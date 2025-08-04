@@ -383,7 +383,7 @@ ipcMain.handle('request-server-status', () => serverStatus);
 ipcMain.handle('redirect-to-login', async (event) => {
   const win = BrowserWindow.getFocusedWindow();
   if (win) {
-    const startUrl = process.env.ELECTRON_START_URL || 'http://localhost:3000/#/userlogin';
+    const startUrl = process.env.ELECTRON_START_URL || 'http://localhost:3000/#/login';
     await win.loadURL(startUrl);
   }
   return true;

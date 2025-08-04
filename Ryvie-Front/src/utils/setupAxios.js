@@ -2,30 +2,18 @@ import axios from 'axios';
 import { logout } from '../services/authService';
 import { getServerUrl } from '../config/urls';
 
-// Fonction pour vérifier si le token est valide
+// Fonction pour vérifier si le token est valide (local, sans appeler un endpoint admin-only)
 export const verifyToken = async () => {
+  const token = localStorage.getItem('jwt_token');
+  if (!token) return false;
   try {
-    const token = localStorage.getItem('jwt_token');
-    if (!token) return false;
-    
-    const accessMode = localStorage.getItem('accessMode') || 'private';
-    const serverUrl = getServerUrl(accessMode);
-    
-    // Appel au serveur pour vérifier la validité du token
-    await axios.get(`${serverUrl}/api/users`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-    
-    return true; // Si aucune erreur n'est levée, le token est valide
-  } catch (error) {
-    if (error.response && error.response.status === 401) {
-      // Token invalide ou expiré
-      handleTokenError();
-      return false;
-    }
-    // Autres erreurs (serveur non disponible, etc.)
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    const payload = JSON.parse(json);
+    if (!payload?.exp) return true; // pas d'exp => on considère valide
+    return Date.now() < payload.exp * 1000;
+  } catch (e) {
     return false;
   }
 };
@@ -52,8 +40,8 @@ export const handleTokenError = (errorCode = null) => {
   
   // Rediriger vers la page de connexion
   const redirectToLogin = () => {
-    const loginUrl = '/userlogin';
-    console.log('Redirecting to login page:', loginUrl);
+    const loginHash = '#/login';
+    console.log('Redirecting to login page:', loginHash);
     
     if (window.electronAPI) {
       // In Electron environment, use IPC to redirect
@@ -62,12 +50,12 @@ export const handleTokenError = (errorCode = null) => {
         .then(() => console.log('Redirected successfully in Electron'))
         .catch(err => {
           console.error('Failed to redirect in Electron, falling back to window.location:', err);
-          window.location.href = loginUrl;
+          try { window.location.hash = loginHash; } catch { /* noop */ }
         });
     } else {
       // In browser environment
       console.log('Using window.location to redirect');
-      window.location.href = loginUrl;
+      try { window.location.hash = loginHash; } catch { /* noop */ }
     }
   };
 
@@ -115,7 +103,10 @@ axios.interceptors.response.use(
         // - Pas déjà retentée (_retry flag)
         // - Code explicite EXPIRED_TOKEN ou TOKEN_ERROR, ou pas de code mais 401 avec Authorization
         const isApi = originalRequest.url?.includes('/api/');
-        const isAuthEndpoint = originalRequest.url?.includes('/api/auth');
+        const isAuthEndpoint = (
+          originalRequest.url?.includes('/api/auth') ||
+          originalRequest.url?.includes('/api/refresh-token')
+        );
         const hadAuth = !!originalRequest.headers?.Authorization;
         const notRetried = !originalRequest._retry;
         const shouldTryRefresh = isApi && !isAuthEndpoint && hadAuth && notRetried;

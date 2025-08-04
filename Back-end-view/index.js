@@ -21,6 +21,12 @@ dotenv.config();
 
 // Secret pour les JWT tokens
 const JWT_SECRET = process.env.JWT_SECRET;
+// Durée d'expiration des JWT (en minutes) configurable via .env
+const JWT_EXPIRES_MINUTES = Math.max(
+  1,
+  parseInt(process.env.JWT_EXPIRES_MINUTES || '15', 10) || 15
+);
+const JWT_EXPIRES_SECONDS = JWT_EXPIRES_MINUTES * 60;
 
 // Validate critical environment variables
 const requiredEnvVars = {
@@ -853,20 +859,20 @@ app.post('/api/authenticate', authLimiter, async (req, res) => {
             
             console.log(`Authentification complétée pour ${uid} avec le rôle ${role}`);
 
-            // Générer un token JWT (15 minutes)
+            // Générer un token JWT (durée configurable)
             const token = jwt.sign(
               user,
               JWT_SECRET,
-              { expiresIn: '15m' }
+              { expiresIn: `${JWT_EXPIRES_MINUTES}m` }
             );
 
-            // Enregistrer le token dans Redis (allowlist) avec TTL 15 min
+            // Enregistrer le token dans Redis (allowlist) avec TTL configurable
             (async () => {
               try {
                 const redis = await ensureConnected();
                 const key = `access:token:${token}`;
                 // Stocker un minimum d'infos utiles
-                await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: 900 });
+                await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: JWT_EXPIRES_SECONDS });
               } catch (e) {
                 console.warn('[login] Impossible d\'enregistrer le token dans Redis:', e?.message || e);
               } finally {
@@ -874,7 +880,7 @@ app.post('/api/authenticate', authLimiter, async (req, res) => {
                   message: 'Authentification réussie', 
                   user: user,
                   token: token,
-                  expiresIn: 900 // 15 min en secondes
+                  expiresIn: JWT_EXPIRES_SECONDS // en secondes
                 });
               }
             })();
@@ -1464,6 +1470,11 @@ app.post('/api/delete-user', async (req, res) => {
     return res.status(400).json({ error: 'adminUid, adminPassword et uid requis' });
   }
 
+  // Empêcher la suppression de soi-même (même pour un admin)
+  if (String(adminUid).trim().toLowerCase() === String(uid).trim().toLowerCase()) {
+    return res.status(403).json({ error: "Vous ne pouvez pas supprimer votre propre compte" });
+  }
+
   const ldapClient = ldap.createClient({ url: ldapConfig.url });
 
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
@@ -1849,7 +1860,7 @@ app.post('/api/refresh-token', async (req, res) => {
       return res.status(503).json({ error: 'Service indisponible. Réessayez plus tard.' });
     }
     
-    // Générer un nouveau token
+    // Générer un nouveau token (durée configurable)
     const newToken = jwt.sign(
       {
         uid: decoded.uid,
@@ -1858,7 +1869,7 @@ app.post('/api/refresh-token', async (req, res) => {
         role: decoded.role
       },
       JWT_SECRET,
-      { expiresIn: '15m' }
+      { expiresIn: `${JWT_EXPIRES_MINUTES}m` }
     );
     // Mettre à jour l'allowlist Redis: révoquer l'ancien token et enregistrer le nouveau
     try {
@@ -1869,7 +1880,7 @@ app.post('/api/refresh-token', async (req, res) => {
       await redis.set(
         `access:token:${newToken}`,
         JSON.stringify({ uid: decoded.uid, role: decoded.role }),
-        { EX: 900 }
+        { EX: JWT_EXPIRES_SECONDS }
       );
     } catch (e) {
       console.warn('[refresh-token] Redis indisponible, impossible de mettre à jour l\'allowlist:', e?.message || e);
@@ -1877,7 +1888,7 @@ app.post('/api/refresh-token', async (req, res) => {
 
     return res.json({
       token: newToken,
-      expiresIn: 900, // 15 min en secondes
+      expiresIn: JWT_EXPIRES_SECONDS, // en secondes
       user: {
         uid: decoded.uid,
         name: decoded.name,

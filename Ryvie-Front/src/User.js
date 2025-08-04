@@ -33,6 +33,14 @@ const User = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteAuthModal, setShowDeleteAuthModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
+  // Rôle courant pour contrôler l'affichage (gestion visible uniquement pour Admin)
+  const [userRole, setUserRole] = useState('User');
+  const isAdmin = userRole === 'Admin';
+
+  useEffect(() => {
+    const role = localStorage.getItem('currentUserRole') || 'User';
+    setUserRole(role);
+  }, []);
 
   // Helper: generate uid from a display name (lowercase, no accents, spaces->- , allowed [a-z0-9_-])
   const toUid = (value) => {
@@ -96,6 +104,8 @@ const User = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
+      setMessage('');
+      setError(null);
       // Récupérer le mode d'accès depuis le localStorage
       const storedMode = localStorage.getItem('accessMode') || 'private';
       setAccessMode(storedMode);
@@ -106,18 +116,67 @@ const User = () => {
       
       const currentRole = localStorage.getItem('currentUserRole') || 'User';
       const endpoint = currentRole === 'Admin' ? '/api/users' : '/api/users-public';
-      const response = await axios.get(`${serverUrl}${endpoint}`); // URL de l'API backend (publique si non-admin)
-      const ldapUsers = response.data.map((user, index) => ({
+      
+      // Helper to map API users
+      const mapUsers = (data) => (data || []).map((user, index) => ({
         id: index + 1,
         name: user.name || user.cn || user.uid,
         email: user.email || user.mail || 'Non défini',
         role: user.role || 'User',
         uid: user.uid
       }));
-      setUsers(ldapUsers);
-      setLoading(false);
+
+      if (endpoint === '/api/users') {
+        // Admin path: try protected first, then fallback to public on missing/401 token
+        const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
+        if (!token) {
+          console.warn('[users] Admin sans token: bascule vers /api/users-public');
+          const resp = await axios.get(`${serverUrl}/api/users-public`);
+          setUsers(mapUsers(resp.data));
+          setMessage('Session expirée — affichage des utilisateurs publics.');
+          setMessageType('warning');
+          setLoading(false);
+          return;
+        }
+        const config = { headers: { Authorization: `Bearer ${token}` } };
+        try {
+          const resp = await axios.get(`${serverUrl}/api/users`, config);
+          setUsers(mapUsers(resp.data));
+          setLoading(false);
+          return;
+        } catch (e) {
+          if (e?.response?.status === 401) {
+            console.warn('[users] 401 sur /api/users: bascule vers /api/users-public');
+            const resp = await axios.get(`${serverUrl}/api/users-public`);
+            setUsers(mapUsers(resp.data));
+            setMessage('Session expirée — affichage des utilisateurs publics.');
+            setMessageType('warning');
+            setLoading(false);
+            return;
+          }
+          throw e; // let outer catch handle other errors
+        }
+      } else {
+        // Non-admin: use public endpoint
+        const resp = await axios.get(`${serverUrl}/api/users-public`);
+        setUsers(mapUsers(resp.data));
+        setLoading(false);
+        return;
+      }
     } catch (err) {
       console.error('Erreur lors du chargement des utilisateurs:', err);
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.error || err?.message || 'Inconnue';
+      if (status === 401) {
+        setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
+        setMessageType('error');
+      } else if (status === 403) {
+        setMessage('Accès refusé. Vous n\'avez pas les droits nécessaires.');
+        setMessageType('error');
+      } else {
+        setMessage(`Erreur lors du chargement des utilisateurs (${status || 'réseau'}): ${detail}`);
+        setMessageType('error');
+      }
       setError('Erreur lors du chargement des utilisateurs');
       setLoading(false);
     }
@@ -126,6 +185,24 @@ const User = () => {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  const handleRoleChange = (id, role) => {
+    setUsers(users.map((user) => (user.id === id ? { ...user, role } : user)));
+  };
+
+  const confirmDeleteUser = (user) => {
+    // Interdire la suppression de soi-même côté UI
+    const currentUser = localStorage.getItem('currentUser') || '';
+    if (
+      user?.uid && currentUser &&
+      String(user.uid).trim().toLowerCase() === String(currentUser).trim().toLowerCase()
+    ) {
+      setMessage("Vous ne pouvez pas supprimer votre propre compte");
+      setMessageType('error');
+      return;
+    }
+    setConfirmDelete(user);
+  };
 
   const openEditUserForm = (user) => {
     setEditUser(user);
@@ -269,7 +346,7 @@ const User = () => {
     }
 
     // Vérifier la présence du token JWT pour les appels protégés
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
     if (!token) {
       setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
       setMessageType('error');
@@ -293,8 +370,7 @@ const User = () => {
       if (editUser) {
         // Mise à jour d'un utilisateur existant
         const updatePayload = {
-          adminUid: adminCredentials.uid,
-          adminPassword: adminCredentials.password,
+          ...commonPayload,
           targetUid: editUser.uid,
           name: newUser.name,
           email: newUser.email,
@@ -383,17 +459,9 @@ const User = () => {
     }
   };
 
-  const handleRoleChange = (id, role) => {
-    setUsers(users.map((user) => (user.id === id ? { ...user, role } : user)));
-  };
-
-  const confirmDeleteUser = (user) => {
-    setConfirmDelete(user);
-  };
-
   const handleDeleteUser = () => {
     if (!confirmDelete) return;
-    
+
     // Récupérer l'utilisateur actuel depuis localStorage pour pré-remplir les identifiants admin
     const currentUser = localStorage.getItem('currentUser') || '';
     
@@ -417,7 +485,7 @@ const User = () => {
     }
 
     // Vérifier la présence du token JWT pour l'appel protégé
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
     if (!token) {
       setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
       setMessageType('error');
@@ -523,9 +591,11 @@ const User = () => {
             <h1>Gestion des utilisateurs</h1>
             <p>Gérez les utilisateurs et leurs permissions</p>
           </div>
-          <div className="add-user-btn">
-            <button onClick={openAddUserForm}>Ajouter un utilisateur</button>
-          </div>
+          {isAdmin && (
+            <div className="add-user-btn">
+              <button onClick={openAddUserForm}>Ajouter un utilisateur</button>
+            </div>
+          )}
         </div>
 
         {/* Message de notification */}
@@ -536,8 +606,8 @@ const User = () => {
           </div>
         )}
 
-        {/* Formulaire d'ajout/modification d'utilisateur */}
-        {formOpen && (
+        {/* Formulaire d'ajout/modification d'utilisateur (Admin uniquement) */}
+        {formOpen && isAdmin && (
           <div ref={userFormRef} className="modal-overlay" onClick={() => setFormOpen(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
@@ -764,7 +834,7 @@ const User = () => {
                 <th>Nom</th>
                 <th>Email</th>
                 <th>Rôle</th>
-                <th>Actions</th>
+                {isAdmin && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -784,30 +854,39 @@ const User = () => {
                       <option value="Guest">Guest</option>
                     </select>
                   </td>
-                  <td className="actions-cell">
-                    <button 
-                      className="action-button edit-button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditUserForm(user);
-                      }}
-                      title="Modifier"
-                    >
-                      <span className="action-icon">✏️</span>
-                      <span className="action-text">Modifier</span>
-                    </button>
-                    <button 
-                      className="action-button delete-button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        confirmDeleteUser(user);
-                      }}
-                      title="Supprimer"
-                    >
-                      <span className="action-icon">🗑️</span>
-                      <span className="action-text">Supprimer</span>
-                    </button>
-                  </td>
+                  {isAdmin && (
+                    <td className="actions-cell">
+                      <button 
+                        className="action-button edit-button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditUserForm(user);
+                        }}
+                        title="Modifier"
+                      >
+                        <span className="action-icon">✏️</span>
+                      </button>
+                      <button 
+                        className="action-button delete-button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmDeleteUser(user);
+                        }}
+                        disabled={
+                          String(localStorage.getItem('currentUser') || '').trim().toLowerCase() ===
+                          String(user.uid || '').trim().toLowerCase()
+                        }
+                        title={
+                          String(localStorage.getItem('currentUser') || '').trim().toLowerCase() ===
+                          String(user.uid || '').trim().toLowerCase()
+                            ? "Vous ne pouvez pas supprimer votre propre compte"
+                            : "Supprimer"
+                        }
+                      >
+                        <span className="action-icon">🗑️</span>
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
