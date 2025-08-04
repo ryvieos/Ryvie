@@ -25,7 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Nouvelles fonctions pour la gestion des sessions utilisateur
   invoke: (channel, ...args) => {
-    const validChannels = ['create-user-window', 'clear-user-session', 'create-user-window-with-mode', 'update-session-partition', 'close-current-window'];
+    const validChannels = ['create-user-window', 'clear-user-session', 'create-user-window-with-mode', 'update-session-partition', 'close-current-window', 'redirect-to-login'];
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);
     }
@@ -33,7 +33,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   
   // Fermer la fenêtre actuelle
-  closeCurrentWindow: () => ipcRenderer.invoke('close-current-window')
+  closeCurrentWindow: () => ipcRenderer.invoke('close-current-window'),
+  
+  // Rediriger vers la page de connexion
+  redirectToLogin: () => ipcRenderer.invoke('redirect-to-login')
 });
 
 // Ce script sera chargé avant que la page soit rendue

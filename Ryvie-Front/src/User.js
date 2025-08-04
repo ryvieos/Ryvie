@@ -33,6 +33,20 @@ const User = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteAuthModal, setShowDeleteAuthModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
+
+  // Helper: generate uid from a display name (lowercase, no accents, spaces->- , allowed [a-z0-9_-])
+  const toUid = (value) => {
+    if (!value) return '';
+    // normalize accents, lowercase, replace spaces with hyphens, remove invalid chars
+    let v = value
+      .normalize('NFD')
+      .replace(/\p{Diacritic}+/gu, '')
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9_-]/g, '');
+    return v;
+  };
   
   // Références pour les animations
   const topBarRef = useRef(null);
@@ -90,7 +104,9 @@ const User = () => {
       const serverUrl = getServerUrl(storedMode);
       console.log("Connexion à :", serverUrl);
       
-      const response = await axios.get(`${serverUrl}/api/users`); // URL de l'API backend
+      const currentRole = localStorage.getItem('currentUserRole') || 'User';
+      const endpoint = currentRole === 'Admin' ? '/api/users' : '/api/users-public';
+      const response = await axios.get(`${serverUrl}${endpoint}`); // URL de l'API backend (publique si non-admin)
       const ldapUsers = response.data.map((user, index) => ({
         id: index + 1,
         name: user.name || user.cn || user.uid,
@@ -110,6 +126,23 @@ const User = () => {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  const openEditUserForm = (user) => {
+    setEditUser(user);
+    setNewUser({ 
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      uid: user.uid,
+      cn: user.name,
+      sn: user.name.split(' ').pop() || user.name,
+      mail: user.email,
+      password: '',
+      confirmPassword: ''
+    });
+    setFormOpen(true);
+    setMessage('');
+  };
 
   const openAddUserForm = () => {
     setEditUser(null);
@@ -136,10 +169,21 @@ const User = () => {
       return false;
     }
     
-    if (!newUser.uid.trim()) {
-      setMessage('L\'identifiant (uid) est requis');
-      setMessageType('error');
-      return false;
+    // En mode ajout, l'UID est identique au nom saisi
+    if (!editUser) {
+      const candidate = newUser.name;
+      if (!candidate) {
+        setMessage('Nom invalide pour générer un identifiant (uid)');
+        setMessageType('error');
+        return false;
+      }
+    } else {
+      // En mode édition, l'UID est en lecture seule mais on vérifie sa présence
+      if (!newUser.uid.trim()) {
+        setMessage('L\'identifiant (uid) est requis');
+        setMessageType('error');
+        return false;
+      }
     }
     
     if (!newUser.email.trim()) {
@@ -148,7 +192,8 @@ const User = () => {
       return false;
     }
     
-    if (!newUser.password) {
+    // Mot de passe requis uniquement lors de l'ajout d'un utilisateur
+    if (!editUser && !newUser.password) {
       setMessage('Le mot de passe est requis');
       setMessageType('error');
       return false;
@@ -161,7 +206,7 @@ const User = () => {
     }
     
     // Validation du format de l'email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^([^\s@]+)@([^\s@]+)\.[^\s@]+$/;
     if (!emailRegex.test(newUser.email)) {
       setMessage('Format d\'email invalide');
       setMessageType('error');
@@ -170,8 +215,9 @@ const User = () => {
     
     // Validation de l'identifiant (uid) - lettres, chiffres, tirets, underscores
     const uidRegex = /^[a-z0-9_-]+$/;
-    if (!uidRegex.test(newUser.uid)) {
-      setMessage('L\'identifiant doit contenir uniquement des lettres minuscules, chiffres, tirets ou underscores');
+    const uidToCheck = editUser ? newUser.uid : newUser.name;
+    if (!uidRegex.test(uidToCheck)) {
+      setMessage('Le nom (utilisé comme identifiant) doit contenir uniquement des lettres minuscules, chiffres, tirets ou underscores');
       setMessageType('error');
       return false;
     }
@@ -197,9 +243,35 @@ const User = () => {
     setShowAdminAuthModal(true);
   };
 
+  const handleUpdateUser = async () => {
+    if (!validateUserForm()) {
+      return;
+    }
+
+    // Récupérer l'utilisateur actuel depuis localStorage pour pré-remplir les identifiants admin
+    const currentUser = localStorage.getItem('currentUser') || '';
+    
+    // Pré-remplir les identifiants admin avec l'utilisateur actuel
+    setAdminCredentials({ 
+      uid: currentUser,
+      password: '' 
+    });
+
+    // Ouvrir le modal d'authentification admin
+    setShowAdminAuthModal(true);
+  };
+
   const submitUserWithAdminAuth = async () => {
     if (!adminCredentials.uid || !adminCredentials.password) {
       setMessage('Veuillez entrer vos identifiants administrateur');
+      setMessageType('error');
+      return;
+    }
+
+    // Vérifier la présence du token JWT pour les appels protégés
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
       setMessageType('error');
       return;
     }
@@ -208,25 +280,53 @@ const User = () => {
     setMessage('');
 
     try {
-      // Préparer les données pour l'API selon le format requis
-      const payload = {
+      // Préparer les données communes pour l'API
+      const commonPayload = {
         adminUid: adminCredentials.uid,
         adminPassword: adminCredentials.password,
-        newUser: {
-          cn: newUser.name,
-          sn: newUser.name.split(' ').pop() || newUser.name,
-          uid: newUser.uid,
-          mail: newUser.email,
-          password: newUser.password,
-          role: newUser.role
-        }
       };
 
       // Utiliser l'URL du serveur en fonction du mode d'accès
       const serverUrl = getServerUrl(accessMode);
-      
-      // Appel à l'API pour ajouter l'utilisateur avec authentification admin
-      const response = await axios.post(`${serverUrl}/api/add-user`, payload);
+      let response;
+
+      if (editUser) {
+        // Mise à jour d'un utilisateur existant
+        const updatePayload = {
+          adminUid: adminCredentials.uid,
+          adminPassword: adminCredentials.password,
+          targetUid: editUser.uid,
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+          ...(newUser.password ? { password: newUser.password } : {})
+        };
+
+        response = await axios.put(
+          `${serverUrl}/api/update-user`,
+          updatePayload,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } else {
+        // Ajout d'un nouvel utilisateur
+        const addPayload = {
+          ...commonPayload,
+          newUser: {
+            cn: newUser.name,
+            sn: newUser.name.split(' ').pop() || newUser.name,
+            uid: newUser.uid,
+            mail: newUser.email,
+            password: newUser.password,
+            role: newUser.role
+          }
+        };
+
+        response = await axios.post(
+          `${serverUrl}/api/add-user`,
+          addPayload,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
 
       // Traitement de la réponse
       if (response.data && response.data.message) {
@@ -244,6 +344,7 @@ const User = () => {
           password: '',
           confirmPassword: ''
         });
+        setEditUser(null);
         setAdminCredentials({ uid: '', password: '' });
         
         // Afficher le message de succès
@@ -254,7 +355,7 @@ const User = () => {
         fetchUsers();
       }
     } catch (err) {
-      console.error('Erreur lors de l\'ajout de l\'utilisateur:', err);
+      console.error(`Erreur lors de ${editUser ? 'la mise à jour' : 'l\'ajout'} de l'utilisateur:`, err);
       
       // Gestion détaillée des erreurs
       if (err.response) {
@@ -263,11 +364,13 @@ const User = () => {
         } else if (err.response.status === 403) {
           setMessage(err.response.data?.error || 'Vous n\'avez pas les droits administrateur nécessaires');
         } else if (err.response.status === 409) {
-          setMessage(err.response.data?.error || 'Cet utilisateur existe déjà');
+          setMessage(err.response.data?.error || 'Cet email est déjà utilisé par un autre compte');
+        } else if (err.response.status === 404) {
+          setMessage(err.response.data?.error || 'Utilisateur non trouvé');
         } else if (err.response.status === 400) {
           setMessage(err.response.data?.error || 'Données invalides. Vérifiez les champs requis.');
         } else {
-          setMessage(err.response.data?.error || 'Erreur lors de l\'ajout de l\'utilisateur');
+          setMessage(err.response.data?.error || `Erreur lors de ${editUser ? 'la mise à jour' : 'l\'ajout'} de l'utilisateur`);
         }
       } else {
         setMessage('Erreur de connexion au serveur');
@@ -313,6 +416,14 @@ const User = () => {
       return;
     }
 
+    // Vérifier la présence du token JWT pour l'appel protégé
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
+      setMessageType('error');
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage('');
 
@@ -328,7 +439,11 @@ const User = () => {
       const serverUrl = getServerUrl(accessMode);
       
       // Appel à l'API pour supprimer l'utilisateur
-      const response = await axios.post(`${serverUrl}/api/delete-user`, payload);
+      const response = await axios.post(
+        `${serverUrl}/api/delete-user`,
+        payload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
       // Traitement de la réponse
       if (response.data && response.data.message) {
@@ -441,16 +556,29 @@ const User = () => {
                 
                 <input
                   type="text"
-                  placeholder="Nom complet"
+                  placeholder={editUser ? "Nom" : "Nom (sera l'UID)"}
                   value={newUser.name}
-                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  onChange={(e) => {
+                    const nameVal = e.target.value;
+                    if (editUser) {
+                      setNewUser({ ...newUser, name: nameVal });
+                    } else {
+                      // En ajout, l'UID = nom exactement
+                      setNewUser({ ...newUser, name: nameVal, uid: nameVal });
+                    }
+                  }}
                 />
-                <input
-                  type="text"
-                  placeholder="Identifiant (uid)"
-                  value={newUser.uid}
-                  onChange={(e) => setNewUser({ ...newUser, uid: e.target.value })}
-                />
+                {editUser && (
+                  <input
+                    type="text"
+                    placeholder="Identifiant (uid)"
+                    value={newUser.uid}
+                    onChange={(e) => setNewUser({ ...newUser, uid: e.target.value })}
+                    disabled={!!editUser}
+                    readOnly={!!editUser}
+                    title={editUser ? "L'identifiant (uid) ne peut pas être modifié" : undefined}
+                  />
+                )}
                 <input
                   type="email"
                   placeholder="Email"
@@ -478,7 +606,10 @@ const User = () => {
                   value={newUser.confirmPassword}
                   onChange={(e) => setNewUser({ ...newUser, confirmPassword: e.target.value })}
                 />
-                <button className="submit-btn" onClick={handleAddUser}>
+                <button 
+                  className="submit-btn" 
+                  onClick={editUser ? handleUpdateUser : handleAddUser}
+                >
                   {editUser ? 'Modifier' : 'Ajouter'}
                 </button>
               </div>
@@ -646,31 +777,36 @@ const User = () => {
                       value={user.role}
                       onChange={(e) => handleRoleChange(user.id, e.target.value)}
                       className={`role-select ${user.role.toLowerCase()}`}
+                      disabled={true} // Disable direct role change, use edit form instead
                     >
                       <option value="User">User</option>
                       <option value="Admin">Admin</option>
                       <option value="Guest">Guest</option>
                     </select>
                   </td>
-                  <td>
-                    <span
-                      className="action-icon edit-icon"
-                      onClick={() => {
-                        setEditUser(user);
-                        setNewUser(user);
-                        setFormOpen(true);
+                  <td className="actions-cell">
+                    <button 
+                      className="action-button edit-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditUserForm(user);
                       }}
                       title="Modifier"
                     >
-                      ✏️
-                    </span>
-                    <span
-                      className="action-icon delete-icon"
-                      onClick={() => confirmDeleteUser(user)}
+                      <span className="action-icon">✏️</span>
+                      <span className="action-text">Modifier</span>
+                    </button>
+                    <button 
+                      className="action-button delete-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmDeleteUser(user);
+                      }}
                       title="Supprimer"
                     >
-                      🗑️
-                    </span>
+                      <span className="action-icon">🗑️</span>
+                      <span className="action-text">Supprimer</span>
+                    </button>
                   </td>
                 </tr>
               ))}
