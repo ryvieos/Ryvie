@@ -31,22 +31,30 @@ export const verifyToken = async () => {
 };
 
 // Fonction pour gérer les erreurs de token
-export const handleTokenError = () => {
+export const handleTokenError = (errorCode = null) => {
   console.log('Token expiré ou invalide, redirection vers la page de connexion');
+  
+  // Log specific error types for debugging
+  if (errorCode === 'INVALID_TOKEN') {
+    console.warn('[auth] Token signature invalid - JWT secret may have been rotated');
+  } else if (errorCode === 'EXPIRED_TOKEN') {
+    console.warn('[auth] Token expired - user needs to re-authenticate');
+  }
   
   // Nettoyer les données d'authentification mais garder le mode d'accès
   const accessMode = localStorage.getItem('accessMode') || 'private';
   logout();
   localStorage.setItem('accessMode', accessMode); // Restaurer le mode d'accès
   
+  // Clear any failed login attempts on token error (fresh start)
+  localStorage.removeItem('loginAttempts');
+  localStorage.removeItem('blockUntil');
+  
   // Rediriger vers la page de connexion
   if (window.electronAPI) {
-    // Dans un environnement Electron, ouvrir une nouvelle fenêtre de connexion
-    window.electronAPI.invoke('create-user-window-with-mode', 'userlogin', accessMode, 'User');
-    // Fermer la fenêtre actuelle après un court délai pour permettre à la nouvelle fenêtre de s'ouvrir
-    setTimeout(() => {
-      window.electronAPI.closeCurrentWindow();
-    }, 500);
+    // Dans un environnement Electron, fermer la fenêtre actuelle
+    // Ne pas créer de nouvelle fenêtre sans token valide
+    window.electronAPI.closeCurrentWindow();
   } else {
     // Dans un environnement navigateur
     window.location.href = '/userlogin';
@@ -74,8 +82,13 @@ axios.interceptors.request.use(request => {
 axios.interceptors.response.use(
   response => response,
   error => {
-    // Si l'erreur est de type 401 (Unauthorized), cela signifie que le token est expiré ou invalide
-    if (error.response && error.response.status === 401) {
+    // Si l'erreur est de type 401 (Unauthorized) ET que la requête avait un token Authorization,
+    // cela signifie que le token est expiré ou invalide
+    if (error.response && 
+        error.response.status === 401 && 
+        error.config && 
+        error.config.headers && 
+        error.config.headers.Authorization) {
       handleTokenError();
     }
     

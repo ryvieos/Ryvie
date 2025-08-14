@@ -206,9 +206,18 @@ ipcMain.handle('create-user-window-with-mode', async (event, userId, accessMode,
   // Close the login window after creating the new window successfully
   const senderWindow = BrowserWindow.fromWebContents(event.sender);
   if (senderWindow && !senderWindow.isDestroyed()) {
+    const senderWindowId = senderWindow.id;
     // Petit délai pour s'assurer que la nouvelle fenêtre est bien chargée
     setTimeout(() => {
-      senderWindow.close();
+      try {
+        const w = BrowserWindow.fromId(senderWindowId);
+        if (w && !w.isDestroyed()) {
+          w.close();
+        }
+      } catch (e) {
+        // Ignore if window no longer exists
+        console.warn('[main] sender window already destroyed, skip close');
+      }
     }, 1000);
   }
   

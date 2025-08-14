@@ -11,12 +11,55 @@ const si = require('systeminformation');
 const osutils = require('os-utils');
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const crypto = require('crypto');
+const { ensureConnected } = require('./redisClient');
 
 // Charger les variables d'environnement du fichier .env
 dotenv.config();
 
 // Secret pour les JWT tokens
-const JWT_SECRET = process.env.JWT_SECRET || 'dQMsVQS39XkJRCHsAhJn3Hn2';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Validate critical environment variables
+const requiredEnvVars = {
+  JWT_SECRET: 'JWT signing secret',
+  LDAP_URL: 'LDAP server URL',
+  LDAP_BIND_DN: 'LDAP bind DN',
+  LDAP_BIND_PASSWORD: 'LDAP bind password'
+};
+
+const optionalEnvVars = {
+  ENCRYPTION_KEY: 'Data encryption key',
+  JWT_ENCRYPTION_KEY: 'JWT encryption key',
+  DEFAULT_EMAIL_DOMAIN: 'Default email domain for users without email'
+};
+
+let hasErrors = false;
+
+// Check required variables
+Object.entries(requiredEnvVars).forEach(([key, description]) => {
+  if (!process.env[key]) {
+    console.error(`❌ CRITICAL: ${key} environment variable is required (${description})`);
+    hasErrors = true;
+  }
+});
+
+// Warn about missing optional variables
+Object.entries(optionalEnvVars).forEach(([key, description]) => {
+  if (!process.env[key]) {
+    console.warn(`⚠️  OPTIONAL: ${key} not set (${description})`);
+  }
+});
+
+if (hasErrors) {
+  console.error('\n💡 Please add the missing variables to your .env file');
+  console.error('📖 See SECURITY.md for configuration details');
+  process.exit(1);
+}
+
+console.log('✅ Environment variables validated successfully');
 
 const { verifyToken, isAdmin, hasPermission } = require('./middleware/auth');
 
@@ -30,8 +73,46 @@ const io = new Server(httpServer, {
   },
 });
 
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for API server
+  crossOriginEmbedderPolicy: false
+}));
+
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// Rate limiting for authentication endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 requests per windowMs
+  message: {
+    error: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.',
+    retryAfter: 15 * 60
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Skip successful requests
+  skipSuccessfulRequests: true,
+  // Custom key generator to include user ID
+  keyGenerator: (req) => {
+    return `${req.ip}_${req.body?.uid || 'unknown'}`;
+  }
+});
+
+// General API rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Limit each IP to 500 requests per windowMs (increased for normal usage)
+  message: {
+    error: 'Trop de requêtes. Réessayez plus tard.',
+    retryAfter: 15 * 60
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.use('/api/', apiLimiter);
 
 // Correspondances des noms de conteneurs Docker avec des noms personnalisés
 const containerMapping = {
@@ -369,6 +450,17 @@ const ldapConfig = {
   guestGroup: process.env.LDAP_GUEST_GROUP,
 };
 
+// Échapper les valeurs insérées dans les filtres LDAP (RFC 4515)
+function escapeLdapFilterValue(value) {
+  if (value == null) return '';
+  return String(value)
+    .replace(/\\/g, '\\5c')
+    .replace(/\*/g, '\\2a')
+    .replace(/\(/g, '\\28')
+    .replace(/\)/g, '\\29')
+    .replace(/\0/g, '\\00');
+}
+
 // Fonction pour déterminer le rôle
 function getRole(dn, groupMemberships) {
   if (groupMemberships.includes(ldapConfig.adminGroup)) return 'Admin';
@@ -459,12 +551,70 @@ app.get('/api/users', verifyToken, async (req, res) => {
   });
 });
 
+// Brute force protection function
+async function checkBruteForce(uid, ip) {
+  try {
+    const redis = await ensureConnected();
+    const key = `bruteforce:${uid}:${ip}`;
+    const attempts = await redis.get(key);
+    
+    if (attempts && parseInt(attempts) >= 5) {
+      const ttl = await redis.ttl(key);
+      return { blocked: true, retryAfter: ttl };
+    }
+    
+    return { blocked: false };
+  } catch (e) {
+    console.warn('[bruteforce] Redis unavailable, skipping check');
+    return { blocked: false };
+  }
+}
+
+async function recordFailedAttempt(uid, ip) {
+  try {
+    const redis = await ensureConnected();
+    const key = `bruteforce:${uid}:${ip}`;
+    const current = await redis.get(key);
+    const attempts = current ? parseInt(current) + 1 : 1;
+    
+    await redis.set(key, attempts, { EX: 15 * 60 }); // 15 minutes
+    return attempts;
+  } catch (e) {
+    console.warn('[bruteforce] Redis unavailable, cannot record attempt');
+    return 0;
+  }
+}
+
+async function clearFailedAttempts(uid, ip) {
+  try {
+    const redis = await ensureConnected();
+    const key = `bruteforce:${uid}:${ip}`;
+    await redis.del(key);
+  } catch (e) {
+    console.warn('[bruteforce] Redis unavailable, cannot clear attempts');
+  }
+}
+
 // Endpoint : Authentification utilisateur LDAP
-app.post('/api/authenticate', (req, res) => {
-  const { uid, password } = req.body;
+app.post('/api/authenticate', authLimiter, async (req, res) => {
+  const { uid: rawUid, password: rawPassword } = req.body;
+  const uid = (rawUid || '').trim();
+  const password = (rawPassword || '').trim();
 
   if (!uid || !password) {
     return res.status(400).json({ error: 'UID et mot de passe requis' });
+  }
+
+  // Check brute force protection
+  const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
+  const bruteForceCheck = await checkBruteForce(uid, clientIP);
+  
+  if (bruteForceCheck.blocked) {
+    console.warn(`[security] Brute force protection: blocking ${uid} from ${clientIP}`);
+    return res.status(429).json({ 
+      error: 'Trop de tentatives échouées. Réessayez plus tard.',
+      retryAfter: bruteForceCheck.retryAfter
+    });
   }
 
   const ldapClient = ldap.createClient({ 
@@ -482,9 +632,12 @@ app.post('/api/authenticate', (req, res) => {
       return res.status(500).json({ error: 'Échec de connexion LDAP initiale' });
     }
 
-    // Rechercher l'utilisateur par uid ou cn
-    const userFilter = `(|(uid=${uid})(cn=${uid}))`;
-    const searchFilter = `(&${userFilter}${ldapConfig.userFilter})`;
+    // Rechercher l'utilisateur par uid d'abord (recommandé). Retomber sur cn si rien trouvé.
+    const escaped = escapeLdapFilterValue(uid);
+    const primaryFilter = `(uid=${escaped})`;
+    const fallbackFilter = `(cn=${escaped})`;
+    const userFilter = `(|${primaryFilter}${fallbackFilter})`;
+    const searchFilter = `(&${primaryFilter}${ldapConfig.userFilter})`;
     
     console.log('Recherche utilisateur avec filtre:', searchFilter);
 
@@ -499,6 +652,7 @@ app.post('/api/authenticate', (req, res) => {
       }
 
       let userEntry;
+      let fallbackTried = false;
 
       ldapRes.on('searchEntry', (entry) => {
         userEntry = entry;
@@ -511,11 +665,50 @@ app.post('/api/authenticate', (req, res) => {
 
       ldapRes.on('end', () => {
         if (!userEntry) {
+          // Retenter avec le filtre incluant cn si uid exact introuvable
+          if (!fallbackTried) {
+            fallbackTried = true;
+            const altSearch = `(&${userFilter}${ldapConfig.userFilter})`;
+            console.log('Aucun uid exact trouvé. Nouvelle recherche avec filtre:', altSearch);
+            return ldapClient.search(ldapConfig.userSearchBase, {
+              filter: altSearch,
+              scope: 'sub',
+              attributes: ['dn', 'cn', 'mail', 'uid'],
+            }, (err2, altRes) => {
+              if (err2) {
+                console.error('Erreur de recherche LDAP (fallback):', err2);
+                ldapClient.unbind();
+                return res.status(500).json({ error: 'Erreur de recherche utilisateur' });
+              }
+              altRes.on('searchEntry', (entry) => {
+                // Choisir prioritairement l'entrée dont l'uid correspond exactement (insensible à la casse)
+                const attrs = {};
+                entry.pojo.attributes.forEach(a => attrs[a.type] = a.values[0]);
+                if (!userEntry && attrs.uid && String(attrs.uid).toLowerCase() === uid.toLowerCase()) {
+                  userEntry = entry;
+                } else if (!userEntry) {
+                  userEntry = entry; // au moins une entrée
+                }
+              });
+              altRes.on('end', () => {
+                if (!userEntry) {
+                  console.error(`Utilisateur ${uid} non trouvé dans LDAP (après fallback)`);
+                  ldapClient.unbind();
+                  return res.status(401).json({ error: 'Utilisateur non trouvé' });
+                }
+                // Continuer le flux normal avec userEntry défini
+                proceedWithUserEntry(userEntry);
+              });
+            });
+          }
           console.error(`Utilisateur ${uid} non trouvé dans LDAP`);
           ldapClient.unbind();
           return res.status(401).json({ error: 'Utilisateur non trouvé' });
         }
+        proceedWithUserEntry(userEntry);
+      });
 
+      function proceedWithUserEntry(userEntry) {
         const userDN = userEntry.pojo.objectName;
         console.log(`DN utilisateur trouvé: ${userDN}`);
 
@@ -526,16 +719,22 @@ app.post('/api/authenticate', (req, res) => {
           connectTimeout: 5000
         });
         
-        userAuthClient.bind(userDN, password, (err) => {
+        userAuthClient.bind(userDN, password, async (err) => {
           if (err) {
             console.error('Échec de l\'authentification utilisateur:', err);
             ldapClient.unbind();
             userAuthClient.destroy();
+            
+            // Record failed attempt for brute force protection
+            const attempts = await recordFailedAttempt(uid, clientIP);
+            console.warn(`[security] Failed login attempt ${attempts} for ${uid} from ${clientIP}`);
+            
             return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
           }
 
-          // Authentification réussie
+          // Authentification réussie - clear failed attempts
           console.log(`Authentification réussie pour ${uid}`);
+          await clearFailedAttempts(uid, clientIP);
           userAuthClient.unbind();
           
           // Rechercher l'appartenance aux groupes
@@ -600,11 +799,6 @@ app.post('/api/authenticate', (req, res) => {
           
           // Fonction pour finaliser l'authentification avec le rôle déterminé
           function completeAuthentication() {
-            // Pour l'utilisateur jules, on force le rôle Admin pour les tests
-            if (uid === 'jules') {
-              role = 'Admin';
-            }
-            
             ldapClient.unbind();
             
             const userAttrs = {};
@@ -615,31 +809,43 @@ app.post('/api/authenticate', (req, res) => {
             const user = {
               uid: userAttrs.uid || userAttrs.cn || uid,
               name: userAttrs.cn || uid,
-              email: userAttrs.mail || `${uid}@example.com`,
+              email: userAttrs.mail || `${uid}@${process.env.DEFAULT_EMAIL_DOMAIN || 'localhost'}`,
               role: role
             };
             
             console.log(`Authentification complétée pour ${uid} avec le rôle ${role}`);
 
-            // Générer un token JWT
+            // Générer un token JWT (15 minutes)
             const token = jwt.sign(
               user,
               JWT_SECRET,
-              { expiresIn: '24h' }
+              { expiresIn: '15m' }
             );
 
-            res.json({ 
-              message: 'Authentification réussie', 
-              user: user,
-              token: token,
-              expiresIn: 86400 // 24h en secondes
-            });
+            // Enregistrer le token dans Redis (allowlist) avec TTL 15 min
+            (async () => {
+              try {
+                const redis = await ensureConnected();
+                const key = `access:token:${token}`;
+                // Stocker un minimum d'infos utiles
+                await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: 900 });
+              } catch (e) {
+                console.warn('[login] Impossible d\'enregistrer le token dans Redis:', e?.message || e);
+              } finally {
+                res.json({ 
+                  message: 'Authentification réussie', 
+                  user: user,
+                  token: token,
+                  expiresIn: 900 // 15 min en secondes
+                });
+              }
+            })();
           }
-        });
-      });
-    });
-  });
-});
+        }); // fin userAuthClient.bind
+      } // fin proceedWithUserEntry
+    }); // fin ldapClient.search
+  }); // fin ldapClient.bind
+}); // fin route /api/authenticate
 
 app.post('/api/add-user', async (req, res) => {
   const { adminUid, adminPassword, newUser } = req.body;
@@ -1127,7 +1333,7 @@ app.get('/api/users-public', async (req, res) => {
             const dn = entry.pojo.objectName;
             const cn = attrs.cn || 'Nom inconnu';
             const uid = attrs.uid || attrs.cn || 'UID inconnu';
-            const mail = attrs.mail || `${uid}@example.com`;
+            const mail = attrs.mail || `${uid}@${process.env.DEFAULT_EMAIL_DOMAIN || 'localhost'}`;
 
             // Exclure l'utilisateur `read-only`
             if (uid !== 'read-only') {
@@ -1187,12 +1393,26 @@ app.post('/api/refresh-token', async (req, res) => {
         role: decoded.role
       },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '15m' }
     );
-    
+    // Mettre à jour l'allowlist Redis: révoquer l'ancien token et enregistrer le nouveau
+    try {
+      const redis = await ensureConnected();
+      if (token) {
+        await redis.del(`access:token:${token}`);
+      }
+      await redis.set(
+        `access:token:${newToken}`,
+        JSON.stringify({ uid: decoded.uid, role: decoded.role }),
+        { EX: 900 }
+      );
+    } catch (e) {
+      console.warn('[refresh-token] Redis indisponible, impossible de mettre à jour l\'allowlist:', e?.message || e);
+    }
+
     return res.json({
       token: newToken,
-      expiresIn: 86400, // 24h en secondes
+      expiresIn: 900, // 15 min en secondes
       user: {
         uid: decoded.uid,
         name: decoded.name,
