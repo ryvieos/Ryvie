@@ -243,7 +243,7 @@ ipcMain.handle('create-user-window', async (event, userId, userRole) => {
 async function fetchUsers(accessMode) {
   try {
     const serverUrl = getServerUrl(accessMode);
-    const response = await axios.get(`${serverUrl}/api/users`);
+    const response = await axios.get(`${serverUrl}/api/users-public`);
     const users = response.data.map(user => ({
       name: user.name || user.uid,
       id: user.uid,
@@ -378,6 +378,16 @@ function startUdpBackend() {
 ipcMain.handle('request-initial-server-ip', () => lastKnownServerIP);
 ipcMain.handle('request-active-containers', () => activeContainers);
 ipcMain.handle('request-server-status', () => serverStatus);
+
+// Handle redirect to login page
+ipcMain.handle('redirect-to-login', async (event) => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) {
+    const startUrl = process.env.ELECTRON_START_URL || 'http://localhost:3000/#/login';
+    await win.loadURL(startUrl);
+  }
+  return true;
+});
 
 // Gestionnaire pour mettre à jour le mode d'accès global
 ipcMain.on('update-access-mode', (event, mode) => {

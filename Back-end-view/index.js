@@ -21,6 +21,12 @@ dotenv.config();
 
 // Secret pour les JWT tokens
 const JWT_SECRET = process.env.JWT_SECRET;
+// Durée d'expiration des JWT (en minutes) configurable via .env
+const JWT_EXPIRES_MINUTES = Math.max(
+  1,
+  parseInt(process.env.JWT_EXPIRES_MINUTES || '15', 10) || 15
+);
+const JWT_EXPIRES_SECONDS = JWT_EXPIRES_MINUTES * 60;
 
 // Validate critical environment variables
 const requiredEnvVars = {
@@ -436,6 +442,44 @@ async function getServerInfo() {
   };
 }
 
+// Helper function to trigger LDAP sync
+async function triggerLdapSync() {
+  return new Promise((resolve) => {
+    const client = require('http');
+    const options = {
+      hostname: 'localhost',
+      port: 2283,
+      path: '/api/admin/users/sync-ldap',
+      method: 'GET',
+      timeout: 10000 // 10 second timeout
+    };
+
+    const req = client.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        console.log(`LDAP sync completed with status ${res.statusCode}: ${data}`);
+        resolve({ statusCode: res.statusCode, data });
+      });
+    });
+
+    req.on('error', (e) => {
+      console.error('Error triggering LDAP sync:', e);
+      resolve({ statusCode: 500, error: e.message });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      console.error('LDAP sync request timed out');
+      resolve({ statusCode: 504, error: 'Request timeout' });
+    });
+
+    req.end();
+  });
+}
+
 // LDAP Configuration
 const ldapConfig = {
   url: process.env.LDAP_URL,
@@ -815,20 +859,20 @@ app.post('/api/authenticate', authLimiter, async (req, res) => {
             
             console.log(`Authentification complétée pour ${uid} avec le rôle ${role}`);
 
-            // Générer un token JWT (15 minutes)
+            // Générer un token JWT (durée configurable)
             const token = jwt.sign(
               user,
               JWT_SECRET,
-              { expiresIn: '15m' }
+              { expiresIn: `${JWT_EXPIRES_MINUTES}m` }
             );
 
-            // Enregistrer le token dans Redis (allowlist) avec TTL 15 min
+            // Enregistrer le token dans Redis (allowlist) avec TTL configurable
             (async () => {
               try {
                 const redis = await ensureConnected();
                 const key = `access:token:${token}`;
                 // Stocker un minimum d'infos utiles
-                await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: 900 });
+                await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: JWT_EXPIRES_SECONDS });
               } catch (e) {
                 console.warn('[login] Impossible d\'enregistrer le token dans Redis:', e?.message || e);
               } finally {
@@ -836,7 +880,7 @@ app.post('/api/authenticate', authLimiter, async (req, res) => {
                   message: 'Authentification réussie', 
                   user: user,
                   token: token,
-                  expiresIn: 900 // 15 min en secondes
+                  expiresIn: JWT_EXPIRES_SECONDS // en secondes
                 });
               }
             })();
@@ -993,16 +1037,26 @@ app.post('/api/add-user', async (req, res) => {
                           return res.status(500).json({ error: 'Utilisateur créé, mais échec d’ajout au groupe' });
                         }
 
-                        return res.json({
-                          message: `Utilisateur "${newUser.uid}" ajouté avec succès en tant que ${newUser.role}`,
-                          user: {
-                            cn: newUser.cn,
-                            sn: newUser.sn,
-                            uid: newUser.uid,
-                            mail: newUser.mail,
-                            role: newUser.role,
-                          }
-                        });
+                        // Trigger LDAP sync after successful user creation
+                        triggerLdapSync()
+                          .then(syncResult => {
+                            console.log('LDAP sync after user creation:', syncResult);
+                          })
+                          .catch(e => {
+                            console.error('Error during LDAP sync after user creation:', e);
+                          })
+                          .finally(() => {
+                            return res.json({
+                              message: `Utilisateur "${newUser.uid}" ajouté avec succès en tant que ${newUser.role}`,
+                              user: {
+                                cn: newUser.cn,
+                                sn: newUser.sn,
+                                uid: newUser.uid,
+                                mail: newUser.mail,
+                                role: newUser.role,
+                              }
+                            });
+                          });
                       });
                     });
                   });
@@ -1016,11 +1070,409 @@ app.post('/api/add-user', async (req, res) => {
   });
 });
 
+// Endpoint to update an existing user
+app.put('/api/update-user', async (req, res) => {
+  const { adminUid, adminPassword, targetUid, name, email, role, password } = req.body;
+
+  if (!adminUid || !adminPassword || !targetUid || !name || !email || !role) {
+    return res.status(400).json({ error: 'Tous les champs sont requis (adminUid, adminPassword, targetUid, name, email, role)' });
+  }
+
+  // Enforce UID immutability: reject any attempt to change UID
+  if (typeof req.body.uid !== 'undefined' && req.body.uid !== targetUid) {
+    return res.status(400).json({ error: "Changement d'UID interdit" });
+  }
+  if (typeof req.body.newUid !== 'undefined' && req.body.newUid !== targetUid) {
+    return res.status(400).json({ error: "Changement d'UID interdit" });
+  }
+
+  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  let adminAuthClient;
+
+  // Step 1: Bind as admin user to verify permissions
+  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
+    if (err) {
+      console.error('Erreur de connexion LDAP initiale :', err);
+      return res.status(500).json({ error: 'Erreur de connexion LDAP initiale' });
+    }
+
+    // Step 2: Find admin user
+    const adminFilter = `(&(uid=${adminUid})${ldapConfig.userFilter})`;
+    ldapClient.search(ldapConfig.userSearchBase, {
+      filter: adminFilter,
+      scope: 'sub',
+      attributes: ['dn'],
+    }, (err, ldapRes) => {
+      if (err) {
+        console.error('Erreur recherche admin :', err);
+        return res.status(500).json({ error: 'Erreur recherche admin' });
+      }
+
+      let adminEntry;
+      ldapRes.on('searchEntry', entry => adminEntry = entry);
+
+      ldapRes.on('end', () => {
+        if (!adminEntry) {
+          ldapClient.unbind();
+          return res.status(401).json({ error: 'Admin non trouvé' });
+        }
+
+        const adminDN = adminEntry.pojo.objectName;
+        adminAuthClient = ldap.createClient({ url: ldapConfig.url });
+
+        // Step 3: Verify admin credentials and permissions
+        adminAuthClient.bind(adminDN, adminPassword, (err) => {
+          if (err) {
+            console.error('Échec authentification admin :', err);
+            ldapClient.unbind();
+            return res.status(401).json({ error: 'Mot de passe admin incorrect' });
+          }
+
+          // Step 4: Check if admin is in admin group
+          ldapClient.search(ldapConfig.adminGroup, {
+            filter: `(member=${adminDN})`,
+            scope: 'base',
+            attributes: ['cn'],
+          }, (err, groupRes) => {
+            let isAdmin = false;
+            groupRes.on('searchEntry', () => isAdmin = true);
+
+            groupRes.on('end', () => {
+              if (!isAdmin) {
+                ldapClient.unbind();
+                adminAuthClient.unbind();
+                return res.status(403).json({ error: 'Accès refusé. Droits admin requis.' });
+              }
+
+              // Step 5: Find the target user to update
+              ldapClient.search(ldapConfig.userSearchBase, {
+                filter: `(uid=${targetUid})`,
+                scope: 'sub',
+                attributes: ['dn', 'uid', 'mail', 'cn', 'sn'],
+              }, (err, userRes) => {
+                if (err) {
+                  console.error('Erreur recherche utilisateur :', err);
+                  return res.status(500).json({ error: 'Erreur recherche utilisateur' });
+                }
+
+                let userEntry;
+                userRes.on('searchEntry', entry => userEntry = entry);
+
+                userRes.on('end', () => {
+                  if (!userEntry) {
+                    ldapClient.unbind();
+                    adminAuthClient.unbind();
+                    return res.status(404).json({ error: 'Utilisateur non trouvé' });
+                  }
+
+                  let userDN = userEntry.pojo.objectName;
+                  const currentMail = userEntry.pojo.attributes.find(attr => attr.type === 'mail')?.values[0];
+                  const currentCn = userEntry.pojo.attributes.find(attr => attr.type === 'cn')?.values[0];
+                  const currentSn = userEntry.pojo.attributes.find(attr => attr.type === 'sn')?.values[0];
+
+                  // Step 6: Check if new email is already in use by another user
+                  if (email !== currentMail) {
+                    ldapClient.search(ldapConfig.userSearchBase, {
+                      filter: `(&(mail=${email})(!(uid=${targetUid})))`,
+                      scope: 'sub',
+                      attributes: ['uid'],
+                    }, (err, emailCheckRes) => {
+                      if (err) {
+                        console.error('Erreur vérification email :', err);
+                        return res.status(500).json({ error: 'Erreur vérification email' });
+                      }
+
+                      let emailInUse = false;
+                      emailCheckRes.on('searchEntry', () => emailInUse = true);
+
+                      emailCheckRes.on('end', () => {
+                        if (emailInUse) {
+                          ldapClient.unbind();
+                          adminAuthClient.unbind();
+                          return res.status(409).json({ error: 'Un utilisateur avec cet email existe déjà' });
+                        }
+                        
+                        // If email is available, proceed with update
+                        updateUser();
+                      });
+                    });
+                  } else {
+                    // If email hasn't changed, proceed with update
+                    updateUser();
+                  }
+
+                  // Function to update user attributes and handle possible RDN rename when DN uses cn=
+                  function updateUser() {
+                    // Detect RDN attribute and parent DN
+                    const firstCommaIdx = userDN.indexOf(',');
+                    const rdn = firstCommaIdx > 0 ? userDN.substring(0, firstCommaIdx) : userDN;
+                    const parentDN = firstCommaIdx > 0 ? userDN.substring(firstCommaIdx + 1) : '';
+                    const eqIdx = rdn.indexOf('=');
+                    const rdnAttr = eqIdx > 0 ? rdn.substring(0, eqIdx).toLowerCase() : '';
+
+                    // Helper to escape DN RDN value (basic RFC 2253 escaping for special chars)
+                    const escapeRdnValue = (val) => {
+                      if (typeof val !== 'string') return val;
+                      let v = val.replace(/\\/g, '\\\\')
+                                 .replace(/,/g, '\\,')
+                                 .replace(/\+/g, '\\+')
+                                 .replace(/"/g, '\\"')
+                                 .replace(/</g, '\\<')
+                                 .replace(/>/g, '\\>')
+                                 .replace(/;/g, '\\;')
+                                 .replace(/=/g, '\\=');
+                      if (v.startsWith(' ')) v = '\\ ' + v.slice(1);
+                      if (v.endsWith(' ')) v = v.slice(0, -1) + '\\ ';
+                      return v;
+                    };
+
+                    // Build attribute changes (we may skip cn replace if we're going to rename)
+                    const changes = [];
+
+                    const isCnRdn = rdnAttr === 'cn';
+                    const nameChanged = name !== currentCn;
+
+                    if (nameChanged && !isCnRdn) {
+                      changes.push(new ldap.Change({
+                        operation: 'replace',
+                        modification: new ldap.Attribute({ type: 'cn', values: [name] })
+                      }));
+                    }
+
+                    // Always update sn when name changes (last word heuristic)
+                    if (nameChanged) {
+                      const lastName = name.split(' ').pop() || name;
+                      changes.push(new ldap.Change({
+                        operation: 'replace',
+                        modification: new ldap.Attribute({ type: 'sn', values: [lastName] })
+                      }));
+                    }
+
+                    if (email !== currentMail) {
+                      changes.push(new ldap.Change({
+                        operation: 'replace',
+                        modification: new ldap.Attribute({ type: 'mail', values: [email] })
+                      }));
+                    }
+
+                    if (password) {
+                      changes.push(new ldap.Change({
+                        operation: 'replace',
+                        modification: new ldap.Attribute({ type: 'userPassword', values: [password] })
+                      }));
+                    }
+
+                    const applyChangesSequentially = () => {
+                      const updateNextChange = (index) => {
+                        if (index >= changes.length) {
+                          // All changes applied, now update group membership
+                          updateGroupMembership();
+                          return;
+                        }
+                        adminAuthClient.modify(userDN, changes[index], (err) => {
+                          if (err) {
+                            console.error('Erreur mise à jour utilisateur :', err);
+                            ldapClient.unbind();
+                            adminAuthClient.unbind();
+                            return res.status(500).json({ error: 'Erreur lors de la mise à jour du profil utilisateur' });
+                          }
+                          updateNextChange(index + 1);
+                        });
+                      };
+                      updateNextChange(0);
+                    };
+
+                    // If DN uses cn= and name changed, perform a modifyDN (rename) first to avoid NamingViolation
+                    if (isCnRdn && nameChanged) {
+                      const newRdn = `cn=${escapeRdnValue(name)}`;
+                      adminAuthClient.modifyDN(userDN, newRdn, (err) => {
+                        if (err) {
+                          console.error('Erreur renommage DN (modifyDN) :', err);
+                          ldapClient.unbind();
+                          adminAuthClient.unbind();
+                          return res.status(500).json({ error: "Erreur de renommage de l'entrée (RDN) lors de la mise à jour du nom" });
+                        }
+                        // Update local DN to the new value for subsequent modifications and group updates
+                        userDN = `${newRdn}${parentDN ? ',' + parentDN : ''}`;
+                        applyChangesSequentially();
+                      });
+                    } else {
+                      // No rename needed; apply changes directly
+                      applyChangesSequentially();
+                    }
+                  }
+                  
+                  // Function to update group membership based on role
+                  function updateGroupMembership() {
+                    const roleGroupMap = {
+                      'Admin': ldapConfig.adminGroup,
+                      'User': ldapConfig.userGroup,
+                      'Guest': ldapConfig.guestGroup
+                    };
+                    
+                    const targetGroup = roleGroupMap[role];
+                    if (!targetGroup) {
+                      ldapClient.unbind();
+                      adminAuthClient.unbind();
+                      return res.status(400).json({ error: 'Rôle invalide' });
+                    }
+                    
+                    // First, remove from all role groups
+                    const removeFromGroup = (groupDn, callback) => {
+                      if (!groupDn) return callback();
+                      
+                      const change = new ldap.Change({
+                        operation: 'delete',
+                        modification: new ldap.Attribute({
+                          type: 'member',
+                          values: [userDN]
+                        })
+                      });
+                      
+                      adminAuthClient.modify(groupDn, change, (err) => {
+                        // Ignore errors if user wasn't in the group
+                        callback();
+                      });
+                    };
+                    
+                    // Remove from all groups first
+                    const groupsToRemove = Object.values(roleGroupMap).filter(group => group !== targetGroup);
+                    const removeNextGroup = (index) => {
+                      if (index >= groupsToRemove.length) {
+                        // Now add to the target group
+                        addToGroup(targetGroup);
+                        return;
+                      }
+                      
+                      removeFromGroup(groupsToRemove[index], () => {
+                        removeNextGroup(index + 1);
+                      });
+                    };
+                    
+                    removeNextGroup(0);
+                    
+                    // Function to add user to target group
+                    function addToGroup(groupDn) {
+                      const change = new ldap.Change({
+                        operation: 'add',
+                        modification: new ldap.Attribute({
+                          type: 'member',
+                          values: [userDN]
+                        })
+                      });
+                      
+                      adminAuthClient.modify(groupDn, change, (err) => {
+                        ldapClient.unbind();
+                        adminAuthClient.unbind();
+                        
+                        if (err && err.name !== 'AttributeOrValueExistsError') {
+                          console.error('Erreur mise à jour groupe :', err);
+                          return res.status(500).json({ 
+                            error: 'Profil mis à jour, mais erreur de mise à jour du groupe',
+                            details: err.message
+                          });
+                        }
+                        
+                        // Trigger LDAP sync after successful user update
+                        triggerLdapSync()
+                          .then(syncResult => {
+                            console.log('LDAP sync after user update:', syncResult);
+                          })
+                          .catch(e => {
+                            console.error('Error during LDAP sync after user update:', e);
+                          })
+                          .finally(() => {
+                            res.json({
+                              message: `Utilisateur "${targetUid}" mis à jour avec succès`,
+                              user: {
+                                name: name,
+                                email: email,
+                                role: role,
+                                uid: targetUid
+                              }
+                            });
+                          });
+                      });
+                    }
+                  }
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+// Endpoint for Repcures to synchronize users with LDAP
+app.get('/api/admin/users/sync-ldap', async (req, res) => {
+  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  let users = [];
+
+  // Step 1: Bind to LDAP with admin credentials
+  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
+    if (err) {
+      console.error('Erreur de connexion LDAP :', err);
+      return res.status(500).json({ error: 'Erreur de connexion LDAP' });
+    }
+
+    // Step 2: Search for all users
+    ldapClient.search(ldapConfig.userSearchBase, {
+      filter: ldapConfig.userFilter,
+      scope: 'sub',
+      attributes: ['uid', 'cn', 'sn', 'mail', 'memberOf']
+    }, (err, searchRes) => {
+      if (err) {
+        console.error('Erreur de recherche LDAP :', err);
+        ldapClient.unbind();
+        return res.status(500).json({ error: 'Erreur de recherche LDAP' });
+      }
+
+      searchRes.on('searchEntry', (entry) => {
+        const user = entry.pojo.attributes.reduce((acc, attr) => {
+          // Convert single values to string, arrays remain as arrays
+          acc[attr.type] = attr.values.length === 1 ? attr.values[0] : attr.values;
+          return acc;
+        }, {});
+        
+        // Add DN to the user object
+        user.dn = entry.pojo.objectName;
+        
+        // Determine user role based on group memberships
+        const groupMemberships = user.memberOf || [];
+        user.role = getRole(user.dn, groupMemberships);
+        
+        users.push(user);
+      });
+
+      searchRes.on('error', (err) => {
+        console.error('Erreur lors de la récupération des utilisateurs :', err);
+        ldapClient.unbind();
+        return res.status(500).json({ error: 'Erreur lors de la récupération des utilisateurs' });
+      });
+
+      searchRes.on('end', () => {
+        ldapClient.unbind();
+        
+        // Return success status code (200) with user count
+        console.log(`Synchronisation LDAP réussie. ${users.length} utilisateurs synchronisés.`);
+        return res.status(200).send(`${users.length}`);
+      });
+    });
+  });
+});
+
 app.post('/api/delete-user', async (req, res) => {
   const { adminUid, adminPassword, uid } = req.body;
 
   if (!adminUid || !adminPassword || !uid) {
     return res.status(400).json({ error: 'adminUid, adminPassword et uid requis' });
+  }
+
+  // Empêcher la suppression de soi-même (même pour un admin)
+  if (String(adminUid).trim().toLowerCase() === String(uid).trim().toLowerCase()) {
+    return res.status(403).json({ error: "Vous ne pouvez pas supprimer votre propre compte" });
   }
 
   const ldapClient = ldap.createClient({ url: ldapConfig.url });
@@ -1136,7 +1588,17 @@ app.post('/api/delete-user', async (req, res) => {
                               return res.status(500).json({ error: 'Erreur suppression utilisateur' });
                             }
 
-                            res.json({ message: `Utilisateur "${uid}" supprimé avec succès` });
+                            // Trigger LDAP sync after successful user deletion
+                            triggerLdapSync()
+                              .then(syncResult => {
+                                console.log('LDAP sync after user deletion:', syncResult);
+                              })
+                              .catch(e => {
+                                console.error('Error during LDAP sync after user deletion:', e);
+                              })
+                              .finally(() => {
+                                res.json({ message: `Utilisateur "${uid}" supprimé avec succès` });
+                              });
                           });
                         }
                       });
@@ -1381,10 +1843,24 @@ app.post('/api/refresh-token', async (req, res) => {
   }
   
   try {
-    // Vérifier le token
-    const decoded = jwt.verify(token, JWT_SECRET);
+    // Vérifier le token même s'il est expiré (nous utilisons l'allowlist Redis pour la sécurité)
+    const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
     
-    // Générer un nouveau token
+    // Avant d'émettre un nouveau token, vérifier que l'ancien existe encore dans l'allowlist (non révoqué)
+    try {
+      const redis = await ensureConnected();
+      const key = `access:token:${token}`;
+      const exists = await redis.exists(key);
+      if (!exists) {
+        return res.status(401).json({ error: 'Token révoqué ou inconnu', code: 'REVOKED_TOKEN' });
+      }
+    } catch (e) {
+      console.warn('[refresh-token] Redis indisponible lors de la vérification de l\'allowlist:', e?.message || e);
+      // En cas d\'indisponibilité Redis, par sécurité, refuser le refresh
+      return res.status(503).json({ error: 'Service indisponible. Réessayez plus tard.' });
+    }
+    
+    // Générer un nouveau token (durée configurable)
     const newToken = jwt.sign(
       {
         uid: decoded.uid,
@@ -1393,7 +1869,7 @@ app.post('/api/refresh-token', async (req, res) => {
         role: decoded.role
       },
       JWT_SECRET,
-      { expiresIn: '15m' }
+      { expiresIn: `${JWT_EXPIRES_MINUTES}m` }
     );
     // Mettre à jour l'allowlist Redis: révoquer l'ancien token et enregistrer le nouveau
     try {
@@ -1404,7 +1880,7 @@ app.post('/api/refresh-token', async (req, res) => {
       await redis.set(
         `access:token:${newToken}`,
         JSON.stringify({ uid: decoded.uid, role: decoded.role }),
-        { EX: 900 }
+        { EX: JWT_EXPIRES_SECONDS }
       );
     } catch (e) {
       console.warn('[refresh-token] Redis indisponible, impossible de mettre à jour l\'allowlist:', e?.message || e);
@@ -1412,7 +1888,7 @@ app.post('/api/refresh-token', async (req, res) => {
 
     return res.json({
       token: newToken,
-      expiresIn: 900, // 15 min en secondes
+      expiresIn: JWT_EXPIRES_SECONDS, // en secondes
       user: {
         uid: decoded.uid,
         name: decoded.name,
@@ -1422,7 +1898,10 @@ app.post('/api/refresh-token', async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur lors du renouvellement du token:', error);
-    return res.status(401).json({ error: 'Token invalide ou expiré' });
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Token invalide', code: 'INVALID_TOKEN' });
+    }
+    return res.status(401).json({ error: 'Token invalide ou expiré', code: 'TOKEN_ERROR' });
   }
 });
 
