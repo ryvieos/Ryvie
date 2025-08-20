@@ -6,6 +6,8 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { io } from 'socket.io-client';
 import { Link, useNavigate } from 'react-router-dom';
+import { detectAccessMode, getCurrentAccessMode } from './utils/detectAccessMode';
+import { isElectron, WindowManager, StorageManager, NotificationManager } from './utils/platformUtils';
 const { getServerUrl, getAppUrl } = require('./config/urls');
 const { generateAppConfig, generateDefaultZones, images } = require('./config/appConfig');
 
@@ -147,12 +149,12 @@ const Taskbar = ({ handleClick }) => {
 const Home = () => {
   const [accessMode, setAccessMode] = useState('private'); 
   const [zones, setZones] = useState(() => {
-    // Essayer de récupérer les zones depuis localStorage
-    const savedZones = localStorage.getItem('iconZones');
+    // Essayer de récupérer les zones depuis StorageManager
+    const savedZones = StorageManager.getItem('iconZones');
     console.log("Zones sauvegardées:", savedZones);
     if (savedZones) {
       try {
-        const parsedZones = JSON.parse(savedZones);
+        const parsedZones = typeof savedZones === 'string' ? JSON.parse(savedZones) : savedZones;
         console.log("Zones analysées:", parsedZones);
         
         // Migration automatique des anciens noms vers les nouveaux
@@ -182,7 +184,7 @@ const Home = () => {
         
         if (migrationNeeded) {
           console.log("Migration effectuée, sauvegarde des nouvelles zones");
-          localStorage.setItem('iconZones', JSON.stringify(parsedZones));
+          StorageManager.setItem('iconZones', parsedZones);
         }
         
         return parsedZones;
@@ -207,51 +209,115 @@ const Home = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const [mounted, setMounted] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [currentSocket, setCurrentSocket] = useState(null);
+  
   useEffect(() => {
-    const storedMode = localStorage.getItem('accessMode') || 'private';
-    setAccessMode(storedMode);
+    const initializeAccessMode = async () => {
+      let mode;
+      if (isElectron()) {
+        // En Electron, utiliser le mode stocké
+        mode = getCurrentAccessMode();
+      } else {
+        // En web, détecter automatiquement
+        console.log('[Home] Détection automatique du mode d\'accès...');
+        mode = await detectAccessMode();
+      }
+      setAccessMode(mode);
+      console.log(`[Home] Mode d'accès initialisé: ${mode}`);
+    };
+    
+    initializeAccessMode();
   }, []);
   
   useEffect(() => {
-    // Récupère la valeur de accessMode depuis le localStorage
-    const storedMode = localStorage.getItem('accessMode') || 'private';
-    setAccessMode(storedMode); // Met à jour l'état accessMode
-  
-    const serverUrl = getServerUrl(storedMode);
-    console.log("Connexion à :", serverUrl);
-  
-    const socket = io(serverUrl);
-  
-    socket.on('status', (data) => {
-      setServerStatus(data.serverStatus);
-      if (data.serverStatus) {
-        console.log('Connected to server');
-      }
-    });
-  
-    socket.on('containers', (data) => {
-      console.log('Conteneurs actifs:', data.activeContainers);
-  
-      // Mettre à jour le statut des applications en fonction des conteneurs actifs
-      const newAppStatus = {};
-      
-      // Parcourir toutes les applications configurées
-      Object.entries(APPS_CONFIG).forEach(([appId, config]) => {
-        if (config.showStatus && config.containerName) {
-          // Vérifier si le conteneur associé à cette application est actif
-          newAppStatus[appId] = data.activeContainers.includes(config.containerName);
+    if (!accessMode) return; // Attendre que le mode d'accès soit initialisé
+    
+    const serverUrl = getServerUrl(accessMode);
+    
+    const connectSocket = async () => {
+      try {
+        console.log(`[Home] Tentative de connexion Socket.io à: ${serverUrl}`);
+        
+        // En mode web, ne connecter que si on est en mode private avec serveur local
+        if (!isElectron() && accessMode !== 'private') {
+          console.log('[Home] Mode web - connexion Socket.io désactivée en mode public');
+          return;
         }
-      });
-      
-      setAppStatus(newAppStatus);
-    });
-  
-    socket.on('disconnect', () => {
-      setServerStatus(false);
-    });
-  
-    return () => socket.disconnect();
-  }, [accessMode]); //  Ajoute accessMode ici pour réexécuter le useEffect à chaque changement
+        
+        const newSocket = io(serverUrl, {
+          transports: ['websocket', 'polling'],
+          timeout: 10000,
+          forceNew: true
+        });
+
+        newSocket.on('connect', () => {
+          console.log(`[Home] Socket.io connecté en mode ${accessMode}`);
+          setCurrentSocket(newSocket);
+          setSocketConnected(true);
+          setServerStatus(true); // Marquer le serveur comme connecté
+        });
+
+        newSocket.on('disconnect', () => {
+          console.log('[Home] Socket.io déconnecté');
+          setSocketConnected(false);
+          setServerStatus(false); // Marquer le serveur comme déconnecté
+        });
+
+        newSocket.on('connect_error', (error) => {
+          console.log(`[Home] Erreur de connexion Socket.io en mode ${accessMode}:`, error.message);
+          setSocketConnected(false);
+          setServerStatus(false); // Marquer le serveur comme déconnecté en cas d'erreur
+          
+          // En mode web, ne jamais essayer le fallback
+          if (!isElectron()) {
+            console.log('[Home] Mode web - arrêt des tentatives de connexion Socket.io');
+            if (newSocket) {
+              newSocket.disconnect();
+            }
+            return;
+          }
+          
+          // Essayer le serveur public seulement en mode Electron
+          if (isElectron() && accessMode === 'private') {
+            console.log('[Home] Tentative de fallback vers le serveur public...');
+            setTimeout(() => {
+              setAccessMode('public');
+            }, 2000);
+          }
+        });
+
+        newSocket.on('server-status', (data) => {
+          console.log('[Home] Statut serveur reçu:', data.status);
+          setServerStatus(data.status);
+          
+          if (data.activeContainers) {
+            console.log('[Home] Conteneurs actifs:', data.activeContainers);
+            const newAppStatus = {};
+            
+            Object.entries(APPS_CONFIG).forEach(([appId, config]) => {
+              if (config.showStatus && config.containerName) {
+                newAppStatus[appId] = data.activeContainers.includes(config.containerName);
+              }
+            });
+            
+            setAppStatus(newAppStatus);
+          }
+        });
+        
+      } catch (error) {
+        console.error('[Home] Erreur lors de la création de la connexion Socket.io:', error);
+      }
+    };
+    
+    connectSocket();
+    
+    return () => {
+      if (currentSocket) {
+        currentSocket.disconnect();
+      }
+    };
+  }, [accessMode]);
   
   useEffect(() => {
     const fetchWeatherData = () => {
@@ -302,10 +368,7 @@ const Home = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  useEffect(() => {
-    const mode = localStorage.getItem('accessMode') || 'private';
-    setAccessMode(mode);
-  }, []);
+  // Supprimer ce useEffect dupliqué car géré dans le premier useEffect
 
   useEffect(() => {
     setMounted(true);
@@ -333,19 +396,55 @@ const Home = () => {
         [toZoneId]: toIcons,
       };
       
-      // Sauvegarder les zones dans localStorage après chaque modification
-      localStorage.setItem('iconZones', JSON.stringify(newZones));
+      // Sauvegarder les zones dans StorageManager après chaque modification
+      StorageManager.setItem('iconZones', newZones);
       
       return newZones;
     });
   };
 
-  const openAppWindow = (url, useOverlay = true) => {
-    if (!useOverlay) {
+
+  const openAppWindow = (url, useOverlay = true, appName = '') => {
+    console.log(`[Home] Ouverture de l'application: ${url}`);
+    
+    const currentUser = StorageManager.getItem('currentUser');
+    
+    if (isElectron()) {
+      // En Electron, utiliser le comportement existant
       window.open(url, '_blank', 'width=1000,height=700');
-      return;
     } else {
-      window.open(url, '_blank', 'width=1000,height=700');
+      // En mode web, simplifier l'approche pour éviter les erreurs cross-origin
+      const windowName = `${appName.toLowerCase().replace(/[^a-z0-9]/g, '')}_${currentUser}`;
+      
+      // Fermer la fenêtre existante si elle existe
+      const existingWindows = window.openedWindows || {};
+      if (existingWindows[windowName] && !existingWindows[windowName].closed) {
+        console.log(`[Home] Fermeture de la fenêtre existante: ${windowName}`);
+        existingWindows[windowName].close();
+      }
+      
+      // Ajouter des paramètres à l'URL pour signaler le changement d'utilisateur
+      const urlWithParams = new URL(url);
+      urlWithParams.searchParams.set('ryvie_user', currentUser);
+      urlWithParams.searchParams.set('ryvie_logout', 'true');
+      urlWithParams.searchParams.set('ryvie_clear_session', 'true');
+      urlWithParams.searchParams.set('t', Date.now().toString());
+      
+      // Ouvrir directement l'URL avec les paramètres, sans nettoyage côté client
+      const newWindow = window.open(urlWithParams.toString(), windowName, 'width=1000,height=700');
+      
+      if (newWindow) {
+        // Stocker la référence de la fenêtre
+        if (!window.openedWindows) window.openedWindows = {};
+        window.openedWindows[windowName] = newWindow;
+        
+        console.log(`[Home] Ouverture de ${appName} pour l'utilisateur: ${currentUser}`);
+        console.log(`[Home] URL avec paramètres: ${urlWithParams.toString()}`);
+      } else {
+        console.log(`[Home] Impossible d'ouvrir la fenêtre ${appName}`);
+        // Fallback : ouvrir dans un nouvel onglet
+        window.open(urlWithParams.toString(), '_blank');
+      }
     }
   };
 
@@ -371,7 +470,7 @@ const Home = () => {
       const appUrl = getAppUrl(appConfig.urlKey, accessMode);
       
       if (appUrl) {
-        openAppWindow(appUrl, !appConfig.useDirectWindow);
+        openAppWindow(appUrl, !appConfig.useDirectWindow, appConfig.name);
       } else {
         console.log("Pas d'URL trouvée pour cette icône :", iconId);
       }
@@ -383,7 +482,15 @@ const Home = () => {
       <DndProvider backend={HTML5Backend}>
         <div className="background">
           <div className={`server-status ${serverStatus ? 'connected' : 'disconnected'}`}>
-            {serverStatus ? 'Connected' : 'Disconnected'}
+            <span className="status-text">
+              {serverStatus ? 'Connecté' : 'Déconnecté'}
+            </span>
+            <span className="mode-indicator">
+              {accessMode === 'private' ? 'Local' : 'Public'}
+            </span>
+            {!isElectron() && (
+              <span className="platform-indicator">Web</span>
+            )}
           </div>
 
           {isLoading && (

@@ -371,16 +371,46 @@ body, html {
   align-items: center;
   justify-content: center;
 }
-/* Indicateur de connexion au serveur */
+/* Indicateur de statut du serveur */
 .server-status {
   position: fixed;
-  top: 10px;
-  left: 10px;
-  padding: 5px 10px;
-  border-radius: 5px;
+  top: 20px;
+  left: 20px;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
   font-size: 14px;
-  font-weight: bold;
-  color: #ffffff; /* Couleur de texte foncée pour le statut du serveur */
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.logout-button {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  margin-left: 8px;
+}
+
+.logout-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.1);
 }
 
 .server-status.disconnected {

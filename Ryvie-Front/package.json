@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "description": "Une application Electron avec React",
   "main": "main.js",
+  "homepage": "./",
   "scripts": {
     "start": "concurrently \"npm run dev\" \"npm run electron\"",
+    "web": "webpack serve --mode development --config webpack.config.js",
     "dev": "webpack serve --mode development --config webpack.config.js",
     "electron": "wait-on http://localhost:3000 && electron .",
+    "build": "webpack --mode production",
+    "build:web": "webpack --mode production --config webpack.config.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },

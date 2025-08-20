@@ -5,6 +5,7 @@ import axios from 'axios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg-icons';
 import io from 'socket.io-client'; // Importer la bibliothèque Socket.IO
+import { isElectron } from './utils/platformUtils';
 const { getServerUrl } = require('./config/urls');
 
 const Settings = () => {
@@ -106,12 +107,20 @@ const Settings = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Charger le dossier de téléchargement actuel
-        const path = await window.electronAPI.getDownloadFolder();
-        setSettings(prev => ({
-          ...prev,
-          downloadPath: path
-        }));
+        // Charger le dossier de téléchargement actuel seulement en mode Electron
+        if (isElectron() && window.electronAPI) {
+          const path = await window.electronAPI.getDownloadFolder();
+          setSettings(prev => ({
+            ...prev,
+            downloadPath: path
+          }));
+        } else {
+          // En mode web, utiliser un dossier par défaut
+          setSettings(prev => ({
+            ...prev,
+            downloadPath: 'Téléchargements (navigateur)'
+          }));
+        }
         
         setLoading(false);
       } catch (error) {
@@ -205,8 +214,10 @@ const Settings = () => {
     // Mettre à jour l'état local
     setAccessMode(newMode);
     
-    // Notifier le processus principal du changement
-    window.electronAPI.updateAccessMode(newMode);
+    // Notifier le processus principal du changement seulement en mode Electron
+    if (isElectron() && window.electronAPI && window.electronAPI.updateAccessMode) {
+      window.electronAPI.updateAccessMode(newMode);
+    }
     
     // Afficher un message de confirmation
     setChangeStatus({
@@ -223,16 +234,27 @@ const Settings = () => {
 
   const handleSettingChange = async (setting, value) => {
     if (setting === 'downloadPath') {
-      const newPath = await window.electronAPI.changeDownloadFolder();
-      if (newPath) {
-        setSettings(prev => ({
-          ...prev,
-          downloadPath: newPath
-        }));
-        setChangeStatus({ show: true, success: true });
-        setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+      // Seulement en mode Electron
+      if (isElectron() && window.electronAPI && window.electronAPI.changeDownloadFolder) {
+        const newPath = await window.electronAPI.changeDownloadFolder();
+        if (newPath) {
+          setSettings(prev => ({
+            ...prev,
+            downloadPath: newPath
+          }));
+          setChangeStatus({ show: true, success: true });
+          setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+        } else {
+          setChangeStatus({ show: true, success: false });
+          setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+        }
       } else {
-        setChangeStatus({ show: true, success: false });
+        // En mode web, afficher un message informatif
+        setChangeStatus({ 
+          show: true, 
+          success: false, 
+          message: "Modification du dossier de téléchargement non disponible en mode web" 
+        });
         setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
       }
     } else {
