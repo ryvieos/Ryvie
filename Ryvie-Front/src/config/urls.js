@@ -14,13 +14,13 @@ const BASE_URLS = {
   
   // URLs des applications
   APPS: {
-    APP_STORE: {
+    APPSTORE: {
       PUBLIC: 'https://appstore.makerfaire.jules.ryvie.fr',
       PRIVATE: 'http://ryvie.local:5173'
     },
-    RCLOUD: {
-      PUBLIC: 'https://rcloud.test.jules.ryvie.fr',
-      PRIVATE: 'http://ryvie.local:3001'
+    RDRIVE: {
+      PUBLIC: 'https://rdrive.test.jules.ryvie.fr',
+      PRIVATE: 'http://ryvie.local:3010'
     },
     PORTAINER: {
       PUBLIC: 'https://portainer.test.jules.ryvie.fr',
@@ -38,9 +38,13 @@ const BASE_URLS = {
       PUBLIC: 'https://rdrop.makerfaire.jules.ryvie.fr',
       PRIVATE: 'http://ryvie.local:8080'
     },
-    RPictures: {
+    RPICTURES: {
       PUBLIC: 'https://rpictures.makerfaire.jules.ryvie.fr',
       PRIVATE: 'http://ryvie.local:2283'
+    },
+    DRIVE: {
+      PUBLIC: 'https://drive.test.jules.ryvie.fr',
+      PRIVATE: 'http://ryvie.local:8081'
     }
   }
 };
