@@ -7,99 +7,23 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { io } from 'socket.io-client';
 import { Link, useNavigate } from 'react-router-dom';
 const { getServerUrl, getAppUrl } = require('./config/urls');
+const { generateAppConfig, generateDefaultZones, images } = require('./config/appConfig');
 
-// Fonction pour importer toutes les images du dossier icons
-const importAll = (r) => {
+// Fonction pour importer toutes les images du dossier weather_icons
+function importAll(r) {
   let images = {};
   r.keys().forEach((item) => {
     images[item.replace('./', '')] = r(item);
   });
   return images;
-};
-
-const images = importAll(require.context('./icons', false, /\.(png|jpe?g|svg)$/));
+}
+localStorage.removeItem('iconZones');
+// Importer les icônes météo
 const weatherImages = importAll(require.context('./weather_icons', false, /\.(png|jpe?g|svg)$/));
 const weatherIcons = importAll(require.context('./weather_icons', false, /\.(png|jpe?g|svg)$/));
 
-// Configuration centralisée des applications
-const APPS_CONFIG = {
-  'AppStore.jpeg': {
-    name: 'AppStore',
-    urlKey: 'APP_STORE',
-    showStatus: false,
-    isTaskbarApp: true,
-  },
-  'rCloud.png': {
-    name: 'rCloud',
-    urlKey: 'RCLOUD',
-    showStatus: true,
-    isTaskbarApp: false,
-    containerName: 'app-rcloud',
-  },
-  'Drive.png': {
-    name: 'Drive',
-    urlKey: 'DRIVE',
-    showStatus: false,
-    isTaskbarApp: false,
-  },
-  'Portainer.png': {
-    name: 'Portainer',
-    urlKey: 'PORTAINER',
-    showStatus: true,
-    isTaskbarApp: false,
-    containerName: 'app-portainer',
-  },
-  'Outline.png': {
-    name: 'Outline',
-    urlKey: 'OUTLINE',
-    showStatus: true,
-    isTaskbarApp: false,
-    containerName: 'outline',
-  },
-  'rTransfer.png': {
-    name: 'rTransfer',
-    urlKey: 'RTRANSFER',
-    showStatus: true,
-    isTaskbarApp: false,
-    containerName: 'app-rtransfer',
-    useDirectWindow: true,
-  },
-  'rDrop.png': {
-    name: 'rDrop',
-    urlKey: 'RDROP',
-    showStatus: true,
-    isTaskbarApp: false,
-    containerName: 'app-rdrop-nginx',
-  },
-  'rPictures.svg': {
-    name: 'rPictures',
-    urlKey: 'RPictures',
-    showStatus: true,
-    isTaskbarApp: false,
-    containerName: 'app-rpictures-server',
-  },
-  'user.svg': {
-    name: 'User',
-    urlKey: '',
-    showStatus: false,
-    isTaskbarApp: true,
-    route: '/user',
-  },
-  'transfer.svg': {
-    name: 'Transfer',
-    urlKey: '',
-    showStatus: false,
-    isTaskbarApp: true,
-    route: '/userlogin',
-  },
-    'settings.svg': {
-    name: 'Settings',
-    urlKey: '',
-    showStatus: false,
-    isTaskbarApp: true,
-    route: '/settings',
-  },
-};
+// Configuration dynamique des applications
+const APPS_CONFIG = generateAppConfig();
 
 // Types pour react-dnd
 const ItemTypes = {
@@ -225,29 +149,50 @@ const Home = () => {
   const [zones, setZones] = useState(() => {
     // Essayer de récupérer les zones depuis localStorage
     const savedZones = localStorage.getItem('iconZones');
+    console.log("Zones sauvegardées:", savedZones);
     if (savedZones) {
       try {
-        return JSON.parse(savedZones);
+        const parsedZones = JSON.parse(savedZones);
+        console.log("Zones analysées:", parsedZones);
+        
+        // Migration automatique des anciens noms vers les nouveaux
+        let migrationNeeded = false;
+        const migrationMap = {
+          'AppStore.jpeg': 'app-AppStore.jpeg',
+          'Portainer.png': 'app-Portainer.png',
+          'rDrive.svg': 'app-rDrive.svg',
+          'rPictures.svg': 'app-rPictures.svg',
+          'rDrop.png': 'app-rDrop.png',
+          'rCloud.png': 'app-rDrive.svg',
+          'user.svg': 'task-user.svg',
+          'transfer.svg': 'task-transfer.svg',
+          'settings.svg': 'task-settings.svg'
+        };
+        
+        Object.keys(parsedZones).forEach(zoneKey => {
+          parsedZones[zoneKey] = parsedZones[zoneKey].map(iconId => {
+            if (migrationMap[iconId]) {
+              console.log(`Migration: ${iconId} -> ${migrationMap[iconId]}`);
+              migrationNeeded = true;
+              return migrationMap[iconId];
+            }
+            return iconId;
+          });
+        });
+        
+        if (migrationNeeded) {
+          console.log("Migration effectuée, sauvegarde des nouvelles zones");
+          localStorage.setItem('iconZones', JSON.stringify(parsedZones));
+        }
+        
+        return parsedZones;
       } catch (error) {
         console.error('Erreur lors de la récupération des zones:', error);
       }
     }
     
-    // Valeurs par défaut si rien n'est trouvé dans localStorage
-    return {
-      left: ['AppStore.jpeg'],
-      right: ['Portainer.png'],
-      bottom1: ['rPictures.svg'],
-      bottom2: ['rCloud.png'],
-      bottom3: ['Outline.png'],
-      bottom4: ['rTransfer.png'],
-      bottom5: ['rDrop.png'],
-      bottom6: [],
-      bottom7: [],
-      bottom8: [],
-      bottom9: [],
-      bottom10: [],
-    };
+    // Utiliser la génération dynamique des zones par défaut
+    return generateDefaultZones();
   });
 
   const [weather, setWeather] = useState({
@@ -405,19 +350,31 @@ const Home = () => {
   };
 
   const handleClick = (iconId) => {
+    console.log("handleClick appelé avec iconId:", iconId);
+    
     const appConfig = APPS_CONFIG[iconId];
     
-    if (!appConfig || !appConfig.urlKey) {
+    if (!appConfig) {
       console.log("Pas de configuration trouvée pour cette icône :", iconId);
+      console.log("Configuration disponible:", Object.keys(APPS_CONFIG));
       return;
     }
     
-    const appUrl = getAppUrl(appConfig.urlKey, accessMode);
+    // Si c'est une route interne (taskbar)
+    if (appConfig.route) {
+      // Cette logique sera gérée par le composant Link dans Taskbar
+      return;
+    }
     
-    if (appUrl) {
-      openAppWindow(appUrl, !appConfig.useDirectWindow);
-    } else {
-      console.log("Pas d'URL trouvée pour cette icône :", iconId);
+    // Si c'est une application avec URL
+    if (appConfig.urlKey) {
+      const appUrl = getAppUrl(appConfig.urlKey, accessMode);
+      
+      if (appUrl) {
+        openAppWindow(appUrl, !appConfig.useDirectWindow);
+      } else {
+        console.log("Pas d'URL trouvée pour cette icône :", iconId);
+      }
     }
   };
 
