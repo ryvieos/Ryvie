@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
+const { createClient } = require('redis');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -7,8 +8,28 @@ dotenv.config();
 // Secret pour signer les tokens JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'dQMsVQS39XkJRCHsAhJn3Hn2';
 
+// Redis client for token allowlist/denylist
+const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const redisClient = createClient({ url: REDIS_URL });
+
+redisClient.on('error', (err) => {
+  console.warn('[auth middleware] Redis client error:', err?.message || err);
+});
+
+// Best-effort connect (non-blocking during startup); we also lazy-connect in middleware
+(async () => {
+  try {
+    if (!redisClient.isOpen) {
+      await redisClient.connect();
+      console.log('[auth middleware] Connected to Redis');
+    }
+  } catch (e) {
+    console.warn('[auth middleware] Unable to connect to Redis at startup. Will retry on demand.');
+  }
+})();
+
 // Vérifie si le token est valide
-const verifyToken = (req, res, next) => {
+const verifyToken = async (req, res, next) => {
   // Récupérer le token de l'en-tête Authorization
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1]; // Format: "Bearer TOKEN"
@@ -25,13 +46,54 @@ const verifyToken = (req, res, next) => {
     
     // Ajouter l'utilisateur décodé à l'objet request pour une utilisation ultérieure
     req.user = decoded;
-    
+    // Enforce Redis allowlist if available
+    try {
+      if (!redisClient.isOpen) {
+        await redisClient.connect();
+      }
+      const key = `access:token:${token}`;
+      const exists = await redisClient.exists(key);
+      if (!exists) {
+        return res.status(401).json({ error: 'Token révoqué ou inconnu' });
+      }
+    } catch (e) {
+      // If Redis is down, fail open to avoid outage, but warn
+      console.warn('[auth middleware] Redis unavailable, skipping allowlist check');
+    }
+
     next(); // Passer au middleware suivant
   } catch (error) {
     console.error('Erreur de vérification du token:', error);
-    return res.status(401).json({ 
-      error: 'Token invalide ou expiré' 
-    });
+    
+    // Handle specific JWT errors
+    if (error.name === 'JsonWebTokenError') {
+      if (error.message === 'invalid signature') {
+        console.warn('[auth] JWT signature invalid - likely due to JWT_SECRET rotation');
+        // Clear the invalid token from Redis if it exists
+        try {
+          if (redisClient.isOpen) {
+            const key = `access:token:${token}`;
+            await redisClient.del(key);
+          }
+        } catch (e) {
+          console.warn('[auth] Could not clear invalid token from Redis');
+        }
+      }
+      return res.status(401).json({ 
+        error: 'Token invalide - veuillez vous reconnecter',
+        code: 'INVALID_TOKEN'
+      });
+    } else if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'Token expiré - veuillez vous reconnecter',
+        code: 'EXPIRED_TOKEN'
+      });
+    } else {
+      return res.status(401).json({ 
+        error: 'Token invalide ou expiré',
+        code: 'TOKEN_ERROR'
+      });
+    }
   }
 };
 

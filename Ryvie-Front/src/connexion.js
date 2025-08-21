@@ -68,9 +68,14 @@ const Userlogin = () => {
     try {
       // Utiliser l'URL du serveur en fonction du mode d'accès
       const serverUrl = getServerUrl(accessMode);
+      // Ne pas inclure l'ancien token Authorization pour les nouvelles authentifications
       const response = await axios.post(`${serverUrl}/api/authenticate`, {
         uid: selectedUser.id,
         password: password
+      }, {
+        headers: {
+          'Authorization': undefined // Supprimer l'ancien token pour cette requête
+        }
       });
 
       if (response.data && response.data.token) {
@@ -105,15 +110,39 @@ const Userlogin = () => {
       }
     } catch (error) {
       console.error('Erreur d\'authentification:', error);
-      setLoginAttempts(prev => prev + 1);
+      setLoginAttempts(prev => {
+        const newAttempts = prev + 1;
+        
+        // Close modal and show blocking message after 5 attempts
+        if (newAttempts >= 5) {
+          setShowPasswordModal(false);
+          setMessage('Trop de tentatives échouées pour cet utilisateur. Veuillez réessayer plus tard.');
+          setMessageType('error');
+          
+          // Block this user for 5 minutes (shorter than main login)
+          setTimeout(() => {
+            setMessage('');
+            setLoginAttempts(0);
+          }, 5 * 60 * 1000);
+        }
+        
+        return newAttempts;
+      });
       
       // Gestion détaillée des erreurs
       if (error.response) {
         // Le serveur a répondu avec un code d'erreur
         if (error.response.status === 401) {
-          setMessage('Identifiants incorrects. Veuillez réessayer.');
+          const remaining = Math.max(0, 5 - (loginAttempts + 1));
+          if (remaining > 0) {
+            setMessage(`Identifiants incorrects. ${remaining} tentative(s) restante(s).`);
+          } else {
+            setMessage('Trop de tentatives échouées. Utilisateur temporairement bloqué.');
+          }
         } else if (error.response.status === 429) {
-          setMessage('Trop de tentatives de connexion. Veuillez réessayer plus tard.');
+          const retryAfter = error.response.data?.retryAfter || 900;
+          setMessage(`Trop de tentatives de connexion. Réessayez dans ${Math.ceil(retryAfter / 60)} minutes.`);
+          setShowPasswordModal(false);
         } else {
           setMessage(`Erreur d'authentification: ${error.response.data?.error || 'Erreur serveur'}`);
         }

@@ -206,9 +206,18 @@ ipcMain.handle('create-user-window-with-mode', async (event, userId, accessMode,
   // Close the login window after creating the new window successfully
   const senderWindow = BrowserWindow.fromWebContents(event.sender);
   if (senderWindow && !senderWindow.isDestroyed()) {
+    const senderWindowId = senderWindow.id;
     // Petit délai pour s'assurer que la nouvelle fenêtre est bien chargée
     setTimeout(() => {
-      senderWindow.close();
+      try {
+        const w = BrowserWindow.fromId(senderWindowId);
+        if (w && !w.isDestroyed()) {
+          w.close();
+        }
+      } catch (e) {
+        // Ignore if window no longer exists
+        console.warn('[main] sender window already destroyed, skip close');
+      }
     }, 1000);
   }
   
@@ -234,7 +243,7 @@ ipcMain.handle('create-user-window', async (event, userId, userRole) => {
 async function fetchUsers(accessMode) {
   try {
     const serverUrl = getServerUrl(accessMode);
-    const response = await axios.get(`${serverUrl}/api/users`);
+    const response = await axios.get(`${serverUrl}/api/users-public`);
     const users = response.data.map(user => ({
       name: user.name || user.uid,
       id: user.uid,
@@ -369,6 +378,16 @@ function startUdpBackend() {
 ipcMain.handle('request-initial-server-ip', () => lastKnownServerIP);
 ipcMain.handle('request-active-containers', () => activeContainers);
 ipcMain.handle('request-server-status', () => serverStatus);
+
+// Handle redirect to login page
+ipcMain.handle('redirect-to-login', async (event) => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) {
+    const startUrl = process.env.ELECTRON_START_URL || 'http://localhost:3000/#/login';
+    await win.loadURL(startUrl);
+  }
+  return true;
+});
 
 // Gestionnaire pour mettre à jour le mode d'accès global
 ipcMain.on('update-access-mode', (event, mode) => {

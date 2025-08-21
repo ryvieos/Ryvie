@@ -191,6 +191,7 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 200px;
+  vertical-align: middle;
 }
 
 .user-table th {
@@ -236,8 +237,97 @@ html, body {
 
 .user-table th:nth-child(4),
 .user-table td:nth-child(4) {
-  width: 20%;
-  min-width: 100px;
+  width: 25%;
+  min-width: 180px;
+  text-align: center;
+}
+
+/* Action buttons */
+.actions-cell {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px !important;
+}
+
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 36px;
+  height: 36px;
+}
+
+.action-button .action-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.action-button .action-text {
+  display: none;
+}
+
+.edit-button {
+  background-color: #eef2ff;
+  color: #4f46e5;
+}
+
+.edit-button:hover {
+  background-color: #e0e7ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.delete-button {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.delete-button:hover {
+  background-color: #fecaca;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Show text on larger screens */
+@media (min-width: 992px) {
+  .action-button {
+    padding: 8px 16px;
+    min-width: 100px;
+  }
+  
+  .action-button .action-text {
+    display: inline;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .user-table th:nth-child(4),
+  .user-table td:nth-child(4) {
+    width: 30%;
+    min-width: 140px;
+  }
+
+  .actions-cell {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px !important;
+  }
+  
+  .action-button {
+    width: 100%;
+    justify-content: center;
+    height: 32px;
+  }
 }
 
 /* Sélecteur des rôles */
