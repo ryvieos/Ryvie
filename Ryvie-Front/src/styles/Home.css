@@ -421,6 +421,49 @@ body, html {
   background-color: green; /* Couleur pour connecté */
 }
 
+/* Bouton de déconnexion en bas à gauche */
+.logout-fab {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 1100;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.logout-fab:hover {
+  background: rgba(0, 0, 0, 0.7);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.3);
+}
+
+.logout-fab:active {
+  transform: translateY(0);
+}
+
+.logout-fab .icon {
+  width: 18px;
+  height: 18px;
+  background: none;
+  box-shadow: none;
+  margin-top: 0;
+}
+
+.logout-fab .label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* Style pour le panneau de configuration */
 .settings-panel {
   position: fixed;

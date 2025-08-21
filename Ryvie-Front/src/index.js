@@ -3,21 +3,16 @@ import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import Home from './Home';
 import User from './User';
+import Login from './Login';
 import Settings from './Settings';
 import Welcome from './Welcome';
 import Userlogin from './connexion';
 import { initializeSession, isSessionActive } from './utils/sessionManager';
 import { isElectron } from './utils/platformUtils';
 
-// Composant de redirection conditionnelle
+// Composant de redirection conditionnelle (Web et Electron)
 const ProtectedRoute = ({ children }) => {
-  // En Electron, toujours permettre l'accès (gestion par les fenêtres)
-  // En Web, vérifier la session
-  if (isElectron()) {
-    return children;
-  }
-  
-  return isSessionActive() ? children : <Navigate to="/login" />;
+  return isSessionActive() ? children : <Navigate to="/login" replace />;
 };
 
 const App = () => {
@@ -30,25 +25,34 @@ const App = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<Userlogin />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/" element={
-          <ProtectedRoute>
-            <Home />
-          </ProtectedRoute>
+          isSessionActive() ? <Navigate to="/welcome" replace /> : <Navigate to="/login" replace />
         } />
         <Route path="/home" element={
           <ProtectedRoute>
             <Home />
           </ProtectedRoute>
         } />
-        <Route path="/user" element={<User />} />
+        <Route path="/user" element={
+          <ProtectedRoute>
+            <User />
+          </ProtectedRoute>
+        } />
         <Route path="/settings" element={
           <ProtectedRoute>
             <Settings />
           </ProtectedRoute>
         } />
-        <Route path="/welcome" element={<Welcome />} />
-        <Route path="/userlogin" element={<Userlogin />} />
+        <Route path="/welcome" element={
+          <ProtectedRoute>
+            <Welcome />
+          </ProtectedRoute>
+        } />
+        <Route path="/userlogin" element={
+          <ProtectedRoute>
+            <Userlogin />
+          </ProtectedRoute>} />
       </Routes>
     </Router>
   );

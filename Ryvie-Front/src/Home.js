@@ -8,6 +8,7 @@ import { io } from 'socket.io-client';
 import { Link, useNavigate } from 'react-router-dom';
 import { detectAccessMode, getCurrentAccessMode } from './utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from './utils/platformUtils';
+import { endSession } from './utils/sessionManager';
 const { getServerUrl, getAppUrl } = require('./config/urls');
 const { generateAppConfig, generateDefaultZones, images } = require('./config/appConfig');
 
@@ -147,6 +148,7 @@ const Taskbar = ({ handleClick }) => {
 
 // Composant principal
 const Home = () => {
+  const navigate = useNavigate();
   const [accessMode, setAccessMode] = useState('private'); 
   const [zones, setZones] = useState(() => {
     // Essayer de récupérer les zones depuis StorageManager
@@ -448,6 +450,18 @@ const Home = () => {
     }
   };
 
+  const handleLogout = () => {
+    try {
+      if (currentSocket) {
+        currentSocket.disconnect();
+      }
+    } catch (e) {
+      console.warn('[Home] Erreur lors de la déconnexion du socket:', e);
+    }
+    endSession();
+    navigate('/login', { replace: true });
+  };
+
   const handleClick = (iconId) => {
     console.log("handleClick appelé avec iconId:", iconId);
     
@@ -552,6 +566,11 @@ const Home = () => {
               ))}
             </div>
           </div>
+          {/* Bouton de déconnexion fixe en bas à gauche */}
+          <button className="logout-fab" onClick={handleLogout} title="Déconnexion">
+            <span className="icon">⎋</span>
+            <span className="label">Déconnexion</span>
+          </button>
         </div>
       </DndProvider>
     </div>
