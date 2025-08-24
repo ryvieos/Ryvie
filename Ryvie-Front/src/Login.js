@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import './styles/Login.css';
 const { getServerUrl } = require('./config/urls');
 import { setAuthToken } from './services/authService';
+import { isSessionActive } from './utils/sessionManager';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -19,12 +20,11 @@ const Login = () => {
     const storedMode = localStorage.getItem('accessMode') || 'private';
     setAccessMode(storedMode);
 
-    // Vérifier si l'utilisateur est déjà connecté
-    const token = localStorage.getItem('jwt_token');
-    if (token) {
-      navigate('/');
+    // Vérifier si une session est réellement active avant de rediriger
+    if (isSessionActive()) {
+      navigate('/welcome', { replace: true });
     }
-  }, [navigate]);
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
