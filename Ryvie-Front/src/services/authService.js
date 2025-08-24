@@ -88,6 +88,12 @@ export const getAuthConfig = () => {
 
 // Gérer les erreurs d'authentification et rediriger vers la page de connexion si nécessaire
 export const handleAuthError = (error) => {
+  // Ignorer les erreurs 404 pour les requêtes de vérification du serveur
+  if (error.config && error.config.url && error.config.url.includes('/api/server-status')) {
+    console.log('Erreur de vérification du serveur ignorée pour l\'authentification');
+    return false;
+  }
+  
   // Vérifier si c'est une erreur d'authentification (401) ou une ressource non trouvée (404)
   if (error.response && (error.response.status === 401 || error.response.status === 404)) {
     console.log('Session expirée ou erreur d\'authentification. Déconnexion automatique...');
@@ -95,9 +101,9 @@ export const handleAuthError = (error) => {
     // Déconnecter l'utilisateur
     logout();
     
-    // Rediriger vers la page de connexion
-    if (window.location.pathname !== '/login') {
-      window.location.href = '/login';
+    // Rediriger vers la page de connexion avec le hash router
+    if (!window.location.hash.includes('#/login')) {
+      window.location.href = '#/login';
     }
     
     return true; // Indique que l'erreur a été traitée comme une erreur d'authentification
