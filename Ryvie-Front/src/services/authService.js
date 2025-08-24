@@ -5,6 +5,7 @@ const TOKEN_KEY = 'jwt_token';
 const USER_KEY = 'currentUser';
 const USER_ROLE_KEY = 'currentUserRole';
 const USER_EMAIL_KEY = 'currentUserEmail';
+const SESSION_ACTIVE_KEY = 'sessionActive';
 
 // Configure axios pour inclure le token dans les en-têtes
 export const setAuthToken = (token) => {
@@ -85,11 +86,32 @@ export const getAuthConfig = () => {
   };
 };
 
+// Gérer les erreurs d'authentification et rediriger vers la page de connexion si nécessaire
+export const handleAuthError = (error) => {
+  // Vérifier si c'est une erreur d'authentification (401) ou une ressource non trouvée (404)
+  if (error.response && (error.response.status === 401 || error.response.status === 404)) {
+    console.log('Session expirée ou erreur d\'authentification. Déconnexion automatique...');
+    
+    // Déconnecter l'utilisateur
+    logout();
+    
+    // Rediriger vers la page de connexion
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+    
+    return true; // Indique que l'erreur a été traitée comme une erreur d'authentification
+  }
+  
+  return false; // Indique que ce n'est pas une erreur d'authentification
+};
+
 export default {
   setAuthToken,
   initializeToken,
   isAuthenticated,
   getCurrentUser,
   logout,
-  getAuthConfig
+  getAuthConfig,
+  handleAuthError
 };
