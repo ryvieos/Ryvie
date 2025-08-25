@@ -265,7 +265,7 @@ const Home = () => {
           if (configEntry) {
             const [iconId] = configEntry;
             //console.log(`[Home] Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
-            newAppStatus[iconId] = app.status === 'running';
+            newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
           } else {
            // console.log(`[Home] Aucun mapping trouvé pour: ${app.name}`);
           }
@@ -367,7 +367,7 @@ const Home = () => {
             if (configEntry) {
               const [iconId] = configEntry;
               console.log(`[Home] Mise à jour - Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
-              newAppStatus[iconId] = app.status === 'running';
+              newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
             } else {
               console.log(`[Home] Mise à jour - Aucun mapping trouvé pour: ${app.name}`);
             }
