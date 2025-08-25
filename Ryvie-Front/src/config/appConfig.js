@@ -44,7 +44,7 @@ const generateAppConfig = () => {
       urlKey: urlKey,
       showStatus: true,
       isTaskbarApp: false,
-      containerName: `app-${appName.toLowerCase()}`,
+      containerName: appName.toLowerCase(),
     };
     
     // Configurations spéciales pour certaines apps

@@ -920,10 +920,10 @@ const Settings = () => {
               </div>
               <div className="docker-app-details-body">
                 <div className="docker-app-status-info">
-                  <div className={`docker-app-status ${selectedApp.status}`}>
+                  <div className={`docker-app-status ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'running' : 'stopped'}`}>
                     <span className="docker-status-icon"></span>
                     <span className="docker-status-text">
-                      {selectedApp.status === 'running' ? 'Opérationnel' : 'Arrêté'}
+                      {selectedApp.status === 'running' && selectedApp.progress > 0 ? 'Opérationnel' : 'Arrêté'}
                     </span>
                   </div>
                   <div className="docker-app-progress">
@@ -968,15 +968,15 @@ const Settings = () => {
                 
                 <div className="docker-app-actions">
                   <button
-                    className={`docker-action-btn-large ${selectedApp.status === 'running' ? 'stop' : 'start'}`}
-                    onClick={() => handleAppAction(selectedApp.id, selectedApp.status === 'running' ? 'stop' : 'start')}
+                    className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
+                    onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
                   >
-                    {selectedApp.status === 'running' ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
+                    {(selectedApp.status === 'running' && selectedApp.progress > 0) ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
                   </button>
                   <button
                     className="docker-action-btn-large restart"
                     onClick={() => handleAppAction(selectedApp.id, 'restart')}
-                    disabled={selectedApp.status !== 'running'}
+                    disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
                   >
                     Redémarrer tous les conteneurs
                   </button>
@@ -1010,8 +1010,8 @@ const Settings = () => {
               >
                 <div className="docker-app-header">
                   <h3>{app.name}</h3>
-                  <span className={`docker-status-badge ${app.status}`}>
-                    {app.status === 'running' ? 'En cours' : 'Arrêté'}
+                  <span className={`docker-status-badge ${app.status === 'running' && app.progress > 0 ? 'running' : 'stopped'}`}>
+                    {app.status === 'running' && app.progress > 0 ? 'En cours' : 'Arrêté'}
                   </span>
                 </div>
                 
@@ -1023,13 +1023,13 @@ const Settings = () => {
                 
                 <div className="docker-app-controls">
                   <button
-                    className={`docker-action-btn ${app.status === 'running' ? 'stop' : 'start'}`}
+                    className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
                     onClick={(e) => {
                       e.stopPropagation(); // Empêcher le déclenchement du onClick du parent
-                      handleAppAction(app.id, app.status === 'running' ? 'stop' : 'start')
+                      handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
                     }}
                   >
-                    {app.status === 'running' ? 'Arrêter' : 'Démarrer'}
+                    {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
                   </button>
                   <button
                     className="docker-action-btn restart"
@@ -1037,7 +1037,7 @@ const Settings = () => {
                       e.stopPropagation(); // Empêcher le déclenchement du onClick du parent
                       handleAppAction(app.id, 'restart')
                     }}
-                    disabled={app.status !== 'running'}
+                    disabled={!(app.status === 'running' && app.progress > 0)}
                   >
                     Redémarrer
                   </button>
