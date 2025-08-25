@@ -208,6 +208,7 @@ const Home = () => {
 
   const [serverStatus, setServerStatus] = useState(false);
   const [appStatus, setAppStatus] = useState({});
+  const [applications, setApplications] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const [mounted, setMounted] = useState(false);
@@ -237,15 +238,57 @@ const Home = () => {
     
     const serverUrl = getServerUrl(accessMode);
     
-    const connectSocket = async () => {
+    const fetchApplications = async () => {
       try {
-        console.log(`[Home] Tentative de connexion Socket.io à: ${serverUrl}`);
+        const response = await axios.get(`${getServerUrl(accessMode)}/api/apps`);
+        const apps = response.data.map(app => ({
+          ...app,
+          port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
+          autostart: false
+        }));
+        setApplications(apps);
         
-        // En mode web, ne connecter que si on est en mode private avec serveur local
-        if (!isElectron() && accessMode !== 'private') {
-          console.log('[Home] Mode web - connexion Socket.io désactivée en mode public');
-          return;
+        // Mettre à jour le statut des applications pour Home.js
+        const newAppStatus = {};
+        //console.log('[Home] Applications reçues:', apps.map(app => ({ name: app.name, running: app.running, fullApp: app })));
+        //console.log('[Home] APPS_CONFIG disponible:', Object.entries(APPS_CONFIG).map(([id, config]) => ({ id, name: config.name })));
+        
+        apps.forEach(app => {
+          // Trouver la configuration correspondante dans APPS_CONFIG
+          const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
+            const match = config.name.toLowerCase() === app.name.toLowerCase() || 
+                         iconId.includes(app.name.toLowerCase());
+            //console.log(`[Home] Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
+            return match;
+          });
+          
+          if (configEntry) {
+            const [iconId] = configEntry;
+            //console.log(`[Home] Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
+            newAppStatus[iconId] = app.status === 'running';
+          } else {
+           // console.log(`[Home] Aucun mapping trouvé pour: ${app.name}`);
+          }
+        });
+        
+        console.log('[Home] Nouveau statut calculé:', newAppStatus);
+        setAppStatus(newAppStatus);
+        
+      } catch (error) {
+        console.error('[Home] Erreur lors de la récupération des applications:', error);
+      }
+    };
+
+    // Récupérer les applications au chargement
+    fetchApplications();
+    
+    const connectSocket = () => {
+      try {
+        if (currentSocket) {
+          currentSocket.disconnect();
         }
+        
+        console.log(`[Home] Tentative de connexion Socket.io vers: ${serverUrl}`);
         
         const newSocket = io(serverUrl, {
           transports: ['websocket', 'polling'],
@@ -292,19 +335,46 @@ const Home = () => {
         newSocket.on('server-status', (data) => {
           console.log('[Home] Statut serveur reçu:', data.status);
           setServerStatus(data.status);
+        });
+
+        // Écouter les mises à jour des statuts d'applications (comme dans Settings.js)
+        newSocket.on('apps-status-update', (updatedApps) => {
+          console.log('[Home] Mise à jour des applications reçue:', updatedApps);
+          setApplications(prevApps => {
+            return updatedApps.map(updatedApp => {
+              const existingApp = prevApps.find(app => app.id === updatedApp.id);
+              return {
+                ...updatedApp,
+                port: updatedApp.ports && updatedApp.ports.length > 0 ? updatedApp.ports[0] : null,
+                autostart: existingApp ? existingApp.autostart : false
+              };
+            });
+          });
+
+          // Mettre à jour le statut des applications pour Home.js
+          const newAppStatus = {};
+          console.log('[Home] Mise à jour apps reçues:', updatedApps.map(app => ({ name: app.name, running: app.running })));
           
-          if (data.activeContainers) {
-            console.log('[Home] Conteneurs actifs:', data.activeContainers);
-            const newAppStatus = {};
-            
-            Object.entries(APPS_CONFIG).forEach(([appId, config]) => {
-              if (config.showStatus && config.containerName) {
-                newAppStatus[appId] = data.activeContainers.includes(config.containerName);
-              }
+          updatedApps.forEach(app => {
+            // Trouver la configuration correspondante dans APPS_CONFIG
+            const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
+              const match = config.name.toLowerCase() === app.name.toLowerCase() || 
+                           iconId.includes(app.name.toLowerCase());
+              console.log(`[Home] Mise à jour - Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
+              return match;
             });
             
-            setAppStatus(newAppStatus);
-          }
+            if (configEntry) {
+              const [iconId] = configEntry;
+              console.log(`[Home] Mise à jour - Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
+              newAppStatus[iconId] = app.status === 'running';
+            } else {
+              console.log(`[Home] Mise à jour - Aucun mapping trouvé pour: ${app.name}`);
+            }
+          });
+          
+          console.log('[Home] Mise à jour - Nouveau statut calculé:', newAppStatus);
+          setAppStatus(newAppStatus);
         });
         
       } catch (error) {

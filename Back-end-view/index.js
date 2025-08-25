@@ -225,10 +225,10 @@ async function getAppStatus() {
     });
     
     // Déterminer si l'application est considérée comme "running"
-    // Une application est "running" seulement si TOUS ses conteneurs sont actifs
+    // Une application est "running" si au moins un de ses conteneurs est actif
     for (const appName in apps) {
       const app = apps[appName];
-      app.running = app.total > 0 && app.active === app.total;
+      app.running = app.active > 0;
     }
     
     // Formater la sortie finale
