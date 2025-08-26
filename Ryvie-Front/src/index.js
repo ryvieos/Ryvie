@@ -11,34 +11,62 @@ import Userlogin from './connexion';
 import { initializeSession, isSessionActive } from './utils/sessionManager';
 import { isElectron } from './utils/platformUtils';
 import { handleAuthError } from './services/authService';
+import faviconUrl from './icons/ryvielogo0.png';
 
 // Composant de redirection conditionnelle (Web et Electron)
 const ProtectedRoute = ({ children }) => {
   return isSessionActive() ? children : <Navigate to="/login" replace />;
 };
 
-// Configurer l'intercepteur Axios pour gérer automatiquement les erreurs d'authentification
-axios.interceptors.response.use(
-  response => response,
-  error => {
-    // Si c'est une erreur d'authentification, la fonction handleAuthError s'en occupera
-    if (handleAuthError(error)) {
-      // L'erreur a été traitée comme une erreur d'authentification
-      return Promise.reject({
-        ...error,
-        handled: true // Marquer l'erreur comme déjà traitée
-      });
+// Configurer l'intercepteur Axios pour gérer automatiquement les erreurs d'authentification (une seule fois)
+if (!axios.__ryvieAuthInterceptorInstalled) {
+  axios.interceptors.response.use(
+    response => response,
+    error => {
+      // Ne rien faire de spécial si on est déjà sur la page de login pour éviter les boucles
+      try {
+        if (typeof window !== 'undefined' && window.location?.hash?.includes('#/login')) {
+          return Promise.reject(error);
+        }
+      } catch { /* noop */ }
+
+      // Si c'est une erreur d'authentification, la fonction handleAuthError s'en occupera
+      if (handleAuthError(error)) {
+        // L'erreur a été traitée comme une erreur d'authentification
+        return Promise.reject({
+          ...error,
+          handled: true // Marquer l'erreur comme déjà traitée
+        });
+      }
+      // Pour les autres types d'erreurs, les laisser se propager normalement
+      return Promise.reject(error);
     }
-    // Pour les autres types d'erreurs, les laisser se propager normalement
-    return Promise.reject(error);
-  }
-);
+  );
+  axios.__ryvieAuthInterceptorInstalled = true;
+}
 
 const App = () => {
   useEffect(() => {
     // Initialiser la session au démarrage
     initializeSession();
     console.log(`[App] Application démarrée en mode ${isElectron() ? 'Electron' : 'Web'}`);
+
+    // Définir le favicon pour l'onglet Web
+    try {
+      if (typeof document !== 'undefined') {
+        let link = document.querySelector("link[rel='icon']");
+        if (!link) {
+          link = document.createElement('link');
+          link.setAttribute('rel', 'icon');
+          document.head.appendChild(link);
+        }
+        link.setAttribute('href', faviconUrl);
+        link.setAttribute('type', 'image/png');
+        link.setAttribute('sizes', '32x32');
+      }
+    } catch (e) {
+      console.warn('[App] Impossible de définir le favicon:', e);
+    }
   }, []);
 
   return (

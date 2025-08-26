@@ -391,47 +391,80 @@ const Home = () => {
   }, [accessMode]);
   
   useEffect(() => {
-    const fetchWeatherData = () => {
-      const geoApiUrl = 'http://ip-api.com/json';
-
-      axios
-        .get(geoApiUrl)
-        .then((response) => {
-          const { city, lat, lon } = response.data;
-          const weatherApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,weathercode,relative_humidity_2m,windspeed_10m&timezone=auto`;
-
-          axios.get(weatherApiUrl).then((weatherResponse) => {
-            const data = weatherResponse.data;
-            const weatherCode = data.current_weather.weathercode;
-            let icon = 'sunny.png';
-
-            if (weatherCode >= 1 && weatherCode <= 3) {
-              icon = 'cloudy.png';
-            } else if ([61,63,65].includes(weatherCode)) {
-              icon = 'rainy.png';
-            }
-
-            setWeather({
-              location: city,
-              temperature: data.current_weather.temperature,
-              humidity: data.hourly.relative_humidity_2m[0],
-              wind: data.current_weather.windspeed,
-              description: weatherCode,
-              icon: icon,
-            });
+    const fetchWeatherData = async () => {
+      try {
+        // 1) Essayer d'abord la géolocalisation du navigateur (position réelle de l'utilisateur)
+        const getPosition = () =>
+          new Promise((resolve, reject) => {
+            if (!navigator.geolocation) return reject(new Error('Geolocation non disponible'));
+            navigator.geolocation.getCurrentPosition(
+              (pos) => resolve(pos),
+              (err) => reject(err),
+              { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+            );
           });
-        })
-        .catch((error) => {
-          console.error('Erreur lors de la récupération de la localisation', error);
-          setWeather({
-            location: 'Localisation non disponible',
-            temperature: null,
-            humidity: null,
-            wind: null,
-            description: '',
-            icon: 'default.png',
-          });
+
+        let latitude = null;
+        let longitude = null;
+        let cityName = null;
+
+        try {
+          const pos = await getPosition();
+          latitude = pos.coords.latitude;
+          longitude = pos.coords.longitude;
+
+          // Reverse geocoding pour obtenir le nom de la ville depuis les coordonnées
+          try {
+            const reverseUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=fr`;
+            const rev = await axios.get(reverseUrl);
+            cityName = rev?.data?.city || rev?.data?.locality || rev?.data?.principalSubdivision || 'Votre position';
+          } catch (e) {
+            cityName = 'Votre position';
+          }
+        } catch (geoErr) {
+          // 2) Repli: géolocalisation par IP (HTTPS)
+          try {
+            const ipResp = await axios.get('https://ipapi.co/json/');
+            latitude = ipResp.data.latitude;
+            longitude = ipResp.data.longitude;
+            cityName = ipResp.data.city || 'Votre position';
+          } catch (ipErr) {
+            throw new Error('Impossible de récupérer la localisation');
+          }
+        }
+
+        // 3) Appel météo Open-Meteo avec les coordonnées trouvées
+        const weatherApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=temperature_2m,weathercode,relative_humidity_2m,windspeed_10m&timezone=auto`;
+        const weatherResponse = await axios.get(weatherApiUrl);
+        const data = weatherResponse.data;
+        const weatherCode = data.current_weather.weathercode;
+
+        let icon = 'sunny.png';
+        if (weatherCode >= 1 && weatherCode <= 3) {
+          icon = 'cloudy.png';
+        } else if ([61, 63, 65].includes(weatherCode)) {
+          icon = 'rainy.png';
+        }
+
+        setWeather({
+          location: cityName,
+          temperature: data.current_weather.temperature,
+          humidity: data.hourly.relative_humidity_2m[0],
+          wind: data.current_weather.windspeed,
+          description: weatherCode,
+          icon: icon,
         });
+      } catch (error) {
+        console.error('Erreur lors de la récupération de la localisation', error);
+        setWeather({
+          location: 'Localisation non disponible',
+          temperature: null,
+          humidity: null,
+          wind: null,
+          description: '',
+          icon: 'default.png',
+        });
+      }
     };
 
     fetchWeatherData();
