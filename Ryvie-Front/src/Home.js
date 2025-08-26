@@ -6,7 +6,7 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { io } from 'socket.io-client';
 import { Link, useNavigate } from 'react-router-dom';
-import { detectAccessMode, getCurrentAccessMode } from './utils/detectAccessMode';
+import { getCurrentAccessMode } from './utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from './utils/platformUtils';
 import { endSession } from './utils/sessionManager';
 const { getServerUrl, getAppUrl } = require('./config/urls');
@@ -149,7 +149,7 @@ const Taskbar = ({ handleClick }) => {
 // Composant principal
 const Home = () => {
   const navigate = useNavigate();
-  const [accessMode, setAccessMode] = useState('private'); 
+  const [accessMode, setAccessMode] = useState(null); 
   const [zones, setZones] = useState(() => {
     // Essayer de récupérer les zones depuis StorageManager
     const savedZones = StorageManager.getItem('iconZones');
@@ -218,16 +218,27 @@ const Home = () => {
   useEffect(() => {
     const initializeAccessMode = () => {
       // TOUJOURS utiliser le mode stocké - ne jamais faire de détection automatique
-      const mode = getCurrentAccessMode();
+      const mode = getCurrentAccessMode(); // peut être null
       setAccessMode(mode);
       console.log(`[Home] Mode d'accès récupéré depuis le stockage: ${mode}`);
     };
-    
+
     initializeAccessMode();
   }, []);
   
   useEffect(() => {
-    if (!accessMode) return; // Attendre que le mode d'accès soit initialisé
+    if (!accessMode) {
+      console.log('[Home] Aucun mode défini - aucune tentative de connexion Socket.io');
+      return; // Attendre que le mode d'accès soit initialisé
+    }
+
+    // En mode web sous HTTPS, ne pas tenter de connexion en mode private (Mixed Content / réseau local)
+    if (!isElectron() && typeof window !== 'undefined' && window.location?.protocol === 'https:' && accessMode === 'private') {
+      console.log('[Home] Contexte HTTPS Web + mode private -> on évite les tentatives Socket.io pour prévenir les timeouts');
+      setSocketConnected(false);
+      setServerStatus(false);
+      return;
+    }
     
     const serverUrl = getServerUrl(accessMode);
     
