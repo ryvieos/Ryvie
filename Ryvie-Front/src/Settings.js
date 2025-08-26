@@ -7,6 +7,7 @@ import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg
 import io from 'socket.io-client'; // Importer la bibliothèque Socket.IO
 import { isElectron } from './utils/platformUtils';
 const { getServerUrl } = require('./config/urls');
+import { getCurrentAccessMode } from './utils/detectAccessMode';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -134,7 +135,18 @@ const Settings = () => {
   // Récupération des informations serveur
   useEffect(() => {
     // Récupère la valeur de accessMode depuis le localStorage
-    const storedMode = localStorage.getItem('accessMode') || 'private';
+    let storedMode = getCurrentAccessMode(); // peut être null désormais
+    if (!storedMode) {
+      // Si non défini: en HTTPS, forcer public pour éviter Mixed Content
+      if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
+        storedMode = 'public';
+        localStorage.setItem('accessMode', 'public');
+      } else {
+        // En HTTP (dev/local), rester prudent: utiliser 'private' par défaut ici
+        storedMode = 'private';
+        localStorage.setItem('accessMode', 'private');
+      }
+    }
     setAccessMode(storedMode);
     
     // Détermine l'URL du serveur en fonction du mode d'accès

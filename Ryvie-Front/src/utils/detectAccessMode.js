@@ -52,10 +52,10 @@ export async function detectAccessMode(timeout = 2000) {
 
 /**
  * Récupère le mode d'accès actuel depuis localStorage
- * @returns {string} - 'private' ou 'public'
+ * @returns {string|null} - 'private', 'public' ou null si non défini
  */
 export function getCurrentAccessMode() {
-  return localStorage.getItem('accessMode') || 'private';
+  return localStorage.getItem('accessMode');
 }
 
 /**

@@ -38,11 +38,18 @@ export const handleTokenError = (errorCode = null) => {
   localStorage.removeItem('loginAttempts');
   localStorage.removeItem('blockUntil');
   
-  // Rediriger vers la page de connexion
+  // Rediriger vers la page de connexion (sauf si déjà sur la page de login)
   const redirectToLogin = () => {
     const loginHash = '#/login';
     console.log('Redirecting to login page:', loginHash);
     
+    // Ne rien faire si on est déjà sur la page de login
+    try {
+      if (typeof window !== 'undefined' && window.location?.hash?.includes(loginHash)) {
+        return;
+      }
+    } catch { /* noop */ }
+
     if (window.electronAPI) {
       // In Electron environment, use IPC to redirect
       console.log('Using Electron API to redirect');

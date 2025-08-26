@@ -33,9 +33,7 @@ const Userlogin = () => {
           // En Electron, utiliser le mode stocké
           detectedMode = getCurrentAccessMode();
         } else {
-          // En web, forcer le mode privé pour les tests (pas de serveur public)
-          console.log('[Connexion] Mode web - utilisation du serveur local uniquement');
-          detectedMode = 'private';
+          detectedMode = getCurrentAccessMode();
         }
         
         setAccessMode(detectedMode);

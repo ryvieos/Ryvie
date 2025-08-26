@@ -6,7 +6,7 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { io } from 'socket.io-client';
 import { Link, useNavigate } from 'react-router-dom';
-import { detectAccessMode, getCurrentAccessMode } from './utils/detectAccessMode';
+import { getCurrentAccessMode } from './utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from './utils/platformUtils';
 import { endSession } from './utils/sessionManager';
 const { getServerUrl, getAppUrl } = require('./config/urls');
@@ -149,7 +149,7 @@ const Taskbar = ({ handleClick }) => {
 // Composant principal
 const Home = () => {
   const navigate = useNavigate();
-  const [accessMode, setAccessMode] = useState('private'); 
+  const [accessMode, setAccessMode] = useState(null); 
   const [zones, setZones] = useState(() => {
     // Essayer de récupérer les zones depuis StorageManager
     const savedZones = StorageManager.getItem('iconZones');
@@ -216,25 +216,29 @@ const Home = () => {
   const [currentSocket, setCurrentSocket] = useState(null);
   
   useEffect(() => {
-    const initializeAccessMode = async () => {
-      let mode;
-      if (isElectron()) {
-        // En Electron, utiliser le mode stocké
-        mode = getCurrentAccessMode();
-      } else {
-        // En web, détecter automatiquement
-        console.log('[Home] Détection automatique du mode d\'accès...');
-        mode = await detectAccessMode();
-      }
+    const initializeAccessMode = () => {
+      // TOUJOURS utiliser le mode stocké - ne jamais faire de détection automatique
+      const mode = getCurrentAccessMode(); // peut être null
       setAccessMode(mode);
-      console.log(`[Home] Mode d'accès initialisé: ${mode}`);
+      console.log(`[Home] Mode d'accès récupéré depuis le stockage: ${mode}`);
     };
-    
+
     initializeAccessMode();
   }, []);
   
   useEffect(() => {
-    if (!accessMode) return; // Attendre que le mode d'accès soit initialisé
+    if (!accessMode) {
+      console.log('[Home] Aucun mode défini - aucune tentative de connexion Socket.io');
+      return; // Attendre que le mode d'accès soit initialisé
+    }
+
+    // En mode web sous HTTPS, ne pas tenter de connexion en mode private (Mixed Content / réseau local)
+    if (!isElectron() && typeof window !== 'undefined' && window.location?.protocol === 'https:' && accessMode === 'private') {
+      console.log('[Home] Contexte HTTPS Web + mode private -> on évite les tentatives Socket.io pour prévenir les timeouts');
+      setSocketConnected(false);
+      setServerStatus(false);
+      return;
+    }
     
     const serverUrl = getServerUrl(accessMode);
     
@@ -323,13 +327,8 @@ const Home = () => {
             return;
           }
           
-          // Essayer le serveur public seulement en mode Electron
-          if (isElectron() && accessMode === 'private') {
-            console.log('[Home] Tentative de fallback vers le serveur public...');
-            setTimeout(() => {
-              setAccessMode('public');
-            }, 2000);
-          }
+          // Ne jamais changer de mode automatiquement - respecter le mode établi
+          console.log('[Home] Connexion Socket.io échouée - mode d\'accès maintenu:', accessMode);
         });
 
         newSocket.on('server-status', (data) => {
@@ -392,47 +391,80 @@ const Home = () => {
   }, [accessMode]);
   
   useEffect(() => {
-    const fetchWeatherData = () => {
-      const geoApiUrl = 'http://ip-api.com/json';
-
-      axios
-        .get(geoApiUrl)
-        .then((response) => {
-          const { city, lat, lon } = response.data;
-          const weatherApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,weathercode,relative_humidity_2m,windspeed_10m&timezone=auto`;
-
-          axios.get(weatherApiUrl).then((weatherResponse) => {
-            const data = weatherResponse.data;
-            const weatherCode = data.current_weather.weathercode;
-            let icon = 'sunny.png';
-
-            if (weatherCode >= 1 && weatherCode <= 3) {
-              icon = 'cloudy.png';
-            } else if ([61,63,65].includes(weatherCode)) {
-              icon = 'rainy.png';
-            }
-
-            setWeather({
-              location: city,
-              temperature: data.current_weather.temperature,
-              humidity: data.hourly.relative_humidity_2m[0],
-              wind: data.current_weather.windspeed,
-              description: weatherCode,
-              icon: icon,
-            });
+    const fetchWeatherData = async () => {
+      try {
+        // 1) Essayer d'abord la géolocalisation du navigateur (position réelle de l'utilisateur)
+        const getPosition = () =>
+          new Promise((resolve, reject) => {
+            if (!navigator.geolocation) return reject(new Error('Geolocation non disponible'));
+            navigator.geolocation.getCurrentPosition(
+              (pos) => resolve(pos),
+              (err) => reject(err),
+              { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+            );
           });
-        })
-        .catch((error) => {
-          console.error('Erreur lors de la récupération de la localisation', error);
-          setWeather({
-            location: 'Localisation non disponible',
-            temperature: null,
-            humidity: null,
-            wind: null,
-            description: '',
-            icon: 'default.png',
-          });
+
+        let latitude = null;
+        let longitude = null;
+        let cityName = null;
+
+        try {
+          const pos = await getPosition();
+          latitude = pos.coords.latitude;
+          longitude = pos.coords.longitude;
+
+          // Reverse geocoding pour obtenir le nom de la ville depuis les coordonnées
+          try {
+            const reverseUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=fr`;
+            const rev = await axios.get(reverseUrl);
+            cityName = rev?.data?.city || rev?.data?.locality || rev?.data?.principalSubdivision || 'Votre position';
+          } catch (e) {
+            cityName = 'Votre position';
+          }
+        } catch (geoErr) {
+          // 2) Repli: géolocalisation par IP (HTTPS)
+          try {
+            const ipResp = await axios.get('https://ipapi.co/json/');
+            latitude = ipResp.data.latitude;
+            longitude = ipResp.data.longitude;
+            cityName = ipResp.data.city || 'Votre position';
+          } catch (ipErr) {
+            throw new Error('Impossible de récupérer la localisation');
+          }
+        }
+
+        // 3) Appel météo Open-Meteo avec les coordonnées trouvées
+        const weatherApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=temperature_2m,weathercode,relative_humidity_2m,windspeed_10m&timezone=auto`;
+        const weatherResponse = await axios.get(weatherApiUrl);
+        const data = weatherResponse.data;
+        const weatherCode = data.current_weather.weathercode;
+
+        let icon = 'sunny.png';
+        if (weatherCode >= 1 && weatherCode <= 3) {
+          icon = 'cloudy.png';
+        } else if ([61, 63, 65].includes(weatherCode)) {
+          icon = 'rainy.png';
+        }
+
+        setWeather({
+          location: cityName,
+          temperature: data.current_weather.temperature,
+          humidity: data.hourly.relative_humidity_2m[0],
+          wind: data.current_weather.windspeed,
+          description: weatherCode,
+          icon: icon,
         });
+      } catch (error) {
+        console.error('Erreur lors de la récupération de la localisation', error);
+        setWeather({
+          location: 'Localisation non disponible',
+          temperature: null,
+          humidity: null,
+          wind: null,
+          description: '',
+          icon: 'default.png',
+        });
+      }
     };
 
     fetchWeatherData();
@@ -485,38 +517,15 @@ const Home = () => {
       // En Electron, utiliser le comportement existant
       window.open(url, '_blank', 'width=1000,height=700');
     } else {
-      // En mode web, simplifier l'approche pour éviter les erreurs cross-origin
-      const windowName = `${appName.toLowerCase().replace(/[^a-z0-9]/g, '')}_${currentUser}`;
-      
-      // Fermer la fenêtre existante si elle existe
-      const existingWindows = window.openedWindows || {};
-      if (existingWindows[windowName] && !existingWindows[windowName].closed) {
-        console.log(`[Home] Fermeture de la fenêtre existante: ${windowName}`);
-        existingWindows[windowName].close();
-      }
-      
-      // Ajouter des paramètres à l'URL pour signaler le changement d'utilisateur
+      // En mode web: ouvrir en nouvel onglet, pas en fenêtre séparée
       const urlWithParams = new URL(url);
-      urlWithParams.searchParams.set('ryvie_user', currentUser);
-      urlWithParams.searchParams.set('ryvie_logout', 'true');
-      urlWithParams.searchParams.set('ryvie_clear_session', 'true');
-      urlWithParams.searchParams.set('t', Date.now().toString());
-      
-      // Ouvrir directement l'URL avec les paramètres, sans nettoyage côté client
-      const newWindow = window.open(urlWithParams.toString(), windowName, 'width=1000,height=700');
-      
-      if (newWindow) {
-        // Stocker la référence de la fenêtre
-        if (!window.openedWindows) window.openedWindows = {};
-        window.openedWindows[windowName] = newWindow;
-        
-        console.log(`[Home] Ouverture de ${appName} pour l'utilisateur: ${currentUser}`);
-        console.log(`[Home] URL avec paramètres: ${urlWithParams.toString()}`);
-      } else {
-        console.log(`[Home] Impossible d'ouvrir la fenêtre ${appName}`);
-        // Fallback : ouvrir dans un nouvel onglet
-        window.open(urlWithParams.toString(), '_blank');
+      if (currentUser) {
+        urlWithParams.searchParams.set('ryvie_user', currentUser);
+        urlWithParams.searchParams.set('ryvie_logout', 'true');
+        urlWithParams.searchParams.set('ryvie_clear_session', 'true');
       }
+      urlWithParams.searchParams.set('t', Date.now().toString());
+      window.open(urlWithParams.toString(), '_blank');
     }
   };
 

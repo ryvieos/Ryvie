@@ -93,9 +93,14 @@ export const handleAuthError = (error) => {
     console.log('Erreur de vérification du serveur ignorée pour l\'authentification');
     return false;
   }
+
+  // Si on est déjà sur la page de login, ne jamais forcer de redirection
+  if (typeof window !== 'undefined' && window.location.hash.includes('#/login')) {
+    return false;
+  }
   
-  // Vérifier si c'est une erreur d'authentification (401) ou une ressource non trouvée (404)
-  if (error.response && (error.response.status === 401 || error.response.status === 404)) {
+  // Vérifier si c'est une erreur d'authentification (401)
+  if (error.response && error.response.status === 401) {
     console.log('Session expirée ou erreur d\'authentification. Déconnexion automatique...');
     
     // Déconnecter l'utilisateur

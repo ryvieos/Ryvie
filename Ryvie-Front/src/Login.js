@@ -5,6 +5,7 @@ import './styles/Login.css';
 const { getServerUrl } = require('./config/urls');
 import { setAuthToken } from './services/authService';
 import { isSessionActive } from './utils/sessionManager';
+import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode } from './utils/detectAccessMode';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -16,14 +17,40 @@ const Login = () => {
   const [accessMode, setAccessMode] = useState('private');
 
   useEffect(() => {
-    // Récupérer le mode d'accès depuis le localStorage
-    const storedMode = localStorage.getItem('accessMode') || 'private';
-    setAccessMode(storedMode);
+    const initMode = async () => {
+      // 1) Respecter un mode déjà établi (Welcome/Settings)
+      const existingModeRaw = typeof window !== 'undefined' ? window.localStorage.getItem('accessMode') : null;
+      if (existingModeRaw) {
+        setAccessMode(existingModeRaw);
+      } else {
+        // 2) Pas de mode encore défini -> déterminer intelligemment
+        if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
+          // En HTTPS, forcer PUBLIC pour éviter tout Mixed Content
+          persistAccessMode('public');
+          setAccessMode('public');
+          console.log('[Login] Page HTTPS - accessMode initialisé à PUBLIC');
+        } else {
+          // En HTTP (dev/local) -> tester la connectivité locale rapidement
+          try {
+            const detected = await detectAccessMode(1500);
+            setAccessMode(detected);
+            console.log(`[Login] accessMode détecté: ${detected}`);
+          } catch {
+            // Fallback sécurisé
+            persistAccessMode('public');
+            setAccessMode('public');
+            console.log('[Login] Détection échouée - fallback PUBLIC');
+          }
+        }
+      }
 
-    // Vérifier si une session est réellement active avant de rediriger
-    if (isSessionActive()) {
-      navigate('/welcome', { replace: true });
-    }
+      // 3) Vérifier si une session est réellement active avant de rediriger
+      if (isSessionActive()) {
+        navigate('/welcome', { replace: true });
+      }
+    };
+
+    initMode();
   }, []);
 
   const handleLogin = async (e) => {
