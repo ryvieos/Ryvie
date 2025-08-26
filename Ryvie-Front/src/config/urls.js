@@ -26,10 +26,6 @@ const BASE_URLS = {
       PUBLIC: 'https://portainer.test.jules.ryvie.fr',
       PRIVATE: 'http://ryvie.local:9005'
     },
-    OUTLINE: {
-      PUBLIC: 'http://192.168.6.131/#/',
-      PRIVATE: 'http://192.168.6.131/#/'
-    },
     RTRANSFER: {
       PUBLIC: 'https://rtransfer.makerfaire.jules.ryvie.fr/auth/signIn',
       PRIVATE: 'http://ryvie.local:3000'
@@ -41,10 +37,6 @@ const BASE_URLS = {
     RPICTURES: {
       PUBLIC: 'https://rpictures.makerfaire.jules.ryvie.fr',
       PRIVATE: 'http://ryvie.local:2283'
-    },
-    DRIVE: {
-      PUBLIC: 'https://drive.test.jules.ryvie.fr',
-      PRIVATE: 'http://ryvie.local:8081'
     }
   }
 };
