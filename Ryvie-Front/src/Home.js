@@ -484,38 +484,15 @@ const Home = () => {
       // En Electron, utiliser le comportement existant
       window.open(url, '_blank', 'width=1000,height=700');
     } else {
-      // En mode web, simplifier l'approche pour éviter les erreurs cross-origin
-      const windowName = `${appName.toLowerCase().replace(/[^a-z0-9]/g, '')}_${currentUser}`;
-      
-      // Fermer la fenêtre existante si elle existe
-      const existingWindows = window.openedWindows || {};
-      if (existingWindows[windowName] && !existingWindows[windowName].closed) {
-        console.log(`[Home] Fermeture de la fenêtre existante: ${windowName}`);
-        existingWindows[windowName].close();
-      }
-      
-      // Ajouter des paramètres à l'URL pour signaler le changement d'utilisateur
+      // En mode web: ouvrir en nouvel onglet, pas en fenêtre séparée
       const urlWithParams = new URL(url);
-      urlWithParams.searchParams.set('ryvie_user', currentUser);
-      urlWithParams.searchParams.set('ryvie_logout', 'true');
-      urlWithParams.searchParams.set('ryvie_clear_session', 'true');
-      urlWithParams.searchParams.set('t', Date.now().toString());
-      
-      // Ouvrir directement l'URL avec les paramètres, sans nettoyage côté client
-      const newWindow = window.open(urlWithParams.toString(), windowName, 'width=1000,height=700');
-      
-      if (newWindow) {
-        // Stocker la référence de la fenêtre
-        if (!window.openedWindows) window.openedWindows = {};
-        window.openedWindows[windowName] = newWindow;
-        
-        console.log(`[Home] Ouverture de ${appName} pour l'utilisateur: ${currentUser}`);
-        console.log(`[Home] URL avec paramètres: ${urlWithParams.toString()}`);
-      } else {
-        console.log(`[Home] Impossible d'ouvrir la fenêtre ${appName}`);
-        // Fallback : ouvrir dans un nouvel onglet
-        window.open(urlWithParams.toString(), '_blank');
+      if (currentUser) {
+        urlWithParams.searchParams.set('ryvie_user', currentUser);
+        urlWithParams.searchParams.set('ryvie_logout', 'true');
+        urlWithParams.searchParams.set('ryvie_clear_session', 'true');
       }
+      urlWithParams.searchParams.set('t', Date.now().toString());
+      window.open(urlWithParams.toString(), '_blank');
     }
   };
 
