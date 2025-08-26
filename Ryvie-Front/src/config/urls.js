@@ -8,7 +8,7 @@
 const BASE_URLS = {
   // URLs du serveur principal
   SERVER: {
-    PUBLIC: 'https://status.makerfaire.jules.ryvie.fr',
+    PUBLIC: 'https://status.demo.ryvie.fr',
     PRIVATE: 'http://ryvie.local:3002'
   },
   
@@ -19,23 +19,23 @@ const BASE_URLS = {
       PRIVATE: 'http://ryvie.local:5173'
     },
     RDRIVE: {
-      PUBLIC: 'https://rdrive.test.jules.ryvie.fr',
+      PUBLIC: 'https://rdrive.demo.ryvie.fr',
       PRIVATE: 'http://ryvie.local:3010'
     },
     PORTAINER: {
-      PUBLIC: 'https://portainer.test.jules.ryvie.fr',
-      PRIVATE: 'http://ryvie.local:9005'
+      PUBLIC: 'https://portainer.demo.ryvie.fr',
+      PRIVATE: 'http://ryvie.local:9443'
     },
     RTRANSFER: {
-      PUBLIC: 'https://rtransfer.makerfaire.jules.ryvie.fr/auth/signIn',
+      PUBLIC: 'https://rtransfer.demo.ryvie.fr/auth/signIn',
       PRIVATE: 'http://ryvie.local:3000'
     },
     RDROP: {
-      PUBLIC: 'https://rdrop.makerfaire.jules.ryvie.fr',
+      PUBLIC: 'https://rdrop.demo.ryvie.fr',
       PRIVATE: 'http://ryvie.local:8080'
     },
     RPICTURES: {
-      PUBLIC: 'https://rpictures.makerfaire.jules.ryvie.fr',
+      PUBLIC: 'https://rpictures.demo.ryvie.fr',
       PRIVATE: 'http://ryvie.local:2283'
     }
   }
