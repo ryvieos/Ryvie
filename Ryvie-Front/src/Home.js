@@ -216,18 +216,11 @@ const Home = () => {
   const [currentSocket, setCurrentSocket] = useState(null);
   
   useEffect(() => {
-    const initializeAccessMode = async () => {
-      let mode;
-      if (isElectron()) {
-        // En Electron, utiliser le mode stocké
-        mode = getCurrentAccessMode();
-      } else {
-        // En web, détecter automatiquement
-        console.log('[Home] Détection automatique du mode d\'accès...');
-        mode = await detectAccessMode();
-      }
+    const initializeAccessMode = () => {
+      // TOUJOURS utiliser le mode stocké - ne jamais faire de détection automatique
+      const mode = getCurrentAccessMode();
       setAccessMode(mode);
-      console.log(`[Home] Mode d'accès initialisé: ${mode}`);
+      console.log(`[Home] Mode d'accès récupéré depuis le stockage: ${mode}`);
     };
     
     initializeAccessMode();
@@ -323,13 +316,8 @@ const Home = () => {
             return;
           }
           
-          // Essayer le serveur public seulement en mode Electron
-          if (isElectron() && accessMode === 'private') {
-            console.log('[Home] Tentative de fallback vers le serveur public...');
-            setTimeout(() => {
-              setAccessMode('public');
-            }, 2000);
-          }
+          // Ne jamais changer de mode automatiquement - respecter le mode établi
+          console.log('[Home] Connexion Socket.io échouée - mode d\'accès maintenu:', accessMode);
         });
 
         newSocket.on('server-status', (data) => {

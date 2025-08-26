@@ -107,7 +107,7 @@ const User = () => {
       setMessage('');
       setError(null);
       // Récupérer le mode d'accès depuis le localStorage
-      const storedMode = localStorage.getItem('accessMode') || 'private';
+      const storedMode = getCurrentAccessMode();
       setAccessMode(storedMode);
       
       // Utiliser l'URL du serveur en fonction du mode d'accès

@@ -134,7 +134,7 @@ const Settings = () => {
   // Récupération des informations serveur
   useEffect(() => {
     // Récupère la valeur de accessMode depuis le localStorage
-    const storedMode = localStorage.getItem('accessMode') || 'private';
+    const storedMode = getCurrentAccessMode();
     setAccessMode(storedMode);
     
     // Détermine l'URL du serveur en fonction du mode d'accès
