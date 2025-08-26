@@ -54,10 +54,26 @@ module.exports = {
   },
   devServer: {
     static: path.join(__dirname, 'dist'),
-    hot: true, // Active le Hot Module Replacement
+    hot: true,
     compress: true,
     port: 3000,
-  },
+  
+    // ✅ indispensable derrière un reverse proxy
+    host: '0.0.0.0',
+    allowedHosts: ['.ryvie.fr', 'localhost', '127.0.0.1'], // ou: 'all' en dev
+  
+    // SPA (si tu fais du routing côté client)
+    historyApiFallback: true,
+  
+    // ✅ HMR via proxy HTTPS (mets TON sous-domaine)
+    client: {
+      webSocketURL: {
+        protocol: 'wss',
+        hostname: 'demo.ryvie.fr', // ou rtransfer.makerfaire... etc.
+        port: 443
+      }
+    }
+  },  
   plugins: [
     new ReactRefreshWebpackPlugin(), // Ajout de React Refresh Plugin
   ],
