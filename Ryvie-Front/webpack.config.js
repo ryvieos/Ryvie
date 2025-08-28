@@ -60,7 +60,7 @@ module.exports = {
   
     // ✅ indispensable derrière un reverse proxy
     host: '0.0.0.0',
-    allowedHosts: ['.ryvie.fr', 'localhost', '127.0.0.1'], // ou: 'all' en dev
+    allowedHosts: 'all', // ou: 'all' en dev
   
     // SPA (si tu fais du routing côté client)
     historyApiFallback: true,
