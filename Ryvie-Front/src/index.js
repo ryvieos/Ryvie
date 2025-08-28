@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import Home from './Home';
+import AppStore from './AppStore';
 import User from './User';
 import Login from './Login';
 import Settings from './Settings';
@@ -94,6 +95,11 @@ const App = () => {
         <Route path="/welcome" element={
           <ProtectedRoute>
             <Welcome />
+          </ProtectedRoute>
+        } />
+        <Route path="/appstore" element={
+          <ProtectedRoute>
+            <AppStore />
           </ProtectedRoute>
         } />
         <Route path="/userlogin" element={

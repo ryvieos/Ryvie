@@ -210,6 +210,9 @@ const Home = () => {
   const [appStatus, setAppStatus] = useState({});
   const [applications, setApplications] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  // Overlay AppStore
+  const [overlayVisible, setOverlayVisible] = useState(false);
+  const [overlayUrl, setOverlayUrl] = useState('');
 
   const [mounted, setMounted] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
@@ -552,6 +555,21 @@ const Home = () => {
       return;
     }
     
+    // Cas spécial: AppStore -> ouvrir un overlay plein écran avec l'App Store
+    const appNameLower = (appConfig.name || '').toLowerCase();
+    if (appNameLower === 'appstore' || appConfig.urlKey === 'APPSTORE') {
+      try {
+        const base = window.location.origin + window.location.pathname;
+        const url = `${base}#/appstore`;
+        setOverlayUrl(url);
+        setOverlayVisible(true);
+      } catch (e) {
+        console.warn('[Home] Impossible d\'ouvrir l\'AppStore en overlay, navigation de secours /appstore');
+        navigate('/appstore');
+      }
+      return;
+    }
+    
     // Si c'est une route interne (taskbar)
     if (appConfig.route) {
       // Cette logique sera gérée par le composant Link dans Taskbar
@@ -651,6 +669,72 @@ const Home = () => {
             <span className="label">Déconnexion</span>
           </button>
         </div>
+      
+      {overlayVisible && (
+        <div
+          className="appstore-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={(e) => {
+            // fermer uniquement si on clique sur l'arrière-plan (pas à l'intérieur de la modale)
+            if (e.target === e.currentTarget) {
+              setOverlayVisible(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              width: '92vw',
+              height: '86vh',
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+              overflow: 'hidden',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 20,
+                display: 'flex',
+                gap: 8,
+                zIndex: 2
+              }}
+            >
+              <button
+                onClick={() => setOverlayVisible(false)}
+                title="Fermer"
+                style={{
+                  border: '1px solid #ddd',
+                  background: '#fff',
+                  borderRadius: 8,
+                  padding: '6px 10px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <iframe
+              title="App Store"
+              src={overlayUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+            />
+          </div>
+        </div>
+      )}
+
       </DndProvider>
     </div>
   );
