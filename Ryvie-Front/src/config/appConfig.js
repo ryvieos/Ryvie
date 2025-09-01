@@ -2,6 +2,12 @@
  * Configuration dynamique des applications basée sur les icônes disponibles
  */
 
+// Import explicite des icônes critiques de la taskbar (évite les soucis de bundling cross-plateformes)
+import taskSettings from '../icons/task-settings.svg';
+import taskAppStore from '../icons/task-AppStore.svg';
+import taskTransfer from '../icons/task-transfer.svg';
+import taskUser from '../icons/task-user.svg';
+
 // Fonction pour importer toutes les images du dossier icons
 const importAll = (r) => {
   let images = {};
@@ -13,6 +19,12 @@ const importAll = (r) => {
 
 // Importer toutes les icônes
 const images = importAll(require.context('../icons', false, /\.(png|jpe?g|svg)$/));
+
+// Surcharger avec des imports explicites (assure la bonne résolution des URLs)
+images['task-settings.svg'] = (taskSettings && taskSettings.default) ? taskSettings.default : taskSettings;
+images['task-AppStore.svg'] = (taskAppStore && taskAppStore.default) ? taskAppStore.default : taskAppStore;
+images['task-transfer.svg'] = (taskTransfer && taskTransfer.default) ? taskTransfer.default : taskTransfer;
+images['task-user.svg'] = (taskUser && taskUser.default) ? taskUser.default : taskUser;
 
 // Fonction pour extraire le nom de l'app depuis le nom du fichier
 const extractAppName = (filename) => {
@@ -141,10 +153,5 @@ const generateDefaultZones = () => {
   return zones;
 };
 
-// Exporter la configuration et les fonctions
-module.exports = {
-  generateAppConfig,
-  generateDefaultZones,
-  images,
-  extractAppName
-};
+// Exporter la configuration et les fonctions (ESM)
+export { generateAppConfig, generateDefaultZones, images, extractAppName };

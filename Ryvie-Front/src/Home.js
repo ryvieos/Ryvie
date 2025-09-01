@@ -10,7 +10,7 @@ import { getCurrentAccessMode } from './utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from './utils/platformUtils';
 import { endSession } from './utils/sessionManager';
 const { getServerUrl, getAppUrl } = require('./config/urls');
-const { generateAppConfig, generateDefaultZones, images } = require('./config/appConfig');
+import { generateAppConfig, generateDefaultZones, images } from './config/appConfig';
 
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
@@ -129,19 +129,46 @@ const Taskbar = ({ handleClick }) => {
 
   return (
     <div className="taskbar">
-      {taskbarApps.map(({ iconId, config }, index) => (
-        <div key={index} className="taskbar-circle">
-          {config.route ? (
-            <Link to={config.route}>
-              <img src={images[iconId]} alt={config.name} />
-            </Link>
-          ) : (
-            <div onClick={() => handleClick(iconId)}>
-              <img src={images[iconId]} alt={config.name} />
-            </div>
-          )}
-        </div>
-      ))}
+      {taskbarApps.map(({ iconId, config }, index) => {
+        const imgSrc = images[iconId];
+        const label = config?.name || iconId;
+        try { console.debug('[Taskbar] Render icon', { iconId, label, hasImage: !!imgSrc, route: config?.route, src: imgSrc }); } catch (_) {}
+
+        const Img = () => (
+          <img
+            src={imgSrc}
+            alt={label}
+            title={label}
+            onError={(e) => {
+              try { console.warn('[Taskbar] Image failed to load', { iconId, src: imgSrc }); } catch (_) {}
+              e.currentTarget.style.display = 'none';
+            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        );
+
+        return (
+          <div key={index} className="taskbar-circle" aria-label={label} title={label}>
+            {config.route ? (
+              <Link to={config.route} aria-label={label} title={label} style={{ width: '100%', height: '100%' }}>
+                {imgSrc ? <Img /> : null}
+              </Link>
+            ) : (
+              <div
+                onClick={() => handleClick(iconId)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleClick(iconId)}
+                role="button"
+                tabIndex={0}
+                aria-label={label}
+                title={label}
+                style={{ width: '100%', height: '100%' }}
+              >
+                {imgSrc ? <Img /> : null}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
