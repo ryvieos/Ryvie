@@ -24,11 +24,11 @@ const BASE_URLS = {
     },
     PORTAINER: {
       PUBLIC: 'https://portainer.demo.ryvie.fr',
-      PRIVATE: 'http://ryvie.local:9443'
+      PRIVATE: 'http://ryvie.local:9000'
     },
     RTRANSFER: {
       PUBLIC: 'https://rtransfer.demo.ryvie.fr/auth/signIn',
-      PRIVATE: 'http://ryvie.local:3000'
+      PRIVATE: 'http://ryvie.local:3011'
     },
     RDROP: {
       PUBLIC: 'https://rdrop.demo.ryvie.fr',

@@ -84,7 +84,7 @@ const generateAppConfig = () => {
         break;
       case 'appstore':
         config[iconFile].urlKey = 'APPSTORE';
-        config[iconFile].route = null;
+        config[iconFile].route = null; // laisser passer par handleClick pour afficher un overlay
         break;
     }
   });

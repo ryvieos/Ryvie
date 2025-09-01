@@ -60,19 +60,21 @@ module.exports = {
   
     // ✅ indispensable derrière un reverse proxy
     host: '0.0.0.0',
-    allowedHosts: ['.ryvie.fr', 'localhost', '127.0.0.1'], // ou: 'all' en dev
+    allowedHosts: 'all', // ou: 'all' en dev
   
     // SPA (si tu fais du routing côté client)
     historyApiFallback: true,
   
-    // ✅ HMR via proxy HTTPS (mets TON sous-domaine)
-    client: {
-      webSocketURL: {
-        protocol: 'wss',
-        hostname: 'demo.ryvie.fr', // ou rtransfer.makerfaire... etc.
-        port: 443
-      }
-    }
+    // ✅ HMR via proxy HTTPS (activé seulement si PUBLIC_HMR=1)
+    client: process.env.PUBLIC_HMR === '1'
+      ? {
+          webSocketURL: {
+            protocol: 'wss',
+            hostname: 'demo.ryvie.fr', // à adapter à ton domaine public
+            port: 443,
+          },
+        }
+      : undefined,
   },  
   plugins: [
     new ReactRefreshWebpackPlugin(), // Ajout de React Refresh Plugin
