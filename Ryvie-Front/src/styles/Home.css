@@ -117,6 +117,16 @@ body, html {
   animation-delay: 0.3s;
 }
 
+/* Fallback accessibilité / Firefox: si l'utilisateur préfère réduire les animations,
+   on s'assure que la taskbar est visible immédiatement (pas décalée hors-écran). */
+@media (prefers-reduced-motion: reduce) {
+  .taskbar {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+}
+
 /* Cercles dans la barre des tâches */
 .taskbar-circle {
   width: 60px;
