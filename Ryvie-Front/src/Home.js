@@ -34,7 +34,7 @@ const ItemTypes = {
 };
 
 // Composant pour chaque icône
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActive }) => {
+const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActive, isSpinning }) => {
   const ref = React.useRef(null);
   const appConfig = APPS_CONFIG[id] || {};
 
@@ -76,6 +76,23 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActiv
             }}
           ></div>
         )}
+        {isSpinning && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(255,255,255,0.15)'
+            }}
+          >
+            <div className="loading-spinner" style={{ width: 24, height: 24, borderWidth: 3 }}></div>
+          </div>
+        )}
       </div>
       {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
     </div>
@@ -83,7 +100,7 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActiv
 };
 
 // Composant Zone
-const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus }) => {
+const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appSpinners }) => {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: ItemTypes.ICON,
     canDrop: () => true,
@@ -113,6 +130,7 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus }) =>
             handleClick={handleClick}
             showName={showName}
             isActive={appStatus[iconId[0]]}
+            isSpinning={appSpinners[iconId[0]]}
           />
         )}
       </div>
@@ -235,6 +253,7 @@ const Home = () => {
 
   const [serverStatus, setServerStatus] = useState(false);
   const [appStatus, setAppStatus] = useState({});
+  const [appSpinners, setAppSpinners] = useState({});
   const [applications, setApplications] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   // Overlay AppStore
@@ -284,6 +303,7 @@ const Home = () => {
         
         // Mettre à jour le statut des applications pour Home.js
         const newAppStatus = {};
+        const newAppSpinners = {};
         //console.log('[Home] Applications reçues:', apps.map(app => ({ name: app.name, running: app.running, fullApp: app })));
         //console.log('[Home] APPS_CONFIG disponible:', Object.entries(APPS_CONFIG).map(([id, config]) => ({ id, name: config.name })));
         
@@ -300,6 +320,7 @@ const Home = () => {
             const [iconId] = configEntry;
             //console.log(`[Home] Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
             newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
+            newAppSpinners[iconId] = !!(app.starting || app.stopping);
           } else {
            // console.log(`[Home] Aucun mapping trouvé pour: ${app.name}`);
           }
@@ -307,6 +328,7 @@ const Home = () => {
         
         console.log('[Home] Nouveau statut calculé:', newAppStatus);
         setAppStatus(newAppStatus);
+        setAppSpinners(newAppSpinners);
         
       } catch (error) {
         console.error('[Home] Erreur lors de la récupération des applications:', error);
@@ -382,6 +404,7 @@ const Home = () => {
 
           // Mettre à jour le statut des applications pour Home.js
           const newAppStatus = {};
+          const newAppSpinners = {};
           console.log('[Home] Mise à jour apps reçues:', updatedApps.map(app => ({ name: app.name, running: app.running })));
           
           updatedApps.forEach(app => {
@@ -397,6 +420,7 @@ const Home = () => {
               const [iconId] = configEntry;
               console.log(`[Home] Mise à jour - Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
               newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
+              newAppSpinners[iconId] = !!(app.starting || app.stopping);
             } else {
               console.log(`[Home] Mise à jour - Aucun mapping trouvé pour: ${app.name}`);
             }
@@ -404,6 +428,7 @@ const Home = () => {
           
           console.log('[Home] Mise à jour - Nouveau statut calculé:', newAppStatus);
           setAppStatus(newAppStatus);
+          setAppSpinners(newAppSpinners);
         });
         
       } catch (error) {
@@ -648,6 +673,7 @@ const Home = () => {
                   moveIcon={moveIcon}
                   handleClick={handleClick}
                   appStatus={appStatus}
+                  appSpinners={appSpinners}
                 />
               </div>
               <div className="widget" style={{ backgroundImage: `url(${weatherImages[weather.icon]})` }}>
@@ -673,6 +699,7 @@ const Home = () => {
                   moveIcon={moveIcon}
                   handleClick={handleClick}
                   appStatus={appStatus}
+                  appSpinners={appSpinners}
                   className="zone-right"
                 />
               </div>
@@ -686,6 +713,7 @@ const Home = () => {
                   moveIcon={moveIcon}
                   handleClick={handleClick}
                   appStatus={appStatus}
+                  appSpinners={appSpinners}
                 />
               ))}
             </div>
