@@ -71,31 +71,11 @@ const { verifyToken, isAdmin, hasPermission } = require('./middleware/auth');
 
 const docker = new Docker();
 const app = express();
-
-// Configure CORS (allowlist)
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://demo.ryvie.fr')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean);
-
-const corsOptions = {
-  origin: (origin, callback) => {
-    // allow non-browser requests (no Origin) and allowlisted origins
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Length', 'Content-Type'],
-};
-
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
-    methods: ['GET', 'POST'],
-    credentials: true,
+    origin: "*",
+    methods: ["GET", "POST"],
   },
 });
 
@@ -105,9 +85,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// Apply CORS to all routes and handle preflight
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 // Rate limiting for authentication endpoints
@@ -151,21 +129,6 @@ const containerMapping = {
   'rpictures': 'rPictures',
 };
 
-// In-memory action flags for apps (set when a start/stop is requested)
-// Keys are app IDs (e.g., 'app-rcloud')
-const appActions = {};
-
-// Helper to parse Docker status string to extract health state
-// Examples: 'Up 10 seconds (healthy)', 'Up 5 seconds (health: starting)', 'Up 3 seconds (unhealthy)'
-function parseHealthFromStatus(status) {
-  if (!status) return null;
-  const s = String(status).toLowerCase();
-  if (s.includes('(healthy)')) return 'healthy';
-  if (s.includes('(health: starting)') || s.includes('(starting)')) return 'starting';
-  if (s.includes('(unhealthy)')) return 'unhealthy';
-  return null;
-}
-
 // Fonction pour extraire le nom de l'application à partir du nom du conteneur
 function extractAppName(containerName) {
   // Vérifier si le conteneur commence par 'app-'
@@ -189,6 +152,22 @@ async function getAllContainers() {
     docker.listContainers({ all: true }, (err, containers) => {
       if (err) return reject(err);
       resolve(containers);
+    });
+  });
+}
+
+// Fonction pour récupérer les conteneurs Docker actifs
+async function initializeActiveContainers() {
+  return new Promise((resolve, reject) => {
+    docker.listContainers({ all: false }, (err, containers) => {
+      if (err) return reject(err);
+
+      const containerNames = containers.map((container) => {
+        return container.Names[0].replace('/', '');
+      });
+
+      console.log('Liste initialisée des conteneurs actifs :', containerNames);
+      resolve(containerNames);
     });
   });
 }
@@ -218,12 +197,7 @@ async function getAppStatus() {
           running: false,
           total: 0,
           active: 0,
-          ports: [],
-          health: {
-            healthy: 0,
-            starting: 0,
-            unhealthy: 0
-          }
+          ports: []
         };
       }
       
@@ -242,17 +216,11 @@ async function getAppStatus() {
         }
       }
       
-      const health = parseHealthFromStatus(container.Status);
-      if (health && apps[appName]?.health) {
-        apps[appName].health[health] = (apps[appName].health[health] || 0) + 1;
-      }
-
       apps[appName].containers.push({
         id: container.Id,
         name: containerName,
         state: container.State,
-        status: container.Status,
-        health: health
+        status: container.Status
       });
     });
     
@@ -263,44 +231,16 @@ async function getAppStatus() {
       app.running = app.active > 0;
     }
     
-    // Formater la sortie finale, en ajoutant les flags starting/stopping
-    const result = Object.values(apps).map(app => {
-      const { id } = app;
-      const flags = appActions[id] || { starting: false, stopping: false };
-
-      // Auto-clear flags when conditions are met
-      // Starting: no container in health 'starting' AND at least one healthy
-      if (flags.starting) {
-        const hasHealthStarting = (app.health?.starting || 0) > 0;
-        const hasHealthy = (app.health?.healthy || 0) > 0;
-        if (!hasHealthStarting && hasHealthy) {
-          appActions[id] = { ...(appActions[id] || {}), starting: false };
-          flags.starting = false;
-        }
-      }
-      // Stopping: all containers inactive
-      if (flags.stopping) {
-        if (app.total > 0 && app.active === 0) {
-          appActions[id] = { ...(appActions[id] || {}), stopping: false };
-          flags.stopping = false;
-        }
-      }
-
-      return {
-        id: app.id,
-        name: app.name,
-        status: app.running ? 'running' : 'stopped',
-        progress: app.total > 0 ? Math.round((app.active / app.total) * 100) : 0,
-        containersRunning: `${app.active}/${app.total}`,
-        ports: app.ports.sort((a, b) => a - b), // Trier les ports
-        containers: app.containers,
-        starting: flags.starting || false,
-        stopping: flags.stopping || false,
-        health: app.health
-      };
-    });
-
-    return result;
+    // Formater la sortie finale
+    return Object.values(apps).map(app => ({
+      id: app.id,
+      name: app.name,
+      status: app.running ? 'running' : 'stopped',
+      progress: app.total > 0 ? Math.round((app.active / app.total) * 100) : 0,
+      containersRunning: `${app.active}/${app.total}`,
+      ports: app.ports.sort((a, b) => a - b), // Trier les ports
+      containers: app.containers
+    }));
   } catch (error) {
     console.error('Erreur lors de la récupération du statut des applications:', error);
     throw error;
@@ -324,16 +264,6 @@ async function startApp(appId) {
       throw new Error(`Aucun conteneur trouvé pour l'application ${appId}`);
     }
     
-    // Marquer l'application comme "starting" immédiatement
-    appActions[appId] = { ...(appActions[appId] || {}), starting: true, stopping: false };
-    // Émettre une mise à jour immédiate pour afficher le spinner côté frontend
-    try {
-      const apps = await getAppStatus();
-      io.emit('apps-status-update', apps);
-    } catch (e) {
-      console.warn('Impossible d\'émettre la mise à jour apps (start):', e?.message || e);
-    }
-
     // Démarrer chaque conteneur arrêté
     for (const container of appContainers) {
       if (container.State !== 'running') {
@@ -376,16 +306,6 @@ async function stopApp(appId) {
       throw new Error(`Aucun conteneur trouvé pour l'application ${appId}`);
     }
     
-    // Marquer l'application comme "stopping" immédiatement
-    appActions[appId] = { ...(appActions[appId] || {}), stopping: true, starting: false };
-    // Émettre une mise à jour immédiate pour afficher le spinner côté frontend
-    try {
-      const apps = await getAppStatus();
-      io.emit('apps-status-update', apps);
-    } catch (e) {
-      console.warn('Impossible d\'émettre la mise à jour apps (stop):', e?.message || e);
-    }
-
     // Arrêter chaque conteneur en cours d'exécution
     for (const container of appContainers) {
       if (container.State === 'running') {
