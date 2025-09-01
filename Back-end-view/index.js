@@ -71,11 +71,31 @@ const { verifyToken, isAdmin, hasPermission } = require('./middleware/auth');
 
 const docker = new Docker();
 const app = express();
+
+// Configure CORS (allowlist)
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://demo.ryvie.fr')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // allow non-browser requests (no Origin) and allowlisted origins
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
+};
+
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 
@@ -85,7 +105,9 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-app.use(cors());
+// Apply CORS to all routes and handle preflight
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
 // Rate limiting for authentication endpoints
