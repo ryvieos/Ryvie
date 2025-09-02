@@ -70,11 +70,14 @@ console.log('✅ Environment variables validated successfully');
 const { verifyToken, isAdmin, hasPermission } = require('./middleware/auth');
 const usersRouter = require('./routes/users');
 const appsRouter = require('./routes/apps');
+const authRouter = require('./routes/auth');
 const { getAppStatus } = require('./services/dockerService');
 const ldapConfig = require('./config/ldap');
 
 const docker = new Docker();
 const app = express();
+// Behind reverse proxies (Docker/Nginx), enable trust proxy so rate limit & req.ip work with X-Forwarded-For safely
+app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: {
@@ -103,11 +106,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   // Skip successful requests
-  skipSuccessfulRequests: true,
-  // Custom key generator to include user ID
-  keyGenerator: (req) => {
-    return `${req.ip}_${req.body?.uid || 'unknown'}`;
-  }
+  skipSuccessfulRequests: true
 });
 
 // General API rate limiting
@@ -129,6 +128,9 @@ app.use('/api', usersRouter);
 
 // Mount Docker apps routes
 app.use('/api', appsRouter);
+
+// Mount Auth routes
+app.use('/api', authRouter);
 
 // Apps helper functions moved to services/dockerService.js
 
@@ -328,436 +330,7 @@ async function clearFailedAttempts(uid, ip) {
   }
 }
 
-// Endpoint : Authentification utilisateur LDAP
-app.post('/api/authenticate', authLimiter, async (req, res) => {
-  const { uid: rawUid, password: rawPassword } = req.body;
-  const uid = (rawUid || '').trim();
-  const password = (rawPassword || '').trim();
-
-  if (!uid || !password) {
-    return res.status(400).json({ error: 'UID et mot de passe requis' });
-  }
-
-  // Check brute force protection
-  const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
-  const bruteForceCheck = await checkBruteForce(uid, clientIP);
-  
-  if (bruteForceCheck.blocked) {
-    console.warn(`[security] Brute force protection: blocking ${uid} from ${clientIP}`);
-    return res.status(429).json({ 
-      error: 'Trop de tentatives échouées. Réessayez plus tard.',
-      retryAfter: bruteForceCheck.retryAfter
-    });
-  }
-
-  const ldapClient = ldap.createClient({ 
-    url: ldapConfig.url,
-    timeout: 5000,
-    connectTimeout: 5000
-  });
-
-  console.log(`Tentative d'authentification pour l'utilisateur: ${uid}`);
-  
-  // Première connexion pour rechercher le DN utilisateur
-  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
-    if (err) {
-      console.error('Erreur de connexion LDAP initiale:', err);
-      return res.status(500).json({ error: 'Échec de connexion LDAP initiale' });
-    }
-
-    // Rechercher l'utilisateur par uid d'abord (recommandé). Retomber sur cn si rien trouvé.
-    const escaped = escapeLdapFilterValue(uid);
-    const primaryFilter = `(uid=${escaped})`;
-    const fallbackFilter = `(cn=${escaped})`;
-    const userFilter = `(|${primaryFilter}${fallbackFilter})`;
-    const searchFilter = `(&${primaryFilter}${ldapConfig.userFilter})`;
-    
-    console.log('Recherche utilisateur avec filtre:', searchFilter);
-
-    ldapClient.search(ldapConfig.userSearchBase, {
-      filter: searchFilter,
-      scope: 'sub',
-      attributes: ['dn', 'cn', 'mail', 'uid'],
-    }, (err, ldapRes) => {
-      if (err) {
-        console.error('Erreur de recherche utilisateur LDAP:', err);
-        return res.status(500).json({ error: 'Erreur de recherche utilisateur' });
-      }
-
-      let userEntry;
-      let fallbackTried = false;
-
-      ldapRes.on('searchEntry', (entry) => {
-        userEntry = entry;
-        console.log('Entrée LDAP trouvée:', entry.pojo.objectName);
-      });
-
-      ldapRes.on('error', (err) => {
-        console.error('Erreur lors de la recherche LDAP:', err);
-      });
-
-      ldapRes.on('end', () => {
-        if (!userEntry) {
-          // Retenter avec le filtre incluant cn si uid exact introuvable
-          if (!fallbackTried) {
-            fallbackTried = true;
-            const altSearch = `(&${userFilter}${ldapConfig.userFilter})`;
-            console.log('Aucun uid exact trouvé. Nouvelle recherche avec filtre:', altSearch);
-            return ldapClient.search(ldapConfig.userSearchBase, {
-              filter: altSearch,
-              scope: 'sub',
-              attributes: ['dn', 'cn', 'mail', 'uid'],
-            }, (err2, altRes) => {
-              if (err2) {
-                console.error('Erreur de recherche LDAP (fallback):', err2);
-                ldapClient.unbind();
-                return res.status(500).json({ error: 'Erreur de recherche utilisateur' });
-              }
-              altRes.on('searchEntry', (entry) => {
-                // Choisir prioritairement l'entrée dont l'uid correspond exactement (insensible à la casse)
-                const attrs = {};
-                entry.pojo.attributes.forEach(a => attrs[a.type] = a.values[0]);
-                if (!userEntry && attrs.uid && String(attrs.uid).toLowerCase() === uid.toLowerCase()) {
-                  userEntry = entry;
-                } else if (!userEntry) {
-                  userEntry = entry; // au moins une entrée
-                }
-              });
-              altRes.on('end', () => {
-                if (!userEntry) {
-                  console.error(`Utilisateur ${uid} non trouvé dans LDAP (après fallback)`);
-                  ldapClient.unbind();
-                  return res.status(401).json({ error: 'Utilisateur non trouvé' });
-                }
-                // Continuer le flux normal avec userEntry défini
-                proceedWithUserEntry(userEntry);
-              });
-            });
-          }
-          console.error(`Utilisateur ${uid} non trouvé dans LDAP`);
-          ldapClient.unbind();
-          return res.status(401).json({ error: 'Utilisateur non trouvé' });
-        }
-        proceedWithUserEntry(userEntry);
-      });
-
-      function proceedWithUserEntry(userEntry) {
-        const userDN = userEntry.pojo.objectName;
-        console.log(`DN utilisateur trouvé: ${userDN}`);
-
-        // Tente de connecter l'utilisateur avec son propre DN et mot de passe
-        const userAuthClient = ldap.createClient({ 
-          url: ldapConfig.url,
-          timeout: 5000,
-          connectTimeout: 5000
-        });
-        
-        userAuthClient.bind(userDN, password, async (err) => {
-          if (err) {
-            console.error('Échec de l\'authentification utilisateur:', err);
-            ldapClient.unbind();
-            userAuthClient.destroy();
-            
-            // Record failed attempt for brute force protection
-            const attempts = await recordFailedAttempt(uid, clientIP);
-            console.warn(`[security] Failed login attempt ${attempts} for ${uid} from ${clientIP}`);
-            
-            return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
-          }
-
-          // Authentification réussie - clear failed attempts
-          console.log(`Authentification réussie pour ${uid}`);
-          await clearFailedAttempts(uid, clientIP);
-          userAuthClient.unbind();
-          
-          // Rechercher l'appartenance aux groupes
-          let role = 'Guest'; // Rôle par défaut
-          
-          // Vérifier si l'utilisateur est membre du groupe Admin
-          ldapClient.search(ldapConfig.adminGroup, {
-            scope: 'base',
-            filter: '(objectClass=*)',
-            attributes: ['member']
-          }, (err, groupRes) => {
-            if (err) {
-              console.error('Erreur lors de la recherche du groupe admin:', err);
-              // Continuer avec le rôle par défaut
-              completeAuthentication();
-              return;
-            }
-            
-            let isAdmin = false;
-            
-            groupRes.on('searchEntry', (entry) => {
-              const members = entry.pojo.attributes.find(attr => attr.type === 'member')?.values || [];
-              if (members.includes(userDN)) {
-                isAdmin = true;
-                role = 'Admin';
-                console.log(`L'utilisateur ${uid} est membre du groupe admin`);
-              }
-            });
-            
-            groupRes.on('end', () => {
-              if (!isAdmin) {
-                // Si pas admin, vérifier si membre du groupe User
-                ldapClient.search(ldapConfig.userGroup, {
-                  scope: 'base',
-                  filter: '(objectClass=*)',
-                  attributes: ['member']
-                }, (err, userGroupRes) => {
-                  if (err) {
-                    console.error('Erreur lors de la recherche du groupe user:', err);
-                    // Continuer avec le rôle par défaut
-                    completeAuthentication();
-                    return;
-                  }
-                  
-                  userGroupRes.on('searchEntry', (entry) => {
-                    const members = entry.pojo.attributes.find(attr => attr.type === 'member')?.values || [];
-                    if (members.includes(userDN)) {
-                      role = 'User';
-                      console.log(`L'utilisateur ${uid} est membre du groupe user`);
-                    }
-                  });
-                  
-                  userGroupRes.on('end', () => {
-                    completeAuthentication();
-                  });
-                });
-              } else {
-                completeAuthentication();
-              }
-            });
-          });
-          
-          // Fonction pour finaliser l'authentification avec le rôle déterminé
-          function completeAuthentication() {
-            ldapClient.unbind();
-            
-            const userAttrs = {};
-            userEntry.pojo.attributes.forEach(attr => {
-              userAttrs[attr.type] = attr.values[0];
-            });
-            
-            const user = {
-              uid: userAttrs.uid || userAttrs.cn || uid,
-              name: userAttrs.cn || uid,
-              email: userAttrs.mail || `${uid}@${process.env.DEFAULT_EMAIL_DOMAIN || 'localhost'}`,
-              role: role
-            };
-            
-            console.log(`Authentification complétée pour ${uid} avec le rôle ${role}`);
-
-            // Générer un token JWT (durée configurable)
-            const token = jwt.sign(
-              user,
-              JWT_SECRET,
-              { expiresIn: `${JWT_EXPIRES_MINUTES}m` }
-            );
-
-            // Enregistrer le token dans Redis (allowlist) avec TTL configurable
-            (async () => {
-              try {
-                const redis = await ensureConnected();
-                const key = `access:token:${token}`;
-                // Stocker un minimum d'infos utiles
-                await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: JWT_EXPIRES_SECONDS });
-              } catch (e) {
-                console.warn('[login] Impossible d\'enregistrer le token dans Redis:', e?.message || e);
-              } finally {
-                res.json({ 
-                  message: 'Authentification réussie', 
-                  user: user,
-                  token: token,
-                  expiresIn: JWT_EXPIRES_SECONDS // en secondes
-                });
-              }
-            })();
-          }
-        }); // fin userAuthClient.bind
-      } // fin proceedWithUserEntry
-    }); // fin ldapClient.search
-  }); // fin ldapClient.bind
-}); // fin route /api/authenticate
-
-app.post('/api/add-user', async (req, res) => {
-  const { adminUid, adminPassword, newUser } = req.body;
-
-  if (!adminUid || !adminPassword || !newUser || !newUser.role) {
-    return res.status(400).json({ error: 'Champs requis manquants (adminUid, adminPassword, newUser, role)' });
-  }
-
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
-
-  // Étape 1 : Connexion initiale en read-only
-  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
-    if (err) {
-      console.error('Erreur connexion LDAP initiale :', err);
-      return res.status(500).json({ error: 'Erreur de connexion LDAP initiale' });
-    }
-
-    // Étape 2 : Chercher DN de l’admin
-    const adminFilter = `(&(uid=${adminUid})${ldapConfig.userFilter})`;
-    ldapClient.search(ldapConfig.userSearchBase, {
-      filter: adminFilter,
-      scope: 'sub',
-      attributes: ['dn'],
-    }, (err, ldapRes) => {
-      if (err) {
-        console.error('Erreur recherche admin LDAP :', err);
-        return res.status(500).json({ error: 'Erreur recherche admin LDAP' });
-      }
-
-      let adminEntry;
-      ldapRes.on('searchEntry', entry => adminEntry = entry);
-
-      ldapRes.on('end', () => {
-        if (!adminEntry) {
-          ldapClient.unbind();
-          return res.status(401).json({ error: 'Admin non trouvé' });
-        }
-
-        const adminDN = adminEntry.pojo.objectName;
-        const adminAuthClient = ldap.createClient({ url: ldapConfig.url });
-
-        // Étape 3 : Authentifier l’admin
-        adminAuthClient.bind(adminDN, adminPassword, (err) => {
-          if (err) {
-            console.error('Échec authentification admin:', err);
-            ldapClient.unbind();
-            return res.status(401).json({ error: 'Authentification Admin échouée' });
-          }
-
-          // Étape 4 : Vérifier si l’admin est bien dans le groupe admins
-          ldapClient.search(ldapConfig.adminGroup, {
-            filter: `(member=${adminDN})`,
-            scope: 'base',
-            attributes: ['cn'],
-          }, (err, groupRes) => {
-            let isAdmin = false;
-            groupRes.on('searchEntry', () => isAdmin = true);
-
-            groupRes.on('end', () => {
-              if (!isAdmin) {
-                ldapClient.unbind();
-                adminAuthClient.unbind();
-                return res.status(403).json({ error: 'Droits admin requis' });
-              }
-
-              // Étape 5 : Vérifier UID ou email déjà utilisé
-              const checkFilter = `(|(uid=${newUser.uid})(mail=${newUser.mail}))`;
-              ldapClient.search(ldapConfig.userSearchBase, {
-                filter: checkFilter,
-                scope: 'sub',
-                attributes: ['uid', 'mail'],
-              }, (err, checkRes) => {
-                if (err) {
-                  console.error('Erreur vérification UID/email existants :', err);
-                  return res.status(500).json({ error: 'Erreur lors de la vérification de l’utilisateur' });
-                }
-
-                let conflict = null;
-                checkRes.on('searchEntry', (entry) => {
-                  const entryUid = entry.pojo.attributes.find(attr => attr.type === 'uid')?.values[0];
-                  const entryMail = entry.pojo.attributes.find(attr => attr.type === 'mail')?.values[0];
-                  if (entryUid === newUser.uid) conflict = 'UID';
-                  else if (entryMail === newUser.mail) conflict = 'email';
-                });
-
-                checkRes.on('end', () => {
-                  if (conflict) {
-                    ldapClient.unbind();
-                    adminAuthClient.unbind();
-                    return res.status(409).json({ error: `Un utilisateur avec ce ${conflict} existe déjà.` });
-                  }
-
-                  // Étape 6 : Créer l'utilisateur
-                  const newUserDN = `uid=${newUser.uid},${ldapConfig.userSearchBase}`;
-                  const entry = {
-                    cn: newUser.cn,
-                    sn: newUser.sn,
-                    uid: newUser.uid,
-                    mail: newUser.mail,
-                    objectClass: ['top', 'person', 'organizationalPerson', 'inetOrgPerson'],
-                    userPassword: newUser.password,
-                  };
-
-                  adminAuthClient.add(newUserDN, entry, (err) => {
-                    if (err) {
-                      console.error('Erreur ajout utilisateur LDAP :', err);
-                      ldapClient.unbind();
-                      adminAuthClient.unbind();
-                      return res.status(500).json({ error: 'Erreur ajout utilisateur LDAP' });
-                    }
-
-                    // Étape 7 : Ajouter dans le bon groupe
-                    const roleGroup = {
-                      Admin: ldapConfig.adminGroup,
-                      User: ldapConfig.userGroup,
-                      Guest: ldapConfig.guestGroup,
-                    }[newUser.role];
-
-                    if (!roleGroup) {
-                      return res.status(400).json({ error: `Rôle inconnu : ${newUser.role}` });
-                    }
-
-                    const groupClient = ldap.createClient({ url: ldapConfig.url });
-                    groupClient.bind(adminDN, adminPassword, (err) => {
-                      if (err) {
-                        console.error('Échec bind admin pour ajout au groupe');
-                        return res.status(500).json({ error: 'Impossible d’ajouter au groupe' });
-                      }
-
-                      const change = new ldap.Change({
-                        operation: 'add',
-                        modification: new ldap.Attribute({
-                          type: 'member',
-                          values: [newUserDN],
-                        }),
-                      });
-
-                      groupClient.modify(roleGroup, change, (err) => {
-                        ldapClient.unbind();
-                        adminAuthClient.unbind();
-                        groupClient.unbind();
-
-                        if (err && err.name !== 'AttributeOrValueExistsError') {
-                          console.error('Erreur ajout au groupe :', err);
-                          return res.status(500).json({ error: 'Utilisateur créé, mais échec d’ajout au groupe' });
-                        }
-
-                        // Trigger LDAP sync after successful user creation
-                        triggerLdapSync()
-                          .then(syncResult => {
-                            console.log('LDAP sync after user creation:', syncResult);
-                          })
-                          .catch(e => {
-                            console.error('Error during LDAP sync after user creation:', e);
-                          })
-                          .finally(() => {
-                            return res.json({
-                              message: `Utilisateur "${newUser.uid}" ajouté avec succès en tant que ${newUser.role}`,
-                              user: {
-                                cn: newUser.cn,
-                                sn: newUser.sn,
-                                uid: newUser.uid,
-                                mail: newUser.mail,
-                                role: newUser.role,
-                              }
-                            });
-                          });
-                      });
-                    });
-                  });
-                });
-              });
-            });
-          });
-        });
-      });
-    });
-  });
-});
+// Endpoint : Authentification utilisateur LDAP moved to routes/auth.js
 
 // Endpoint to update an existing user
 app.put('/api/update-user', async (req, res) => {
@@ -1379,74 +952,42 @@ app.get('/api/disks', async (req, res) => {
 // Public users endpoint moved to routes/users.js
 
 // ... rest of the code remains the same ...
-app.post('/api/refresh-token', async (req, res) => {
-  const { token } = req.body || {};
-  if (!token) {
-    return res.status(400).json({ error: 'Token requis' });
-  }
-  
-  try {
-    // Vérifier le token même s'il est expiré (nous utilisons l'allowlist Redis pour la sécurité)
-    const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
-    
-    // Avant d'émettre un nouveau token, vérifier que l'ancien existe encore dans l'allowlist (non révoqué)
-    try {
-      const redis = await ensureConnected();
-      const key = `access:token:${token}`;
-      const exists = await redis.exists(key);
-      if (!exists) {
-        return res.status(401).json({ error: 'Token révoqué ou inconnu', code: 'REVOKED_TOKEN' });
-      }
-    } catch (e) {
-      console.warn('[refresh-token] Redis indisponible lors de la vérification de l\'allowlist:', e?.message || e);
-      // En cas d\'indisponibilité Redis, par sécurité, refuser le refresh
-      return res.status(503).json({ error: 'Service indisponible. Réessayez plus tard.' });
-    }
-    
-    // Générer un nouveau token (durée configurable)
-    const newToken = jwt.sign(
-      {
-        uid: decoded.uid,
-        name: decoded.name,
-        email: decoded.email,
-        role: decoded.role
-      },
-      JWT_SECRET,
-      { expiresIn: `${JWT_EXPIRES_MINUTES}m` }
-    );
-    // Mettre à jour l'allowlist Redis: révoquer l'ancien token et enregistrer le nouveau
-    try {
-      const redis = await ensureConnected();
-      if (token) {
-        await redis.del(`access:token:${token}`);
-      }
-      await redis.set(
-        `access:token:${newToken}`,
-        JSON.stringify({ uid: decoded.uid, role: decoded.role }),
-        { EX: JWT_EXPIRES_SECONDS }
-      );
-    } catch (e) {
-      console.warn('[refresh-token] Redis indisponible, impossible de mettre à jour l\'allowlist:', e?.message || e);
-    }
-
-    return res.json({
-      token: newToken,
-      expiresIn: JWT_EXPIRES_SECONDS, // en secondes
-      user: {
-        uid: decoded.uid,
-        name: decoded.name,
-        email: decoded.email,
-        role: decoded.role
-      }
-    });
-  } catch (error) {
-    console.error('Erreur lors du renouvellement du token:', error);
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Token invalide', code: 'INVALID_TOKEN' });
-    }
-    return res.status(401).json({ error: 'Token invalide ou expiré', code: 'TOKEN_ERROR' });
-  }
-});
+// Refresh token route moved to routes/auth.js
+// app.post('/api/refresh-token', async (req, res) => {
+//   const { token } = req.body || {};
+//   if (!token) {
+//     return res.status(400).json({ error: 'Token requis' });
+//   }
+//   
+//   try {
+//     // Vérifier le token même s'il est expiré (nous utilisons l'allowlist Redis pour la sécurité)
+//     const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
+//     
+//     // Avant d'émettre un nouveau token, vérifier que l'ancien existe encore dans l'allowlist (non révoqué)
+//     try {
+//       const redis = await ensureConnected();
+//       const key = `access:token:${token}`;
+//       const exists = await redis.exists(key);
+//       if (!exists) {
+//         return res.status(401).json({ error: 'Token révoqué ou inconnu', code: 'REVOKED_TOKEN' });
+//       }
+//     } catch (e) {
+//       console.warn('[refresh-token] Redis indisponible lors de la vérification de l\'allowlist:', e?.message || e);
+//       // En cas d\'indisponibilité Redis, par sécurité, refuser le refresh
+//       return res.status(503).json({ error: 'Service indisponible. Réessayez plus tard.' });
+//     }
+//     
+//     // Générer un nouveau token (durée configurable)
+//     const newToken = jwt.sign(
+//       {
+//         uid: decoded.uid,
+//         name: decoded.name,
+//         email: decoded.email,
+//         role: decoded.role
+//       },
+//       JWT_SECRET,
+//       { expiresIn: `${JWT_EXPIRES_MINUTES}m` }
+//     );
 
 // Liste des conteneurs actifs
 let activeContainers = [];
