@@ -4,29 +4,13 @@ const http = require('http');
 const { Server } = require('socket.io');
 const os = require('os');
 const Docker = require('dockerode');
-const diskusage = require('diskusage');
-const path = require('path');
 const ldap = require('ldapjs');
-const si = require('systeminformation');
-const osutils = require('os-utils');
-const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
-const crypto = require('crypto');
-const { ensureConnected } = require('./redisClient');
 
 // Charger les variables d'environnement du fichier .env
 dotenv.config();
-
-// Secret pour les JWT tokens
-const JWT_SECRET = process.env.JWT_SECRET;
-// Durée d'expiration des JWT (en minutes) configurable via .env
-const JWT_EXPIRES_MINUTES = Math.max(
-  1,
-  parseInt(process.env.JWT_EXPIRES_MINUTES || '15', 10) || 15
-);
-const JWT_EXPIRES_SECONDS = JWT_EXPIRES_MINUTES * 60;
 
 // Validate critical environment variables
 const requiredEnvVars = {
@@ -38,7 +22,6 @@ const requiredEnvVars = {
 
 const optionalEnvVars = {
   ENCRYPTION_KEY: 'Data encryption key',
-  JWT_ENCRYPTION_KEY: 'JWT encryption key',
   DEFAULT_EMAIL_DOMAIN: 'Default email domain for users without email'
 };
 
@@ -142,10 +125,6 @@ app.use('/api', systemRouter);
 // Also mount at root to expose /status without /api prefix
 app.use('/', systemRouter);
 
-// Apps helper functions moved to services/dockerService.js
-
-// getAllContainers moved to services/dockerService.js
-
 // Fonction pour récupérer les conteneurs Docker actifs
 async function initializeActiveContainers() {
   return new Promise((resolve, reject) => {
@@ -162,14 +141,6 @@ async function initializeActiveContainers() {
   });
 }
 
-// getAppStatus moved to services/dockerService.js
-
-// startApp moved to services/dockerService.js
-
-// stopApp moved to services/dockerService.js
-
-// restartApp moved to services/dockerService.js
-
 // Fonction pour récupérer l'adresse IP locale
 function getLocalIP() {
   const networkInterfaces = os.networkInterfaces();
@@ -182,59 +153,6 @@ function getLocalIP() {
     }
   }
   return 'IP not found';
-}
-
-// Fonction pour récupérer les informations du serveur
-async function getServerInfo() {
-  // 1) Mémoire
-  const totalRam = os.totalmem();
-  const freeRam = os.freemem();
-  const ramUsagePercentage = (((totalRam - freeRam) / totalRam) * 100).toFixed(1);
-
-  // 2) Disques
-  const diskLayout = await si.diskLayout();
-  const fsSizes = await si.fsSize();
-
-  // 3) Compose la réponse disque par disque (sans 'type')
-  const disks = diskLayout.map(d => {
-    const totalBytes = d.size;
-    const parts = fsSizes.filter(f =>
-      f.fs && f.fs.startsWith(d.device)
-    );
-    const mounted = parts.length > 0;
-    const usedBytes = parts.reduce((sum, p) => sum + p.used, 0);
-    const freeBytes = totalBytes - usedBytes;
-
-    return {
-      device: d.device,                         // ex: '/dev/sda'
-      size: `${(totalBytes / 1e9).toFixed(1)} GB`,
-      used: `${(usedBytes / 1e9).toFixed(1)} GB`,
-      free: `${(freeBytes / 1e9).toFixed(1)} GB`,
-      mounted: mounted
-    };
-  });
-
-  // 4) Totaux globaux (uniquement pour les disques montés)
-  const mountedDisks = disks.filter(d => d.mounted);
-  const totalSize = mountedDisks.reduce((sum, d) => sum + parseFloat(d.size), 0);
-  const totalUsed = mountedDisks.reduce((sum, d) => sum + parseFloat(d.used), 0);
-  const totalFree = mountedDisks.reduce((sum, d) => sum + parseFloat(d.free), 0);
-  
-  // 5) CPU
-  const cpuUsagePercentage = await new Promise(resolve => {
-    osutils.cpuUsage(u => resolve((u * 100).toFixed(1)));
-  });
-  
-  return {
-    stockage: {
-      utilise: `${totalUsed.toFixed(1)} GB`,
-      total: `${totalSize.toFixed(1)} GB`,
-    },
-    performance: {
-      cpu: `${cpuUsagePercentage}%`,
-      ram: `${ramUsagePercentage}%`,
-    },
-  };
 }
 
 // Helper function to trigger LDAP sync
@@ -275,8 +193,6 @@ async function triggerLdapSync() {
   });
 }
 
-// LDAP Configuration moved to ./config/ldap
-
 // Échapper les valeurs insérées dans les filtres LDAP (RFC 4515)
 function escapeLdapFilterValue(value) {
   if (value == null) return '';
@@ -294,50 +210,6 @@ function getRole(dn, groupMemberships) {
   if (groupMemberships.includes(ldapConfig.userGroup)) return 'User';
   if (groupMemberships.includes(ldapConfig.guestGroup)) return 'Guest';
   return 'Unknown';
-}
-
-// Brute force protection function
-async function checkBruteForce(uid, ip) {
-  try {
-    const redis = await ensureConnected();
-    const key = `bruteforce:${uid}:${ip}`;
-    const attempts = await redis.get(key);
-    
-    if (attempts && parseInt(attempts) >= 5) {
-      const ttl = await redis.ttl(key);
-      return { blocked: true, retryAfter: ttl };
-    }
-    
-    return { blocked: false };
-  } catch (e) {
-    console.warn('[bruteforce] Redis unavailable, skipping check');
-    return { blocked: false };
-  }
-}
-
-async function recordFailedAttempt(uid, ip) {
-  try {
-    const redis = await ensureConnected();
-    const key = `bruteforce:${uid}:${ip}`;
-    const current = await redis.get(key);
-    const attempts = current ? parseInt(current) + 1 : 1;
-    
-    await redis.set(key, attempts, { EX: 15 * 60 }); // 15 minutes
-    return attempts;
-  } catch (e) {
-    console.warn('[bruteforce] Redis unavailable, cannot record attempt');
-    return 0;
-  }
-}
-
-async function clearFailedAttempts(uid, ip) {
-  try {
-    const redis = await ensureConnected();
-    const key = `bruteforce:${uid}:${ip}`;
-    await redis.del(key);
-  } catch (e) {
-    console.warn('[bruteforce] Redis unavailable, cannot clear attempts');
-  }
 }
 
 // Endpoint : Authentification utilisateur LDAP moved to routes/auth.js
@@ -683,44 +555,6 @@ app.put('/api/update-user', async (req, res) => {
 // Moved to routes/system.js: GET /api/disks
 
 // Public users endpoint moved to routes/users.js
-
-// ... rest of the code remains the same ...
-// Refresh token route moved to routes/auth.js
-// app.post('/api/refresh-token', async (req, res) => {
-//   const { token } = req.body || {};
-//   if (!token) {
-//     return res.status(400).json({ error: 'Token requis' });
-//   }
-//   
-//   try {
-//     // Vérifier le token même s'il est expiré (nous utilisons l'allowlist Redis pour la sécurité)
-//     const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
-//     
-//     // Avant d'émettre un nouveau token, vérifier que l'ancien existe encore dans l'allowlist (non révoqué)
-//     try {
-//       const redis = await ensureConnected();
-//       const key = `access:token:${token}`;
-//       const exists = await redis.exists(key);
-//       if (!exists) {
-//         return res.status(401).json({ error: 'Token révoqué ou inconnu', code: 'REVOKED_TOKEN' });
-//       }
-//     } catch (e) {
-//       console.warn('[refresh-token] Redis indisponible lors de la vérification de l\'allowlist:', e?.message || e);
-//       // En cas d\'indisponibilité Redis, par sécurité, refuser le refresh
-//       return res.status(503).json({ error: 'Service indisponible. Réessayez plus tard.' });
-//     }
-//     
-//     // Générer un nouveau token (durée configurable)
-//     const newToken = jwt.sign(
-//       {
-//         uid: decoded.uid,
-//         name: decoded.name,
-//         email: decoded.email,
-//         role: decoded.role
-//       },
-//       JWT_SECRET,
-//       { expiresIn: `${JWT_EXPIRES_MINUTES}m` }
-//     );
 
 // Liste des conteneurs actifs
 let activeContainers = [];
