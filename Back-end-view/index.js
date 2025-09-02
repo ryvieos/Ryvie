@@ -138,44 +138,6 @@ function getLocalIP() {
   return 'IP not found';
 }
 
-// Helper function to trigger LDAP sync
-async function triggerLdapSync() {
-  return new Promise((resolve) => {
-    const client = require('http');
-    const options = {
-      hostname: 'localhost',
-      port: 2283,
-      path: '/api/admin/users/sync-ldap',
-      method: 'GET',
-      timeout: 10000 // 10 second timeout
-    };
-
-    const req = client.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-      res.on('end', () => {
-        console.log(`LDAP sync completed with status ${res.statusCode}: ${data}`);
-        resolve({ statusCode: res.statusCode, data });
-      });
-    });
-
-    req.on('error', (e) => {
-      console.error('Error triggering LDAP sync:', e);
-      resolve({ statusCode: 500, error: e.message });
-    });
-
-    req.on('timeout', () => {
-      req.destroy();
-      console.error('LDAP sync request timed out');
-      resolve({ statusCode: 504, error: 'Request timeout' });
-    });
-
-    req.end();
-  });
-}
-
  
 
 // Liste des conteneurs actifs
