@@ -71,6 +71,8 @@ const { verifyToken, isAdmin, hasPermission } = require('./middleware/auth');
 const usersRouter = require('./routes/users');
 const appsRouter = require('./routes/apps');
 const authRouter = require('./routes/auth');
+const adminRouter = require('./routes/admin');
+const systemRouter = require('./routes/system');
 const { getAppStatus } = require('./services/dockerService');
 const ldapConfig = require('./config/ldap');
 
@@ -131,6 +133,14 @@ app.use('/api', appsRouter);
 
 // Mount Auth routes
 app.use('/api', authRouter);
+
+// Mount Admin routes
+app.use('/api', adminRouter);
+
+// Mount System routes
+app.use('/api', systemRouter);
+// Also mount at root to expose /status without /api prefix
+app.use('/', systemRouter);
 
 // Apps helper functions moved to services/dockerService.js
 
@@ -667,287 +677,10 @@ app.put('/api/update-user', async (req, res) => {
   });
 });
 
-// Endpoint for Repcures to synchronize users with LDAP
-app.get('/api/admin/users/sync-ldap', async (req, res) => {
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
-  let users = [];
-
-  // Step 1: Bind to LDAP with admin credentials
-  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
-    if (err) {
-      console.error('Erreur de connexion LDAP :', err);
-      return res.status(500).json({ error: 'Erreur de connexion LDAP' });
-    }
-
-    // Step 2: Search for all users
-    ldapClient.search(ldapConfig.userSearchBase, {
-      filter: ldapConfig.userFilter,
-      scope: 'sub',
-      attributes: ['uid', 'cn', 'sn', 'mail', 'memberOf']
-    }, (err, searchRes) => {
-      if (err) {
-        console.error('Erreur de recherche LDAP :', err);
-        ldapClient.unbind();
-        return res.status(500).json({ error: 'Erreur de recherche LDAP' });
-      }
-
-      searchRes.on('searchEntry', (entry) => {
-        const user = entry.pojo.attributes.reduce((acc, attr) => {
-          // Convert single values to string, arrays remain as arrays
-          acc[attr.type] = attr.values.length === 1 ? attr.values[0] : attr.values;
-          return acc;
-        }, {});
-        
-        // Add DN to the user object
-        user.dn = entry.pojo.objectName;
-        
-        // Determine user role based on group memberships
-        const groupMemberships = user.memberOf || [];
-        user.role = getRole(user.dn, groupMemberships);
-        
-        users.push(user);
-      });
-
-      searchRes.on('error', (err) => {
-        console.error('Erreur lors de la récupération des utilisateurs :', err);
-        ldapClient.unbind();
-        return res.status(500).json({ error: 'Erreur lors de la récupération des utilisateurs' });
-      });
-
-      searchRes.on('end', () => {
-        ldapClient.unbind();
-        
-        // Return success status code (200) with user count
-        console.log(`Synchronisation LDAP réussie. ${users.length} utilisateurs synchronisés.`);
-        return res.status(200).send(`${users.length}`);
-      });
-    });
-  });
-});
-
-app.post('/api/delete-user', async (req, res) => {
-  const { adminUid, adminPassword, uid } = req.body;
-
-  if (!adminUid || !adminPassword || !uid) {
-    return res.status(400).json({ error: 'adminUid, adminPassword et uid requis' });
-  }
-
-  // Empêcher la suppression de soi-même (même pour un admin)
-  if (String(adminUid).trim().toLowerCase() === String(uid).trim().toLowerCase()) {
-    return res.status(403).json({ error: "Vous ne pouvez pas supprimer votre propre compte" });
-  }
-
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
-
-  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
-    if (err) {
-      console.error('Erreur bind initial LDAP :', err);
-      return res.status(500).json({ error: 'Connexion LDAP échouée' });
-    }
-
-    const adminFilter = `(&(uid=${adminUid})${ldapConfig.userFilter})`;
-
-    ldapClient.search(ldapConfig.userSearchBase, {
-      filter: adminFilter,
-      scope: 'sub',
-      attributes: ['dn'],
-    }, (err, ldapRes) => {
-      if (err) {
-        console.error('Erreur recherche admin :', err);
-        return res.status(500).json({ error: 'Erreur recherche admin' });
-      }
-
-      let adminEntry;
-      ldapRes.on('searchEntry', entry => adminEntry = entry);
-
-      ldapRes.on('end', () => {
-        if (!adminEntry) {
-          ldapClient.unbind();
-          return res.status(401).json({ error: 'Admin non trouvé' });
-        }
-
-        const adminDN = adminEntry.pojo.objectName;
-        const adminAuthClient = ldap.createClient({ url: ldapConfig.url });
-
-        adminAuthClient.bind(adminDN, adminPassword, (err) => {
-          if (err) {
-            console.error('Échec authentification admin :', err);
-            ldapClient.unbind();
-            return res.status(401).json({ error: 'Mot de passe admin incorrect' });
-          }
-
-          // Vérifie si l'admin est bien dans le groupe "admins"
-          ldapClient.search(ldapConfig.adminGroup, {
-            filter: `(member=${adminDN})`,
-            scope: 'base',
-            attributes: ['cn'],
-          }, (err, groupRes) => {
-            let isAdmin = false;
-            groupRes.on('searchEntry', () => isAdmin = true);
-
-            groupRes.on('end', () => {
-              if (!isAdmin) {
-                ldapClient.unbind();
-                adminAuthClient.unbind();
-                return res.status(403).json({ error: 'Accès refusé. Droits admin requis.' });
-              }
-
-              // Trouver l'utilisateur à supprimer
-              ldapClient.search(ldapConfig.userSearchBase, {
-                filter: `(uid=${uid})`,
-                scope: 'sub',
-                attributes: ['dn'],
-              }, (err, userRes) => {
-                if (err) {
-                  console.error('Erreur recherche utilisateur à supprimer :', err);
-                  return res.status(500).json({ error: 'Erreur recherche utilisateur' });
-                }
-
-                let userEntry;
-                userRes.on('searchEntry', entry => userEntry = entry);
-
-                userRes.on('end', () => {
-                  if (!userEntry) {
-                    ldapClient.unbind();
-                    adminAuthClient.unbind();
-                    return res.status(404).json({ error: 'Utilisateur non trouvé' });
-                  }
-
-                  const userDN = userEntry.pojo.objectName;
-
-                  // Étape 1 : Supprimer des groupes
-                  const removeFromGroups = [ldapConfig.adminGroup, ldapConfig.userGroup, ldapConfig.guestGroup];
-
-                  const groupClient = ldap.createClient({ url: ldapConfig.url });
-                  groupClient.bind(adminDN, adminPassword, (err) => {
-                    if (err) {
-                      console.error('Erreur bind pour nettoyage groupes');
-                      return res.status(500).json({ error: 'Erreur de nettoyage groupes' });
-                    }
-
-                    let tasksDone = 0;
-                    removeFromGroups.forEach(groupDN => {
-                      const change = new ldap.Change({
-                        operation: 'delete',
-                        modification: new ldap.Attribute({
-                          type: 'member',
-                          values: [userDN],
-                        }),
-                      });
-
-                      groupClient.modify(groupDN, change, (err) => {
-                        // Silencieusement ignore si l'utilisateur n'était pas dans le groupe
-                        tasksDone++;
-                        if (tasksDone === removeFromGroups.length) {
-                          // Étape 2 : Supprimer l'utilisateur
-                          adminAuthClient.del(userDN, (err) => {
-                            ldapClient.unbind();
-                            adminAuthClient.unbind();
-                            groupClient.unbind();
-
-                            if (err) {
-                              console.error('Erreur suppression utilisateur :', err);
-                              return res.status(500).json({ error: 'Erreur suppression utilisateur' });
-                            }
-
-                            // Trigger LDAP sync after successful user deletion
-                            triggerLdapSync()
-                              .then(syncResult => {
-                                console.log('LDAP sync after user deletion:', syncResult);
-                              })
-                              .catch(e => {
-                                console.error('Error during LDAP sync after user deletion:', e);
-                              })
-                              .finally(() => {
-                                res.json({ message: `Utilisateur "${uid}" supprimé avec succès` });
-                              });
-                          });
-                        }
-                      });
-                    });
-                  });
-                });
-              });
-            });
-          });
-        });
-      });
-    });
-  });
-});
-
-// Serveur HTTP pour signaler la détection du serveur
-app.get('/status', (req, res) => {
-  res.status(200).json({
-    message: 'Server is running',
-    serverDetected: false,
-    ip: getLocalIP(),
-  });
-});
-
-app.get('/api/server-info', verifyToken, async (req, res) => {
-  try {
-    const serverInfo = await getServerInfo();
-    res.json(serverInfo);
-  } catch (error) {
-    console.error('Erreur lors de la récupération des informations du serveur :', error);
-    res.status(500).json({ error: 'Erreur serveur lors de la récupération des informations' });
-  }
-});
-
-app.get('/api/disks', async (req, res) => {
-  try {
-    // 1) Liste des disques physiques
-    const diskLayout = await si.diskLayout();
-    // 2) Liste des volumes montés
-    const fsSizes    = await si.fsSize();
-
-    // 3) Compose la réponse disque par disque
-    const disks = diskLayout.map(d => {
-      const totalBytes = d.size;
-      const parts      = fsSizes.filter(f =>
-        f.fs && f.fs.startsWith(d.device)
-      );
-      const mounted    = parts.length > 0;
-
-      // Si monté, on calcule used/free ; sinon, on force à 0
-      let usedBytes, freeBytes;
-      if (mounted) {
-        usedBytes = parts.reduce((sum, p) => sum + p.used, 0);
-        freeBytes = totalBytes - usedBytes;
-      } else {
-        usedBytes = 0;
-        freeBytes = 0;
-      }
-
-      return {
-        device:  d.device,                         // ex: '/dev/sda'
-        size:    `${(totalBytes / 1e9).toFixed(1)} GB`,
-        used:    `${(usedBytes   / 1e9).toFixed(1)} GB`,
-        free:    `${(freeBytes   / 1e9).toFixed(1)} GB`,
-        mounted: mounted
-      };
-    });
-
-    // 4) Totaux globaux (uniquement pour les disques montés)
-    const mountedDisks = disks.filter(d => d.mounted);
-    const totalSize = mountedDisks.reduce((sum, d) => sum + parseFloat(d.size), 0);
-    const totalUsed = mountedDisks.reduce((sum, d) => sum + parseFloat(d.used), 0);
-    const totalFree = mountedDisks.reduce((sum, d) => sum + parseFloat(d.free), 0);
-
-    res.json({
-      disks,
-      total: {
-        size: `${totalSize.toFixed(1)} GB`,
-        used: `${totalUsed.toFixed(1)} GB`,
-        free: `${totalFree.toFixed(1)} GB`
-      }
-    });
-  } catch (err) {
-    console.error('Erreur récupération info disques :', err);
-    res.status(500).json({ error: 'Impossible de récupérer les informations de disques' });
-  }
-});
+// Moved to routes/admin.js: POST /api/delete-user
+// Moved to routes/system.js: GET /status
+// Moved to routes/system.js: GET /api/server-info
+// Moved to routes/system.js: GET /api/disks
 
 // Public users endpoint moved to routes/users.js
 
