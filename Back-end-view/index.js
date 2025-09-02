@@ -68,6 +68,10 @@ if (hasErrors) {
 console.log('✅ Environment variables validated successfully');
 
 const { verifyToken, isAdmin, hasPermission } = require('./middleware/auth');
+const usersRouter = require('./routes/users');
+const appsRouter = require('./routes/apps');
+const { getAppStatus } = require('./services/dockerService');
+const ldapConfig = require('./config/ldap');
 
 const docker = new Docker();
 const app = express();
@@ -120,41 +124,15 @@ const apiLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
-// Correspondances des noms de conteneurs Docker avec des noms personnalisés
-const containerMapping = {
-  'rcloud': 'Cloud',
-  'portainer': 'Portainer',
-  'rtransfer': 'rTransfer',
-  'rdrop': 'rDrop',
-  'rpictures': 'rPictures',
-};
+// Mount LDAP users routes
+app.use('/api', usersRouter);
 
-// Fonction pour extraire le nom de l'application à partir du nom du conteneur
-function extractAppName(containerName) {
-  // Vérifier si le conteneur commence par 'app-'
-  if (containerName.startsWith('app-')) {
-    // Extraire la partie après 'app-'
-    const appNameWithSuffix = containerName.substring(4);
-    // Extraire la partie avant le prochain tiret ou prendre tout si pas de tiret
-    const dashIndex = appNameWithSuffix.indexOf('-');
-    if (dashIndex > 0) {
-      return appNameWithSuffix.substring(0, dashIndex);
-    }
-    return appNameWithSuffix;
-  }
-  // Pour les conteneurs qui ne commencent pas par 'app-', retourner null
-  return null;
-}
+// Mount Docker apps routes
+app.use('/api', appsRouter);
 
-// Fonction pour récupérer tous les conteneurs Docker (actifs et inactifs)
-async function getAllContainers() {
-  return new Promise((resolve, reject) => {
-    docker.listContainers({ all: true }, (err, containers) => {
-      if (err) return reject(err);
-      resolve(containers);
-    });
-  });
-}
+// Apps helper functions moved to services/dockerService.js
+
+// getAllContainers moved to services/dockerService.js
 
 // Fonction pour récupérer les conteneurs Docker actifs
 async function initializeActiveContainers() {
@@ -172,208 +150,13 @@ async function initializeActiveContainers() {
   });
 }
 
-// Fonction pour regrouper les conteneurs par application
-async function getAppStatus() {
-  try {
-    const containers = await getAllContainers();
-    const apps = {};
-    
-    // Regrouper les conteneurs par application
-    containers.forEach(container => {
-      const containerName = container.Names[0].replace('/', '');
-      const appName = extractAppName(containerName);
-      
-      // Si ce n'est pas un conteneur d'application, ignorer
-      if (!appName) return;
-      
-      // Créer l'entrée de l'application si elle n'existe pas
-      if (!apps[appName]) {
-        // Utiliser le nom personnalisé s'il existe, sinon utiliser le nom extrait
-        const displayName = containerMapping[appName] || appName;
-        apps[appName] = {
-          id: `app-${appName}`,
-          name: displayName,
-          containers: [],
-          running: false,
-          total: 0,
-          active: 0,
-          ports: []
-        };
-      }
-      
-      // Ajouter le conteneur à l'application
-      apps[appName].total++;
-      if (container.State === 'running') {
-        apps[appName].active++;
-        
-        // Collecter les ports exposés
-        if (container.Ports && container.Ports.length > 0) {
-          container.Ports.forEach(port => {
-            if (port.PublicPort && !apps[appName].ports.includes(port.PublicPort)) {
-              apps[appName].ports.push(port.PublicPort);
-            }
-          });
-        }
-      }
-      
-      apps[appName].containers.push({
-        id: container.Id,
-        name: containerName,
-        state: container.State,
-        status: container.Status
-      });
-    });
-    
-    // Déterminer si l'application est considérée comme "running"
-    // Une application est "running" si au moins un de ses conteneurs est actif
-    for (const appName in apps) {
-      const app = apps[appName];
-      app.running = app.active > 0;
-    }
-    
-    // Formater la sortie finale
-    return Object.values(apps).map(app => ({
-      id: app.id,
-      name: app.name,
-      status: app.running ? 'running' : 'stopped',
-      progress: app.total > 0 ? Math.round((app.active / app.total) * 100) : 0,
-      containersRunning: `${app.active}/${app.total}`,
-      ports: app.ports.sort((a, b) => a - b), // Trier les ports
-      containers: app.containers
-    }));
-  } catch (error) {
-    console.error('Erreur lors de la récupération du statut des applications:', error);
-    throw error;
-  }
-}
+// getAppStatus moved to services/dockerService.js
 
-// Fonction pour démarrer une application (tous ses conteneurs)
-async function startApp(appId) {
-  try {
-    const containers = await getAllContainers();
-    let startedCount = 0;
-    let failedCount = 0;
-    
-    // Filtrer les conteneurs appartenant à cette application
-    const appContainers = containers.filter(container => {
-      const containerName = container.Names[0].replace('/', '');
-      return containerName.startsWith(appId);
-    });
-    
-    if (appContainers.length === 0) {
-      throw new Error(`Aucun conteneur trouvé pour l'application ${appId}`);
-    }
-    
-    // Démarrer chaque conteneur arrêté
-    for (const container of appContainers) {
-      if (container.State !== 'running') {
-        try {
-          const containerObj = docker.getContainer(container.Id);
-          await containerObj.start();
-          startedCount++;
-        } catch (err) {
-          console.error(`Erreur lors du démarrage du conteneur ${container.Names[0]}:`, err);
-          failedCount++;
-        }
-      }
-    }
-    
-    return {
-      success: failedCount === 0,
-      message: `${startedCount} conteneur(s) démarré(s), ${failedCount} échec(s)`,
-      appId
-    };
-  } catch (error) {
-    console.error(`Erreur lors du démarrage de l'application ${appId}:`, error);
-    throw error;
-  }
-}
+// startApp moved to services/dockerService.js
 
-// Fonction pour arrêter une application (tous ses conteneurs)
-async function stopApp(appId) {
-  try {
-    const containers = await getAllContainers();
-    let stoppedCount = 0;
-    let failedCount = 0;
-    
-    // Filtrer les conteneurs appartenant à cette application
-    const appContainers = containers.filter(container => {
-      const containerName = container.Names[0].replace('/', '');
-      return containerName.startsWith(appId);
-    });
-    
-    if (appContainers.length === 0) {
-      throw new Error(`Aucun conteneur trouvé pour l'application ${appId}`);
-    }
-    
-    // Arrêter chaque conteneur en cours d'exécution
-    for (const container of appContainers) {
-      if (container.State === 'running') {
-        try {
-          const containerObj = docker.getContainer(container.Id);
-          await containerObj.stop();
-          stoppedCount++;
-        } catch (err) {
-          console.error(`Erreur lors de l'arrêt du conteneur ${container.Names[0]}:`, err);
-          failedCount++;
-        }
-      }
-    }
-    
-    return {
-      success: failedCount === 0,
-      message: `${stoppedCount} conteneur(s) arrêté(s), ${failedCount} échec(s)`,
-      appId
-    };
-  } catch (error) {
-    console.error(`Erreur lors de l'arrêt de l'application ${appId}:`, error);
-    throw error;
-  }
-}
+// stopApp moved to services/dockerService.js
 
-// Fonction pour redémarrer une application (tous ses conteneurs)
-async function restartApp(appId) {
-  try {
-    const containers = await getAllContainers();
-    let restartedCount = 0;
-    let failedCount = 0;
-    
-    // Filtrer les conteneurs appartenant à cette application
-    const appContainers = containers.filter(container => {
-      const containerName = container.Names[0].replace('/', '');
-      return containerName.startsWith(appId);
-    });
-    
-    if (appContainers.length === 0) {
-      throw new Error(`Aucun conteneur trouvé pour l'application ${appId}`);
-    }
-    
-    // Redémarrer chaque conteneur
-    for (const container of appContainers) {
-      try {
-        const containerObj = docker.getContainer(container.Id);
-        if (container.State === 'running') {
-          await containerObj.restart();
-        } else {
-          await containerObj.start();
-        }
-        restartedCount++;
-      } catch (err) {
-        console.error(`Erreur lors du redémarrage du conteneur ${container.Names[0]}:`, err);
-        failedCount++;
-      }
-    }
-    
-    return {
-      success: failedCount === 0,
-      message: `${restartedCount} conteneur(s) redémarré(s), ${failedCount} échec(s)`,
-      appId
-    };
-  } catch (error) {
-    console.error(`Erreur lors du redémarrage de l'application ${appId}:`, error);
-    throw error;
-  }
-}
+// restartApp moved to services/dockerService.js
 
 // Fonction pour récupérer l'adresse IP locale
 function getLocalIP() {
@@ -480,19 +263,7 @@ async function triggerLdapSync() {
   });
 }
 
-// LDAP Configuration
-const ldapConfig = {
-  url: process.env.LDAP_URL,
-  bindDN: process.env.LDAP_BIND_DN,
-  bindPassword: process.env.LDAP_BIND_PASSWORD,
-  userSearchBase: process.env.LDAP_USER_SEARCH_BASE,
-  groupSearchBase: process.env.LDAP_GROUP_SEARCH_BASE,
-  userFilter: process.env.LDAP_USER_FILTER,
-  groupFilter: process.env.LDAP_GROUP_FILTER,
-  adminGroup: process.env.LDAP_ADMIN_GROUP,
-  userGroup: process.env.LDAP_USER_GROUP,
-  guestGroup: process.env.LDAP_GUEST_GROUP,
-};
+// LDAP Configuration moved to ./config/ldap
 
 // Échapper les valeurs insérées dans les filtres LDAP (RFC 4515)
 function escapeLdapFilterValue(value) {
@@ -512,88 +283,6 @@ function getRole(dn, groupMemberships) {
   if (groupMemberships.includes(ldapConfig.guestGroup)) return 'Guest';
   return 'Unknown';
 }
-
-// Endpoint : Récupérer les utilisateurs LDAP
-app.get('/api/users', verifyToken, async (req, res) => {
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
-
-  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
-    if (err) {
-      console.error('Échec de la connexion LDAP :', err);
-      res.status(500).json({ error: 'Échec de la connexion LDAP' });
-      return;
-    }
-
-    const ldapUsers = [];
-    ldapClient.search(
-      ldapConfig.userSearchBase,
-      { filter: ldapConfig.userFilter, scope: 'sub', attributes: ['cn', 'uid', 'mail', 'dn'] },
-      (err, ldapRes) => {
-        if (err) {
-          console.error('Erreur de recherche LDAP :', err);
-          res.status(500).json({ error: 'Erreur de recherche LDAP' });
-          return;
-        }
-
-        ldapRes.on('searchEntry', (entry) => {
-          try {
-            const cn = entry.pojo.attributes.find(attr => attr.type === 'cn')?.values[0] || 'Nom inconnu';
-            const uid = entry.pojo.attributes.find(attr => attr.type === 'uid')?.values[0] || 'UID inconnu';
-            const mail = entry.pojo.attributes.find(attr => attr.type === 'mail')?.values[0] || 'Email inconnu';
-            const dn = entry.pojo.objectName;
-
-            // Exclure l'utilisateur `read-only`
-            if (uid !== 'read-only') {
-              ldapUsers.push({ dn, name: cn, uid, email: mail });
-            }
-          } catch (err) {
-            console.error('Erreur lors du traitement de l\'entrée LDAP :', err);
-          }
-        });
-
-        ldapRes.on('end', () => {
-          console.log('Recherche utilisateur terminée. Vérification des rôles...');
-          const roles = {};
-
-          ldapClient.search(
-            ldapConfig.groupSearchBase,
-            { filter: ldapConfig.groupFilter, scope: 'sub', attributes: ['cn', 'member'] },
-            (err, groupRes) => {
-              if (err) {
-                console.error('Erreur lors de la recherche des groupes LDAP :', err);
-                res.status(500).json({ error: 'Erreur lors de la recherche des groupes LDAP' });
-                return;
-              }
-
-              groupRes.on('searchEntry', (groupEntry) => {
-                const groupName = groupEntry.pojo.attributes.find(attr => attr.type === 'cn')?.values[0];
-                const members = groupEntry.pojo.attributes.find(attr => attr.type === 'member')?.values || [];
-
-                members.forEach((member) => {
-                  if (!roles[member]) roles[member] = [];
-                  roles[member].push(groupEntry.pojo.objectName);
-                });
-              });
-
-              groupRes.on('end', () => {
-                console.log('Recherche des groupes terminée.');
-
-                const usersWithRoles = ldapUsers.map(user => ({
-                  ...user,
-                  role: getRole(user.dn, roles[user.dn] || []),
-                }));
-
-                console.log('Utilisateurs avec rôles :', usersWithRoles);
-                res.json(usersWithRoles);
-                ldapClient.unbind();
-              });
-            }
-          );
-        });
-      }
-    );
-  });
-});
 
 // Brute force protection function
 async function checkBruteForce(uid, ip) {
@@ -1687,147 +1376,11 @@ app.get('/api/disks', async (req, res) => {
   }
 });
 
-// Endpoint : Récupérer la liste des applications et leur statut
-app.get('/api/apps', async (req, res) => {
-  try {
-    const apps = await getAppStatus();
-    res.status(200).json(apps);
-  } catch (error) {
-    console.error('Erreur lors de la récupération des applications :', error);
-    res.status(500).json({ error: 'Erreur serveur lors de la récupération des applications' });
-  }
-});
+// Public users endpoint moved to routes/users.js
 
-// Endpoint : Démarrer une application
-app.post('/api/apps/:id/start', verifyToken, hasPermission('manage_apps'), async (req, res) => {
-  const { id } = req.params;
-  
-  try {
-    const result = await startApp(id);
-    res.status(200).json(result);
-  } catch (error) {
-    console.error(`Erreur lors du démarrage de l'application ${id} :`, error);
-    res.status(500).json({ 
-      error: `Erreur serveur lors du démarrage de l'application`,
-      message: error.message
-    });
-  }
-});
-
-// Endpoint : Arrêter une application
-app.post('/api/apps/:id/stop', verifyToken, hasPermission('manage_apps'), async (req, res) => {
-  const { id } = req.params;
-  
-  try {
-    const result = await stopApp(id);
-    res.status(200).json(result);
-  } catch (error) {
-    console.error(`Erreur lors de l'arrêt de l'application ${id} :`, error);
-    res.status(500).json({ 
-      error: `Erreur serveur lors de l'arrêt de l'application`,
-      message: error.message
-    });
-  }
-});
-
-// Endpoint : Redémarrer une application
-app.post('/api/apps/:id/restart', verifyToken, hasPermission('manage_apps'), async (req, res) => {
-  const { id } = req.params;
-  
-  try {
-    const result = await restartApp(id);
-    res.status(200).json(result);
-  } catch (error) {
-    console.error(`Erreur lors du redémarrage de l'application ${id} :`, error);
-    res.status(500).json({ 
-      error: `Erreur serveur lors du redémarrage de l'application`,
-      message: error.message
-    });
-  }
-});
-
-// Endpoint public pour récupérer la liste des utilisateurs (utilisé pour la page de connexion)
-app.get('/api/users-public', async (req, res) => {
-  const ldapClient = ldap.createClient({ 
-    url: ldapConfig.url,
-    timeout: 5000,
-    connectTimeout: 5000
-  });
-
-  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
-    if (err) {
-      console.error('Échec de la connexion LDAP :', err);
-    }
-
-    const ldapUsers = [];
-    
-    // Utiliser le filtre défini dans la configuration
-    console.log('Recherche d\'utilisateurs avec filtre:', ldapConfig.userFilter);
-    
-    ldapClient.search(
-      ldapConfig.userSearchBase,
-      { filter: ldapConfig.userFilter, scope: 'sub', attributes: ['cn', 'uid', 'mail', 'dn'] },
-      (err, ldapRes) => {
-        if (err) {
-          console.error('Erreur de recherche LDAP :', err);
-          // En cas d'erreur, retourner une liste d'utilisateurs par défaut
-
-        }
-
-        ldapRes.on('searchEntry', (entry) => {
-          try {
-            // Extraire les attributs de l'entrée
-            const attrs = {};
-            entry.pojo.attributes.forEach(attr => {
-              attrs[attr.type] = attr.values[0];
-            });
-            
-            const dn = entry.pojo.objectName;
-            const cn = attrs.cn || 'Nom inconnu';
-            const uid = attrs.uid || attrs.cn || 'UID inconnu';
-            const mail = attrs.mail || `${uid}@${process.env.DEFAULT_EMAIL_DOMAIN || 'localhost'}`;
-
-            // Exclure l'utilisateur `read-only`
-            if (uid !== 'read-only') {
-              ldapUsers.push({ 
-                uid, 
-                name: cn, 
-                email: mail,
-                // Simplification pour la page de connexion
-                role: uid === 'jules' ? 'Admin' : 'User'
-              });
-            }
-          } catch (err) {
-            console.error('Erreur lors du traitement de l\'entrée LDAP :', err);
-          }
-        });
-
-        ldapRes.on('end', () => {
-          console.log('Recherche utilisateur terminée pour la liste publique');
-          console.log('Utilisateurs trouvés:', ldapUsers.length);
-          
-          // Si aucun utilisateur n'a été trouvé, renvoyer une liste par défaut
-          if (ldapUsers.length === 0) {
-            console.log('Aucun utilisateur trouvé, utilisation de la liste par défaut');
-            return res.json([
-              { uid: 'jules', name: 'Jules', role: 'Admin', email: 'jules.maisonnave@gmail.com' },
-              { uid: 'cynthia', name: 'Cynthia', role: 'User', email: 'cynthia@example.com' },
-              { uid: 'test', name: 'Test', role: 'User', email: 'test@gmail.com' }
-            ]);
-          }
-          
-          res.json(ldapUsers);
-          ldapClient.unbind();
-        });
-      }
-    );
-  });
-});
-
-// Endpoint pour renouveler le token JWT
+// ... rest of the code remains the same ...
 app.post('/api/refresh-token', async (req, res) => {
-  const { token } = req.body;
-  
+  const { token } = req.body || {};
   if (!token) {
     return res.status(400).json({ error: 'Token requis' });
   }

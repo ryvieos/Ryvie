@@ -8,34 +8,34 @@
 const BASE_URLS = {
   // URLs du serveur principal
   SERVER: {
-    PUBLIC: 'https://status.demo.ryvie.fr',
+    PUBLIC: 'https://status.test.ryvie.fr',
     PRIVATE: 'http://ryvie.local:3002'
   },
   
   // URLs des applications
   APPS: {
     APPSTORE: {
-      PUBLIC: 'https://appstore.makerfaire.jules.ryvie.fr',
+      PUBLIC: 'https://appstore.test.ryvie.fr',
       PRIVATE: 'http://ryvie.local:5173'
     },
     RDRIVE: {
-      PUBLIC: 'https://rdrive.demo.ryvie.fr',
+      PUBLIC: 'https://rdrive.test.ryvie.fr',
       PRIVATE: 'http://ryvie.local:3010'
     },
     PORTAINER: {
-      PUBLIC: 'https://portainer.demo.ryvie.fr',
+      PUBLIC: 'https://portainer.test.ryvie.fr',
       PRIVATE: 'http://ryvie.local:9000'
     },
     RTRANSFER: {
-      PUBLIC: 'https://rtransfer.demo.ryvie.fr/auth/signIn',
+      PUBLIC: 'https://rtransfer.test.ryvie.fr/auth/signIn',
       PRIVATE: 'http://ryvie.local:3011'
     },
     RDROP: {
-      PUBLIC: 'https://rdrop.demo.ryvie.fr',
+      PUBLIC: 'https://rdrop.test.ryvie.fr',
       PRIVATE: 'http://ryvie.local:8080'
     },
     RPICTURES: {
-      PUBLIC: 'https://rpictures.demo.ryvie.fr',
+      PUBLIC: 'https://rpictures.test.ryvie.fr',
       PRIVATE: 'http://ryvie.local:2283'
     }
   }
