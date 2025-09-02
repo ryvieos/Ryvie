@@ -3,6 +3,7 @@ import './styles/User.css';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 const { getServerUrl } = require('./config/urls');
+import { getCurrentAccessMode } from './utils/detectAccessMode';
 
 const User = () => {
   const navigate = useNavigate();
@@ -25,7 +26,7 @@ const User = () => {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [loading, setLoading] = useState(true); // Indicateur de chargement
   const [error, setError] = useState(null); // Gestion des erreurs
-  const [accessMode, setAccessMode] = useState('private');
+  const [accessMode, setAccessMode] = useState(null);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
   const [showAdminAuthModal, setShowAdminAuthModal] = useState(false);
@@ -106,12 +107,21 @@ const User = () => {
       setLoading(true);
       setMessage('');
       setError(null);
-      // Récupérer le mode d'accès depuis le localStorage
-      const storedMode = localStorage.getItem('accessMode') || 'private';
-      setAccessMode(storedMode);
+      // Récupérer le mode d'accès courant (sans le modifier si absent)
+      let storedMode = getCurrentAccessMode();
+      // Calculer un mode effectif pour les requêtes sans persister
+      let effectiveMode = storedMode;
+      if (!effectiveMode) {
+        if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
+          effectiveMode = 'public';
+        } else {
+          effectiveMode = 'private';
+        }
+      }
+      setAccessMode(effectiveMode);
       
-      // Utiliser l'URL du serveur en fonction du mode d'accès
-      const serverUrl = getServerUrl(storedMode);
+      // Utiliser l'URL du serveur en fonction du mode d'accès effectif
+      const serverUrl = getServerUrl(effectiveMode);
       console.log("Connexion à :", serverUrl);
       
       const currentRole = localStorage.getItem('currentUserRole') || 'User';

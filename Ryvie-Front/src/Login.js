@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import './styles/Login.css';
 const { getServerUrl } = require('./config/urls');
 import { setAuthToken } from './services/authService';
+import { isSessionActive } from './utils/sessionManager';
+import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode } from './utils/detectAccessMode';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -13,59 +15,49 @@ const Login = () => {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info'); // 'info', 'success', 'error'
   const [accessMode, setAccessMode] = useState('private');
-  const [loginAttempts, setLoginAttempts] = useState(0);
-  const [isBlocked, setIsBlocked] = useState(false);
-  const [blockTimeRemaining, setBlockTimeRemaining] = useState(0);
 
   useEffect(() => {
-    // Récupérer le mode d'accès depuis le localStorage
-    const storedMode = localStorage.getItem('accessMode') || 'private';
-    setAccessMode(storedMode);
-
-    // Vérifier si l'utilisateur est déjà connecté
-    const token = localStorage.getItem('jwt_token');
-    if (token) {
-      navigate('/');
-    }
-
-    // Check for existing login attempts and blocks
-    const attempts = parseInt(localStorage.getItem('loginAttempts') || '0');
-    const blockUntil = parseInt(localStorage.getItem('blockUntil') || '0');
-    
-    setLoginAttempts(attempts);
-    
-    if (blockUntil > Date.now()) {
-      setIsBlocked(true);
-      setBlockTimeRemaining(Math.ceil((blockUntil - Date.now()) / 1000));
-      
-      // Start countdown timer
-      const timer = setInterval(() => {
-        const remaining = Math.ceil((blockUntil - Date.now()) / 1000);
-        if (remaining <= 0) {
-          setIsBlocked(false);
-          setBlockTimeRemaining(0);
-          localStorage.removeItem('blockUntil');
-          clearInterval(timer);
+    const initMode = async () => {
+      // 1) Respecter un mode déjà établi (Welcome/Settings)
+      const existingModeRaw = typeof window !== 'undefined' ? window.localStorage.getItem('accessMode') : null;
+      if (existingModeRaw) {
+        setAccessMode(existingModeRaw);
+      } else {
+        // 2) Pas de mode encore défini -> déterminer intelligemment
+        if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
+          // En HTTPS, forcer PUBLIC pour éviter tout Mixed Content
+          persistAccessMode('public');
+          setAccessMode('public');
+          console.log('[Login] Page HTTPS - accessMode initialisé à PUBLIC');
         } else {
-          setBlockTimeRemaining(remaining);
+          // En HTTP (dev/local) -> tester la connectivité locale rapidement
+          try {
+            const detected = await detectAccessMode(1500);
+            setAccessMode(detected);
+            console.log(`[Login] accessMode détecté: ${detected}`);
+          } catch {
+            // Fallback sécurisé
+            persistAccessMode('public');
+            setAccessMode('public');
+            console.log('[Login] Détection échouée - fallback PUBLIC');
+          }
         }
-      }, 1000);
-      
-      return () => clearInterval(timer);
-    }
-  }, [navigate]);
+      }
+
+      // 3) Vérifier si une session est réellement active avant de rediriger
+      if (isSessionActive()) {
+        navigate('/welcome', { replace: true });
+      }
+    };
+
+    initMode();
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     
     if (!username || !password) {
       setMessage("Veuillez entrer un nom d'utilisateur et un mot de passe");
-      setMessageType('error');
-      return;
-    }
-
-    if (isBlocked) {
-      setMessage(`Trop de tentatives échouées. Réessayez dans ${blockTimeRemaining} secondes.`);
       setMessageType('error');
       return;
     }
@@ -79,10 +71,6 @@ const Login = () => {
       const response = await axios.post(`${serverUrl}/api/authenticate`, {
         uid: username,
         password: password
-      }, {
-        headers: {
-          'Authorization': undefined // Supprimer l'ancien token pour cette requête
-        }
       });
 
       if (response.data && response.data.token) {
@@ -91,22 +79,23 @@ const Login = () => {
         localStorage.setItem('currentUser', response.data.user.name || response.data.user.uid);
         localStorage.setItem('currentUserRole', response.data.user.role || 'User');
         localStorage.setItem('currentUserEmail', response.data.user.email || '');
+
+        // Marquer la session comme active (requis par ProtectedRoute)
+        localStorage.setItem('sessionActive', 'true');
+        localStorage.setItem('sessionStartTime', new Date().toISOString());
+        // Marquer qu'au moins une connexion a eu lieu
+        localStorage.setItem('hasEverConnected', 'true');
         
         // Configurer axios pour utiliser le token dans toutes les requêtes futures
         setAuthToken(response.data.token);
         
-        // Clear failed attempts on success
-        setLoginAttempts(0);
-        localStorage.removeItem('loginAttempts');
-        localStorage.removeItem('blockUntil');
-        
         setMessage('Connexion réussie. Redirection...');
         setMessageType('success');
         
-        // Rediriger vers la page d'accueil
+        // Rediriger vers la page de bienvenue pour éviter la boucle sur /login
         setTimeout(() => {
-          navigate('/');
-        }, 1000);
+          navigate('/welcome');
+        }, 300);
       } else {
         setMessage('Réponse incorrecte du serveur');
         setMessageType('error');
@@ -114,45 +103,13 @@ const Login = () => {
     } catch (error) {
       console.error('Erreur d\'authentification:', error);
       
-      // Increment failed attempts
-      const newAttempts = loginAttempts + 1;
-      setLoginAttempts(newAttempts);
-      localStorage.setItem('loginAttempts', newAttempts.toString());
-      
-      // Block after 5 failed attempts
-      if (newAttempts >= 5) {
-        const blockUntil = Date.now() + (15 * 60 * 1000); // 15 minutes
-        localStorage.setItem('blockUntil', blockUntil.toString());
-        setIsBlocked(true);
-        setBlockTimeRemaining(15 * 60);
-        
-        // Start countdown timer
-        const timer = setInterval(() => {
-          const remaining = Math.ceil((blockUntil - Date.now()) / 1000);
-          if (remaining <= 0) {
-            setIsBlocked(false);
-            setBlockTimeRemaining(0);
-            localStorage.removeItem('blockUntil');
-            clearInterval(timer);
-          } else {
-            setBlockTimeRemaining(remaining);
-          }
-        }, 1000);
-      }
-      
       // Gestion détaillée des erreurs
       if (error.response) {
         // Le serveur a répondu avec un code d'erreur
         if (error.response.status === 401) {
-          const remaining = 5 - newAttempts;
-          if (remaining > 0) {
-            setMessage(`Identifiants incorrects. ${remaining} tentative(s) restante(s).`);
-          } else {
-            setMessage('Trop de tentatives échouées. Compte bloqué pendant 15 minutes.');
-          }
+          setMessage('Identifiants incorrects. Veuillez réessayer.');
         } else if (error.response.status === 429) {
-          const retryAfter = error.response.data?.retryAfter || 900; // 15 minutes default
-          setMessage(`Trop de tentatives de connexion. Réessayez dans ${Math.ceil(retryAfter / 60)} minutes.`);
+          setMessage('Trop de tentatives de connexion. Veuillez réessayer plus tard.');
         } else {
           setMessage(`Erreur d'authentification: ${error.response.data?.error || 'Erreur serveur'}`);
         }

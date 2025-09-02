@@ -5,6 +5,7 @@ const TOKEN_KEY = 'jwt_token';
 const USER_KEY = 'currentUser';
 const USER_ROLE_KEY = 'currentUserRole';
 const USER_EMAIL_KEY = 'currentUserEmail';
+const SESSION_ACTIVE_KEY = 'sessionActive';
 
 // Configure axios pour inclure le token dans les en-têtes
 export const setAuthToken = (token) => {
@@ -85,11 +86,43 @@ export const getAuthConfig = () => {
   };
 };
 
+// Gérer les erreurs d'authentification et rediriger vers la page de connexion si nécessaire
+export const handleAuthError = (error) => {
+  // Ignorer les erreurs 404 pour les requêtes de vérification du serveur
+  if (error.config && error.config.url && error.config.url.includes('/api/server-status')) {
+    console.log('Erreur de vérification du serveur ignorée pour l\'authentification');
+    return false;
+  }
+
+  // Si on est déjà sur la page de login, ne jamais forcer de redirection
+  if (typeof window !== 'undefined' && window.location.hash.includes('#/login')) {
+    return false;
+  }
+  
+  // Vérifier si c'est une erreur d'authentification (401)
+  if (error.response && error.response.status === 401) {
+    console.log('Session expirée ou erreur d\'authentification. Déconnexion automatique...');
+    
+    // Déconnecter l'utilisateur
+    logout();
+    
+    // Rediriger vers la page de connexion avec le hash router
+    if (!window.location.hash.includes('#/login')) {
+      window.location.href = '#/login';
+    }
+    
+    return true; // Indique que l'erreur a été traitée comme une erreur d'authentification
+  }
+  
+  return false; // Indique que ce n'est pas une erreur d'authentification
+};
+
 export default {
   setAuthToken,
   initializeToken,
   isAuthenticated,
   getCurrentUser,
   logout,
-  getAuthConfig
+  getAuthConfig,
+  handleAuthError
 };

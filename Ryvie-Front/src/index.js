@@ -1,58 +1,115 @@
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import axios from 'axios';
 import Home from './Home';
+import AppStore from './AppStore';
 import User from './User';
+import Login from './Login';
 import Settings from './Settings';
-import Welcome from './welcome'; // Import du composant Welcome
-import Userlogin from './connexion'; // Ancien composant Login
-import Login from './Login'; // Nouveau composant Login
-import { initializeToken, isAuthenticated } from './services/authService';
-import AuthListener from './components/AuthListener'; // Import du composant d'écoute d'authentification
-import './utils/setupAxios'; // Importer l'intercepteur axios pour gérer les erreurs de token
-import { verifyToken } from './utils/setupAxios'; // Importer la fonction de vérification du token
+import Welcome from './Welcome';
+import Userlogin from './connexion';
+import { initializeSession, isSessionActive } from './utils/sessionManager';
+import { isElectron } from './utils/platformUtils';
+import { handleAuthError } from './services/authService';
+import faviconUrl from './icons/ryvielogo0.png';
 
-// Initialiser le token au démarrage de l'application
-initializeToken();
-
-// Vérifier immédiatement la validité du token
-setTimeout(() => {
-  verifyToken().then(isValid => {
-    console.log('Token valide :', isValid);
-  });
-}, 1000); // Délai court pour s'assurer que l'application est chargée
-
-// Composant de redirection conditionnelle
+// Composant de redirection conditionnelle (Web et Electron)
 const ProtectedRoute = ({ children }) => {
-  return isAuthenticated() ? children : <Navigate to="/login" />;
+  return isSessionActive() ? children : <Navigate to="/login" replace />;
 };
 
-const App = () => (
-  <Router>
-    {/* Composant qui écoute les événements d'authentification depuis Electron */}
-    <AuthListener />
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={
-        <ProtectedRoute>
-          <Welcome />
-        </ProtectedRoute>
-      } />
-      <Route path="/home" element={
-        <ProtectedRoute>
-          <Home />
-        </ProtectedRoute>
-      } />
-      <Route path="/user" element={<User />} />
-      <Route path="/settings" element={
-        <ProtectedRoute>
-          <Settings />
-        </ProtectedRoute>
-      } />
-      <Route path="/userlogin" element={<Userlogin />} />
-    </Routes>
-  </Router>
-);
+// Configurer l'intercepteur Axios pour gérer automatiquement les erreurs d'authentification (une seule fois)
+if (!axios.__ryvieAuthInterceptorInstalled) {
+  axios.interceptors.response.use(
+    response => response,
+    error => {
+      // Ne rien faire de spécial si on est déjà sur la page de login pour éviter les boucles
+      try {
+        if (typeof window !== 'undefined' && window.location?.hash?.includes('#/login')) {
+          return Promise.reject(error);
+        }
+      } catch { /* noop */ }
+
+      // Si c'est une erreur d'authentification, la fonction handleAuthError s'en occupera
+      if (handleAuthError(error)) {
+        // L'erreur a été traitée comme une erreur d'authentification
+        return Promise.reject({
+          ...error,
+          handled: true // Marquer l'erreur comme déjà traitée
+        });
+      }
+      // Pour les autres types d'erreurs, les laisser se propager normalement
+      return Promise.reject(error);
+    }
+  );
+  axios.__ryvieAuthInterceptorInstalled = true;
+}
+
+const App = () => {
+  useEffect(() => {
+    // Initialiser la session au démarrage
+    initializeSession();
+    console.log(`[App] Application démarrée en mode ${isElectron() ? 'Electron' : 'Web'}`);
+
+    // Définir le favicon pour l'onglet Web
+    try {
+      if (typeof document !== 'undefined') {
+        let link = document.querySelector("link[rel='icon']");
+        if (!link) {
+          link = document.createElement('link');
+          link.setAttribute('rel', 'icon');
+          document.head.appendChild(link);
+        }
+        link.setAttribute('href', faviconUrl);
+        link.setAttribute('type', 'image/png');
+        link.setAttribute('sizes', '32x32');
+      }
+    } catch (e) {
+      console.warn('[App] Impossible de définir le favicon:', e);
+    }
+  }, []);
+
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={
+          isSessionActive() ? <Navigate to="/welcome" replace /> : <Navigate to="/login" replace />
+        } />
+        <Route path="/home" element={
+          <ProtectedRoute>
+            <Home />
+          </ProtectedRoute>
+        } />
+        <Route path="/user" element={
+          <ProtectedRoute>
+            <User />
+          </ProtectedRoute>
+        } />
+        <Route path="/settings" element={
+          <ProtectedRoute>
+            <Settings />
+          </ProtectedRoute>
+        } />
+        <Route path="/welcome" element={
+          <ProtectedRoute>
+            <Welcome />
+          </ProtectedRoute>
+        } />
+        <Route path="/appstore" element={
+          <ProtectedRoute>
+            <AppStore />
+          </ProtectedRoute>
+        } />
+        <Route path="/userlogin" element={
+          <ProtectedRoute>
+            <Userlogin />
+          </ProtectedRoute>} />
+      </Routes>
+    </Router>
+  );
+};
 
 const rootElement = document.getElementById('root');
 const root = ReactDOM.createRoot(rootElement);

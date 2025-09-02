@@ -5,7 +5,9 @@ import axios from 'axios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg-icons';
 import io from 'socket.io-client'; // Importer la bibliothèque Socket.IO
+import { isElectron } from './utils/platformUtils';
 const { getServerUrl } = require('./config/urls');
+import { getCurrentAccessMode } from './utils/detectAccessMode';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -106,12 +108,20 @@ const Settings = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Charger le dossier de téléchargement actuel
-        const path = await window.electronAPI.getDownloadFolder();
-        setSettings(prev => ({
-          ...prev,
-          downloadPath: path
-        }));
+        // Charger le dossier de téléchargement actuel seulement en mode Electron
+        if (isElectron() && window.electronAPI) {
+          const path = await window.electronAPI.getDownloadFolder();
+          setSettings(prev => ({
+            ...prev,
+            downloadPath: path
+          }));
+        } else {
+          // En mode web, utiliser un dossier par défaut
+          setSettings(prev => ({
+            ...prev,
+            downloadPath: 'Téléchargements (navigateur)'
+          }));
+        }
         
         setLoading(false);
       } catch (error) {
@@ -125,7 +135,18 @@ const Settings = () => {
   // Récupération des informations serveur
   useEffect(() => {
     // Récupère la valeur de accessMode depuis le localStorage
-    const storedMode = localStorage.getItem('accessMode') || 'private';
+    let storedMode = getCurrentAccessMode(); // peut être null désormais
+    if (!storedMode) {
+      // Si non défini: en HTTPS, forcer public pour éviter Mixed Content
+      if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
+        storedMode = 'public';
+        localStorage.setItem('accessMode', 'public');
+      } else {
+        // En HTTP (dev/local), rester prudent: utiliser 'private' par défaut ici
+        storedMode = 'private';
+        localStorage.setItem('accessMode', 'private');
+      }
+    }
     setAccessMode(storedMode);
     
     // Détermine l'URL du serveur en fonction du mode d'accès
@@ -205,8 +226,10 @@ const Settings = () => {
     // Mettre à jour l'état local
     setAccessMode(newMode);
     
-    // Notifier le processus principal du changement
-    window.electronAPI.updateAccessMode(newMode);
+    // Notifier le processus principal du changement seulement en mode Electron
+    if (isElectron() && window.electronAPI && window.electronAPI.updateAccessMode) {
+      window.electronAPI.updateAccessMode(newMode);
+    }
     
     // Afficher un message de confirmation
     setChangeStatus({
@@ -223,16 +246,27 @@ const Settings = () => {
 
   const handleSettingChange = async (setting, value) => {
     if (setting === 'downloadPath') {
-      const newPath = await window.electronAPI.changeDownloadFolder();
-      if (newPath) {
-        setSettings(prev => ({
-          ...prev,
-          downloadPath: newPath
-        }));
-        setChangeStatus({ show: true, success: true });
-        setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+      // Seulement en mode Electron
+      if (isElectron() && window.electronAPI && window.electronAPI.changeDownloadFolder) {
+        const newPath = await window.electronAPI.changeDownloadFolder();
+        if (newPath) {
+          setSettings(prev => ({
+            ...prev,
+            downloadPath: newPath
+          }));
+          setChangeStatus({ show: true, success: true });
+          setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+        } else {
+          setChangeStatus({ show: true, success: false });
+          setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+        }
       } else {
-        setChangeStatus({ show: true, success: false });
+        // En mode web, afficher un message informatif
+        setChangeStatus({ 
+          show: true, 
+          success: false, 
+          message: "Modification du dossier de téléchargement non disponible en mode web" 
+        });
         setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
       }
     } else {
@@ -898,10 +932,10 @@ const Settings = () => {
               </div>
               <div className="docker-app-details-body">
                 <div className="docker-app-status-info">
-                  <div className={`docker-app-status ${selectedApp.status}`}>
+                  <div className={`docker-app-status ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'running' : 'stopped'}`}>
                     <span className="docker-status-icon"></span>
                     <span className="docker-status-text">
-                      {selectedApp.status === 'running' ? 'Opérationnel' : 'Arrêté'}
+                      {selectedApp.status === 'running' && selectedApp.progress > 0 ? 'Opérationnel' : 'Arrêté'}
                     </span>
                   </div>
                   <div className="docker-app-progress">
@@ -946,15 +980,15 @@ const Settings = () => {
                 
                 <div className="docker-app-actions">
                   <button
-                    className={`docker-action-btn-large ${selectedApp.status === 'running' ? 'stop' : 'start'}`}
-                    onClick={() => handleAppAction(selectedApp.id, selectedApp.status === 'running' ? 'stop' : 'start')}
+                    className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
+                    onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
                   >
-                    {selectedApp.status === 'running' ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
+                    {(selectedApp.status === 'running' && selectedApp.progress > 0) ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
                   </button>
                   <button
                     className="docker-action-btn-large restart"
                     onClick={() => handleAppAction(selectedApp.id, 'restart')}
-                    disabled={selectedApp.status !== 'running'}
+                    disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
                   >
                     Redémarrer tous les conteneurs
                   </button>
@@ -988,8 +1022,8 @@ const Settings = () => {
               >
                 <div className="docker-app-header">
                   <h3>{app.name}</h3>
-                  <span className={`docker-status-badge ${app.status}`}>
-                    {app.status === 'running' ? 'En cours' : 'Arrêté'}
+                  <span className={`docker-status-badge ${app.status === 'running' && app.progress > 0 ? 'running' : 'stopped'}`}>
+                    {app.status === 'running' && app.progress > 0 ? 'En cours' : 'Arrêté'}
                   </span>
                 </div>
                 
@@ -1001,13 +1035,13 @@ const Settings = () => {
                 
                 <div className="docker-app-controls">
                   <button
-                    className={`docker-action-btn ${app.status === 'running' ? 'stop' : 'start'}`}
+                    className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
                     onClick={(e) => {
                       e.stopPropagation(); // Empêcher le déclenchement du onClick du parent
-                      handleAppAction(app.id, app.status === 'running' ? 'stop' : 'start')
+                      handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
                     }}
                   >
-                    {app.status === 'running' ? 'Arrêter' : 'Démarrer'}
+                    {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
                   </button>
                   <button
                     className="docker-action-btn restart"
@@ -1015,7 +1049,7 @@ const Settings = () => {
                       e.stopPropagation(); // Empêcher le déclenchement du onClick du parent
                       handleAppAction(app.id, 'restart')
                     }}
-                    disabled={app.status !== 'running'}
+                    disabled={!(app.status === 'running' && app.progress > 0)}
                   >
                     Redémarrer
                   </button>

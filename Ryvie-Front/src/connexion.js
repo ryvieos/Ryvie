@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import './styles/connexion.css';
+import { detectAccessMode, getCurrentAccessMode } from './utils/detectAccessMode';
+import { detectAccessModeRobust } from './utils/fallbackDetection';
+import { isElectron, WindowManager, StorageManager } from './utils/platformUtils';
 const { getServerUrl } = require('./config/urls');
 
 const Userlogin = () => {
@@ -17,35 +20,74 @@ const Userlogin = () => {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [authenticating, setAuthenticating] = useState(false);
   const [loginAttempts, setLoginAttempts] = useState(0);
-  const currentUser = localStorage.getItem('currentUser');
-  const currentUserRole = localStorage.getItem('currentUserRole');
+  const [detectingMode, setDetectingMode] = useState(true);
+  const currentUser = StorageManager.getItem('currentUser');
+  const currentUserRole = StorageManager.getItem('currentUserRole');
 
   useEffect(() => {
-    // Récupérer le mode d'accès depuis le localStorage
-    const storedMode = localStorage.getItem('accessMode') || 'private';
-    setAccessMode(storedMode);
-    
-    const fetchUsers = async () => {
+    const initializeApp = async () => {
       try {
-        // Utiliser l'URL du serveur en fonction du mode d'accès
-        const serverUrl = getServerUrl(storedMode);
-        const response = await axios.get(`${serverUrl}/api/users`);
+        // Détecter automatiquement le mode d'accès si on est en web
+        let detectedMode;
+        if (isElectron()) {
+          // En Electron, utiliser le mode stocké
+          detectedMode = getCurrentAccessMode();
+        } else {
+          detectedMode = getCurrentAccessMode();
+        }
+        
+        setAccessMode(detectedMode);
+        setDetectingMode(false);
+        
+        // Charger les utilisateurs avec le mode détecté
+        await fetchUsers(detectedMode);
+      } catch (err) {
+        console.error('Erreur lors de l\'initialisation:', err);
+        setDetectingMode(false);
+        setError('Erreur lors de l\'initialisation de l\'application.');
+        setLoading(false);
+      }
+    };
+
+    const fetchUsers = async (mode) => {
+      try {
+        const serverUrl = getServerUrl(mode);
+        console.log(`[Connexion] Chargement des utilisateurs depuis: ${serverUrl}`);
+        
+        const response = await axios.get(`${serverUrl}/api/users-public`, {
+          timeout: 5000,
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
         const ldapUsers = response.data.map(user => ({
           name: user.name || user.uid,
           id: user.uid,
           email: user.email || 'Non défini',
           role: user.role || 'User'
         }));
+        
         setUsers(ldapUsers);
         setLoading(false);
+        console.log(`[Connexion] ${ldapUsers.length} utilisateurs chargés`);
       } catch (err) {
         console.error('Erreur lors du chargement des utilisateurs:', err);
+        
+        // Si on est en web et qu'on a échoué en mode privé, forcer le mode privé (pas de serveur public pour les tests)
+        if (!isElectron() && mode === 'private') {
+          console.log('[Connexion] Échec en mode privé, mais on reste en mode privé (pas de serveur public de test)');
+          setError('Impossible de se connecter au serveur local ryvie.local:3002. Vérifiez que le serveur est démarré et accessible.');
+          setLoading(false);
+          return;
+        }
+        
         setError('Erreur lors du chargement des utilisateurs. Veuillez vérifier votre connexion au serveur.');
         setLoading(false);
       }
     };
 
-    fetchUsers();
+    initializeApp();
   }, []);
 
   const selectUser = (userId, userName) => {
@@ -73,17 +115,19 @@ const Userlogin = () => {
         uid: selectedUser.id,
         password: password
       }, {
+        withCredentials: false,
         headers: {
-          'Authorization': undefined // Supprimer l'ancien token pour cette requête
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
         }
       });
 
       if (response.data && response.data.token) {
         // Authentification réussie, stocker le token JWT et les informations utilisateur
-        localStorage.setItem('jwt_token', response.data.token);
-        localStorage.setItem('currentUser', selectedUser.name || selectedUser.id);
-        localStorage.setItem('currentUserRole', response.data.user.role || 'User');
-        localStorage.setItem('currentUserEmail', response.data.user.email || '');
+        StorageManager.setItem('jwt_token', response.data.token);
+        StorageManager.setItem('currentUser', selectedUser.name || selectedUser.id);
+        StorageManager.setItem('currentUserRole', response.data.user.role || 'User');
+        StorageManager.setItem('currentUserEmail', response.data.user.email || '');
         
         // Configurer axios pour inclure le token dans les futures requêtes
         axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
@@ -162,22 +206,25 @@ const Userlogin = () => {
 
   const openUserWindow = async (userId, userName, userRole, token) => {
     try {
-      console.log(`Ouverture de session pour: ${userName} avec le rôle ${userRole}`);
+      console.log(`[Connexion] Ouverture de session pour: ${userName} avec le rôle ${userRole}`);
       
-      // Récupérer le mode d'accès actuel (privé ou public)
-      const accessMode = localStorage.getItem('accessMode') || 'private';
-      
-      // Vérifier si l'API Electron est disponible
-      if (window.electronAPI && typeof window.electronAPI.invoke === 'function') {
-        // Créer une nouvelle fenêtre pour cet utilisateur avec le mode d'accès spécifié
+      if (isElectron()) {
+        // Mode Electron - Créer une nouvelle fenêtre
         await window.electronAPI.invoke('create-user-window-with-mode', userId, accessMode, userRole, token);
         setMessage(`Fenêtre ouverte pour ${userName} en mode ${accessMode} avec le rôle ${userRole}`);
         setMessageType('success');
       } else {
-        // Si nous sommes dans un navigateur, rediriger vers la page d'accueil
-        navigate('/');
-        setMessage(`Mode navigateur : redirection vers l'accueil pour ${userName}`);
-        setMessageType('info');
+        // Mode Web - Rediriger vers la page d'accueil
+        console.log(`[Connexion] Mode web - redirection vers l'accueil pour ${userName}`);
+        
+        // Stocker les informations de session pour la page d'accueil
+        StorageManager.setItem('sessionActive', true);
+        StorageManager.setItem('sessionStartTime', new Date().toISOString());
+        
+        // Rediriger vers la page de bienvenue
+        navigate('/welcome');
+        setMessage(`Connexion réussie pour ${userName}`);
+        setMessageType('success');
       }
     } catch (error) {
       console.error('Erreur lors de l\'ouverture de la fenêtre:', error);
@@ -186,12 +233,17 @@ const Userlogin = () => {
     }
   };
 
-  if (loading) {
+  if (loading || detectingMode) {
     return (
       <div className="container">
         <div className="loading-container">
           <div className="spinner"></div>
-          <p className="loading-text">Chargement des utilisateurs...</p>
+          <p className="loading-text">
+            {detectingMode ? 'Détection du mode d\'accès...' : 'Chargement des utilisateurs...'}
+          </p>
+          {!isElectron() && detectingMode && (
+            <p className="loading-subtext">Test de connectivité au serveur local...</p>
+          )}
         </div>
       </div>
     );
@@ -218,6 +270,15 @@ const Userlogin = () => {
     <div className="container">
       <div className="login-card">
         <h1 className="title-connexion">Ouvrir une nouvelle session</h1>
+        
+        <div className="access-mode-indicator">
+          <span className={`mode-badge ${accessMode}`}>
+            Mode: {accessMode === 'private' ? 'Local' : 'Public'}
+          </span>
+          {!isElectron() && (
+            <span className="platform-badge">Web</span>
+          )}
+        </div>
         
         <div className="user-buttons-container">
           {users.map(user => (

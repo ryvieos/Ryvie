@@ -48,6 +48,55 @@
   letter-spacing: -0.5px;
 }
 
+/* Indicateurs de mode et plateforme */
+.access-mode-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.mode-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mode-badge.private {
+  background-color: #e8f5e8;
+  color: #2d5a2d;
+  border: 1px solid #4caf50;
+}
+
+.mode-badge.public {
+  background-color: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ff9800;
+}
+
+.platform-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background-color: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #2196f3;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Texte de sous-chargement */
+.loading-subtext {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 10px;
+  text-align: center;
+}
+
 .user-buttons-container {
   display: flex;
   flex-direction: column;

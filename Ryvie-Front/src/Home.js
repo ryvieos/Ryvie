@@ -6,8 +6,11 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { io } from 'socket.io-client';
 import { Link, useNavigate } from 'react-router-dom';
+import { getCurrentAccessMode } from './utils/detectAccessMode';
+import { isElectron, WindowManager, StorageManager, NotificationManager } from './utils/platformUtils';
+import { endSession } from './utils/sessionManager';
 const { getServerUrl, getAppUrl } = require('./config/urls');
-const { generateAppConfig, generateDefaultZones, images } = require('./config/appConfig');
+import { generateAppConfig, generateDefaultZones, images } from './config/appConfig';
 
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
@@ -126,33 +129,61 @@ const Taskbar = ({ handleClick }) => {
 
   return (
     <div className="taskbar">
-      {taskbarApps.map(({ iconId, config }, index) => (
-        <div key={index} className="taskbar-circle">
-          {config.route ? (
-            <Link to={config.route}>
-              <img src={images[iconId]} alt={config.name} />
-            </Link>
-          ) : (
-            <div onClick={() => handleClick(iconId)}>
-              <img src={images[iconId]} alt={config.name} />
-            </div>
-          )}
-        </div>
-      ))}
+      {taskbarApps.map(({ iconId, config }, index) => {
+        const imgSrc = images[iconId];
+        const label = config?.name || iconId;
+        try { console.debug('[Taskbar] Render icon', { iconId, label, hasImage: !!imgSrc, route: config?.route, src: imgSrc }); } catch (_) {}
+
+        const Img = () => (
+          <img
+            src={imgSrc}
+            alt={label}
+            title={label}
+            onError={(e) => {
+              try { console.warn('[Taskbar] Image failed to load', { iconId, src: imgSrc }); } catch (_) {}
+              e.currentTarget.style.display = 'none';
+            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        );
+
+        return (
+          <div key={index} className="taskbar-circle" aria-label={label} title={label}>
+            {config.route ? (
+              <Link to={config.route} aria-label={label} title={label} style={{ width: '100%', height: '100%' }}>
+                {imgSrc ? <Img /> : null}
+              </Link>
+            ) : (
+              <div
+                onClick={() => handleClick(iconId)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleClick(iconId)}
+                role="button"
+                tabIndex={0}
+                aria-label={label}
+                title={label}
+                style={{ width: '100%', height: '100%' }}
+              >
+                {imgSrc ? <Img /> : null}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
 
 // Composant principal
 const Home = () => {
-  const [accessMode, setAccessMode] = useState('private'); 
+  const navigate = useNavigate();
+  const [accessMode, setAccessMode] = useState(null); 
   const [zones, setZones] = useState(() => {
-    // Essayer de récupérer les zones depuis localStorage
-    const savedZones = localStorage.getItem('iconZones');
+    // Essayer de récupérer les zones depuis StorageManager
+    const savedZones = StorageManager.getItem('iconZones');
     console.log("Zones sauvegardées:", savedZones);
     if (savedZones) {
       try {
-        const parsedZones = JSON.parse(savedZones);
+        const parsedZones = typeof savedZones === 'string' ? JSON.parse(savedZones) : savedZones;
         console.log("Zones analysées:", parsedZones);
         
         // Migration automatique des anciens noms vers les nouveaux
@@ -182,7 +213,7 @@ const Home = () => {
         
         if (migrationNeeded) {
           console.log("Migration effectuée, sauvegarde des nouvelles zones");
-          localStorage.setItem('iconZones', JSON.stringify(parsedZones));
+          StorageManager.setItem('iconZones', parsedZones);
         }
         
         return parsedZones;
@@ -204,97 +235,266 @@ const Home = () => {
 
   const [serverStatus, setServerStatus] = useState(false);
   const [appStatus, setAppStatus] = useState({});
+  const [applications, setApplications] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  // Overlay AppStore
+  const [overlayVisible, setOverlayVisible] = useState(false);
+  const [overlayUrl, setOverlayUrl] = useState('');
 
   const [mounted, setMounted] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [currentSocket, setCurrentSocket] = useState(null);
+  
   useEffect(() => {
-    const storedMode = localStorage.getItem('accessMode') || 'private';
-    setAccessMode(storedMode);
+    const initializeAccessMode = () => {
+      // TOUJOURS utiliser le mode stocké - ne jamais faire de détection automatique
+      const mode = getCurrentAccessMode(); // peut être null
+      setAccessMode(mode);
+      console.log(`[Home] Mode d'accès récupéré depuis le stockage: ${mode}`);
+    };
+
+    initializeAccessMode();
   }, []);
   
   useEffect(() => {
-    // Récupère la valeur de accessMode depuis le localStorage
-    const storedMode = localStorage.getItem('accessMode') || 'private';
-    setAccessMode(storedMode); // Met à jour l'état accessMode
-  
-    const serverUrl = getServerUrl(storedMode);
-    console.log("Connexion à :", serverUrl);
-  
-    const socket = io(serverUrl);
-  
-    socket.on('status', (data) => {
-      setServerStatus(data.serverStatus);
-      if (data.serverStatus) {
-        console.log('Connected to server');
-      }
-    });
-  
-    socket.on('containers', (data) => {
-      console.log('Conteneurs actifs:', data.activeContainers);
-  
-      // Mettre à jour le statut des applications en fonction des conteneurs actifs
-      const newAppStatus = {};
-      
-      // Parcourir toutes les applications configurées
-      Object.entries(APPS_CONFIG).forEach(([appId, config]) => {
-        if (config.showStatus && config.containerName) {
-          // Vérifier si le conteneur associé à cette application est actif
-          newAppStatus[appId] = data.activeContainers.includes(config.containerName);
-        }
-      });
-      
-      setAppStatus(newAppStatus);
-    });
-  
-    socket.on('disconnect', () => {
+    if (!accessMode) {
+      console.log('[Home] Aucun mode défini - aucune tentative de connexion Socket.io');
+      return; // Attendre que le mode d'accès soit initialisé
+    }
+
+    // En mode web sous HTTPS, ne pas tenter de connexion en mode private (Mixed Content / réseau local)
+    if (!isElectron() && typeof window !== 'undefined' && window.location?.protocol === 'https:' && accessMode === 'private') {
+      console.log('[Home] Contexte HTTPS Web + mode private -> on évite les tentatives Socket.io pour prévenir les timeouts');
+      setSocketConnected(false);
       setServerStatus(false);
-    });
-  
-    return () => socket.disconnect();
-  }, [accessMode]); //  Ajoute accessMode ici pour réexécuter le useEffect à chaque changement
-  
-  useEffect(() => {
-    const fetchWeatherData = () => {
-      const geoApiUrl = 'http://ip-api.com/json';
+      return;
+    }
+    
+    const serverUrl = getServerUrl(accessMode);
+    
+    const fetchApplications = async () => {
+      try {
+        const response = await axios.get(`${getServerUrl(accessMode)}/api/apps`);
+        const apps = response.data.map(app => ({
+          ...app,
+          port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
+          autostart: false
+        }));
+        setApplications(apps);
+        
+        // Mettre à jour le statut des applications pour Home.js
+        const newAppStatus = {};
+        //console.log('[Home] Applications reçues:', apps.map(app => ({ name: app.name, running: app.running, fullApp: app })));
+        //console.log('[Home] APPS_CONFIG disponible:', Object.entries(APPS_CONFIG).map(([id, config]) => ({ id, name: config.name })));
+        
+        apps.forEach(app => {
+          // Trouver la configuration correspondante dans APPS_CONFIG
+          const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
+            const match = config.name.toLowerCase() === app.name.toLowerCase() || 
+                         iconId.includes(app.name.toLowerCase());
+            //console.log(`[Home] Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
+            return match;
+          });
+          
+          if (configEntry) {
+            const [iconId] = configEntry;
+            //console.log(`[Home] Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
+            newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
+          } else {
+           // console.log(`[Home] Aucun mapping trouvé pour: ${app.name}`);
+          }
+        });
+        
+        console.log('[Home] Nouveau statut calculé:', newAppStatus);
+        setAppStatus(newAppStatus);
+        
+      } catch (error) {
+        console.error('[Home] Erreur lors de la récupération des applications:', error);
+      }
+    };
 
-      axios
-        .get(geoApiUrl)
-        .then((response) => {
-          const { city, lat, lon } = response.data;
-          const weatherApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,weathercode,relative_humidity_2m,windspeed_10m&timezone=auto`;
+    // Récupérer les applications au chargement
+    fetchApplications();
+    
+    const connectSocket = () => {
+      try {
+        if (currentSocket) {
+          currentSocket.disconnect();
+        }
+        
+        console.log(`[Home] Tentative de connexion Socket.io vers: ${serverUrl}`);
+        
+        const newSocket = io(serverUrl, {
+          transports: ['websocket', 'polling'],
+          timeout: 10000,
+          forceNew: true
+        });
 
-          axios.get(weatherApiUrl).then((weatherResponse) => {
-            const data = weatherResponse.data;
-            const weatherCode = data.current_weather.weathercode;
-            let icon = 'sunny.png';
+        newSocket.on('connect', () => {
+          console.log(`[Home] Socket.io connecté en mode ${accessMode}`);
+          setCurrentSocket(newSocket);
+          setSocketConnected(true);
+          setServerStatus(true); // Marquer le serveur comme connecté
+        });
 
-            if (weatherCode >= 1 && weatherCode <= 3) {
-              icon = 'cloudy.png';
-            } else if ([61,63,65].includes(weatherCode)) {
-              icon = 'rainy.png';
+        newSocket.on('disconnect', () => {
+          console.log('[Home] Socket.io déconnecté');
+          setSocketConnected(false);
+          setServerStatus(false); // Marquer le serveur comme déconnecté
+        });
+
+        newSocket.on('connect_error', (error) => {
+          console.log(`[Home] Erreur de connexion Socket.io en mode ${accessMode}:`, error.message);
+          setSocketConnected(false);
+          setServerStatus(false); // Marquer le serveur comme déconnecté en cas d'erreur
+          
+          // En mode web, ne jamais essayer le fallback
+          if (!isElectron()) {
+            console.log('[Home] Mode web - arrêt des tentatives de connexion Socket.io');
+            if (newSocket) {
+              newSocket.disconnect();
             }
+            return;
+          }
+          
+          // Ne jamais changer de mode automatiquement - respecter le mode établi
+          console.log('[Home] Connexion Socket.io échouée - mode d\'accès maintenu:', accessMode);
+        });
 
-            setWeather({
-              location: city,
-              temperature: data.current_weather.temperature,
-              humidity: data.hourly.relative_humidity_2m[0],
-              wind: data.current_weather.windspeed,
-              description: weatherCode,
-              icon: icon,
+        newSocket.on('server-status', (data) => {
+          console.log('[Home] Statut serveur reçu:', data.status);
+          setServerStatus(data.status);
+        });
+
+        // Écouter les mises à jour des statuts d'applications (comme dans Settings.js)
+        newSocket.on('apps-status-update', (updatedApps) => {
+          console.log('[Home] Mise à jour des applications reçue:', updatedApps);
+          setApplications(prevApps => {
+            return updatedApps.map(updatedApp => {
+              const existingApp = prevApps.find(app => app.id === updatedApp.id);
+              return {
+                ...updatedApp,
+                port: updatedApp.ports && updatedApp.ports.length > 0 ? updatedApp.ports[0] : null,
+                autostart: existingApp ? existingApp.autostart : false
+              };
             });
           });
-        })
-        .catch((error) => {
-          console.error('Erreur lors de la récupération de la localisation', error);
-          setWeather({
-            location: 'Localisation non disponible',
-            temperature: null,
-            humidity: null,
-            wind: null,
-            description: '',
-            icon: 'default.png',
+
+          // Mettre à jour le statut des applications pour Home.js
+          const newAppStatus = {};
+          console.log('[Home] Mise à jour apps reçues:', updatedApps.map(app => ({ name: app.name, running: app.running })));
+          
+          updatedApps.forEach(app => {
+            // Trouver la configuration correspondante dans APPS_CONFIG
+            const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
+              const match = config.name.toLowerCase() === app.name.toLowerCase() || 
+                           iconId.includes(app.name.toLowerCase());
+              console.log(`[Home] Mise à jour - Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
+              return match;
+            });
+            
+            if (configEntry) {
+              const [iconId] = configEntry;
+              console.log(`[Home] Mise à jour - Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
+              newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
+            } else {
+              console.log(`[Home] Mise à jour - Aucun mapping trouvé pour: ${app.name}`);
+            }
           });
+          
+          console.log('[Home] Mise à jour - Nouveau statut calculé:', newAppStatus);
+          setAppStatus(newAppStatus);
         });
+        
+      } catch (error) {
+        console.error('[Home] Erreur lors de la création de la connexion Socket.io:', error);
+      }
+    };
+    
+    connectSocket();
+    
+    return () => {
+      if (currentSocket) {
+        currentSocket.disconnect();
+      }
+    };
+  }, [accessMode]);
+  
+  useEffect(() => {
+    const fetchWeatherData = async () => {
+      try {
+        // 1) Essayer d'abord la géolocalisation du navigateur (position réelle de l'utilisateur)
+        const getPosition = () =>
+          new Promise((resolve, reject) => {
+            if (!navigator.geolocation) return reject(new Error('Geolocation non disponible'));
+            navigator.geolocation.getCurrentPosition(
+              (pos) => resolve(pos),
+              (err) => reject(err),
+              { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+            );
+          });
+
+        let latitude = null;
+        let longitude = null;
+        let cityName = null;
+
+        try {
+          const pos = await getPosition();
+          latitude = pos.coords.latitude;
+          longitude = pos.coords.longitude;
+
+          // Reverse geocoding pour obtenir le nom de la ville depuis les coordonnées
+          try {
+            const reverseUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=fr`;
+            const rev = await axios.get(reverseUrl);
+            cityName = rev?.data?.city || rev?.data?.locality || rev?.data?.principalSubdivision || 'Votre position';
+          } catch (e) {
+            cityName = 'Votre position';
+          }
+        } catch (geoErr) {
+          // 2) Repli: géolocalisation par IP (HTTPS)
+          try {
+            const ipResp = await axios.get('https://ipapi.co/json/');
+            latitude = ipResp.data.latitude;
+            longitude = ipResp.data.longitude;
+            cityName = ipResp.data.city || 'Votre position';
+          } catch (ipErr) {
+            throw new Error('Impossible de récupérer la localisation');
+          }
+        }
+
+        // 3) Appel météo Open-Meteo avec les coordonnées trouvées
+        const weatherApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=temperature_2m,weathercode,relative_humidity_2m,windspeed_10m&timezone=auto`;
+        const weatherResponse = await axios.get(weatherApiUrl);
+        const data = weatherResponse.data;
+        const weatherCode = data.current_weather.weathercode;
+
+        let icon = 'sunny.png';
+        if (weatherCode >= 1 && weatherCode <= 3) {
+          icon = 'cloudy.png';
+        } else if ([61, 63, 65].includes(weatherCode)) {
+          icon = 'rainy.png';
+        }
+
+        setWeather({
+          location: cityName,
+          temperature: data.current_weather.temperature,
+          humidity: data.hourly.relative_humidity_2m[0],
+          wind: data.current_weather.windspeed,
+          description: weatherCode,
+          icon: icon,
+        });
+      } catch (error) {
+        console.error('Erreur lors de la récupération de la localisation', error);
+        setWeather({
+          location: 'Localisation non disponible',
+          temperature: null,
+          humidity: null,
+          wind: null,
+          description: '',
+          icon: 'default.png',
+        });
+      }
     };
 
     fetchWeatherData();
@@ -302,10 +502,7 @@ const Home = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  useEffect(() => {
-    const mode = localStorage.getItem('accessMode') || 'private';
-    setAccessMode(mode);
-  }, []);
+  // Supprimer ce useEffect dupliqué car géré dans le premier useEffect
 
   useEffect(() => {
     setMounted(true);
@@ -333,20 +530,45 @@ const Home = () => {
         [toZoneId]: toIcons,
       };
       
-      // Sauvegarder les zones dans localStorage après chaque modification
-      localStorage.setItem('iconZones', JSON.stringify(newZones));
+      // Sauvegarder les zones dans StorageManager après chaque modification
+      StorageManager.setItem('iconZones', newZones);
       
       return newZones;
     });
   };
 
-  const openAppWindow = (url, useOverlay = true) => {
-    if (!useOverlay) {
+
+  const openAppWindow = (url, useOverlay = true, appName = '') => {
+    console.log(`[Home] Ouverture de l'application: ${url}`);
+    
+    const currentUser = StorageManager.getItem('currentUser');
+    
+    if (isElectron()) {
+      // En Electron, utiliser le comportement existant
       window.open(url, '_blank', 'width=1000,height=700');
-      return;
     } else {
-      window.open(url, '_blank', 'width=1000,height=700');
+      // En mode web: ouvrir en nouvel onglet, pas en fenêtre séparée
+      const urlWithParams = new URL(url);
+      if (currentUser) {
+        urlWithParams.searchParams.set('ryvie_user', currentUser);
+        urlWithParams.searchParams.set('ryvie_logout', 'true');
+        urlWithParams.searchParams.set('ryvie_clear_session', 'true');
+      }
+      urlWithParams.searchParams.set('t', Date.now().toString());
+      window.open(urlWithParams.toString(), '_blank');
     }
+  };
+
+  const handleLogout = () => {
+    try {
+      if (currentSocket) {
+        currentSocket.disconnect();
+      }
+    } catch (e) {
+      console.warn('[Home] Erreur lors de la déconnexion du socket:', e);
+    }
+    endSession();
+    navigate('/login', { replace: true });
   };
 
   const handleClick = (iconId) => {
@@ -357,6 +579,21 @@ const Home = () => {
     if (!appConfig) {
       console.log("Pas de configuration trouvée pour cette icône :", iconId);
       console.log("Configuration disponible:", Object.keys(APPS_CONFIG));
+      return;
+    }
+    
+    // Cas spécial: AppStore -> ouvrir un overlay plein écran avec l'App Store
+    const appNameLower = (appConfig.name || '').toLowerCase();
+    if (appNameLower === 'appstore' || appConfig.urlKey === 'APPSTORE') {
+      try {
+        const base = window.location.origin + window.location.pathname;
+        const url = `${base}#/appstore`;
+        setOverlayUrl(url);
+        setOverlayVisible(true);
+      } catch (e) {
+        console.warn('[Home] Impossible d\'ouvrir l\'AppStore en overlay, navigation de secours /appstore');
+        navigate('/appstore');
+      }
       return;
     }
     
@@ -371,7 +608,7 @@ const Home = () => {
       const appUrl = getAppUrl(appConfig.urlKey, accessMode);
       
       if (appUrl) {
-        openAppWindow(appUrl, !appConfig.useDirectWindow);
+        openAppWindow(appUrl, !appConfig.useDirectWindow, appConfig.name);
       } else {
         console.log("Pas d'URL trouvée pour cette icône :", iconId);
       }
@@ -383,7 +620,15 @@ const Home = () => {
       <DndProvider backend={HTML5Backend}>
         <div className="background">
           <div className={`server-status ${serverStatus ? 'connected' : 'disconnected'}`}>
-            {serverStatus ? 'Connected' : 'Disconnected'}
+            <span className="status-text">
+              {serverStatus ? 'Connecté' : 'Déconnecté'}
+            </span>
+            <span className="mode-indicator">
+              {accessMode === 'private' ? 'Local' : 'Public'}
+            </span>
+            {!isElectron() && (
+              <span className="platform-indicator">Web</span>
+            )}
           </div>
 
           {isLoading && (
@@ -445,7 +690,78 @@ const Home = () => {
               ))}
             </div>
           </div>
+          {/* Bouton de déconnexion fixe en bas à gauche */}
+          <button className="logout-fab" onClick={handleLogout} title="Déconnexion">
+            <span className="icon">⎋</span>
+            <span className="label">Déconnexion</span>
+          </button>
         </div>
+      
+      {overlayVisible && (
+        <div
+          className="appstore-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={(e) => {
+            // fermer uniquement si on clique sur l'arrière-plan (pas à l'intérieur de la modale)
+            if (e.target === e.currentTarget) {
+              setOverlayVisible(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              width: '92vw',
+              height: '86vh',
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+              overflow: 'hidden',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 20,
+                display: 'flex',
+                gap: 8,
+                zIndex: 2
+              }}
+            >
+              <button
+                onClick={() => setOverlayVisible(false)}
+                title="Fermer"
+                style={{
+                  border: '1px solid #ddd',
+                  background: '#fff',
+                  borderRadius: 8,
+                  padding: '6px 10px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <iframe
+              title="App Store"
+              src={overlayUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+            />
+          </div>
+        </div>
+      )}
+
       </DndProvider>
     </div>
   );
