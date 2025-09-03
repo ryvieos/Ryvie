@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios'; // Import axios
+import axios from './utils/setupAxios'; // Centralized axios instance with interceptors
 import './styles/Welcome.css';
 import serverIcon from './icons/lettre-r.png';
 import { setAccessMode as setGlobalAccessMode } from './utils/detectAccessMode';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from './utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
 import './styles/Login.css';
 const { getServerUrl } = require('./config/urls');

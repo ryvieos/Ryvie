@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './styles/Home.css';
 import './styles/Transitions.css';
-import axios from 'axios';
+import axios from './utils/setupAxios';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { connectRyvieSocket } from './utils/detectAccessMode';

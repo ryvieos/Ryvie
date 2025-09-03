@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './styles/User.css';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from './utils/setupAxios';
 const { getServerUrl } = require('./config/urls');
 import { getCurrentAccessMode } from './utils/detectAccessMode';
 
