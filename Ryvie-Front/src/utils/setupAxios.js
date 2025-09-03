@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { logout } from '../services/authService';
 import { getServerUrl } from '../config/urls';
+import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from './detectAccessMode';
 
 // Fonction pour vérifier si le token est valide (local, sans appeler un endpoint admin-only)
 export const verifyToken = async () => {
@@ -30,9 +31,10 @@ export const handleTokenError = (errorCode = null) => {
   }
   
   // Nettoyer les données d'authentification mais garder le mode d'accès
-  const accessMode = localStorage.getItem('accessMode') || 'private';
+  const accessMode = getCurrentAccessMode() || 'private';
   logout();
-  localStorage.setItem('accessMode', accessMode); // Restaurer le mode d'accès
+  // Restaurer le mode d'accès via le singleton (persistance incluse)
+  setGlobalAccessMode(accessMode);
   
   // Clear any failed login attempts on token error (fresh start)
   localStorage.removeItem('loginAttempts');
@@ -73,7 +75,7 @@ export const handleTokenError = (errorCode = null) => {
 // Configuration des délais de timeout pour les requêtes axios
 // Augmenter les timeouts pour le mode privé pour donner plus de temps au serveur local de répondre
 axios.interceptors.request.use(request => {
-  const accessMode = localStorage.getItem('accessMode') || 'private';
+  const accessMode = getCurrentAccessMode() || 'private';
   
   // Augmenter le timeout pour le mode privé car le serveur local peut prendre plus de temps à répondre
   if (accessMode === 'private') {
@@ -119,7 +121,7 @@ axios.interceptors.response.use(
         const shouldTryRefresh = isApi && !isAuthEndpoint && hadAuth && notRetried;
 
         if (shouldTryRefresh) {
-          const accessMode = localStorage.getItem('accessMode') || 'private';
+          const accessMode = getCurrentAccessMode() || 'private';
           const serverUrl = getServerUrl(accessMode);
           const currentToken = localStorage.getItem('jwt_token');
           if (currentToken) {

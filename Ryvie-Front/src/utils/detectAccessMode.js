@@ -4,6 +4,32 @@
  */
 
 const { getServerUrl } = require('../config/urls');
+import { io } from 'socket.io-client';
+import { isElectron } from './platformUtils';
+
+// Etat global (source de vérité pour la session en cours)
+let currentMode = null; // 'private' | 'public' | null
+const listeners = new Set(); // callbacks (mode) => void
+
+function notify(mode) {
+  for (const cb of Array.from(listeners)) {
+    try { cb(mode); } catch {}
+  }
+}
+
+function persist(mode) {
+  try { localStorage.setItem('accessMode', mode); } catch {}
+}
+
+function ensureLoadedFromStorage() {
+  if (currentMode !== null) return;
+  try {
+    const stored = localStorage.getItem('accessMode');
+    if (stored === 'private' || stored === 'public') {
+      currentMode = stored;
+    }
+  } catch {}
+}
 
 /**
  * Détecte automatiquement le mode d'accès en testant la connectivité
@@ -32,7 +58,7 @@ export async function detectAccessMode(timeout = 2000) {
 
     if (response.ok) {
       console.log('[AccessMode] Serveur local accessible - Mode PRIVATE');
-      localStorage.setItem('accessMode', 'private');
+      setAccessMode('private');
       return 'private';
     }
   } catch (error) {
@@ -46,7 +72,7 @@ export async function detectAccessMode(timeout = 2000) {
   }
 
   console.log('[AccessMode] Basculement vers le mode PUBLIC');
-  localStorage.setItem('accessMode', 'public');
+  setAccessMode('public');
   return 'public';
 }
 
@@ -55,7 +81,8 @@ export async function detectAccessMode(timeout = 2000) {
  * @returns {string|null} - 'private', 'public' ou null si non défini
  */
 export function getCurrentAccessMode() {
-  return localStorage.getItem('accessMode');
+  ensureLoadedFromStorage();
+  return currentMode;
 }
 
 /**
@@ -66,9 +93,10 @@ export function setAccessMode(mode) {
   if (mode !== 'private' && mode !== 'public') {
     throw new Error('Mode d\'accès invalide. Utilisez "private" ou "public".');
   }
-  
-  localStorage.setItem('accessMode', mode);
+  currentMode = mode;
+  persist(mode);
   console.log(`[AccessMode] Mode forcé à: ${mode.toUpperCase()}`);
+  notify(mode);
 }
 
 /**
@@ -99,4 +127,90 @@ export async function testServerConnectivity(mode, timeout = 2000) {
     clearTimeout(timeoutId);
     return false;
   }
+}
+
+/**
+ * S'abonner aux changements de mode
+ * @param {(mode: string)=>void} cb
+ */
+export function subscribeAccessMode(cb) {
+  if (typeof cb !== 'function') return () => {};
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+
+/**
+ * Se désabonner (alias pratique)
+ */
+export function unsubscribeAccessMode(cb) {
+  listeners.delete(cb);
+}
+
+/**
+ * Crée une connexion Socket.IO en respectant le mode d'accès et le contexte (Web/Electron, HTTPS, etc.)
+ * @param {Object} params
+ * @param {'private'|'public'} params.mode - Mode d'accès à utiliser
+ * @param {function} [params.onConnect]
+ * @param {function} [params.onDisconnect]
+ * @param {function} [params.onError]
+ * @param {function} [params.onServerStatus]
+ * @param {function} [params.onAppsStatusUpdate]
+ * @param {number} [params.timeoutMs=10000]
+ * @returns {import('socket.io-client').Socket | null}
+ */
+export function connectRyvieSocket({
+  mode,
+  onConnect,
+  onDisconnect,
+  onError,
+  onServerStatus,
+  onAppsStatusUpdate,
+  timeoutMs = 10000,
+} = {}) {
+  if (!mode) {
+    try { console.log('[SocketHelper] Aucun mode fourni, annulation de la connexion'); } catch {}
+    return null;
+  }
+
+  // En mode web sous HTTPS, éviter le mode private (réseau local / Mixed Content)
+  try {
+    if (!isElectron() && typeof window !== 'undefined' && window.location?.protocol === 'https:' && mode === 'private') {
+      console.log('[SocketHelper] HTTPS Web + mode private -> pas de tentative Socket.io');
+      return null;
+    }
+  } catch {}
+
+  const serverUrl = getServerUrl(mode);
+  console.log(`[SocketHelper] Connexion Socket.io -> ${serverUrl} (mode=${mode})`);
+
+  const socket = io(serverUrl, {
+    transports: ['websocket', 'polling'],
+    timeout: timeoutMs,
+    forceNew: true,
+  });
+
+  socket.on('connect', () => {
+    try { console.log(`[SocketHelper] Socket connecté (mode=${mode})`); } catch {}
+    onConnect && onConnect(socket);
+  });
+
+  socket.on('disconnect', () => {
+    try { console.log('[SocketHelper] Socket déconnecté'); } catch {}
+    onDisconnect && onDisconnect();
+  });
+
+  socket.on('connect_error', (err) => {
+    try { console.log(`[SocketHelper] Erreur de connexion (mode=${mode}):`, err?.message); } catch {}
+    onError && onError(err);
+  });
+
+  if (typeof onServerStatus === 'function') {
+    socket.on('server-status', (data) => onServerStatus(data));
+  }
+
+  if (typeof onAppsStatusUpdate === 'function') {
+    socket.on('apps-status-update', (updatedApps) => onAppsStatusUpdate(updatedApps));
+  }
+
+  return socket;
 }

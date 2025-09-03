@@ -19,7 +19,7 @@ const Login = () => {
   useEffect(() => {
     const initMode = async () => {
       // 1) Respecter un mode déjà établi (Welcome/Settings)
-      const existingModeRaw = typeof window !== 'undefined' ? window.localStorage.getItem('accessMode') : null;
+      const existingModeRaw = getCurrentAccessMode();
       if (existingModeRaw) {
         setAccessMode(existingModeRaw);
       } else {
@@ -52,6 +52,37 @@ const Login = () => {
 
     initMode();
   }, []);
+
+  // Polling: rester en public et tenter périodiquement de basculer en privé dès que détecté
+  useEffect(() => {
+    // Ne pas tenter en HTTPS (évite Mixed Content) et uniquement si on est en PUBLIC
+    if (typeof window !== 'undefined' && window.location?.protocol === 'https:') return;
+    if (accessMode !== 'public') return;
+
+    let isCancelled = false;
+
+    const attemptDetect = async () => {
+      try {
+        const detected = await detectAccessMode(1200);
+        if (!isCancelled && detected === 'private') {
+          persistAccessMode('private');
+          setAccessMode('private');
+          console.log('[Login] Mode privé détecté pendant le polling -> bascule en PRIVÉ');
+        }
+      } catch {
+        // Reste en public silencieusement
+      }
+    };
+
+    // Tentative immédiate puis toutes les 3 secondes
+    attemptDetect();
+    const intervalId = setInterval(attemptDetect, 3000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [accessMode]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -129,7 +160,7 @@ const Login = () => {
   const toggleAccessMode = () => {
     const newMode = accessMode === 'private' ? 'public' : 'private';
     setAccessMode(newMode);
-    localStorage.setItem('accessMode', newMode);
+    persistAccessMode(newMode);
   };
 
   return (
