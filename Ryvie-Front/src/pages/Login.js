@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import axios from './utils/setupAxios';
+import axios from '../utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
-import './styles/Login.css';
-const { getServerUrl } = require('./config/urls');
-import { isSessionActive, startSession } from './utils/sessionManager';
-import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode } from './utils/detectAccessMode';
+import '../styles/Login.css';
+const { getServerUrl } = require('../config/urls');
+import { isSessionActive, startSession } from '../utils/sessionManager';
+import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode } from '../utils/detectAccessMode';
 
 const Login = () => {
   const navigate = useNavigate();

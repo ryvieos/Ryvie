@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import './styles/Settings.css';
+import '../styles/Settings.css';
 import { useNavigate } from 'react-router-dom';
-import axios from './utils/setupAxios';
+import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg-icons';
-import { isElectron } from './utils/platformUtils';
-const { getServerUrl } = require('./config/urls');
-import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, connectRyvieSocket } from './utils/detectAccessMode';
+import { isElectron } from '../utils/platformUtils';
+const { getServerUrl } = require('../config/urls');
+import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, connectRyvieSocket } from '../utils/detectAccessMode';
 
 const Settings = () => {
   const navigate = useNavigate();
