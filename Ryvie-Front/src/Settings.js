@@ -186,26 +186,30 @@ const Settings = () => {
     
     if (data.stockage) {
       // Convertir les valeurs de GB en nombre
-      const usedMatch = data.stockage.utilise.match(/(\d+(\.\d+)?)/);
-      const totalMatch = data.stockage.total.match(/(\d+(\.\d+)?)/);
+      const usedMatch = data.stockage.utilise?.match(/(\d+(\.\d+)?)/);
+      const totalMatch = data.stockage.total?.match(/(\d+(\.\d+)?)/);
       
-      if (usedMatch && totalMatch) {
-        storageUsed = parseFloat(usedMatch[0]);
-        storageTotal = parseFloat(totalMatch[0]);
-      }
+      if (usedMatch) storageUsed = parseFloat(usedMatch[0]);
+      if (totalMatch) storageTotal = parseFloat(totalMatch[0]);
     }
     
-    // Extraire les valeurs de performance
-    let cpuUsage = 30; // Valeur par défaut
-    let ramUsage = 40; // Valeur par défaut
+    // Extraire les valeurs CPU/RAM directement depuis l'objet data
+    let cpuUsage = 0;
+    let ramUsage = 0;
     
-    if (data.performance) {
-      // Convertir les pourcentages en nombres
-      const cpuMatch = data.performance.cpu.match(/(\d+(\.\d+)?)/);
-      const ramMatch = data.performance.ram.match(/(\d+(\.\d+)?)/);
-      
-      if (cpuMatch) cpuUsage = parseFloat(cpuMatch[0]);
-      if (ramMatch) ramUsage = parseFloat(ramMatch[0]);
+    // Extraire les pourcentages des chaînes comme '12.8%'
+    if (typeof data.cpu === 'string') {
+      const cpuMatch = data.cpu.match(/(\d+(\.\d+)?)/);
+      if (cpuMatch) cpuUsage = parseFloat(cpuMatch[1]);
+    } else if (typeof data.cpu === 'number') {
+      cpuUsage = data.cpu;
+    }
+    
+    if (typeof data.ram === 'string') {
+      const ramMatch = data.ram.match(/(\d+(\.\d+)?)/);
+      if (ramMatch) ramUsage = parseFloat(ramMatch[1]);
+    } else if (typeof data.ram === 'number') {
+      ramUsage = data.ram;
     }
     
     // Mettre à jour les statistiques
