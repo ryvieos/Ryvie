@@ -603,7 +603,7 @@ const User = () => {
           </div>
           {isAdmin && (
             <div className="add-user-btn">
-              <button onClick={openAddUserForm}>Ajouter un utilisateur</button>
+              <button type="button" onClick={openAddUserForm}>Ajouter un utilisateur</button>
             </div>
           )}
         </div>
@@ -618,11 +618,11 @@ const User = () => {
 
         {/* Formulaire d'ajout/modification d'utilisateur (Admin uniquement) */}
         {formOpen && isAdmin && (
-          <div ref={userFormRef} className="modal-overlay" onClick={() => setFormOpen(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div ref={userFormRef} className="modal-overlay" onMouseDown={() => setFormOpen(false)}>
+            <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>{editUser ? 'Modifier un utilisateur' : 'Ajouter un utilisateur'}</h2>
-                <button className="close-btn" onClick={() => setFormOpen(false)}>
+                <button type="button" className="close-btn" onClick={() => setFormOpen(false)}>
                   ✖
                 </button>
               </div>
@@ -687,6 +687,7 @@ const User = () => {
                   onChange={(e) => setNewUser({ ...newUser, confirmPassword: e.target.value })}
                 />
                 <button 
+                  type="button"
                   className="submit-btn" 
                   onClick={editUser ? handleUpdateUser : handleAddUser}
                 >
@@ -699,11 +700,11 @@ const User = () => {
 
         {/* Modal d'authentification admin */}
         {showAdminAuthModal && (
-          <div className="modal-overlay" onClick={() => !isSubmitting && setShowAdminAuthModal(false)}>
-            <div className="modal-content admin-auth-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-overlay" onMouseDown={() => !isSubmitting && setShowAdminAuthModal(false)}>
+            <div className="modal-content admin-auth-modal" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>Authentification Administrateur</h2>
-                <button className="close-btn" onClick={() => !isSubmitting && setShowAdminAuthModal(false)}>
+                <button type="button" className="close-btn" onClick={() => !isSubmitting && setShowAdminAuthModal(false)}>
                   ✖
                 </button>
               </div>
@@ -735,6 +736,7 @@ const User = () => {
                 />
                 <div className="admin-auth-buttons">
                   <button 
+                    type="button"
                     className="cancel-btn" 
                     onClick={() => {
                       setShowAdminAuthModal(false);
@@ -745,6 +747,7 @@ const User = () => {
                     Annuler
                   </button>
                   <button 
+                    type="button"
                     className="submit-btn" 
                     onClick={submitUserWithAdminAuth}
                     disabled={isSubmitting}
@@ -759,15 +762,15 @@ const User = () => {
 
         {/* Confirmation de suppression */}
         {confirmDelete && (
-          <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-overlay" onMouseDown={() => setConfirmDelete(null)}>
+            <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
               <h3>Confirmer la suppression</h3>
               <p>Êtes-vous sûr de vouloir supprimer {confirmDelete.name} ?</p>
               <div className="modal-actions">
-                <button className="cancel-btn" onClick={() => setConfirmDelete(null)}>
+                <button type="button" className="cancel-btn" onClick={() => setConfirmDelete(null)}>
                   Annuler
                 </button>
-                <button className="delete-btn" onClick={handleDeleteUser}>
+                <button type="button" className="delete-btn" onClick={handleDeleteUser}>
                   Supprimer
                 </button>
               </div>
@@ -777,11 +780,11 @@ const User = () => {
 
         {/* Modal d'authentification admin pour la suppression */}
         {showDeleteAuthModal && (
-          <div className="modal-overlay" onClick={() => !isSubmitting && setShowDeleteAuthModal(false)}>
-            <div className="modal-content admin-auth-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-overlay" onMouseDown={() => !isSubmitting && setShowDeleteAuthModal(false)}>
+            <div className="modal-content admin-auth-modal" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>Authentification Administrateur</h2>
-                <button className="close-btn" onClick={() => !isSubmitting && setShowDeleteAuthModal(false)}>
+                <button type="button" className="close-btn" onClick={() => !isSubmitting && setShowDeleteAuthModal(false)}>
                   ✖
                 </button>
               </div>
@@ -813,6 +816,7 @@ const User = () => {
                 />
                 <div className="admin-auth-buttons">
                   <button 
+                    type="button"
                     className="cancel-btn" 
                     onClick={() => {
                       setShowDeleteAuthModal(false);
@@ -824,6 +828,7 @@ const User = () => {
                     Annuler
                   </button>
                   <button 
+                    type="button"
                     className="submit-btn delete-btn" 
                     onClick={deleteUserWithAdminAuth}
                     disabled={isSubmitting}
@@ -867,6 +872,7 @@ const User = () => {
                   {isAdmin && (
                     <td className="actions-cell">
                       <button 
+                        type="button"
                         className="action-button edit-button"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -877,6 +883,7 @@ const User = () => {
                         <span className="action-icon">✏️</span>
                       </button>
                       <button 
+                        type="button"
                         className="action-button delete-button"
                         onClick={(e) => {
                           e.stopPropagation();
