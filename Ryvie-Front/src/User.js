@@ -37,7 +37,7 @@ const User = () => {
   const [userToDelete, setUserToDelete] = useState(null);
   // Rôle courant pour contrôler l'affichage (gestion visible uniquement pour Admin)
   const [userRole, setUserRole] = useState('User');
-  const isAdmin = userRole === 'Admin';
+  const isAdmin = String(userRole || '').toLowerCase() === 'admin';
 
   useEffect(() => {
     const role = getCurrentUserRole() || 'User';
@@ -840,7 +840,22 @@ const User = () => {
 
         {/* Tableau des utilisateurs */}
         <div ref={userListRef} className="table-container">
-          <table className="user-table">
+          <table className={`user-table ${isAdmin ? 'admin' : 'no-admin'}`}>
+            {/* Set explicit column widths for consistent alignment */}
+            {isAdmin ? (
+              <colgroup>
+                <col style={{ width: 'auto' }} />
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '160px' }} />
+                <col style={{ width: '320px' }} />
+              </colgroup>
+            ) : (
+              <colgroup>
+                <col style={{ width: '35%' }} />
+                <col style={{ width: '45%' }} />
+                <col style={{ width: '20%' }} />
+              </colgroup>
+            )}
             <thead>
               <tr>
                 <th>Nom</th>
@@ -888,11 +903,15 @@ const User = () => {
                         }}
                         disabled={
                           String(getCurrentUser() || '').trim().toLowerCase() ===
-                          String(user.uid || '').trim().toLowerCase()
+                            String(user.uid || '').trim().toLowerCase() ||
+                          String(getCurrentUser() || '').trim().toLowerCase() ===
+                            String(user.name || '').trim().toLowerCase()
                         }
                         title={
                           String(getCurrentUser() || '').trim().toLowerCase() ===
-                          String(user.uid || '').trim().toLowerCase()
+                            String(user.uid || '').trim().toLowerCase() ||
+                          String(getCurrentUser() || '').trim().toLowerCase() ===
+                            String(user.name || '').trim().toLowerCase()
                             ? "Vous ne pouvez pas supprimer votre propre compte"
                             : "Supprimer"
                         }

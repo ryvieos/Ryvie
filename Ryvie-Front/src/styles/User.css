@@ -163,22 +163,43 @@ html, body {
 
 /* Table des utilisateurs */
 .table-container {
+  overflow-x: auto; /* allow horizontal scroll if columns need more space */
+  border-radius: 16px 16px 0 0; /* Only round top corners */
+  background: white;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 0;
+  position: relative;
   width: 100%;
-  overflow-x: auto;
-  border-radius: 16px;
-  -webkit-overflow-scrolling: touch;
+  display: block;
+}
+
+/* Full width bottom border */
+.table-container::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: #f0f0f0;
+  z-index: 2;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .user-table {
-  margin-top: 32px;
+  margin-top: 0;
   width: 100%;
-  border-collapse: separate;
+  border-collapse: collapse;
   border-spacing: 0;
   background: white;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  overflow: hidden;
+  box-shadow: none;
+  border-radius: 0;
   min-width: 650px;
+  table-layout: fixed;
+  position: relative;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .user-table th,
@@ -186,12 +207,32 @@ html, body {
   padding: 16px 20px;
   text-align: left;
   font-size: 0.95rem;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+/* Use a single border per row for a continuous separator */
+.user-table tr {
   border-bottom: 1px solid #f0f0f0;
+}
+
+/* Only name and email columns should ellipsize long content */
+.user-table th:nth-child(1),
+.user-table td:nth-child(1),
+.user-table th:nth-child(2),
+.user-table td:nth-child(2) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
-  vertical-align: middle;
+}
+
+/* Ensure role and actions columns do not clip */
+.user-table th:nth-child(3),
+.user-table td:nth-child(3),
+.user-table th:nth-child(4),
+.user-table td:nth-child(4) {
+  white-space: nowrap;
+  overflow: visible;
 }
 
 .user-table th {
@@ -208,7 +249,15 @@ html, body {
   background-color: white;
 }
 
-.user-table tr:last-child td {
+/* Décale uniquement le texte de l'en-tête ACTIONS vers la droite (loin de EMAIL) */
+.user-table th:nth-child(4) {
+  padding-left: 78px; /* augmente pour décaler davantage */
+  padding-right: 0;   /* reste aligné avec les icônes à droite */
+  text-align: center;
+}
+
+/* Remove bottom border from last row */
+.user-table tr:last-child { 
   border-bottom: none;
 }
 
@@ -216,37 +265,34 @@ html, body {
   background-color: #f8fafc;
 }
 
-/* Colonnes du tableau */
-.user-table th:nth-child(1),
-.user-table td:nth-child(1) {
-  width: 25%;
-  min-width: 150px;
+/* Column alignment - exact pixel matching */
+.user-table th,
+.user-table td {
+  padding: 16px 20px;
+  border-right: 0;
+  border-left: 0;
 }
 
-.user-table th:nth-child(2),
-.user-table td:nth-child(2) {
-  width: 35%;
-  min-width: 200px;
-}
 
-.user-table th:nth-child(3),
-.user-table td:nth-child(3) {
-  width: 20%;
-  min-width: 120px;
-}
 
-.user-table th:nth-child(4),
-.user-table td:nth-child(4) {
-  width: 25%;
-  min-width: 180px;
-  text-align: center;
+/* Actions column */
+
+
+/* Remove right border from last cell */
+.user-table td:last-child {
+  border-right: none;
 }
 
 /* Action buttons */
 .actions-cell {
   display: flex;
-  gap: 8px;
-  padding: 8px 12px !important;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  padding: 0;
+  margin: 0;
 }
 
 .action-button {
@@ -254,21 +300,23 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 0; /* clean, square buttons */
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
-  min-width: 36px;
+  width: 96px;
   height: 36px;
+  margin: 0;
 }
 
 .action-button .action-icon {
   font-size: 1rem;
   line-height: 1;
+  margin: 0;
 }
 
 .action-button .action-text {
@@ -297,15 +345,16 @@ html, body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* Show text on larger screens */
-@media (min-width: 992px) {
+/* Show action labels only on very large/wide screens to avoid clipping */
+@media (min-width: 1400px) {
   .action-button {
-    padding: 8px 16px;
-    min-width: 100px;
+    padding: 8px 14px;
+    min-width: auto; /* avoid forcing very wide buttons */
   }
   
   .action-button .action-text {
     display: inline;
+    margin-left: 2px;
   }
 }
 
