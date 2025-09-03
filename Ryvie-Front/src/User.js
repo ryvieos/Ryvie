@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from './utils/setupAxios';
 const { getServerUrl } = require('./config/urls');
 import { getCurrentAccessMode } from './utils/detectAccessMode';
+import { getCurrentUserRole, getCurrentUser, getSessionInfo } from './utils/sessionManager';
 
 const User = () => {
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ const User = () => {
   const isAdmin = userRole === 'Admin';
 
   useEffect(() => {
-    const role = localStorage.getItem('currentUserRole') || 'User';
+    const role = getCurrentUserRole() || 'User';
     setUserRole(role);
   }, []);
 
@@ -124,7 +125,7 @@ const User = () => {
       const serverUrl = getServerUrl(effectiveMode);
       console.log("Connexion à :", serverUrl);
       
-      const currentRole = localStorage.getItem('currentUserRole') || 'User';
+      const currentRole = getCurrentUserRole() || 'User';
       const endpoint = currentRole === 'Admin' ? '/api/users' : '/api/users-public';
       
       // Helper to map API users
@@ -138,7 +139,7 @@ const User = () => {
 
       if (endpoint === '/api/users') {
         // Admin path: try protected first, then fallback to public on missing/401 token
-        const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
+        const token = (getSessionInfo() || {}).token;
         if (!token) {
           console.warn('[users] Admin sans token: bascule vers /api/users-public');
           const resp = await axios.get(`${serverUrl}/api/users-public`);
@@ -202,7 +203,7 @@ const User = () => {
 
   const confirmDeleteUser = (user) => {
     // Interdire la suppression de soi-même côté UI
-    const currentUser = localStorage.getItem('currentUser') || '';
+    const currentUser = getCurrentUser() || '';
     if (
       user?.uid && currentUser &&
       String(user.uid).trim().toLowerCase() === String(currentUser).trim().toLowerCase()
@@ -317,8 +318,8 @@ const User = () => {
       return;
     }
 
-    // Récupérer l'utilisateur actuel depuis localStorage pour pré-remplir les identifiants admin
-    const currentUser = localStorage.getItem('currentUser') || '';
+    // Récupérer l'utilisateur actuel depuis le gestionnaire de session pour pré-remplir les identifiants admin
+    const currentUser = getCurrentUser() || '';
     
     // Pré-remplir les identifiants admin avec l'utilisateur actuel
     setAdminCredentials({ 
@@ -335,8 +336,8 @@ const User = () => {
       return;
     }
 
-    // Récupérer l'utilisateur actuel depuis localStorage pour pré-remplir les identifiants admin
-    const currentUser = localStorage.getItem('currentUser') || '';
+    // Récupérer l'utilisateur actuel depuis le gestionnaire de session pour pré-remplir les identifiants admin
+    const currentUser = getCurrentUser() || '';
     
     // Pré-remplir les identifiants admin avec l'utilisateur actuel
     setAdminCredentials({ 
@@ -356,7 +357,7 @@ const User = () => {
     }
 
     // Vérifier la présence du token JWT pour les appels protégés
-    const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
+    const token = (getSessionInfo() || {}).token;
     if (!token) {
       setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
       setMessageType('error');
@@ -472,8 +473,8 @@ const User = () => {
   const handleDeleteUser = () => {
     if (!confirmDelete) return;
 
-    // Récupérer l'utilisateur actuel depuis localStorage pour pré-remplir les identifiants admin
-    const currentUser = localStorage.getItem('currentUser') || '';
+    // Récupérer l'utilisateur actuel depuis le gestionnaire de session pour pré-remplir les identifiants admin
+    const currentUser = getCurrentUser() || '';
     
     // Pré-remplir les identifiants admin avec l'utilisateur actuel
     setAdminCredentials({ 
@@ -495,7 +496,7 @@ const User = () => {
     }
 
     // Vérifier la présence du token JWT pour l'appel protégé
-    const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
+    const token = (getSessionInfo() || {}).token;
     if (!token) {
       setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
       setMessageType('error');
@@ -890,11 +891,11 @@ const User = () => {
                           confirmDeleteUser(user);
                         }}
                         disabled={
-                          String(localStorage.getItem('currentUser') || '').trim().toLowerCase() ===
+                          String(getCurrentUser() || '').trim().toLowerCase() ===
                           String(user.uid || '').trim().toLowerCase()
                         }
                         title={
-                          String(localStorage.getItem('currentUser') || '').trim().toLowerCase() ===
+                          String(getCurrentUser() || '').trim().toLowerCase() ===
                           String(user.uid || '').trim().toLowerCase()
                             ? "Vous ne pouvez pas supprimer votre propre compte"
                             : "Supprimer"

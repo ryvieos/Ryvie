@@ -120,6 +120,19 @@ export class SessionManager {
   }
 
   /**
+   * Définit le nom utilisateur courant (sans gérer de token)
+   * Utile pour des contextes Electron où l'utilisateur est connu avant l'auth
+   * @param {string} name
+   */
+  setCurrentUserName(name) {
+    if (!name) return;
+    StorageManager.setItem(this.userKey, name);
+    if (!isElectron()) {
+      this.setCookie('ryvie_user', name, 7);
+    }
+  }
+
+  /**
    * Récupère le rôle de l'utilisateur actuel
    * @returns {string}
    */
@@ -158,6 +171,19 @@ export class SessionManager {
   setAuthHeader(token) {
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
+  /**
+   * Met à jour le token JWT courant (stockage + header axios + cookie web)
+   * @param {string} newToken
+   */
+  setToken(newToken) {
+    if (!newToken) return;
+    StorageManager.setItem(this.tokenKey, newToken);
+    this.setAuthHeader(newToken);
+    if (!isElectron()) {
+      this.setCookie('ryvie_session', newToken, 7);
     }
   }
 
@@ -256,11 +282,13 @@ export const sessionManager = new SessionManager();
 
 // Fonctions utilitaires exportées
 export const startSession = (userData) => sessionManager.startSession(userData);
-export const endSession = () => sessionManager.endSession();
+export const getSessionInfo = () => sessionManager.getSessionInfo();
+export const initializeSession = () => sessionManager.initializeSession();
 export const isSessionActive = () => sessionManager.isSessionActive();
 export const getCurrentUser = () => sessionManager.getCurrentUser();
 export const getCurrentUserRole = () => sessionManager.getCurrentUserRole();
-export const getSessionInfo = () => sessionManager.getSessionInfo();
-export const initializeSession = () => sessionManager.initializeSession();
+export const endSession = () => sessionManager.endSession();
+export const setCurrentUserName = (name) => sessionManager.setCurrentUserName(name);
+export const setToken = (token) => sessionManager.setToken(token);
 
 export default sessionManager;

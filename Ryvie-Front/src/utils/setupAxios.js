@@ -2,10 +2,11 @@ import axios from 'axios';
 import { logout } from '../services/authService';
 import { getServerUrl } from '../config/urls';
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from './detectAccessMode';
+import { getSessionInfo, setToken } from './sessionManager';
 
 // Fonction pour vérifier si le token est valide (local, sans appeler un endpoint admin-only)
 export const verifyToken = async () => {
-  const token = localStorage.getItem('jwt_token');
+  const token = (getSessionInfo() || {}).token;
   if (!token) return false;
   try {
     const base64Url = token.split('.')[1];
@@ -123,7 +124,7 @@ axios.interceptors.response.use(
         if (shouldTryRefresh) {
           const accessMode = getCurrentAccessMode() || 'private';
           const serverUrl = getServerUrl(accessMode);
-          const currentToken = localStorage.getItem('jwt_token');
+          const currentToken = (getSessionInfo() || {}).token;
           if (currentToken) {
             try {
               originalRequest._retry = true;
@@ -134,9 +135,8 @@ axios.interceptors.response.use(
               });
               const newToken = refreshResp.data?.token;
               if (newToken) {
-                // Mettre à jour le stockage et les headers par défaut
-                localStorage.setItem('jwt_token', newToken);
-                axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+                // Mettre à jour via le gestionnaire de session (stockage + headers + cookie)
+                setToken(newToken);
                 // Mettre à jour le header de la requête originale et la relancer
                 originalRequest.headers = {
                   ...(originalRequest.headers || {}),
