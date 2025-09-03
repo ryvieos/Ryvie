@@ -8,7 +8,7 @@ import { connectRyvieSocket } from './utils/detectAccessMode';
 import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentAccessMode } from './utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from './utils/platformUtils';
-import { endSession } from './utils/sessionManager';
+import { endSession, getCurrentUser } from './utils/sessionManager';
 const { getServerUrl, getAppUrl } = require('./config/urls');
 import { generateAppConfig, generateDefaultZones, images } from './config/appConfig';
 
@@ -177,6 +177,7 @@ const Taskbar = ({ handleClick }) => {
 const Home = () => {
   const navigate = useNavigate();
   const [accessMode, setAccessMode] = useState(null); 
+  const [currentUserName, setCurrentUserName] = useState('');
   const [zones, setZones] = useState(() => {
     // Essayer de récupérer les zones depuis StorageManager
     const savedZones = StorageManager.getItem('iconZones');
@@ -254,6 +255,10 @@ const Home = () => {
     };
 
     initializeAccessMode();
+    // Récupérer l'utilisateur connecté
+    try {
+      setCurrentUserName(getCurrentUser() || '');
+    } catch (_) {}
   }, []);
   
   useEffect(() => {
@@ -507,7 +512,7 @@ const Home = () => {
   const openAppWindow = (url, useOverlay = true, appName = '') => {
     console.log(`[Home] Ouverture de l'application: ${url}`);
     
-    const currentUser = StorageManager.getItem('currentUser');
+    const currentUser = getCurrentUser();
     
     if (isElectron()) {
       // En Electron, utiliser le comportement existant
@@ -604,6 +609,12 @@ const Home = () => {
           )}
 
           <Taskbar handleClick={handleClick} />
+          {currentUserName && (
+            <div className="user-chip" title="Utilisateur connecté">
+              <div className="avatar">{String(currentUserName).charAt(0).toUpperCase()}</div>
+              <div className="name">{currentUserName}</div>
+            </div>
+          )}
           <div className="content">
             <h1 className="title">Bienvenue dans votre Cloud</h1>
             <div className="main-content">

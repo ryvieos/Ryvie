@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { setAuthToken } from '../services/authService';
+import { startSession } from '../utils/sessionManager';
 
 /**
  * Composant qui écoute les événements d'authentification depuis Electron
@@ -15,13 +15,14 @@ const AuthListener = () => {
       if (data && data.token) {
         console.log('Token d\'authentification reçu de Electron');
         
-        // Stocker le token JWT et les informations utilisateur
-        localStorage.setItem('jwt_token', data.token);
-        localStorage.setItem('currentUser', data.userId);
-        localStorage.setItem('currentUserRole', data.userRole || 'User');
-        
-        // Configurer axios pour inclure le token dans les futures requêtes
-        setAuthToken(data.token);
+        // Démarrer une session unifiée (stockage, header axios, cookies web)
+        startSession({
+          token: data.token,
+          userId: data.userId,
+          userName: data.userName || data.userId,
+          userRole: data.userRole || 'User',
+          userEmail: data.userEmail || ''
+        });
         
         // Rediriger vers la page d'accueil (Welcome)
         navigate('/');

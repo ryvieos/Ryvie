@@ -3,8 +3,9 @@ import axios from './utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
 import './styles/connexion.css';
 import { getCurrentAccessMode } from './utils/detectAccessMode';
-import { isElectron, WindowManager, StorageManager } from './utils/platformUtils';
+import { isElectron, WindowManager } from './utils/platformUtils';
 const { getServerUrl } = require('./config/urls');
+import { startSession, getCurrentUser, getCurrentUserRole, getSessionInfo } from './utils/sessionManager';
 
 const Userlogin = () => {
   const navigate = useNavigate();
@@ -20,8 +21,8 @@ const Userlogin = () => {
   const [authenticating, setAuthenticating] = useState(false);
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [detectingMode, setDetectingMode] = useState(true);
-  const currentUser = StorageManager.getItem('currentUser');
-  const currentUserRole = StorageManager.getItem('currentUserRole');
+  const currentUser = getCurrentUser();
+  const currentUserRole = getCurrentUserRole();
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -53,19 +54,54 @@ const Userlogin = () => {
         const serverUrl = getServerUrl(mode);
         console.log(`[Connexion] Chargement des utilisateurs depuis: ${serverUrl}`);
         
-        const response = await axios.get(`${serverUrl}/api/users-public`, {
-          timeout: 5000,
-          headers: {
-            'Accept': 'application/json'
+        // Essayer l'endpoint protégé si un token existe (pas seulement Admin). En cas d'échec 401/403, fallback public.
+        const session = getSessionInfo() || {};
+        const token = session.token;
+        let response;
+        if (token) {
+          try {
+            response = await axios.get(`${serverUrl}/api/users`, {
+              timeout: 5000,
+              headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            });
+          } catch (e) {
+            if (e?.response?.status === 401 || e?.response?.status === 403) {
+              console.warn('[Connexion] Accès refusé à /api/users, bascule sur /api/users-public');
+              response = await axios.get(`${serverUrl}/api/users-public`, {
+                timeout: 5000,
+                headers: { 'Accept': 'application/json' }
+              });
+            } else {
+              throw e;
+            }
           }
-        });
+        } else {
+          response = await axios.get(`${serverUrl}/api/users-public`, {
+            timeout: 5000,
+            headers: { 'Accept': 'application/json' }
+          });
+        }
         
-        const ldapUsers = response.data.map(user => ({
-          name: user.name || user.uid,
-          id: user.uid,
-          email: user.email || 'Non défini',
-          role: user.role || 'User'
-        }));
+        const sessionUser = (getCurrentUser() || '').trim().toLowerCase();
+        const sessionRole = getCurrentUserRole();
+        const ldapUsers = (response.data || []).map(user => {
+          const u = {
+            name: user.name || user.uid,
+            id: user.uid,
+            email: user.email || 'Non défini',
+            // Préserver le rôle si fourni; sinon, si c'est l'utilisateur courant, afficher son rôle de session
+            role: user.role || ''
+          };
+          const matchById = String(u.id || '').trim().toLowerCase() === sessionUser;
+          const matchByName = String(u.name || '').trim().toLowerCase() === sessionUser;
+          if (!u.role && (matchById || matchByName) && sessionRole) {
+            u.role = sessionRole;
+          }
+          return u;
+        });
         
         setUsers(ldapUsers);
         setLoading(false);
@@ -96,6 +132,15 @@ const Userlogin = () => {
     setMessage('');
   };
 
+  // Helper: check if a given list user matches the current session user (by id or name)
+  const isCurrentSessionUser = (u) => {
+    const cu = (getCurrentUser() || '').trim().toLowerCase();
+    if (!cu) return false;
+    const byId = String(u?.id || '').trim().toLowerCase() === cu;
+    const byName = String(u?.name || '').trim().toLowerCase() === cu;
+    return byId || byName;
+  };
+
   const authenticateUser = async () => {
     if (!selectedUser || !password) {
       setMessage('Veuillez entrer un mot de passe');
@@ -122,14 +167,14 @@ const Userlogin = () => {
       });
 
       if (response.data && response.data.token) {
-        // Authentification réussie, stocker le token JWT et les informations utilisateur
-        StorageManager.setItem('jwt_token', response.data.token);
-        StorageManager.setItem('currentUser', selectedUser.name || selectedUser.id);
-        StorageManager.setItem('currentUserRole', response.data.user.role || 'User');
-        StorageManager.setItem('currentUserEmail', response.data.user.email || '');
-        
-        // Configurer axios pour inclure le token dans les futures requêtes
-        axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+        // Authentification réussie, démarrer une session centralisée
+        startSession({
+          token: response.data.token,
+          userId: selectedUser.id,
+          userName: selectedUser.name || selectedUser.id,
+          userRole: response.data.user.role || 'User',
+          userEmail: response.data.user.email || ''
+        });
         
         setMessage('Authentification réussie. Ouverture d\'une nouvelle session...');
         setMessageType('success');
@@ -216,10 +261,6 @@ const Userlogin = () => {
         // Mode Web - Rediriger vers la page d'accueil
         console.log(`[Connexion] Mode web - redirection vers l'accueil pour ${userName}`);
         
-        // Stocker les informations de session pour la page d'accueil
-        StorageManager.setItem('sessionActive', true);
-        StorageManager.setItem('sessionStartTime', new Date().toISOString());
-        
         // Rediriger vers la page de bienvenue
         navigate('/welcome');
         setMessage(`Connexion réussie pour ${userName}`);
@@ -284,14 +325,14 @@ const Userlogin = () => {
             <button
               key={user.id}
               onClick={() => selectUser(user.id, user.name)}
-              className={`user-button ${user.name === currentUser ? 'primary-user-button' : ''}`}
+              className={`user-button ${isCurrentSessionUser(user) ? 'primary-user-button' : ''}`}
             >
               <div className="user-avatar">
                 {user.name.charAt(0).toUpperCase()}
               </div>
               <div className="user-name">
                 {user.name}
-                <span className="user-role">{user.role}</span>
+                <span className="user-role">{user.role || ''}</span>
               </div>
             </button>
           ))}

@@ -3,8 +3,7 @@ import axios from './utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
 import './styles/Login.css';
 const { getServerUrl } = require('./config/urls');
-import { setAuthToken } from './services/authService';
-import { isSessionActive } from './utils/sessionManager';
+import { isSessionActive, startSession } from './utils/sessionManager';
 import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode } from './utils/detectAccessMode';
 
 const Login = () => {
@@ -105,21 +104,15 @@ const Login = () => {
       });
 
       if (response.data && response.data.token) {
-        // Enregistrer le token et les infos utilisateur
-        localStorage.setItem('jwt_token', response.data.token);
-        localStorage.setItem('currentUser', response.data.user.name || response.data.user.uid);
-        localStorage.setItem('currentUserRole', response.data.user.role || 'User');
-        localStorage.setItem('currentUserEmail', response.data.user.email || '');
+        // Démarrer la session via le gestionnaire centralisé
+        startSession({
+          token: response.data.token,
+          userId: response.data.user.uid,
+          userName: response.data.user.name || response.data.user.uid,
+          userRole: response.data.user.role || 'User',
+          userEmail: response.data.user.email || ''
+        });
 
-        // Marquer la session comme active (requis par ProtectedRoute)
-        localStorage.setItem('sessionActive', 'true');
-        localStorage.setItem('sessionStartTime', new Date().toISOString());
-        // Marquer qu'au moins une connexion a eu lieu
-        localStorage.setItem('hasEverConnected', 'true');
-        
-        // Configurer axios pour utiliser le token dans toutes les requêtes futures
-        setAuthToken(response.data.token);
-        
         setMessage('Connexion réussie. Redirection...');
         setMessageType('success');
         
