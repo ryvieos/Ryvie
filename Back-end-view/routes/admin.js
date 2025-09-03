@@ -4,6 +4,7 @@ const router = express.Router();
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const ldapConfig = require('../config/ldap');
 const { getRole, parseDnParts, escapeRdnValue } = require('../services/ldapService');
+const { startApp } = require('../services/dockerService');
 
 // GET /api/admin/users/sync-ldap
 router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req, res) => {
@@ -51,6 +52,155 @@ router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req, res) => {
         });
       }
     );
+  });
+});
+
+// POST /api/add-user — create a new LDAP user and assign role group (moved from auth.js)
+router.post('/add-user', verifyToken, isAdmin, async (req, res) => {
+  const { adminUid, adminPassword, newUser } = req.body || {};
+
+  if (!adminUid || !adminPassword || !newUser) {
+    return res.status(400).json({ error: 'Champs requis manquants (adminUid, adminPassword, newUser)' });
+  }
+  const { uid, cn, sn, mail, password, role } = newUser;
+  if (!uid || !cn || !sn || !mail || !password || !role) {
+    return res.status(400).json({ error: 'Champs requis manquants pour newUser (uid, cn, sn, mail, password, role)' });
+  }
+
+  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+
+  // 1) Bind initial as service account
+  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
+    if (err) {
+      console.error('Erreur connexion LDAP initiale :', err);
+      return res.status(500).json({ error: 'Erreur de connexion LDAP initiale' });
+    }
+
+    // 2) Find admin DN
+    const adminFilter = `(&(uid=${adminUid})${ldapConfig.userFilter})`;
+    ldapClient.search(ldapConfig.userSearchBase, { filter: adminFilter, scope: 'sub', attributes: ['dn'] }, (err, ldapRes) => {
+      if (err) {
+        console.error('Erreur recherche admin :', err);
+        return res.status(500).json({ error: 'Erreur recherche admin' });
+      }
+
+      let adminEntry;
+      ldapRes.on('searchEntry', (entry) => (adminEntry = entry));
+      ldapRes.on('end', () => {
+        if (!adminEntry) {
+          ldapClient.unbind();
+          return res.status(401).json({ error: 'Admin non trouvé' });
+        }
+
+        const adminDN = adminEntry.pojo.objectName;
+        const adminAuthClient = ldap.createClient({ url: ldapConfig.url });
+
+        // 3) Verify admin credentials
+        adminAuthClient.bind(adminDN, adminPassword, (err) => {
+          if (err) {
+            console.error('Échec authentification admin :', err);
+            ldapClient.unbind();
+            return res.status(401).json({ error: 'Authentification Admin échouée' });
+          }
+
+          // 4) Ensure admin is in admin group
+          ldapClient.search(ldapConfig.adminGroup, { filter: `(member=${adminDN})`, scope: 'base', attributes: ['cn'] }, (err, groupRes) => {
+            let isAdminMember = false;
+            groupRes.on('searchEntry', () => (isAdminMember = true));
+            groupRes.on('end', () => {
+              if (!isAdminMember) {
+                ldapClient.unbind();
+                adminAuthClient.unbind();
+                return res.status(403).json({ error: 'Droits admin requis' });
+              }
+
+              // 5) Check for UID or email conflicts
+              const checkFilter = `(|(uid=${uid})(mail=${mail}))`;
+              ldapClient.search(ldapConfig.userSearchBase, { filter: checkFilter, scope: 'sub', attributes: ['uid', 'mail'] }, (err, checkRes) => {
+                if (err) {
+                  console.error('Erreur vérification uid/mail :', err);
+                  return res.status(500).json({ error: 'Erreur lors de la vérification de l\'utilisateur' });
+                }
+                let conflict = null;
+                checkRes.on('searchEntry', (entry) => {
+                  const entryUid = entry.pojo.attributes.find((a) => a.type === 'uid')?.values[0];
+                  const entryMail = entry.pojo.attributes.find((a) => a.type === 'mail')?.values[0];
+                  if (entryUid === uid) conflict = 'UID';
+                  else if (entryMail === mail) conflict = 'email';
+                });
+                checkRes.on('end', () => {
+                  if (conflict) {
+                    ldapClient.unbind();
+                    adminAuthClient.unbind();
+                    return res.status(409).json({ error: `Un utilisateur avec ce ${conflict} existe déjà.` });
+                  }
+
+                  // 6) Create user entry
+                  const newUserDN = `uid=${uid},${ldapConfig.userSearchBase}`;
+                  const entry = {
+                    cn,
+                    sn,
+                    uid,
+                    mail,
+                    objectClass: ['top', 'person', 'organizationalPerson', 'inetOrgPerson'],
+                    userPassword: password,
+                  };
+
+                  adminAuthClient.add(newUserDN, entry, (err) => {
+                    if (err) {
+                      console.error('Erreur ajout utilisateur LDAP :', err);
+                      ldapClient.unbind();
+                      adminAuthClient.unbind();
+                      return res.status(500).json({ error: 'Erreur ajout utilisateur LDAP' });
+                    }
+
+                    // 7) Add to role group
+                    const roleGroup = { Admin: ldapConfig.adminGroup, User: ldapConfig.userGroup, Guest: ldapConfig.guestGroup }[role];
+                    if (!roleGroup) {
+                      ldapClient.unbind();
+                      adminAuthClient.unbind();
+                      return res.status(400).json({ error: `Rôle inconnu : ${role}` });
+                    }
+
+                    const groupClient = ldap.createClient({ url: ldapConfig.url });
+                    groupClient.bind(adminDN, adminPassword, (err) => {
+                      if (err) {
+                        console.error('Échec bind admin pour ajout au groupe');
+                        ldapClient.unbind();
+                        adminAuthClient.unbind();
+                        return res.status(500).json({ error: 'Impossible d\'ajouter au groupe' });
+                      }
+
+                      const change = new ldap.Change({ operation: 'add', modification: new ldap.Attribute({ type: 'member', values: [newUserDN] }) });
+                      groupClient.modify(roleGroup, change, (err) => {
+                        ldapClient.unbind();
+                        adminAuthClient.unbind();
+                        groupClient.unbind();
+
+                        if (err && err.name !== 'AttributeOrValueExistsError') {
+                          console.error('Erreur ajout au groupe :', err);
+                          return res.status(500).json({ error: 'Utilisateur créé, mais échec d\'ajout au groupe' });
+                        }
+
+                        triggerLdapSync()
+                          .catch(() => {})
+                          .finally(() => {
+                            try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                            return res.json({
+                              message: `Utilisateur "${uid}" ajouté avec succès en tant que ${role}`,
+                              user: { cn, sn, uid, mail, role },
+                            });
+                          });
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
   });
 });
 
@@ -171,7 +321,13 @@ router.post('/delete-user', verifyToken, isAdmin, async (req, res) => {
                                     return res.status(500).json({ error: 'Erreur suppression utilisateur' });
                                   }
 
-                                  return res.json({ message: `Utilisateur "${uid}" supprimé avec succès` });
+                                  // Trigger sync and start container, then respond
+                                  triggerLdapSync()
+                                    .catch(() => {})
+                                    .finally(() => {
+                                      try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                                      return res.json({ message: `Utilisateur "${uid}" supprimé avec succès` });
+                                    });
                                 });
                               }
                             });
@@ -190,13 +346,13 @@ router.post('/delete-user', verifyToken, isAdmin, async (req, res) => {
   });
 });
 
-// Helper function to trigger LDAP sync via existing endpoint
+// Helper function to trigger LDAP sync via existing endpoint (curl target default 2283)
 async function triggerLdapSync() {
   return new Promise((resolve) => {
     const client = require('http');
     const options = {
       hostname: 'localhost',
-      port: process.env.PORT || 3002,
+      port: parseInt(process.env.LDAP_SYNC_PORT || '2283', 10),
       path: '/api/admin/users/sync-ldap',
       method: 'GET',
       timeout: 10000,
@@ -403,9 +559,12 @@ router.put('/update-user', verifyToken, isAdmin, async (req, res) => {
                             console.error('Erreur mise à jour groupe :', err);
                             return res.status(500).json({ error: 'Profil mis à jour, mais erreur de mise à jour du groupe', details: err.message });
                           }
-                          triggerLdapSync().finally(() => {
-                            res.json({ message: `Utilisateur "${targetUid}" mis à jour avec succès`, user: { name, email, role, uid: targetUid } });
-                          });
+                          triggerLdapSync()
+                            .catch(() => {})
+                            .finally(() => {
+                              try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                              res.json({ message: `Utilisateur "${targetUid}" mis à jour avec succès`, user: { name, email, role, uid: targetUid } });
+                            });
                         });
                       }
                     }
