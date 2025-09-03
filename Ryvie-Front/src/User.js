@@ -125,55 +125,51 @@ const User = () => {
       const serverUrl = getServerUrl(effectiveMode);
       console.log("Connexion à :", serverUrl);
       
-      const currentRole = getCurrentUserRole() || 'User';
-      const endpoint = currentRole === 'Admin' ? '/api/users' : '/api/users-public';
-      
-      // Helper to map API users
-      const mapUsers = (data) => (data || []).map((user, index) => ({
-        id: index + 1,
-        name: user.name || user.cn || user.uid,
-        email: user.email || user.mail || 'Non défini',
-        role: user.role || 'User',
-        uid: user.uid
-      }));
-
-      if (endpoint === '/api/users') {
-        // Admin path: try protected first, then fallback to public on missing/401 token
-        const token = (getSessionInfo() || {}).token;
-        if (!token) {
-          console.warn('[users] Admin sans token: bascule vers /api/users-public');
-          const resp = await axios.get(`${serverUrl}/api/users-public`);
-          setUsers(mapUsers(resp.data));
-          setMessage('Session expirée — affichage des utilisateurs publics.');
-          setMessageType('warning');
-          setLoading(false);
-          return;
-        }
-        const config = { headers: { Authorization: `Bearer ${token}` } };
+      // Essayer l'endpoint protégé si un token existe. En cas d'échec 401/403, fallback public.
+      const session = getSessionInfo() || {};
+      const token = session.token;
+      let response;
+      if (token) {
         try {
-          const resp = await axios.get(`${serverUrl}/api/users`, config);
-          setUsers(mapUsers(resp.data));
-          setLoading(false);
-          return;
+          response = await axios.get(`${serverUrl}/api/users`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
         } catch (e) {
-          if (e?.response?.status === 401) {
-            console.warn('[users] 401 sur /api/users: bascule vers /api/users-public');
-            const resp = await axios.get(`${serverUrl}/api/users-public`);
-            setUsers(mapUsers(resp.data));
-            setMessage('Session expirée — affichage des utilisateurs publics.');
+          if (e?.response?.status === 401 || e?.response?.status === 403) {
+            console.warn('[users] Accès refusé à /api/users, bascule sur /api/users-public');
+            response = await axios.get(`${serverUrl}/api/users-public`);
+            setMessage('Session limitée — affichage des utilisateurs publics.');
             setMessageType('warning');
-            setLoading(false);
-            return;
+          } else {
+            throw e;
           }
-          throw e; // let outer catch handle other errors
         }
       } else {
-        // Non-admin: use public endpoint
-        const resp = await axios.get(`${serverUrl}/api/users-public`);
-        setUsers(mapUsers(resp.data));
-        setLoading(false);
-        return;
+        response = await axios.get(`${serverUrl}/api/users-public`);
       }
+
+      // Mapping des utilisateurs sans forcer le rôle sur public et injection du rôle de session pour l'utilisateur courant
+      const sessionUser = (getCurrentUser() || '').trim().toLowerCase();
+      const sessionRole = getCurrentUserRole();
+      const mapped = (response.data || []).map((user, index) => {
+        const u = {
+          id: index + 1,
+          name: user.name || user.cn || user.uid,
+          email: user.email || user.mail || 'Non défini',
+          role: user.role || '',
+          uid: user.uid
+        };
+        const matchById = String(u.uid || '').trim().toLowerCase() === sessionUser;
+        const matchByName = String(u.name || '').trim().toLowerCase() === sessionUser;
+        if (!u.role && (matchById || matchByName) && sessionRole) {
+          u.role = sessionRole;
+        }
+        return u;
+      });
+
+      setUsers(mapped);
+      setLoading(false);
+      return;
     } catch (err) {
       console.error('Erreur lors du chargement des utilisateurs:', err);
       const status = err?.response?.status;

@@ -7,7 +7,7 @@ import User from './User';
 import Login from './Login';
 import Settings from './Settings';
 import Welcome from './Welcome';
-import Userlogin from './connexion';
+import Userlogin from './Connexion';
 import { initializeSession, isSessionActive } from './utils/sessionManager';
 import { isElectron } from './utils/platformUtils';
 import { handleAuthError } from './services/authService';

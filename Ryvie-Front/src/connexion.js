@@ -54,34 +54,54 @@ const Userlogin = () => {
         const serverUrl = getServerUrl(mode);
         console.log(`[Connexion] Chargement des utilisateurs depuis: ${serverUrl}`);
         
-        // Si la session courante est Admin et qu'on a un token, utiliser l'endpoint protégé pour récupérer les rôles
-        const role = getCurrentUserRole();
-        const token = (getSessionInfo() || {}).token;
+        // Essayer l'endpoint protégé si un token existe (pas seulement Admin). En cas d'échec 401/403, fallback public.
+        const session = getSessionInfo() || {};
+        const token = session.token;
         let response;
-        if (role === 'Admin' && token) {
-          response = await axios.get(`${serverUrl}/api/users`, {
-            timeout: 5000,
-            headers: {
-              'Accept': 'application/json',
-              'Authorization': `Bearer ${token}`
+        if (token) {
+          try {
+            response = await axios.get(`${serverUrl}/api/users`, {
+              timeout: 5000,
+              headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            });
+          } catch (e) {
+            if (e?.response?.status === 401 || e?.response?.status === 403) {
+              console.warn('[Connexion] Accès refusé à /api/users, bascule sur /api/users-public');
+              response = await axios.get(`${serverUrl}/api/users-public`, {
+                timeout: 5000,
+                headers: { 'Accept': 'application/json' }
+              });
+            } else {
+              throw e;
             }
-          });
+          }
         } else {
           response = await axios.get(`${serverUrl}/api/users-public`, {
             timeout: 5000,
-            headers: {
-              'Accept': 'application/json'
-            }
+            headers: { 'Accept': 'application/json' }
           });
         }
         
-        const ldapUsers = (response.data || []).map(user => ({
-          name: user.name || user.uid,
-          id: user.uid,
-          email: user.email || 'Non défini',
-          // Préserver le rôle si fourni par l'API protégée, sinon vide sur le public
-          role: user.role || ''
-        }));
+        const sessionUser = (getCurrentUser() || '').trim().toLowerCase();
+        const sessionRole = getCurrentUserRole();
+        const ldapUsers = (response.data || []).map(user => {
+          const u = {
+            name: user.name || user.uid,
+            id: user.uid,
+            email: user.email || 'Non défini',
+            // Préserver le rôle si fourni; sinon, si c'est l'utilisateur courant, afficher son rôle de session
+            role: user.role || ''
+          };
+          const matchById = String(u.id || '').trim().toLowerCase() === sessionUser;
+          const matchByName = String(u.name || '').trim().toLowerCase() === sessionUser;
+          if (!u.role && (matchById || matchByName) && sessionRole) {
+            u.role = sessionRole;
+          }
+          return u;
+        });
         
         setUsers(ldapUsers);
         setLoading(false);
