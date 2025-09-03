@@ -1,8 +1,7 @@
 import axios from 'axios';
-import { logout } from '../services/authService';
 import { getServerUrl } from '../config/urls';
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from './detectAccessMode';
-import { getSessionInfo, setToken } from './sessionManager';
+import { getSessionInfo, setToken, endSession } from './sessionManager';
 
 // Fonction pour vérifier si le token est valide (local, sans appeler un endpoint admin-only)
 export const verifyToken = async () => {
@@ -33,7 +32,8 @@ export const handleTokenError = (errorCode = null) => {
   
   // Nettoyer les données d'authentification mais garder le mode d'accès
   const accessMode = getCurrentAccessMode() || 'private';
-  logout();
+  // Nettoyage complet: localStorage, cookies et header Authorization
+  endSession();
   // Restaurer le mode d'accès via le singleton (persistance incluse)
   setGlobalAccessMode(accessMode);
   

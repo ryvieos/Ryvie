@@ -4,7 +4,7 @@ import axios from './utils/setupAxios'; // Centralized axios instance with inter
 import './styles/Welcome.css';
 import serverIcon from './icons/lettre-r.png';
 import { setAccessMode as setGlobalAccessMode } from './utils/detectAccessMode';
-import { getCurrentUser, getCurrentUserRole, setCurrentUserName, initializeSession } from './utils/sessionManager';
+import { getCurrentUser, getCurrentUserRole, setCurrentUserName, initializeSession, isSessionActive } from './utils/sessionManager';
 
 const Welcome = () => {
   const navigate = useNavigate();
@@ -154,7 +154,11 @@ const Welcome = () => {
     
     setUnlocked(true);
     setTimeout(() => {
-      navigate('/home');
+      if (isSessionActive()) {
+        navigate('/home');
+      } else {
+        navigate('/login');
+      }
     }, 10);
   };
   

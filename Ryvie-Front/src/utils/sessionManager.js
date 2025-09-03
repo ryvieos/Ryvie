@@ -82,11 +82,13 @@ export class SessionManager {
    * @returns {boolean}
    */
   isSessionActive() {
-    const hasToken = !!this.getToken();
+    const token = this.getToken();
+    const hasValidToken = !!token && this.validateToken(token);
     const hasUser = !!this.getCurrentUser();
     const sessionActive = StorageManager.getItem(this.sessionActiveKey, false);
     
-    return hasToken && hasUser && sessionActive;
+    // Exige un JWT valide pour considérer la session active (évite les cookies/caches résiduels)
+    return hasValidToken && hasUser && sessionActive;
   }
 
   /**
