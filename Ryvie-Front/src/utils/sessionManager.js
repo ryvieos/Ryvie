@@ -4,7 +4,7 @@
  */
 
 import { StorageManager, isElectron } from './platformUtils';
-import axios from 'axios';
+import axios from './setupAxios';
 
 /**
  * Gestionnaire de sessions unifié

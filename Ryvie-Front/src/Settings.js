@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import './styles/Settings.css';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from './utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg-icons';
-import io from 'socket.io-client'; // Importer la bibliothèque Socket.IO
 import { isElectron } from './utils/platformUtils';
 const { getServerUrl } = require('./config/urls');
-import { getCurrentAccessMode } from './utils/detectAccessMode';
+import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, connectRyvieSocket } from './utils/detectAccessMode';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -98,7 +97,16 @@ const Settings = () => {
   ]);
 
   const [changeStatus, setChangeStatus] = useState({ show: false, success: false });
-  const [accessMode, setAccessMode] = useState('private');
+  // Initialiser prudemment pour éviter tout appel privé intempestif
+  const [accessMode, setAccessMode] = useState(() => {
+    const mode = getCurrentAccessMode();
+    if (mode) return mode;
+    // Fallback sécurisé: en HTTPS forcer public, sinon rester public pour éviter erreurs DNS
+    try {
+      if (typeof window !== 'undefined' && window.location?.protocol === 'https:') return 'public';
+    } catch {}
+    return 'public';
+  });
   const [systemDisksInfo, setSystemDisksInfo] = useState(null);
   const [showDisksInfo, setShowDisksInfo] = useState(false);
 
@@ -132,26 +140,29 @@ const Settings = () => {
     fetchData();
   }, []);
 
-  // Récupération des informations serveur
+  // S'assurer que accessMode est cohérent et persistant au montage
   useEffect(() => {
-    // Récupère la valeur de accessMode depuis le localStorage
-    let storedMode = getCurrentAccessMode(); // peut être null désormais
-    if (!storedMode) {
-      // Si non défini: en HTTPS, forcer public pour éviter Mixed Content
+    let mode = getCurrentAccessMode();
+    console.log('[Settings] getCurrentAccessMode() ->', mode);
+    if (!mode) {
+      // Déterminer un fallback sûr
       if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
-        storedMode = 'public';
-        localStorage.setItem('accessMode', 'public');
+        mode = 'public';
       } else {
-        // En HTTP (dev/local), rester prudent: utiliser 'private' par défaut ici
-        storedMode = 'private';
-        localStorage.setItem('accessMode', 'private');
+        mode = 'public';
       }
+      setGlobalAccessMode(mode);
     }
-    setAccessMode(storedMode);
-    
-    // Détermine l'URL du serveur en fonction du mode d'accès
-    const baseUrl = getServerUrl(storedMode);
-    console.log("Connexion à :", baseUrl);
+    console.log('[Settings] Mode final utilisé ->', mode);
+    if (mode !== accessMode) setAccessMode(mode);
+  }, []);
+
+  // Récupération des informations serveur (HTTP polling)
+  useEffect(() => {
+    if (!accessMode) return; // attendre l'init
+    const baseUrl = getServerUrl(accessMode);
+    console.log('[Settings] accessMode courant =', accessMode);
+    console.log('Connexion à :', baseUrl);
     
     // Fonction pour récupérer les informations serveur
     const fetchServerInfo = async () => {
@@ -186,26 +197,30 @@ const Settings = () => {
     
     if (data.stockage) {
       // Convertir les valeurs de GB en nombre
-      const usedMatch = data.stockage.utilise.match(/(\d+(\.\d+)?)/);
-      const totalMatch = data.stockage.total.match(/(\d+(\.\d+)?)/);
+      const usedMatch = data.stockage.utilise?.match(/(\d+(\.\d+)?)/);
+      const totalMatch = data.stockage.total?.match(/(\d+(\.\d+)?)/);
       
-      if (usedMatch && totalMatch) {
-        storageUsed = parseFloat(usedMatch[0]);
-        storageTotal = parseFloat(totalMatch[0]);
-      }
+      if (usedMatch) storageUsed = parseFloat(usedMatch[0]);
+      if (totalMatch) storageTotal = parseFloat(totalMatch[0]);
     }
     
-    // Extraire les valeurs de performance
-    let cpuUsage = 30; // Valeur par défaut
-    let ramUsage = 40; // Valeur par défaut
+    // Extraire les valeurs CPU/RAM directement depuis l'objet data
+    let cpuUsage = 0;
+    let ramUsage = 0;
     
-    if (data.performance) {
-      // Convertir les pourcentages en nombres
-      const cpuMatch = data.performance.cpu.match(/(\d+(\.\d+)?)/);
-      const ramMatch = data.performance.ram.match(/(\d+(\.\d+)?)/);
-      
-      if (cpuMatch) cpuUsage = parseFloat(cpuMatch[0]);
-      if (ramMatch) ramUsage = parseFloat(ramMatch[0]);
+    // Extraire les pourcentages des chaînes comme '12.8%'
+    if (typeof data.cpu === 'string') {
+      const cpuMatch = data.cpu.match(/(\d+(\.\d+)?)/);
+      if (cpuMatch) cpuUsage = parseFloat(cpuMatch[1]);
+    } else if (typeof data.cpu === 'number') {
+      cpuUsage = data.cpu;
+    }
+    
+    if (typeof data.ram === 'string') {
+      const ramMatch = data.ram.match(/(\d+(\.\d+)?)/);
+      if (ramMatch) ramUsage = parseFloat(ramMatch[1]);
+    } else if (typeof data.ram === 'number') {
+      ramUsage = data.ram;
     }
     
     // Mettre à jour les statistiques
@@ -220,8 +235,8 @@ const Settings = () => {
 
   // Fonction pour changer le mode d'accès
   const handleAccessModeChange = (newMode) => {
-    // Mettre à jour le localStorage
-    localStorage.setItem('accessMode', newMode);
+    // Mettre à jour le mode via le gestionnaire centralisé
+    setGlobalAccessMode(newMode);
     
     // Mettre à jour l'état local
     setAccessMode(newMode);
@@ -283,7 +298,9 @@ const Settings = () => {
     setAppsError(null);
     
     try {
-      const response = await axios.get(`${getServerUrl(accessMode)}/api/apps`);
+      const appsBase = getServerUrl(accessMode);
+      console.log('[Settings] Récupération des apps depuis:', appsBase, 'mode =', accessMode);
+      const response = await axios.get(`${appsBase}/api/apps`);
       setApplications(response.data.map(app => ({
         ...app,
         port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
@@ -449,39 +466,42 @@ const Settings = () => {
   };
 
   useEffect(() => {
+    if (!accessMode) return;
     fetchApplications();
     
-    // Connexion au websocket pour les mises à jour en temps réel
-    const socket = io(getServerUrl(accessMode));
-    
-    socket.on('connect', () => {
-      console.log('Socket connected');
-      setSocketConnected(true);
-    });
-    
-    socket.on('disconnect', () => {
-      console.log('Socket disconnected');
-      setSocketConnected(false);
-    });
-    
-    // Écouter les mises à jour des statuts d'applications
-    socket.on('apps-status-update', (updatedApps) => {
-      console.log('Received apps update:', updatedApps);
-      setApplications(prevApps => {
-        // Mettre à jour les applications tout en préservant les paramètres autostart
-        return updatedApps.map(updatedApp => {
-          const existingApp = prevApps.find(app => app.id === updatedApp.id);
-          return {
-            ...updatedApp,
-            port: updatedApp.ports && updatedApp.ports.length > 0 ? updatedApp.ports[0] : null,
-            autostart: existingApp ? existingApp.autostart : false
-          };
+    // Connexion centralisée via le helper
+    const socket = connectRyvieSocket({
+      mode: accessMode,
+      onConnect: () => {
+        console.log('[Settings] Socket connecté');
+        setSocketConnected(true);
+      },
+      onDisconnect: () => {
+        console.log('[Settings] Socket déconnecté');
+        setSocketConnected(false);
+      },
+      onError: (err) => {
+        console.log('[Settings] Erreur socket:', err?.message || err);
+      },
+      onAppsStatusUpdate: (updatedApps) => {
+        console.log('[Settings] Mise à jour des apps reçue:', updatedApps);
+        setApplications(prevApps => {
+          return updatedApps.map(updatedApp => {
+            const existingApp = prevApps.find(app => app.id === updatedApp.id);
+            return {
+              ...updatedApp,
+              port: updatedApp.ports && updatedApp.ports.length > 0 ? updatedApp.ports[0] : null,
+              autostart: existingApp ? existingApp.autostart : false
+            };
+          });
         });
-      });
+      },
     });
-    
+
     return () => {
-      socket.disconnect();
+      if (socket && typeof socket.disconnect === 'function') {
+        socket.disconnect();
+      }
     };
   }, [accessMode]);
 

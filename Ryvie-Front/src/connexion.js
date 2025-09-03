@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from './utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
 import './styles/connexion.css';
-import { detectAccessMode, getCurrentAccessMode } from './utils/detectAccessMode';
-import { detectAccessModeRobust } from './utils/fallbackDetection';
+import { getCurrentAccessMode } from './utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager } from './utils/platformUtils';
 const { getServerUrl } = require('./config/urls');
 

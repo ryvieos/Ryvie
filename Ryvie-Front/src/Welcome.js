@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios'; // Import axios
+import axios from './utils/setupAxios'; // Centralized axios instance with interceptors
 import './styles/Welcome.css';
 import serverIcon from './icons/lettre-r.png';
+import { setAccessMode as setGlobalAccessMode } from './utils/detectAccessMode';
 
 const Welcome = () => {
   const navigate = useNavigate();
@@ -165,8 +166,8 @@ const Welcome = () => {
   }, []);
 
   const handlePrivateAccess = () => {
-    // Store the access mode in localStorage
-    localStorage.setItem('accessMode', 'private');
+    // Centralized access mode
+    setGlobalAccessMode('private');
     
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
@@ -190,8 +191,9 @@ const Welcome = () => {
   };
   
   const handlePublicAccess = () => {
-    // Store the access mode in localStorage
-    localStorage.setItem('accessMode', 'public');
+    // Centralized access mode
+    setGlobalAccessMode('public');
+    
 
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {

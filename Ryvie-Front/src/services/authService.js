@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios from '../utils/setupAxios';
 
 // Clés utilisées pour le stockage dans localStorage
 const TOKEN_KEY = 'jwt_token';
