@@ -4,7 +4,7 @@ const ldap = require('ldapjs');
 const jwt = require('jsonwebtoken');
 const { ensureConnected } = require('../redisClient');
 const ldapConfig = require('../config/ldap');
-const { escapeLdapFilterValue } = require('../services/ldapService');
+const { escapeLdapFilterValue, getUserRole } = require('../services/ldapService');
 const {
   JWT_EXPIRES_SECONDS,
   checkBruteForce,
@@ -98,28 +98,17 @@ router.post('/authenticate', authLimiter, async (req, res) => {
           await clearFailedAttempts(uid, clientIP);
           userAuthClient.unbind();
 
-          // Déterminer le rôle via groupes
+          // Déterminer le rôle via helper centralisé
           let role = 'Guest';
-          ldapClient.search(ldapConfig.adminGroup, { scope: 'base', filter: '(objectClass=*)', attributes: ['member'] }, (err, groupRes) => {
-            if (err) return complete();
-            let isAdmin = false;
-            groupRes.on('searchEntry', (entry) => {
-              const members = entry.pojo.attributes.find(attr => attr.type === 'member')?.values || [];
-              if (members.includes(userDN)) { isAdmin = true; role = 'Admin'; }
-            });
-            groupRes.on('end', () => {
-              if (!isAdmin) {
-                ldapClient.search(ldapConfig.userGroup, { scope: 'base', filter: '(objectClass=*)', attributes: ['member'] }, (err2, userGroupRes) => {
-                  if (err2) return complete();
-                  userGroupRes.on('searchEntry', (entry) => {
-                    const members = entry.pojo.attributes.find(attr => attr.type === 'member')?.values || [];
-                    if (members.includes(userDN)) { role = 'User'; }
-                  });
-                  userGroupRes.on('end', complete);
-                });
-              } else { complete(); }
-            });
-          });
+          (async () => {
+            try {
+              role = await getUserRole(userDN);
+            } catch (e) {
+              role = 'Guest';
+            } finally {
+              complete();
+            }
+          })();
 
           function complete() {
             ldapClient.unbind();

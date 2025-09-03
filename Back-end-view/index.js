@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
-const os = require('os');
 const Docker = require('dockerode');
 const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
@@ -55,6 +54,8 @@ const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
 const systemRouter = require('./routes/system');
 const { getAppStatus } = require('./services/dockerService');
+const { setupRealtime } = require('./services/realtimeService');
+const { getLocalIP } = require('./utils/network');
 
 const docker = new Docker();
 const app = express();
@@ -108,93 +109,19 @@ app.use('/api', systemRouter);
 // Also mount at root to expose /status without /api prefix
 app.use('/', systemRouter);
 
-// Fonction pour récupérer les conteneurs Docker actifs
-async function initializeActiveContainers() {
-  return new Promise((resolve, reject) => {
-    docker.listContainers({ all: false }, (err, containers) => {
-      if (err) return reject(err);
-
-      const containerNames = containers.map((container) => {
-        return container.Names[0].replace('/', '');
-      });
-
-      console.log('Liste initialisée des conteneurs actifs :', containerNames);
-      resolve(containerNames);
-    });
-  });
-}
-
-// Fonction pour récupérer l'adresse IP locale
-function getLocalIP() {
-  const networkInterfaces = os.networkInterfaces();
-  for (const interfaceName in networkInterfaces) {
-    const addresses = networkInterfaces[interfaceName];
-    for (const addressInfo of addresses) {
-      if (addressInfo.family === 'IPv4' && !addressInfo.internal) {
-        return addressInfo.address;
-      }
-    }
-  }
-  return 'IP not found';
-}
+// Realtime (Socket.IO + Docker events) handled by services/realtimeService.js
+let realtime;
 
  
-
-// Liste des conteneurs actifs
-let activeContainers = [];
-let isServerDetected = false;
-
-io.on('connection', async (socket) => {
-  console.log('Un client est connecté');
-
-  socket.emit('status', { serverStatus: true });
-  socket.emit('containers', { activeContainers });
-
-  socket.on('discover', () => {
-    io.emit('server-detected', { message: 'Ryvie server found!', ip: getLocalIP() });
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client déconnecté');
-  });
-});
-
-// Écouter les événements Docker et mettre à jour la liste des conteneurs
-docker.getEvents((err, stream) => {
-  if (err) {
-    console.error('Erreur lors de l\'écoute des événements Docker', err);
-    return;
-  }
-
-  stream.on('data', (data) => {
-    const event = JSON.parse(data.toString());
-    if (event.Type === 'container' && (event.Action === 'start' || event.Action === 'stop')) {
-      const containerName = event.Actor.Attributes.name;
-      if (event.Action === 'start') {
-        if (!activeContainers.includes(containerName)) {
-          activeContainers.push(containerName);
-        }
-      } else if (event.Action === 'stop') {
-        activeContainers = activeContainers.filter((name) => name !== containerName);
-      }
-      io.emit('containers', { activeContainers });
-      
-      // Émettre l'événement de mise à jour des applications
-      // Cela permet au frontend de mettre à jour l'état des applications en temps réel
-      getAppStatus().then(apps => {
-        io.emit('apps-status-update', apps);
-      }).catch(error => {
-        console.error('Erreur lors de la mise à jour des statuts d\'applications:', error);
-      });
-    }
-  });
-});
+ 
+// Inline realtime code removed; replaced by realtimeService
 
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
-    activeContainers = await initializeActiveContainers();
-    console.log('Liste initialisée des conteneurs actifs :', activeContainers);
+    // Initialize realtime service
+    realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
+    await realtime.initializeActiveContainers();
 
     const PORT = process.env.PORT || 3002;
     httpServer.listen(PORT, () => {

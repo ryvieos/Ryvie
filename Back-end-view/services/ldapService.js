@@ -12,11 +12,70 @@ function escapeLdapFilterValue(value) {
     .replace(/\0/g, '\\00');
 }
 
+// Escape a value intended for use in an RDN (e.g., in modifyDN operations)
+function escapeRdnValue(val) {
+  if (typeof val !== 'string') return val;
+  let v = val
+    .replace(/\\/g, '\\\\')
+    .replace(/,/g, '\\,')
+    .replace(/\+/g, '\\+')
+    .replace(/"/g, '\\"')
+    .replace(/</g, '\\<')
+    .replace(/>/g, '\\>')
+    .replace(/;/g, '\\;')
+    .replace(/=/g, '\\=');
+  if (v.startsWith(' ')) v = '\\ ' + v.slice(1);
+  if (v.endsWith(' ')) v = v.slice(0, -1) + ' \\';
+  return v;
+}
+
+// Parse DN into parts: rdn attribute name and parent DN
+function parseDnParts(dn) {
+  const firstCommaIdx = dn.indexOf(',');
+  const rdn = firstCommaIdx > 0 ? dn.substring(0, firstCommaIdx) : dn;
+  const parentDN = firstCommaIdx > 0 ? dn.substring(firstCommaIdx + 1) : '';
+  const eqIdx = rdn.indexOf('=');
+  const rdnAttr = eqIdx > 0 ? rdn.substring(0, eqIdx).toLowerCase() : '';
+  return { rdnAttr, parentDN };
+}
+
 function getRole(dn, groupMemberships) {
   if (groupMemberships.includes(ldapConfig.adminGroup)) return 'Admin';
   if (groupMemberships.includes(ldapConfig.userGroup)) return 'User';
   if (groupMemberships.includes(ldapConfig.guestGroup)) return 'Guest';
   return 'Unknown';
+}
+
+// Resolve a user's role by searching for groups that include the user's DN as member
+async function getUserRole(userDN) {
+  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  return new Promise((resolve) => {
+    ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
+      if (err) {
+        ldapClient.destroy();
+        return resolve('Guest');
+      }
+      const memberships = [];
+      const filter = `(&(objectClass=groupOfNames)(member=${userDN}))`;
+      ldapClient.search(
+        ldapConfig.groupSearchBase,
+        { filter, scope: 'sub', attributes: ['dn'] },
+        (err2, res) => {
+          if (err2) {
+            ldapClient.unbind();
+            return resolve('Guest');
+          }
+          res.on('searchEntry', (entry) => {
+            memberships.push(entry.pojo.objectName);
+          });
+          res.on('end', () => {
+            ldapClient.unbind();
+            resolve(getRole(userDN, memberships));
+          });
+        }
+      );
+    });
+  });
 }
 
 async function listUsersWithRoles() {
@@ -120,7 +179,10 @@ async function listUsersPublic() {
 
 module.exports = {
   escapeLdapFilterValue,
+  escapeRdnValue,
+  parseDnParts,
   getRole,
+  getUserRole,
   listUsersWithRoles,
   listUsersPublic,
 };

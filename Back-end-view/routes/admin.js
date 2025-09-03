@@ -3,7 +3,7 @@ const ldap = require('ldapjs');
 const router = express.Router();
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const ldapConfig = require('../config/ldap');
-const { getRole } = require('../services/ldapService');
+const { getRole, parseDnParts, escapeRdnValue } = require('../services/ldapService');
 
 // GET /api/admin/users/sync-ldap
 router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req, res) => {
@@ -322,27 +322,8 @@ router.put('/update-user', verifyToken, isAdmin, async (req, res) => {
                   }
 
                   function updateUser() {
-                    // Detect RDN attribute and parent DN
-                    const firstCommaIdx = userDN.indexOf(',');
-                    const rdn = firstCommaIdx > 0 ? userDN.substring(0, firstCommaIdx) : userDN;
-                    const parentDN = firstCommaIdx > 0 ? userDN.substring(firstCommaIdx + 1) : '';
-                    const eqIdx = rdn.indexOf('=');
-                    const rdnAttr = eqIdx > 0 ? rdn.substring(0, eqIdx).toLowerCase() : '';
-
-                    const escapeRdnValue = (val) => {
-                      if (typeof val !== 'string') return val;
-                      let v = val.replace(/\\/g, '\\\\')
-                                 .replace(/,/g, '\\,')
-                                 .replace(/\+/g, '\\+')
-                                 .replace(/"/g, '\\"')
-                                 .replace(/</g, '\\<')
-                                 .replace(/>/g, '\\>')
-                                 .replace(/;/g, '\\;')
-                                 .replace(/=/g, '\\=');
-                      if (v.startsWith(' ')) v = '\\ ' + v.slice(1);
-                      if (v.endsWith(' ')) v = v.slice(0, -1) + '\\ ';
-                      return v;
-                    };
+                    // Detect RDN attribute and parent DN using centralized helper
+                    const { rdnAttr, parentDN } = parseDnParts(userDN);
 
                     const changes = [];
                     const isCnRdn = rdnAttr === 'cn';

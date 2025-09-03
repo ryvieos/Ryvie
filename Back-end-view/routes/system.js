@@ -3,20 +3,7 @@ const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
 const { getServerInfo } = require('../services/systemService');
 const si = require('systeminformation');
-const os = require('os');
-
-// Helper to get local IP address
-function getLocalIP() {
-  const ifaces = os.networkInterfaces();
-  for (const name of Object.keys(ifaces)) {
-    for (const iface of ifaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return '127.0.0.1';
-}
+const { getLocalIP } = require('../utils/network');
 
 // GET /status (non-authenticated health endpoint)
 router.get('/status', (req, res) => {
