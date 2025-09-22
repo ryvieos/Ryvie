@@ -1094,6 +1094,14 @@ const Settings = () => {
       {/* Section Stockage */}
       <section className="settings-section">
         <h2>Configuration du Stockage</h2>
+        <div style={{ marginBottom: 16 }}>
+          <button
+            className="setting-button"
+            onClick={() => navigate('/settings/storage')}
+          >
+            Ouvrir l'assistant Stockage (RAID + Btrfs)
+          </button>
+        </div>
         <div className="storage-options">
           {/* Emplacement du stockage */}
           <div className="settings-card">

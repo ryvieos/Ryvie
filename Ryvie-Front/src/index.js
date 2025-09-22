@@ -6,6 +6,7 @@ import AppStore from './pages/AppStore';
 import User from './pages/User';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
+import StorageSettings from './pages/StorageSettings';
 import Welcome from './pages/Welcome';
 import Userlogin from './pages/Connexion';
 import { initializeSession, isSessionActive } from './utils/sessionManager';
@@ -62,6 +63,11 @@ const App = () => {
         <Route path="/settings" element={
           <ProtectedRoute>
             <Settings />
+          </ProtectedRoute>
+        } />
+        <Route path="/settings/storage" element={
+          <ProtectedRoute>
+            <StorageSettings />
           </ProtectedRoute>
         } />
         <Route path="/welcome" element={
