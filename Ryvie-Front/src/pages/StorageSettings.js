@@ -24,7 +24,9 @@ const StorageSettings = () => {
       const list = Array.isArray(resp.data?.disks) ? resp.data.disks : [];
       setDisks(list);
       const init = {};
-      list.forEach(d => { init[d.id || d.device] = false; });
+      list.forEach(d => {
+        init[d.id || d.device] = d.isSystem; // Sélectionner automatiquement le système par défaut
+      });
       setSelected(init);
     } catch (e) {
       setError(e?.response?.data?.error || e.message || 'scan_error');
@@ -36,7 +38,7 @@ const StorageSettings = () => {
   useEffect(() => { fetchDisks(); }, []);
 
   const toggle = (d) => {
-    if (d.isSystem) return;
+    if (d.isSystem) return; // Empêcher la désélection du système
     const key = d.id || d.device;
     setSelected(prev => ({ ...prev, [key]: !prev[key] }));
   };
@@ -53,6 +55,15 @@ const StorageSettings = () => {
         setProposalError('Sélectionnez au moins deux disques');
         setProposalLoading(false);
         return;
+      }
+      // Vérifier si un disque système est sélectionné et demander confirmation stricte
+      const systemDisks = disks.filter(d => d.isSystem && selected[d.id || d.device]);
+      if (systemDisks.length > 0) {
+        const confirmMessage = `ATTENTION : Vous avez sélectionné des disques système (${systemDisks.map(d => d.device).join(', ')}). \n\n- Ces disques contiennent votre OS et ne seront PAS formatés.\n- Ils ne seront utilisés que pour la proposition (dry-run).\n- Aucune écriture ne sera faite sans votre confirmation explicite aux étapes suivantes.\n\nÊtes-vous SÛR de vouloir continuer ?`;
+        if (!window.confirm(confirmMessage)) {
+          setProposalLoading(false);
+          return;
+        }
       }
       const mode = getCurrentAccessMode() || 'private';
       const base = getServerUrl(mode);
@@ -122,7 +133,7 @@ const StorageSettings = () => {
                         return (
                           <tr key={key}>
                             <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                              <input type="checkbox" checked={!!selected[key]} onChange={() => toggle(d)} disabled={!!d.isSystem} />
+                              <input type="checkbox" checked={!!selected[key]} onChange={() => toggle(d)} />
                             </td>
                             <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
                               <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -176,7 +187,7 @@ const StorageSettings = () => {
         )}
 
         <p style={{ color: '#475569', marginTop: 12 }}>
-          Les cases sont désactivées pour les disques système. Un avertissement est affiché si un disque est monté.
+          Les cases sont désactivées pour les disques système (sélectionnés par défaut et non désélectionnables). Un avertissement est affiché si un disque est monté.
         </p>
       </div>
 

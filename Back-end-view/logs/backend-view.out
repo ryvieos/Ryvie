@@ -1,0 +1,35 @@
+[dotenv@17.2.2] injecting env (0) from .env -- tip: 📡 observe env with Radar: https://dotenvx.com/radar
+❌ CRITICAL: JWT_SECRET environment variable is required (JWT signing secret)
+❌ CRITICAL: LDAP_URL environment variable is required (LDAP server URL)
+❌ CRITICAL: LDAP_BIND_DN environment variable is required (LDAP bind DN)
+❌ CRITICAL: LDAP_BIND_PASSWORD environment variable is required (LDAP bind password)
+⚠️  OPTIONAL: ENCRYPTION_KEY not set (Data encryption key)
+⚠️  OPTIONAL: DEFAULT_EMAIL_DOMAIN not set (Default email domain for users without email)
+
+💡 Please add the missing variables to your .env file
+📖 See SECURITY.md for configuration details
+[dotenv@17.2.2] injecting env (29) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+✅ Environment variables validated successfully
+[dotenv@17.2.2] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[auth middleware] Connected to Redis
+node:events:495
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3002
+    at Server.setupListenHandle [as _listen2] (node:net:1811:16)
+    at listenInCluster (node:net:1859:12)
+    at Server.listen (node:net:1947:7)
+    at startServer (/home/jules/Bureau/Ryvie/Back-end-view/index.js:131:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1838:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3002
+}
+
+Node.js v18.19.1
