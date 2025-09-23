@@ -13,6 +13,11 @@ const StorageSettings = () => {
   const [proposal, setProposal] = useState(null);
   const [proposalLoading, setProposalLoading] = useState(false);
   const [proposalError, setProposalError] = useState(null);
+  // Step 3 — Préflight (sans écrire)
+  const [preflightAck, setPreflightAck] = useState(false);
+  const [preflightLoading, setPreflightLoading] = useState(false);
+  const [preflightError, setPreflightError] = useState(null);
+  const [preflightReport, setPreflightReport] = useState(null);
 
   const fetchDisks = async () => {
     try {
@@ -32,6 +37,36 @@ const StorageSettings = () => {
       setError(e?.response?.data?.error || e.message || 'scan_error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Étape 3 — Préflight (sans écrire)
+  const runPreflight = async () => {
+    try {
+      setPreflightLoading(true);
+      setPreflightError(null);
+      setPreflightReport(null);
+      const ids = Object.entries(selected)
+        .filter(([, v]) => !!v)
+        .map(([k]) => k);
+      if (ids.length < 2) {
+        setPreflightError('Sélectionnez au moins deux disques.');
+        setPreflightLoading(false);
+        return;
+      }
+      if (!preflightAck) {
+        setPreflightError("Veuillez cocher l'accusé de compréhension : seuls les disques non-système seront formatés pour créer le RAID.");
+        setPreflightLoading(false);
+        return;
+      }
+      const mode = getCurrentAccessMode() || 'private';
+      const base = getServerUrl(mode);
+      const resp = await axios.post(`${base}/api/storage/preflight`, { diskIds: ids });
+      setPreflightReport(resp.data);
+    } catch (e) {
+      setPreflightError(e?.response?.data?.error || e.message || 'preflight_error');
+    } finally {
+      setPreflightLoading(false);
     }
   };
 
@@ -58,13 +93,7 @@ const StorageSettings = () => {
       }
       // Vérifier si un disque système est sélectionné et demander confirmation stricte
       const systemDisks = disks.filter(d => d.isSystem && selected[d.id || d.device]);
-      if (systemDisks.length > 0) {
-        const confirmMessage = `ATTENTION : Vous avez sélectionné des disques système (${systemDisks.map(d => d.device).join(', ')}). \n\n- Ces disques contiennent votre OS et ne seront PAS formatés.\n- Ils ne seront utilisés que pour la proposition (dry-run).\n- Aucune écriture ne sera faite sans votre confirmation explicite aux étapes suivantes.\n\nÊtes-vous SÛR de vouloir continuer ?`;
-        if (!window.confirm(confirmMessage)) {
-          setProposalLoading(false);
-          return;
-        }
-      }
+
       const mode = getCurrentAccessMode() || 'private';
       const base = getServerUrl(mode);
       const resp = await axios.post(`${base}/api/storage/proposal`, { diskIds: ids });
@@ -220,6 +249,45 @@ const StorageSettings = () => {
                 ))}
               </ul>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Step 3 — Préflight (sans écrire) */}
+      <div style={{
+        marginTop: 16,
+        padding: 16,
+        border: '1px solid #cbd5e1',
+        borderRadius: 12,
+        background: '#ffffff',
+        boxShadow: '0 1px 2px rgba(16,24,40,0.06)'
+      }}>
+        <h2 style={{ color: '#0f172a', marginTop: 0 }}>Étape 3 — Préflight (sans écrire)</h2>
+        <p style={{ color: '#475569', marginTop: 0 }}>
+          Cette étape vérifie les conditions avant toute action destructive.
+        </p>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+          <input
+            type="checkbox"
+            checked={preflightAck}
+            onChange={e => setPreflightAck(e.target.checked)}
+          />
+          <span>
+            Je comprends que <strong>seuls les disques non‑système</strong> sélectionnés seront <strong>formatés</strong> pour créer le RAID. Le(s) disque(s) système ne seront <strong>jamais formatés</strong>.
+          </span>
+        </label>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+          <button onClick={runPreflight} disabled={preflightLoading} style={{ background: '#0f172a', color: '#fff', padding: '8px 12px', border: 0, borderRadius: 8 }}>
+            {preflightLoading ? 'Vérification…' : 'Lancer le préflight'}
+          </button>
+          {preflightError && <span style={{ color: '#b91c1c' }}>Erreur: {String(preflightError)}</span>}
+        </div>
+        {preflightReport && (
+          <div style={{ marginTop: 12, color: '#334155' }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Rapport de préflight</div>
+            <pre style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, overflowX: 'auto' }}>
+{JSON.stringify(preflightReport, null, 2)}
+            </pre>
           </div>
         )}
       </div>
