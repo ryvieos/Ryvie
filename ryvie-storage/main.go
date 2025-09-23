@@ -91,7 +91,9 @@ func main() {
 		scanDisks(args)
 	case "proposal":
 		proposal(args)
-	case "preflight", "status", "create", "partition", "mdadm", "persist", "lvm", "format", "mount", "subvolumes":
+	case "preflight":
+		preflight(args)
+	case "status", "create", "partition", "mdadm", "persist", "lvm", "format", "mount", "subvolumes":
 		out(cmd, args)
  default:
   resp := Response{
@@ -159,6 +161,13 @@ func scanDisks(args map[string]interface{}) {
  var disks []Disk
  for _, bd := range lsblk.Blockdevices {
   if bd.Type != "disk" {
+   continue
+  }
+  // Filter: hide floppy/loop and very small devices (< 1GB)
+  if strings.HasPrefix(bd.Name, "fd") || strings.HasPrefix(bd.Name, "loop") {
+   continue
+  }
+  if bd.Size > 0 && bd.Size < 1000000000 { // 1 GB
    continue
   }
   devPath := "/dev/" + bd.Name
@@ -304,37 +313,13 @@ func proposal(args map[string]interface{}) {
  // This keeps Step 2 read-only and leverages existing scan code
  // Simpler: call lsblk again here to build a map of size by id/device
  lsblkOut, err := exec.Command("lsblk", "-bJ", "-o", "NAME,KNAME,SIZE,TYPE").Output()
- if err != nil {
-  enc := json.NewEncoder(os.Stdout)
-  _ = enc.Encode(map[string]any{ "ok": false, "command": "proposal", "error": "lsblk_failed", "detail": err.Error() })
-  return
- }
- var ls struct { Blockdevices []struct{ Name, Kname, Type string; Size int64 } `json:"blockdevices"` }
- if err := json.Unmarshal(lsblkOut, &ls); err != nil {
-  enc := json.NewEncoder(os.Stdout)
-  _ = enc.Encode(map[string]any{ "ok": false, "command": "proposal", "error": "parse_failed", "detail": err.Error() })
-  return
- }
- sizeByKey := map[string]int64{}
- for _, bd := range ls.Blockdevices {
-  if bd.Type != "disk" { continue }
-  sizeByKey["/dev/"+bd.Name] = bd.Size
-  sizeByKey["/dev/"+bd.Kname] = bd.Size
- }
-
- var sizes []int64
- for _, id := range ids {
-  if sz, ok := sizeByKey[id]; ok {
-   sizes = append(sizes, sz)
   }
- }
- if len(sizes) != len(ids) {
-  enc := json.NewEncoder(os.Stdout)
-  _ = enc.Encode(map[string]any{ "ok": false, "command": "proposal", "error": "unknown_disks_in_selection" })
-  return
- }
 
- // Heuristics
+  if len(ids) < 2 {
+    enc := json.NewEncoder(os.Stdout)
+    _ = enc.Encode(map[string]any{ "ok": false, "command": "proposal", "error": "need_at_least_two_disks" })
+    return
+  }
  suggested := "auto"
  capacity := int64(0)
  fault := 1

@@ -105,34 +105,71 @@ const StorageSettings = () => {
                 </tr>
               </thead>
               <tbody>
-                {disks.map(d => {
-                  const key = d.id || d.device;
+                {(() => {
+                  // Filtrer: masquer fd*, loop* et les disques < 1 Go
+                  const all = Array.isArray(disks) ? disks : [];
+                  const visibleDisks = all.filter(d => {
+                    const name = (d.device || '').toString();
+                    const isWeird = name.startsWith('fd') || name.startsWith('loop');
+                    const bigEnough = (d.sizeBytes ?? 0) >= 1_000_000_000;
+                    return !isWeird && bigEnough;
+                  });
+                  const hiddenCount = all.length - visibleDisks.length;
                   return (
-                    <tr key={key}>
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                        <input type="checkbox" checked={!!selected[key]} onChange={() => toggle(d)} disabled={!!d.isSystem} />
-                      </td>
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <strong>{d.device}</strong>
-                          <small style={{ color: '#888' }}>{d.id}</small>
-                        </div>
-                      </td>
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>{d.sizeHuman || `${d.sizeBytes} B`}</td>
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>{d.isSystem ? <span style={{ color: '#b91c1c', background: '#fee2e2', padding: '2px 6px', borderRadius: 6 }}>Oui</span> : <span style={{ color: '#065f46', background: '#d1fae5', padding: '2px 6px', borderRadius: 6 }}>Non</span>}</td>
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>{d.isMounted ? <span style={{ color: '#b45309', background: '#fef3c7', padding: '2px 6px', borderRadius: 6 }}>Monté{d.mountpoint ? ` (${d.mountpoint})` : ''}</span> : <span style={{ color: '#334155' }}>Non</span>}</td>
-                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                        {(d.partitions || []).length ? (
-                          <ul style={{ margin: 0, paddingLeft: 18 }}>
-                            {d.partitions.map(p => (
-                              <li key={p.path}>{p.path} — {p.fs || 'no-fs'} — {p.sizeBytes} B</li>
-                            ))}
-                          </ul>
-                        ) : <span style={{ color: '#888' }}>Aucune</span>}
-                      </td>
-                    </tr>
+                    <>
+                      {visibleDisks.map(d => {
+                        const key = d.id || d.device;
+                        return (
+                          <tr key={key}>
+                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
+                              <input type="checkbox" checked={!!selected[key]} onChange={() => toggle(d)} disabled={!!d.isSystem} />
+                            </td>
+                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <strong>{d.device}</strong>
+                                <small style={{ color: '#888' }}>{d.id}</small>
+                              </div>
+                            </td>
+                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>{d.sizeHuman || `${d.sizeBytes} B`}</td>
+                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>{d.isSystem ? <span style={{ color: '#b91c1c', background: '#fee2e2', padding: '2px 6px', borderRadius: 6 }}>Oui</span> : <span style={{ color: '#065f46', background: '#d1fae5', padding: '2px 6px', borderRadius: 6 }}>Non</span>}</td>
+                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>{d.isMounted ? <span style={{ color: '#b45309', background: '#fef3c7', padding: '2px 6px', borderRadius: 6 }}>Monté{d.mountpoint ? ` (${d.mountpoint})` : ''}</span> : <span style={{ color: '#334155' }}>Non</span>}</td>
+                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
+                              {(() => {
+                                const parts = Array.isArray(d.partitions) ? d.partitions : [];
+                                const visible = parts.filter(p => (p?.sizeBytes ?? 0) >= 1_000_000_000);
+                                const hiddenParts = parts.length - visible.length;
+                                if (visible.length === 0) {
+                                  return <span style={{ color: '#888' }}>Aucune</span>;
+                                }
+                                return (
+                                  <>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {visible.map(p => (
+                                        <li key={p.path}>{p.path} — {p.fs || 'no-fs'} — {p.sizeBytes} B</li>
+                                      ))}
+                                    </ul>
+                                    {hiddenParts > 0 && (
+                                      <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
+                                        {hiddenParts} partition(s) &lt; 1 Go masquée(s)
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {hiddenCount > 0 && (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '8px 12px', color: '#64748b', fontSize: 12 }}>
+                            {hiddenCount} périphérique(s) non pertinent(s) masqué(s) (fd*, loop*, &lt; 1 Go)
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   );
-                })}
+                })()}
               </tbody>
             </table>
           </div>
