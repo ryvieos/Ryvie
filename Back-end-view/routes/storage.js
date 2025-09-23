@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
+const { execFile } = require('child_process');
+const path = require('path');
 
 function notImplemented(res, info = {}) {
   return res.status(501).json({
@@ -13,14 +15,106 @@ function notImplemented(res, info = {}) {
 // Storage API - Step 0 skeleton: all endpoints return 501 Not Implemented
 // Base: /api/storage
 
-// GET /api/storage/disks
+// Helper to locate Go binary reliably when running under different environments (snap, apt, etc.)
+function resolveGoCmd() {
+  const fs = require('fs');
+  const candidates = [
+    '/snap/bin/go',
+    '/usr/local/go/bin/go',
+    '/usr/bin/go',
+    'go'
+  ];
+  for (const c of candidates) {
+    try {
+      if (c === 'go') return c; // let PATH resolve it
+      if (fs.existsSync(c)) return c;
+    } catch { /* ignore */ }
+  }
+  return 'go';
+}
+
+function resolveCliInvocation(cliCwd) {
+  const fs = require('fs');
+  const binPath = path.join(cliCwd, process.platform === 'win32' ? 'ryvie-storage.exe' : 'ryvie-storage');
+  if (fs.existsSync(binPath)) {
+    return { cmd: binPath, args: [] };
+  }
+  // Fallback to go run
+  const cmd = resolveGoCmd();
+  const args = ['run', 'main.go'];
+  return { cmd, args };
+}
+
+// GET /api/storage/disks — Step 1: proxy CLI scan (read-only)
 router.get('/storage/disks', verifyToken, (req, res) => {
-  return notImplemented(res, { endpoint: 'GET /storage/disks' });
+  // From Back-end-view/routes -> up to repo root then into ryvie-storage
+  const cliCwd = path.resolve(__dirname, '..', '..', 'ryvie-storage');
+  const { cmd, args: baseArgs } = resolveCliInvocation(cliCwd);
+  const args = [...baseArgs, 'scan'];
+
+  const env = { ...process.env };
+  env.PATH = `${env.PATH || ''}:/snap/bin:/usr/local/go/bin:/usr/bin:/bin`;
+
+  execFile(cmd, args, { cwd: cliCwd, timeout: 20000, env }, (error, stdout, stderr) => {
+    if (error) {
+      return res.status(500).json({
+        ok: false,
+        error: 'scan_failed',
+        detail: error.message,
+        stderr: String(stderr || ''),
+        cwd: cliCwd,
+        cmd: `${cmd} ${args.join(' ')}`,
+        envPath: env.PATH,
+      });
+    }
+    try {
+      const data = JSON.parse(stdout || '{}');
+      // Expecting { ok: true, disks: [...] }
+      if (!data || typeof data !== 'object') {
+        throw new Error('invalid_response');
+      }
+      return res.json(data);
+    } catch (e) {
+      return res.status(502).json({
+        ok: false,
+        error: 'invalid_cli_json',
+        detail: e.message,
+        raw: String(stdout || ''),
+      });
+    }
+  });
 });
 
 // POST /api/storage/proposal
 router.post('/storage/proposal', verifyToken, (req, res) => {
-  return notImplemented(res, { endpoint: 'POST /storage/proposal' });
+  const cliCwd = path.resolve(__dirname, '..', '..', 'ryvie-storage');
+  const { cmd, args: baseArgs } = resolveCliInvocation(cliCwd);
+  const body = JSON.stringify(req.body || {});
+  const args = [...baseArgs, 'proposal', '--json', body];
+
+  execFile(cmd, args, { cwd: cliCwd, timeout: 20000 }, (error, stdout, stderr) => {
+    if (error) {
+      return res.status(500).json({
+        ok: false,
+        error: 'proposal_failed',
+        detail: error.message,
+        stderr: String(stderr || ''),
+        cwd: cliCwd,
+        cmd: `${cmd} ${args.join(' ')}`,
+      });
+    }
+    try {
+      const data = JSON.parse(stdout || '{}');
+      return res.json(data);
+    } catch (e) {
+      return res.status(502).json({
+        ok: false,
+        error: 'invalid_cli_json',
+        detail: e.message,
+        raw: String(stdout || ''),
+      });
+    }
+  });
 });
 
 // POST /api/storage/preflight
