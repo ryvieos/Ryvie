@@ -53,6 +53,7 @@ const appsRouter = require('./routes/apps');
 const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
 const systemRouter = require('./routes/system');
+const storageRouter = require('./routes/storage');
 const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
 const { getLocalIP } = require('./utils/network');
@@ -108,6 +109,9 @@ app.use('/api', adminRouter);
 app.use('/api', systemRouter);
 // Also mount at root to expose /status without /api prefix
 app.use('/', systemRouter);
+
+// Mount Storage routes (Step 0 skeleton)
+app.use('/api', storageRouter);
 
 // Realtime (Socket.IO + Docker events) handled by services/realtimeService.js
 let realtime;

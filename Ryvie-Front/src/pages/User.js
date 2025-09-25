@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import './styles/User.css';
+import '../styles/User.css';
 import { useNavigate } from 'react-router-dom';
-import axios from './utils/setupAxios';
-const { getServerUrl } = require('./config/urls');
-import { getCurrentAccessMode } from './utils/detectAccessMode';
-import { getCurrentUserRole, getCurrentUser, getSessionInfo } from './utils/sessionManager';
+import axios from '../utils/setupAxios';
+const { getServerUrl } = require('../config/urls');
+import { getCurrentAccessMode } from '../utils/detectAccessMode';
+import { getCurrentUserRole, getCurrentUser, getSessionInfo } from '../utils/sessionManager';
 
 const User = () => {
   const navigate = useNavigate();

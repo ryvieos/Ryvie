@@ -1,0 +1,13 @@
+{
+  "domains": {
+    "status": "status.ryvie.fr",
+    "app": "app.ryvie.fr",
+    "rdrive": "rdrive.ryvie.fr",
+    "rtransfer": "rtransfer.ryvie.fr",
+    "rdrop": "rdrop.ryvie.fr",
+    "rpictures": "rpictures.ryvie.fr",
+    "backend.rdrive": "backend.rdrive.ryvie.fr",
+    "connector.rdrive": "connector.rdrive.ryvie.fr",
+    "document.rdrive": "document.rdrive.ryvie.fr"
+  }
+}

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from './utils/setupAxios'; // Centralized axios instance with interceptors
-import './styles/Welcome.css';
-import serverIcon from './icons/lettre-r.png';
-import { setAccessMode as setGlobalAccessMode } from './utils/detectAccessMode';
-import { getCurrentUser, getCurrentUserRole, setCurrentUserName, initializeSession, isSessionActive } from './utils/sessionManager';
+import axios from '../utils/setupAxios'; // Centralized axios instance with interceptors
+import '../styles/Welcome.css';
+import serverIcon from '../icons/lettre-r.png';
+import { setAccessMode as setGlobalAccessMode } from '../utils/detectAccessMode';
+import { getCurrentUser, getCurrentUserRole, setCurrentUserName, initializeSession, isSessionActive } from '../utils/sessionManager';
 
 const Welcome = () => {
   const navigate = useNavigate();
