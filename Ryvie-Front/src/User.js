@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './styles/User.css';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from './utils/setupAxios';
 const { getServerUrl } = require('./config/urls');
 import { getCurrentAccessMode } from './utils/detectAccessMode';
+import { getCurrentUserRole, getCurrentUser, getSessionInfo } from './utils/sessionManager';
 
 const User = () => {
   const navigate = useNavigate();
@@ -36,10 +37,10 @@ const User = () => {
   const [userToDelete, setUserToDelete] = useState(null);
   // Rôle courant pour contrôler l'affichage (gestion visible uniquement pour Admin)
   const [userRole, setUserRole] = useState('User');
-  const isAdmin = userRole === 'Admin';
+  const isAdmin = String(userRole || '').toLowerCase() === 'admin';
 
   useEffect(() => {
-    const role = localStorage.getItem('currentUserRole') || 'User';
+    const role = getCurrentUserRole() || 'User';
     setUserRole(role);
   }, []);
 
@@ -124,55 +125,51 @@ const User = () => {
       const serverUrl = getServerUrl(effectiveMode);
       console.log("Connexion à :", serverUrl);
       
-      const currentRole = localStorage.getItem('currentUserRole') || 'User';
-      const endpoint = currentRole === 'Admin' ? '/api/users' : '/api/users-public';
-      
-      // Helper to map API users
-      const mapUsers = (data) => (data || []).map((user, index) => ({
-        id: index + 1,
-        name: user.name || user.cn || user.uid,
-        email: user.email || user.mail || 'Non défini',
-        role: user.role || 'User',
-        uid: user.uid
-      }));
-
-      if (endpoint === '/api/users') {
-        // Admin path: try protected first, then fallback to public on missing/401 token
-        const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
-        if (!token) {
-          console.warn('[users] Admin sans token: bascule vers /api/users-public');
-          const resp = await axios.get(`${serverUrl}/api/users-public`);
-          setUsers(mapUsers(resp.data));
-          setMessage('Session expirée — affichage des utilisateurs publics.');
-          setMessageType('warning');
-          setLoading(false);
-          return;
-        }
-        const config = { headers: { Authorization: `Bearer ${token}` } };
+      // Essayer l'endpoint protégé si un token existe. En cas d'échec 401/403, fallback public.
+      const session = getSessionInfo() || {};
+      const token = session.token;
+      let response;
+      if (token) {
         try {
-          const resp = await axios.get(`${serverUrl}/api/users`, config);
-          setUsers(mapUsers(resp.data));
-          setLoading(false);
-          return;
+          response = await axios.get(`${serverUrl}/api/users`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
         } catch (e) {
-          if (e?.response?.status === 401) {
-            console.warn('[users] 401 sur /api/users: bascule vers /api/users-public');
-            const resp = await axios.get(`${serverUrl}/api/users-public`);
-            setUsers(mapUsers(resp.data));
-            setMessage('Session expirée — affichage des utilisateurs publics.');
+          if (e?.response?.status === 401 || e?.response?.status === 403) {
+            console.warn('[users] Accès refusé à /api/users, bascule sur /api/users-public');
+            response = await axios.get(`${serverUrl}/api/users-public`);
+            setMessage('Session limitée — affichage des utilisateurs publics.');
             setMessageType('warning');
-            setLoading(false);
-            return;
+          } else {
+            throw e;
           }
-          throw e; // let outer catch handle other errors
         }
       } else {
-        // Non-admin: use public endpoint
-        const resp = await axios.get(`${serverUrl}/api/users-public`);
-        setUsers(mapUsers(resp.data));
-        setLoading(false);
-        return;
+        response = await axios.get(`${serverUrl}/api/users-public`);
       }
+
+      // Mapping des utilisateurs sans forcer le rôle sur public et injection du rôle de session pour l'utilisateur courant
+      const sessionUser = (getCurrentUser() || '').trim().toLowerCase();
+      const sessionRole = getCurrentUserRole();
+      const mapped = (response.data || []).map((user, index) => {
+        const u = {
+          id: index + 1,
+          name: user.name || user.cn || user.uid,
+          email: user.email || user.mail || 'Non défini',
+          role: user.role || '',
+          uid: user.uid
+        };
+        const matchById = String(u.uid || '').trim().toLowerCase() === sessionUser;
+        const matchByName = String(u.name || '').trim().toLowerCase() === sessionUser;
+        if (!u.role && (matchById || matchByName) && sessionRole) {
+          u.role = sessionRole;
+        }
+        return u;
+      });
+
+      setUsers(mapped);
+      setLoading(false);
+      return;
     } catch (err) {
       console.error('Erreur lors du chargement des utilisateurs:', err);
       const status = err?.response?.status;
@@ -202,7 +199,7 @@ const User = () => {
 
   const confirmDeleteUser = (user) => {
     // Interdire la suppression de soi-même côté UI
-    const currentUser = localStorage.getItem('currentUser') || '';
+    const currentUser = getCurrentUser() || '';
     if (
       user?.uid && currentUser &&
       String(user.uid).trim().toLowerCase() === String(currentUser).trim().toLowerCase()
@@ -317,8 +314,8 @@ const User = () => {
       return;
     }
 
-    // Récupérer l'utilisateur actuel depuis localStorage pour pré-remplir les identifiants admin
-    const currentUser = localStorage.getItem('currentUser') || '';
+    // Récupérer l'utilisateur actuel depuis le gestionnaire de session pour pré-remplir les identifiants admin
+    const currentUser = getCurrentUser() || '';
     
     // Pré-remplir les identifiants admin avec l'utilisateur actuel
     setAdminCredentials({ 
@@ -335,8 +332,8 @@ const User = () => {
       return;
     }
 
-    // Récupérer l'utilisateur actuel depuis localStorage pour pré-remplir les identifiants admin
-    const currentUser = localStorage.getItem('currentUser') || '';
+    // Récupérer l'utilisateur actuel depuis le gestionnaire de session pour pré-remplir les identifiants admin
+    const currentUser = getCurrentUser() || '';
     
     // Pré-remplir les identifiants admin avec l'utilisateur actuel
     setAdminCredentials({ 
@@ -356,7 +353,7 @@ const User = () => {
     }
 
     // Vérifier la présence du token JWT pour les appels protégés
-    const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
+    const token = (getSessionInfo() || {}).token;
     if (!token) {
       setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
       setMessageType('error');
@@ -472,8 +469,8 @@ const User = () => {
   const handleDeleteUser = () => {
     if (!confirmDelete) return;
 
-    // Récupérer l'utilisateur actuel depuis localStorage pour pré-remplir les identifiants admin
-    const currentUser = localStorage.getItem('currentUser') || '';
+    // Récupérer l'utilisateur actuel depuis le gestionnaire de session pour pré-remplir les identifiants admin
+    const currentUser = getCurrentUser() || '';
     
     // Pré-remplir les identifiants admin avec l'utilisateur actuel
     setAdminCredentials({ 
@@ -495,7 +492,7 @@ const User = () => {
     }
 
     // Vérifier la présence du token JWT pour l'appel protégé
-    const token = localStorage.getItem('jwt_token') || localStorage.getItem('token');
+    const token = (getSessionInfo() || {}).token;
     if (!token) {
       setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
       setMessageType('error');
@@ -603,7 +600,7 @@ const User = () => {
           </div>
           {isAdmin && (
             <div className="add-user-btn">
-              <button onClick={openAddUserForm}>Ajouter un utilisateur</button>
+              <button type="button" onClick={openAddUserForm}>Ajouter un utilisateur</button>
             </div>
           )}
         </div>
@@ -618,11 +615,11 @@ const User = () => {
 
         {/* Formulaire d'ajout/modification d'utilisateur (Admin uniquement) */}
         {formOpen && isAdmin && (
-          <div ref={userFormRef} className="modal-overlay" onClick={() => setFormOpen(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div ref={userFormRef} className="modal-overlay" onMouseDown={() => setFormOpen(false)}>
+            <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>{editUser ? 'Modifier un utilisateur' : 'Ajouter un utilisateur'}</h2>
-                <button className="close-btn" onClick={() => setFormOpen(false)}>
+                <button type="button" className="close-btn" onClick={() => setFormOpen(false)}>
                   ✖
                 </button>
               </div>
@@ -687,6 +684,7 @@ const User = () => {
                   onChange={(e) => setNewUser({ ...newUser, confirmPassword: e.target.value })}
                 />
                 <button 
+                  type="button"
                   className="submit-btn" 
                   onClick={editUser ? handleUpdateUser : handleAddUser}
                 >
@@ -699,11 +697,11 @@ const User = () => {
 
         {/* Modal d'authentification admin */}
         {showAdminAuthModal && (
-          <div className="modal-overlay" onClick={() => !isSubmitting && setShowAdminAuthModal(false)}>
-            <div className="modal-content admin-auth-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-overlay" onMouseDown={() => !isSubmitting && setShowAdminAuthModal(false)}>
+            <div className="modal-content admin-auth-modal" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>Authentification Administrateur</h2>
-                <button className="close-btn" onClick={() => !isSubmitting && setShowAdminAuthModal(false)}>
+                <button type="button" className="close-btn" onClick={() => !isSubmitting && setShowAdminAuthModal(false)}>
                   ✖
                 </button>
               </div>
@@ -735,6 +733,7 @@ const User = () => {
                 />
                 <div className="admin-auth-buttons">
                   <button 
+                    type="button"
                     className="cancel-btn" 
                     onClick={() => {
                       setShowAdminAuthModal(false);
@@ -745,6 +744,7 @@ const User = () => {
                     Annuler
                   </button>
                   <button 
+                    type="button"
                     className="submit-btn" 
                     onClick={submitUserWithAdminAuth}
                     disabled={isSubmitting}
@@ -759,15 +759,15 @@ const User = () => {
 
         {/* Confirmation de suppression */}
         {confirmDelete && (
-          <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-overlay" onMouseDown={() => setConfirmDelete(null)}>
+            <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
               <h3>Confirmer la suppression</h3>
               <p>Êtes-vous sûr de vouloir supprimer {confirmDelete.name} ?</p>
               <div className="modal-actions">
-                <button className="cancel-btn" onClick={() => setConfirmDelete(null)}>
+                <button type="button" className="cancel-btn" onClick={() => setConfirmDelete(null)}>
                   Annuler
                 </button>
-                <button className="delete-btn" onClick={handleDeleteUser}>
+                <button type="button" className="delete-btn" onClick={handleDeleteUser}>
                   Supprimer
                 </button>
               </div>
@@ -777,11 +777,11 @@ const User = () => {
 
         {/* Modal d'authentification admin pour la suppression */}
         {showDeleteAuthModal && (
-          <div className="modal-overlay" onClick={() => !isSubmitting && setShowDeleteAuthModal(false)}>
-            <div className="modal-content admin-auth-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-overlay" onMouseDown={() => !isSubmitting && setShowDeleteAuthModal(false)}>
+            <div className="modal-content admin-auth-modal" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>Authentification Administrateur</h2>
-                <button className="close-btn" onClick={() => !isSubmitting && setShowDeleteAuthModal(false)}>
+                <button type="button" className="close-btn" onClick={() => !isSubmitting && setShowDeleteAuthModal(false)}>
                   ✖
                 </button>
               </div>
@@ -813,6 +813,7 @@ const User = () => {
                 />
                 <div className="admin-auth-buttons">
                   <button 
+                    type="button"
                     className="cancel-btn" 
                     onClick={() => {
                       setShowDeleteAuthModal(false);
@@ -824,6 +825,7 @@ const User = () => {
                     Annuler
                   </button>
                   <button 
+                    type="button"
                     className="submit-btn delete-btn" 
                     onClick={deleteUserWithAdminAuth}
                     disabled={isSubmitting}
@@ -838,7 +840,22 @@ const User = () => {
 
         {/* Tableau des utilisateurs */}
         <div ref={userListRef} className="table-container">
-          <table className="user-table">
+          <table className={`user-table ${isAdmin ? 'admin' : 'no-admin'}`}>
+            {/* Set explicit column widths for consistent alignment */}
+            {isAdmin ? (
+              <colgroup>
+                <col style={{ width: 'auto' }} />
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '160px' }} />
+                <col style={{ width: '320px' }} />
+              </colgroup>
+            ) : (
+              <colgroup>
+                <col style={{ width: '35%' }} />
+                <col style={{ width: '45%' }} />
+                <col style={{ width: '20%' }} />
+              </colgroup>
+            )}
             <thead>
               <tr>
                 <th>Nom</th>
@@ -867,6 +884,7 @@ const User = () => {
                   {isAdmin && (
                     <td className="actions-cell">
                       <button 
+                        type="button"
                         className="action-button edit-button"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -877,18 +895,23 @@ const User = () => {
                         <span className="action-icon">✏️</span>
                       </button>
                       <button 
+                        type="button"
                         className="action-button delete-button"
                         onClick={(e) => {
                           e.stopPropagation();
                           confirmDeleteUser(user);
                         }}
                         disabled={
-                          String(localStorage.getItem('currentUser') || '').trim().toLowerCase() ===
-                          String(user.uid || '').trim().toLowerCase()
+                          String(getCurrentUser() || '').trim().toLowerCase() ===
+                            String(user.uid || '').trim().toLowerCase() ||
+                          String(getCurrentUser() || '').trim().toLowerCase() ===
+                            String(user.name || '').trim().toLowerCase()
                         }
                         title={
-                          String(localStorage.getItem('currentUser') || '').trim().toLowerCase() ===
-                          String(user.uid || '').trim().toLowerCase()
+                          String(getCurrentUser() || '').trim().toLowerCase() ===
+                            String(user.uid || '').trim().toLowerCase() ||
+                          String(getCurrentUser() || '').trim().toLowerCase() ===
+                            String(user.name || '').trim().toLowerCase()
                             ? "Vous ne pouvez pas supprimer votre propre compte"
                             : "Supprimer"
                         }

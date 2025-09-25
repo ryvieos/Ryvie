@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from './utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
 import './styles/Login.css';
 const { getServerUrl } = require('./config/urls');
-import { setAuthToken } from './services/authService';
-import { isSessionActive } from './utils/sessionManager';
+import { isSessionActive, startSession } from './utils/sessionManager';
 import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode } from './utils/detectAccessMode';
 
 const Login = () => {
@@ -19,7 +18,7 @@ const Login = () => {
   useEffect(() => {
     const initMode = async () => {
       // 1) Respecter un mode déjà établi (Welcome/Settings)
-      const existingModeRaw = typeof window !== 'undefined' ? window.localStorage.getItem('accessMode') : null;
+      const existingModeRaw = getCurrentAccessMode();
       if (existingModeRaw) {
         setAccessMode(existingModeRaw);
       } else {
@@ -53,6 +52,37 @@ const Login = () => {
     initMode();
   }, []);
 
+  // Polling: rester en public et tenter périodiquement de basculer en privé dès que détecté
+  useEffect(() => {
+    // Ne pas tenter en HTTPS (évite Mixed Content) et uniquement si on est en PUBLIC
+    if (typeof window !== 'undefined' && window.location?.protocol === 'https:') return;
+    if (accessMode !== 'public') return;
+
+    let isCancelled = false;
+
+    const attemptDetect = async () => {
+      try {
+        const detected = await detectAccessMode(1200);
+        if (!isCancelled && detected === 'private') {
+          persistAccessMode('private');
+          setAccessMode('private');
+          console.log('[Login] Mode privé détecté pendant le polling -> bascule en PRIVÉ');
+        }
+      } catch {
+        // Reste en public silencieusement
+      }
+    };
+
+    // Tentative immédiate puis toutes les 3 secondes
+    attemptDetect();
+    const intervalId = setInterval(attemptDetect, 3000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [accessMode]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     
@@ -74,21 +104,15 @@ const Login = () => {
       });
 
       if (response.data && response.data.token) {
-        // Enregistrer le token et les infos utilisateur
-        localStorage.setItem('jwt_token', response.data.token);
-        localStorage.setItem('currentUser', response.data.user.name || response.data.user.uid);
-        localStorage.setItem('currentUserRole', response.data.user.role || 'User');
-        localStorage.setItem('currentUserEmail', response.data.user.email || '');
+        // Démarrer la session via le gestionnaire centralisé
+        startSession({
+          token: response.data.token,
+          userId: response.data.user.uid,
+          userName: response.data.user.name || response.data.user.uid,
+          userRole: response.data.user.role || 'User',
+          userEmail: response.data.user.email || ''
+        });
 
-        // Marquer la session comme active (requis par ProtectedRoute)
-        localStorage.setItem('sessionActive', 'true');
-        localStorage.setItem('sessionStartTime', new Date().toISOString());
-        // Marquer qu'au moins une connexion a eu lieu
-        localStorage.setItem('hasEverConnected', 'true');
-        
-        // Configurer axios pour utiliser le token dans toutes les requêtes futures
-        setAuthToken(response.data.token);
-        
         setMessage('Connexion réussie. Redirection...');
         setMessageType('success');
         
@@ -129,7 +153,7 @@ const Login = () => {
   const toggleAccessMode = () => {
     const newMode = accessMode === 'private' ? 'public' : 'private';
     setAccessMode(newMode);
-    localStorage.setItem('accessMode', newMode);
+    persistAccessMode(newMode);
   };
 
   return (

@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import './styles/Home.css';
 import './styles/Transitions.css';
-import axios from 'axios';
+import axios from './utils/setupAxios';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { io } from 'socket.io-client';
+import { connectRyvieSocket } from './utils/detectAccessMode';
 import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentAccessMode } from './utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from './utils/platformUtils';
-import { endSession } from './utils/sessionManager';
+import { endSession, getCurrentUser } from './utils/sessionManager';
 const { getServerUrl, getAppUrl } = require('./config/urls');
 import { generateAppConfig, generateDefaultZones, images } from './config/appConfig';
 
@@ -177,6 +177,7 @@ const Taskbar = ({ handleClick }) => {
 const Home = () => {
   const navigate = useNavigate();
   const [accessMode, setAccessMode] = useState(null); 
+  const [currentUserName, setCurrentUserName] = useState('');
   const [zones, setZones] = useState(() => {
     // Essayer de récupérer les zones depuis StorageManager
     const savedZones = StorageManager.getItem('iconZones');
@@ -254,6 +255,10 @@ const Home = () => {
     };
 
     initializeAccessMode();
+    // Récupérer l'utilisateur connecté
+    try {
+      setCurrentUserName(getCurrentUser() || '');
+    } catch (_) {}
   }, []);
   
   useEffect(() => {
@@ -274,7 +279,9 @@ const Home = () => {
     
     const fetchApplications = async () => {
       try {
-        const response = await axios.get(`${getServerUrl(accessMode)}/api/apps`);
+        const appsBase = getServerUrl(accessMode);
+        console.log('[Home] Récupération des apps depuis:', appsBase, 'mode =', accessMode);
+        const response = await axios.get(`${appsBase}/api/apps`);
         const apps = response.data.map(app => ({
           ...app,
           port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
@@ -316,107 +323,71 @@ const Home = () => {
     // Récupérer les applications au chargement
     fetchApplications();
     
-    const connectSocket = () => {
-      try {
-        if (currentSocket) {
-          currentSocket.disconnect();
+    const socket = connectRyvieSocket({
+      mode: accessMode,
+      onConnect: (s) => {
+        console.log(`[Home] Socket.io connecté en mode ${accessMode}`);
+        setCurrentSocket(s);
+        setSocketConnected(true);
+        setServerStatus(true);
+      },
+      onDisconnect: () => {
+        console.log('[Home] Socket.io déconnecté');
+        setSocketConnected(false);
+        setServerStatus(false);
+      },
+      onError: (error) => {
+        console.log(`[Home] Erreur de connexion Socket.io en mode ${accessMode}:`, error?.message);
+        setSocketConnected(false);
+        setServerStatus(false);
+        if (!isElectron()) {
+          console.log('[Home] Mode web - arrêt des tentatives de connexion Socket.io');
         }
-        
-        console.log(`[Home] Tentative de connexion Socket.io vers: ${serverUrl}`);
-        
-        const newSocket = io(serverUrl, {
-          transports: ['websocket', 'polling'],
-          timeout: 10000,
-          forceNew: true
+      },
+      onServerStatus: (data) => {
+        console.log('[Home] Statut serveur reçu:', data.status);
+        setServerStatus(data.status);
+      },
+      onAppsStatusUpdate: (updatedApps) => {
+        console.log('[Home] Mise à jour des applications reçue:', updatedApps);
+        setApplications(prevApps => {
+          return updatedApps.map(updatedApp => {
+            const existingApp = prevApps.find(app => app.id === updatedApp.id);
+            return {
+              ...updatedApp,
+              port: updatedApp.ports && updatedApp.ports.length > 0 ? updatedApp.ports[0] : null,
+              autostart: existingApp ? existingApp.autostart : false
+            };
+          });
         });
 
-        newSocket.on('connect', () => {
-          console.log(`[Home] Socket.io connecté en mode ${accessMode}`);
-          setCurrentSocket(newSocket);
-          setSocketConnected(true);
-          setServerStatus(true); // Marquer le serveur comme connecté
-        });
-
-        newSocket.on('disconnect', () => {
-          console.log('[Home] Socket.io déconnecté');
-          setSocketConnected(false);
-          setServerStatus(false); // Marquer le serveur comme déconnecté
-        });
-
-        newSocket.on('connect_error', (error) => {
-          console.log(`[Home] Erreur de connexion Socket.io en mode ${accessMode}:`, error.message);
-          setSocketConnected(false);
-          setServerStatus(false); // Marquer le serveur comme déconnecté en cas d'erreur
-          
-          // En mode web, ne jamais essayer le fallback
-          if (!isElectron()) {
-            console.log('[Home] Mode web - arrêt des tentatives de connexion Socket.io');
-            if (newSocket) {
-              newSocket.disconnect();
-            }
-            return;
+        const newAppStatus = {};
+        console.log('[Home] Mise à jour apps reçues:', updatedApps.map(app => ({ name: app.name, running: app.running })));
+        updatedApps.forEach(app => {
+          const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
+            const match = config.name.toLowerCase() === app.name.toLowerCase() || iconId.includes(app.name.toLowerCase());
+            console.log(`[Home] Mise à jour - Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
+            return match;
+          });
+          if (configEntry) {
+            const [iconId] = configEntry;
+            console.log(`[Home] Mise à jour - Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
+            newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
+          } else {
+            console.log(`[Home] Mise à jour - Aucun mapping trouvé pour: ${app.name}`);
           }
-          
-          // Ne jamais changer de mode automatiquement - respecter le mode établi
-          console.log('[Home] Connexion Socket.io échouée - mode d\'accès maintenu:', accessMode);
         });
-
-        newSocket.on('server-status', (data) => {
-          console.log('[Home] Statut serveur reçu:', data.status);
-          setServerStatus(data.status);
-        });
-
-        // Écouter les mises à jour des statuts d'applications (comme dans Settings.js)
-        newSocket.on('apps-status-update', (updatedApps) => {
-          console.log('[Home] Mise à jour des applications reçue:', updatedApps);
-          setApplications(prevApps => {
-            return updatedApps.map(updatedApp => {
-              const existingApp = prevApps.find(app => app.id === updatedApp.id);
-              return {
-                ...updatedApp,
-                port: updatedApp.ports && updatedApp.ports.length > 0 ? updatedApp.ports[0] : null,
-                autostart: existingApp ? existingApp.autostart : false
-              };
-            });
-          });
-
-          // Mettre à jour le statut des applications pour Home.js
-          const newAppStatus = {};
-          console.log('[Home] Mise à jour apps reçues:', updatedApps.map(app => ({ name: app.name, running: app.running })));
-          
-          updatedApps.forEach(app => {
-            // Trouver la configuration correspondante dans APPS_CONFIG
-            const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
-              const match = config.name.toLowerCase() === app.name.toLowerCase() || 
-                           iconId.includes(app.name.toLowerCase());
-              console.log(`[Home] Mise à jour - Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
-              return match;
-            });
-            
-            if (configEntry) {
-              const [iconId] = configEntry;
-              console.log(`[Home] Mise à jour - Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
-              newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
-            } else {
-              console.log(`[Home] Mise à jour - Aucun mapping trouvé pour: ${app.name}`);
-            }
-          });
-          
-          console.log('[Home] Mise à jour - Nouveau statut calculé:', newAppStatus);
-          setAppStatus(newAppStatus);
-        });
-        
-      } catch (error) {
-        console.error('[Home] Erreur lors de la création de la connexion Socket.io:', error);
-      }
-    };
-    
-    connectSocket();
+        console.log('[Home] Mise à jour - Nouveau statut calculé:', newAppStatus);
+        setAppStatus(newAppStatus);
+      },
+      timeoutMs: 10000,
+    });
     
     return () => {
-      if (currentSocket) {
-        currentSocket.disconnect();
-      }
+      try {
+        if (socket) socket.disconnect();
+        if (currentSocket && currentSocket !== socket) currentSocket.disconnect();
+      } catch {}
     };
   }, [accessMode]);
   
@@ -541,7 +512,7 @@ const Home = () => {
   const openAppWindow = (url, useOverlay = true, appName = '') => {
     console.log(`[Home] Ouverture de l'application: ${url}`);
     
-    const currentUser = StorageManager.getItem('currentUser');
+    const currentUser = getCurrentUser();
     
     if (isElectron()) {
       // En Electron, utiliser le comportement existant
@@ -638,6 +609,12 @@ const Home = () => {
           )}
 
           <Taskbar handleClick={handleClick} />
+          {currentUserName && (
+            <div className="user-chip" title="Utilisateur connecté">
+              <div className="avatar">{String(currentUserName).charAt(0).toUpperCase()}</div>
+              <div className="name">{currentUserName}</div>
+            </div>
+          )}
           <div className="content">
             <h1 className="title">Bienvenue dans votre Cloud</h1>
             <div className="main-content">

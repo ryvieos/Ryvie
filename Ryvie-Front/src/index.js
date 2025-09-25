@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-import axios from 'axios';
 import Home from './Home';
 import AppStore from './AppStore';
 import User from './User';
@@ -18,33 +17,6 @@ import faviconUrl from './icons/ryvielogo0.png';
 const ProtectedRoute = ({ children }) => {
   return isSessionActive() ? children : <Navigate to="/login" replace />;
 };
-
-// Configurer l'intercepteur Axios pour gérer automatiquement les erreurs d'authentification (une seule fois)
-if (!axios.__ryvieAuthInterceptorInstalled) {
-  axios.interceptors.response.use(
-    response => response,
-    error => {
-      // Ne rien faire de spécial si on est déjà sur la page de login pour éviter les boucles
-      try {
-        if (typeof window !== 'undefined' && window.location?.hash?.includes('#/login')) {
-          return Promise.reject(error);
-        }
-      } catch { /* noop */ }
-
-      // Si c'est une erreur d'authentification, la fonction handleAuthError s'en occupera
-      if (handleAuthError(error)) {
-        // L'erreur a été traitée comme une erreur d'authentification
-        return Promise.reject({
-          ...error,
-          handled: true // Marquer l'erreur comme déjà traitée
-        });
-      }
-      // Pour les autres types d'erreurs, les laisser se propager normalement
-      return Promise.reject(error);
-    }
-  );
-  axios.__ryvieAuthInterceptorInstalled = true;
-}
 
 const App = () => {
   useEffect(() => {

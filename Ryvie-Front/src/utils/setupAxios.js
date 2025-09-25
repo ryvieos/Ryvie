@@ -1,10 +1,11 @@
 import axios from 'axios';
-import { logout } from '../services/authService';
 import { getServerUrl } from '../config/urls';
+import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from './detectAccessMode';
+import { getSessionInfo, setToken, endSession } from './sessionManager';
 
 // Fonction pour vérifier si le token est valide (local, sans appeler un endpoint admin-only)
 export const verifyToken = async () => {
-  const token = localStorage.getItem('jwt_token');
+  const token = (getSessionInfo() || {}).token;
   if (!token) return false;
   try {
     const base64Url = token.split('.')[1];
@@ -30,9 +31,11 @@ export const handleTokenError = (errorCode = null) => {
   }
   
   // Nettoyer les données d'authentification mais garder le mode d'accès
-  const accessMode = localStorage.getItem('accessMode') || 'private';
-  logout();
-  localStorage.setItem('accessMode', accessMode); // Restaurer le mode d'accès
+  const accessMode = getCurrentAccessMode() || 'private';
+  // Nettoyage complet: localStorage, cookies et header Authorization
+  endSession();
+  // Restaurer le mode d'accès via le singleton (persistance incluse)
+  setGlobalAccessMode(accessMode);
   
   // Clear any failed login attempts on token error (fresh start)
   localStorage.removeItem('loginAttempts');
@@ -73,7 +76,7 @@ export const handleTokenError = (errorCode = null) => {
 // Configuration des délais de timeout pour les requêtes axios
 // Augmenter les timeouts pour le mode privé pour donner plus de temps au serveur local de répondre
 axios.interceptors.request.use(request => {
-  const accessMode = localStorage.getItem('accessMode') || 'private';
+  const accessMode = getCurrentAccessMode() || 'private';
   
   // Augmenter le timeout pour le mode privé car le serveur local peut prendre plus de temps à répondre
   if (accessMode === 'private') {
@@ -119,9 +122,9 @@ axios.interceptors.response.use(
         const shouldTryRefresh = isApi && !isAuthEndpoint && hadAuth && notRetried;
 
         if (shouldTryRefresh) {
-          const accessMode = localStorage.getItem('accessMode') || 'private';
+          const accessMode = getCurrentAccessMode() || 'private';
           const serverUrl = getServerUrl(accessMode);
-          const currentToken = localStorage.getItem('jwt_token');
+          const currentToken = (getSessionInfo() || {}).token;
           if (currentToken) {
             try {
               originalRequest._retry = true;
@@ -132,9 +135,8 @@ axios.interceptors.response.use(
               });
               const newToken = refreshResp.data?.token;
               if (newToken) {
-                // Mettre à jour le stockage et les headers par défaut
-                localStorage.setItem('jwt_token', newToken);
-                axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+                // Mettre à jour via le gestionnaire de session (stockage + headers + cookie)
+                setToken(newToken);
                 // Mettre à jour le header de la requête originale et la relancer
                 originalRequest.headers = {
                   ...(originalRequest.headers || {}),

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios'; // Import axios
+import axios from './utils/setupAxios'; // Centralized axios instance with interceptors
 import './styles/Welcome.css';
 import serverIcon from './icons/lettre-r.png';
+import { setAccessMode as setGlobalAccessMode } from './utils/detectAccessMode';
+import { getCurrentUser, getCurrentUserRole, setCurrentUserName, initializeSession, isSessionActive } from './utils/sessionManager';
 
 const Welcome = () => {
   const navigate = useNavigate();
@@ -11,16 +13,19 @@ const Welcome = () => {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Receive user ID directly from main process
+  // Initialize session headers and receive user ID from Electron main process
   useEffect(() => {
+    // Ensure axios has auth header if a token exists
+    initializeSession();
+
     // Check if electronAPI is available
     if (window.electronAPI && window.electronAPI.onSetCurrentUser) {
       // Add event listener for 'set-current-user'
       const handleSetCurrentUser = (_, userId) => {
         console.log('User ID received from main process:', userId);
         setCurrentUser(userId);
-        // Also update localStorage for compatibility with existing code
-        localStorage.setItem('currentUser', userId);
+        // Update centralized session user name
+        setCurrentUserName(userId);
       };
       
       window.electronAPI.onSetCurrentUser(handleSetCurrentUser);
@@ -31,53 +36,17 @@ const Welcome = () => {
     }
   }, []);
 
-  // Retrieve the user from localStorage as fallback
+  // Retrieve the current user from session manager
   useEffect(() => {
-    const storedUser = localStorage.getItem('currentUser');
-    const token = localStorage.getItem('jwt_token');
-    console.log('Welcome - Stored user and token:', { storedUser, hasToken: !!token });
-    
-    if (storedUser) {
-      setCurrentUser(storedUser);
-    }
-
-    // S'assurer que le token JWT est configuré dans axios pour toutes les requêtes
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      console.log('Welcome - Token JWT configuré dans les en-têtes axios');
-    }
-
-    // Écouter les changements de localStorage (pour les fenêtres multiples)
-    const handleStorageChange = (e) => {
-      if (e.key === 'currentUser' && e.newValue) {
-        console.log('Changement d\'utilisateur détecté:', e.newValue);
-        setCurrentUser(e.newValue);
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    const user = getCurrentUser();
+    if (user) setCurrentUser(user);
   }, []);
 
   useEffect(() => {
     
-    // Vérifier s'il y a un utilisateur dans localStorage
-    const storedUser = localStorage.getItem('currentUser');
-    console.log('Utilisateur récupéré:', storedUser);
-    if (storedUser) {
-      setCurrentUser(storedUser);
-    }
-
-    // Écouter les changements de localStorage (pour les fenêtres multiples)
-    const handleStorageChange = (e) => {
-      if (e.key === 'currentUser' && e.newValue) {
-        console.log('Changement d\'utilisateur détecté:', e.newValue);
-        setCurrentUser(e.newValue);
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    // Sync current user at mount
+    const user = getCurrentUser();
+    if (user) setCurrentUser(user);
   }, []);
 
   useEffect(() => {
@@ -165,13 +134,13 @@ const Welcome = () => {
   }, []);
 
   const handlePrivateAccess = () => {
-    // Store the access mode in localStorage
-    localStorage.setItem('accessMode', 'private');
+    // Centralized access mode
+    setGlobalAccessMode('private');
     
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
-      // Récupérer le rôle de l'utilisateur depuis localStorage
-      const userRole = localStorage.getItem('currentUserRole') || 'User';
+      // Récupérer le rôle de l'utilisateur via session manager
+      const userRole = getCurrentUserRole() || 'User';
       
       // Get the current session's cookies and update the partition
       window.electronAPI.invoke('update-session-partition', currentUser, 'private', userRole)
@@ -185,18 +154,23 @@ const Welcome = () => {
     
     setUnlocked(true);
     setTimeout(() => {
-      navigate('/home');
+      if (isSessionActive()) {
+        navigate('/home');
+      } else {
+        navigate('/login');
+      }
     }, 10);
   };
   
   const handlePublicAccess = () => {
-    // Store the access mode in localStorage
-    localStorage.setItem('accessMode', 'public');
+    // Centralized access mode
+    setGlobalAccessMode('public');
+    
 
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
-      // Récupérer le rôle de l'utilisateur depuis localStorage
-      const userRole = localStorage.getItem('currentUserRole') || 'User';
+      // Récupérer le rôle de l'utilisateur via session manager
+      const userRole = getCurrentUserRole() || 'User';
       
       // Get the current session's cookies and update the partition
       window.electronAPI.invoke('update-session-partition', currentUser, 'public', userRole)
