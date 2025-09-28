@@ -28,10 +28,24 @@ const StorageSettings = () => {
       const resp = await axios.get(`${base}/api/storage/disks`);
       const list = Array.isArray(resp.data?.disks) ? resp.data.disks : [];
       setDisks(list);
+      // Sélection automatique: source = disque/partition monté sur /data, cible = premier disque non-système
       const init = {};
+      let sourceDiskKey = null;
       list.forEach(d => {
-        init[d.id || d.device] = d.isSystem; // Sélectionner automatiquement le système par défaut
+        const key = d.id || d.device;
+        const hasDataMount = (d.mountpoint === '/data') || (Array.isArray(d.partitions) && d.partitions.some(p => p.mountpoint === '/data'));
+        if (hasDataMount) {
+          sourceDiskKey = key;
+          init[key] = true;
+        } else {
+          init[key] = false;
+        }
       });
+      if (sourceDiskKey) {
+        // pick a default target disk: first non-system and not the source
+        const target = list.find(d => !(d.isSystem) && (d.id || d.device) !== sourceDiskKey);
+        if (target) init[target.id || target.device] = true;
+      }
       setSelected(init);
     } catch (e) {
       setError(e?.response?.data?.error || e.message || 'scan_error');
@@ -40,17 +54,25 @@ const StorageSettings = () => {
     }
   };
 
+  const humanize = (b) => {
+    const unit = 1024;
+    const n = Number(b || 0);
+    if (n < unit) return `${n|0} B`;
+    const exp = Math.floor(Math.log(n) / Math.log(unit));
+    const pre = 'KMGTPE'.charAt(exp - 1);
+    const val = (n / Math.pow(unit, exp)).toFixed(1);
+    return `${val} ${pre}B`;
+  };
+
   // Étape 3 — Préflight (sans écrire)
   const runPreflight = async () => {
     try {
       setPreflightLoading(true);
       setPreflightError(null);
       setPreflightReport(null);
-      const ids = Object.entries(selected)
-        .filter(([, v]) => !!v)
-        .map(([k]) => k);
-      if (ids.length < 2) {
-        setPreflightError('Sélectionnez au moins deux disques.');
+      const body = buildRaid1Body();
+      if (!body) {
+        setPreflightError('Impossible de déterminer source=/data et une cible valide.');
         setPreflightLoading(false);
         return;
       }
@@ -61,7 +83,7 @@ const StorageSettings = () => {
       }
       const mode = getCurrentAccessMode() || 'private';
       const base = getServerUrl(mode);
-      const resp = await axios.post(`${base}/api/storage/preflight`, { diskIds: ids });
+      const resp = await axios.post(`${base}/api/storage/preflight`, body);
       setPreflightReport(resp.data);
     } catch (e) {
       setPreflightError(e?.response?.data?.error || e.message || 'preflight_error');
@@ -83,26 +105,50 @@ const StorageSettings = () => {
       setProposalLoading(true);
       setProposalError(null);
       setProposal(null);
-      const ids = Object.entries(selected)
-        .filter(([, v]) => !!v)
-        .map(([k]) => k);
-      if (ids.length < 2) {
-        setProposalError('Sélectionnez au moins deux disques');
+      const body = buildRaid1Body();
+      if (!body) {
+        setProposalError('Impossible de déterminer source=/data et une cible valide.');
         setProposalLoading(false);
         return;
       }
-      // Vérifier si un disque système est sélectionné et demander confirmation stricte
-      const systemDisks = disks.filter(d => d.isSystem && selected[d.id || d.device]);
-
       const mode = getCurrentAccessMode() || 'private';
       const base = getServerUrl(mode);
-      const resp = await axios.post(`${base}/api/storage/proposal`, { diskIds: ids });
+      const resp = await axios.post(`${base}/api/storage/proposal`, body);
       setProposal(resp.data);
     } catch (e) {
       setProposalError(e?.response?.data?.error || e.message || 'proposal_error');
     } finally {
       setProposalLoading(false);
     }
+  };
+
+  // Construit le corps { sourcePartitionId, targetPartitionId } pour RAID1 dégradé
+  const buildRaid1Body = () => {
+    // Trouver la partition montée sur /data comme source
+    const all = Array.isArray(disks) ? disks : [];
+    let sourcePart = null;
+    let sourceDiskKey = null;
+    for (const d of all) {
+      // Cas 1: device de premier niveau monté sur /data (partition levée au top-level)
+      if (d.mountpoint === '/data' && d.device) {
+        sourcePart = d.device; // ex: /dev/sda6
+        sourceDiskKey = d.id || d.device;
+        break;
+      }
+      const key = d.id || d.device;
+      const parts = Array.isArray(d.partitions) ? d.partitions : [];
+      const p = parts.find(x => x.mountpoint === '/data');
+      if (p) { sourcePart = p.path; sourceDiskKey = key; break; }
+    }
+    if (!sourcePart) return null;
+
+    // Choisir une cible par les cases cochées: privilégier le disque complet sélectionné
+    const selectedKeys = Object.entries(selected).filter(([, v]) => !!v).map(([k]) => k);
+    const targetDisk = all.find(d => selectedKeys.includes(d.id || d.device) && (d.id || d.device) !== sourceDiskKey && !d.isSystem);
+    if (!targetDisk) return null;
+    // Passer le disque complet (ex: /dev/sdb) au backend, qui supporte disque ou partition
+    const targetId = targetDisk.id || targetDisk.device;
+    return { sourcePartitionId: sourcePart, targetPartitionId: targetId };
   };
 
   return (
@@ -162,7 +208,13 @@ const StorageSettings = () => {
                         return (
                           <tr key={key}>
                             <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                              <input type="checkbox" checked={!!selected[key]} onChange={() => toggle(d)} />
+                              <input
+                                type="checkbox"
+                                checked={!!selected[key]}
+                                onChange={() => toggle(d)}
+                                disabled={!!d.isSystem}
+                                title={d.isSystem ? 'Disque système non sélectionnable' : ''}
+                              />
                             </td>
                             <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
                               <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -185,7 +237,12 @@ const StorageSettings = () => {
                                   <>
                                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                                       {visible.map(p => (
-                                        <li key={p.path}>{p.path} — {p.fs || 'no-fs'} — {p.sizeBytes} B</li>
+                                        <li key={p.path}>
+                                          {p.path} — {p.fs || 'no-fs'} — {p.sizeBytes} B
+                                          {p.mountpoint ? (
+                                            <span style={{ marginLeft: 6, color: '#0f766e' }}> (monté: {p.mountpoint})</span>
+                                          ) : null}
+                                        </li>
                                       ))}
                                     </ul>
                                     {hiddenParts > 0 && (
@@ -238,14 +295,26 @@ const StorageSettings = () => {
         </div>
         {proposal && (
           <div style={{ marginTop: 8, color: '#334155' }}>
-            <div>Type suggéré: <strong>{proposal.suggested}</strong></div>
-            <div>Capacité: <strong>{proposal.capacityBytes} B</strong></div>
+            <div>Type: <strong>{proposal.level || proposal.suggested || 'raid1'}</strong></div>
+            <div>Capacité: <strong>{humanize(proposal.capacityBytes)}</strong></div>
             <div>Tolérance aux pannes: <strong>{proposal.faultTolerance}</strong></div>
+            {proposal.mdName && (
+              <div>Périphérique RAID: <strong>{proposal.mdName}</strong></div>
+            )}
+            {proposal.selection && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontWeight: 600 }}>Sélection:</div>
+                <ul>
+                  <li>Source: <strong>{proposal.selection.source?.short || proposal.selection.source?.id}</strong>{proposal.selection.source?.mountpoint ? ` (monté: ${proposal.selection.source.mountpoint})` : ''} — {humanize(proposal.selection.source?.sizeBytes)}</li>
+                  <li>Cible: <strong>{proposal.selection.target?.short || proposal.selection.target?.id}</strong>{proposal.selection.target?.mountpoint ? ` (monté: ${proposal.selection.target.mountpoint})` : ''} — {humanize(proposal.selection.target?.sizeBytes)}</li>
+                </ul>
+              </div>
+            )}
             <div style={{ marginTop: 8 }}>
               <div>Plan:</div>
               <ul>
-                {(proposal.planPreview || []).map((s, idx) => (
-                  <li key={idx}>{s.step}{s.fs ? ` (fs: ${s.fs})` : ''}{s.mountpoint ? ` → ${s.mountpoint}` : ''}</li>
+                {(proposal.planPreview || []).map((text, idx) => (
+                  <li key={idx}>{typeof text === 'string' ? text : JSON.stringify(text)}</li>
                 ))}
               </ul>
             </div>

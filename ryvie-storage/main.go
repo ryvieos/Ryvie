@@ -37,6 +37,7 @@ type Partition struct {
  SizeBytes int64  `json:"sizeBytes"`
  FS        string `json:"fs,omitempty"`
  Type      string `json:"type,omitempty"`
+ Mountpoint string `json:"mountpoint,omitempty"`
 }
 
 type ScanResponse struct {
@@ -111,7 +112,7 @@ func main() {
 // scanDisks performs a read-only scan using lsblk JSON and findmnt for root device.
 func scanDisks(args map[string]interface{}) {
  // lsblk JSON for disks and partitions
- lsblkOut, err := exec.Command("lsblk", "-bJ", "-o", "NAME,KNAME,SIZE,TYPE,FSTYPE,MOUNTPOINT").Output()
+ lsblkOut, err := exec.Command("lsblk", "-bJ", "-o", "NAME,KNAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,MOUNTPOINTS").Output()
  if err != nil {
   enc := json.NewEncoder(os.Stdout)
   _ = enc.Encode(map[string]any{
@@ -126,24 +127,40 @@ func scanDisks(args map[string]interface{}) {
  // root device
  rootSrcBytes, _ := exec.Command("findmnt", "-n", "-o", "SOURCE", "/").Output()
  rootSrc := strings.TrimSpace(string(rootSrcBytes))
+ // Normalize UUID/PARTUUID to a /dev/* path for robust comparison
+ if strings.HasPrefix(rootSrc, "UUID=") {
+  uuid := strings.TrimPrefix(rootSrc, "UUID=")
+  if devBytes, err := exec.Command("blkid", "-U", uuid).Output(); err == nil {
+   cand := strings.TrimSpace(string(devBytes))
+   if strings.HasPrefix(cand, "/dev/") { rootSrc = cand }
+  }
+ } else if strings.HasPrefix(rootSrc, "PARTUUID=") {
+  partuuid := strings.TrimPrefix(rootSrc, "PARTUUID=")
+  if devBytes, err := exec.Command("blkid", "-t", "PARTUUID="+partuuid, "-o", "device").Output(); err == nil {
+   cand := strings.TrimSpace(string(devBytes))
+   if strings.HasPrefix(cand, "/dev/") { rootSrc = cand }
+  }
+ }
  rootDisk := baseDiskFromSource(rootSrc)
 
- // Parse lsblk JSON
+ // Parse lsblk JSON (support both mountpoint and mountpoints)
  var lsblk struct {
   Blockdevices []struct {
-   Name       string `json:"name"`
-   Kname      string `json:"kname"`
-   Size       int64  `json:"size"`
-   Type       string `json:"type"`
-   Fstype     string `json:"fstype"`
-   Mountpoint string `json:"mountpoint"`
-   Children   []struct {
-    Name       string `json:"name"`
-    Kname      string `json:"kname"`
-    Size       int64  `json:"size"`
-    Type       string `json:"type"`
-    Fstype     string `json:"fstype"`
-    Mountpoint string `json:"mountpoint"`
+   Name        string   `json:"name"`
+   Kname       string   `json:"kname"`
+   Size        int64    `json:"size"`
+   Type        string   `json:"type"`
+   Fstype      string   `json:"fstype"`
+   Mountpoint  string   `json:"mountpoint"`
+   Mountpoints []string `json:"mountpoints"`
+   Children    []struct {
+    Name        string   `json:"name"`
+    Kname       string   `json:"kname"`
+    Size        int64    `json:"size"`
+    Type        string   `json:"type"`
+    Fstype      string   `json:"fstype"`
+    Mountpoint  string   `json:"mountpoint"`
+    Mountpoints []string `json:"mountpoints"`
    } `json:"children"`
   } `json:"blockdevices"`
  }
@@ -172,6 +189,7 @@ func scanDisks(args map[string]interface{}) {
   }
   devPath := "/dev/" + bd.Name
   isSystem := (baseDiskFromSource(rootDisk) == devPath)
+  rootOnThisDisk := false
 
   // Partitions
   parts := make([]Partition, 0)
@@ -181,29 +199,47 @@ func scanDisks(args map[string]interface{}) {
    if ch.Type != "part" {
     continue
    }
+   // Determine partition mountpoint from either field
+   partMP := ch.Mountpoint
+   if partMP == "" && len(ch.Mountpoints) > 0 {
+    partMP = ch.Mountpoints[0]
+   }
    p := Partition{
-    Path:      "/dev/" + ch.Name,
-    SizeBytes: ch.Size,
-    FS:        ch.Fstype,
-    Type:      "partition",
+    Path:       "/dev/" + ch.Name,
+    SizeBytes:  ch.Size,
+    FS:         ch.Fstype,
+    Type:       "partition",
+    Mountpoint: partMP,
    }
    parts = append(parts, p)
-   if ch.Mountpoint != "" {
+   if partMP != "" {
     isMounted = true
     if mountpoint == "" {
-     mountpoint = ch.Mountpoint
+     mountpoint = partMP
+    }
+    if partMP == "/" { // robust root detection
+     rootOnThisDisk = true
     }
    }
   }
 
+  // Determine disk-level mountpoint from either field
+  diskMP := bd.Mountpoint
+  if diskMP == "" && len(bd.Mountpoints) > 0 {
+   diskMP = bd.Mountpoints[0]
+  }
+  // If any partition is '/' or the disk itself shows '/', mark as system
+  if rootOnThisDisk || diskMP == "/" {
+   isSystem = true
+  }
   disk := Disk{
    ID:         stableIdFromKname(bd.Kname),
    Device:     bd.Name,
    SizeBytes:  bd.Size,
    SizeHuman:  humanizeBytes(bd.Size),
    IsSystem:   isSystem,
-   IsMounted:  isMounted || bd.Mountpoint != "",
-   Mountpoint: mountpoint,
+   IsMounted:  isMounted || diskMP != "",
+   Mountpoint: func() string { if mountpoint != "" { return mountpoint }; return diskMP }(),
    Health:     "unknown",
    Partitions: parts,
   }
