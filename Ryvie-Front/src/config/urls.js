@@ -31,7 +31,7 @@ const generateBaseUrls = () => {
     // URLs du serveur principal
     SERVER: {
       PUBLIC: `https://${domains.status}`,
-      PRIVATE: `http://ryvieos.local:${LOCAL_PORTS.SERVER}`
+      PRIVATE: `http://ryvie.local:${LOCAL_PORTS.SERVER}`
     },
     
     // URLs des applications
