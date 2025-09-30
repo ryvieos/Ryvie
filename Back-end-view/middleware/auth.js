@@ -131,6 +131,7 @@ const hasPermission = (permission) => {
 
 module.exports = {
   verifyToken,
+  authenticateToken: verifyToken, // Alias pour compatibilité
   isAdmin,
   hasPermission,
   JWT_SECRET

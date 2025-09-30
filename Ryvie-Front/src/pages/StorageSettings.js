@@ -1,388 +1,689 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import '../styles/StorageSettings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
-import { getServerUrl } from '../config/urls';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faHdd, 
+  faCheckCircle, 
+  faExclamationTriangle, 
+  faSpinner,
+  faPlay,
+  faCopy,
+  faArrowLeft,
+  faCheck
+} from '@fortawesome/free-solid-svg-icons';
+const { getServerUrl } = require('../config/urls');
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 
 const StorageSettings = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [disks, setDisks] = useState([]);
-  const [selected, setSelected] = useState({}); // { idOrDevice: boolean }
-  const [proposal, setProposal] = useState(null);
-  const [proposalLoading, setProposalLoading] = useState(false);
-  const [proposalError, setProposalError] = useState(null);
-  // Step 3 — Préflight (sans écrire)
-  const [preflightAck, setPreflightAck] = useState(false);
-  const [preflightLoading, setPreflightLoading] = useState(false);
-  const [preflightError, setPreflightError] = useState(null);
-  const [preflightReport, setPreflightReport] = useState(null);
+  const logsEndRef = useRef(null);
 
-  const fetchDisks = async () => {
+  // États pour les données
+  const [loading, setLoading] = useState(true);
+  const [disks, setDisks] = useState([]); // Seulement les disques, pas les partitions
+  const [dataSource, setDataSource] = useState(null); // Info sur /data
+  const [raidStatus, setRaidStatus] = useState(null); // État du RAID actuel
+  const [raidDevices, setRaidDevices] = useState([]); // Liste des devices déjà dans le RAID
+  
+  // États pour la sélection
+  const [sourceDevice, setSourceDevice] = useState('');
+  const [targetDevices, setTargetDevices] = useState([]);
+  const [targetLabels, setTargetLabels] = useState({});
+  
+  // États pour les options
+  const [dryRun, setDryRun] = useState(false);
+  const [raidLevel, setRaidLevel] = useState('raid1');
+  
+  // États pour les logs et l'exécution
+  const [logs, setLogs] = useState([]);
+  const [executionStatus, setExecutionStatus] = useState('idle'); // idle, running, success, error
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [commandsList, setCommandsList] = useState([]);
+  
+  // États pour les validations
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [validationWarnings, setValidationWarnings] = useState([]);
+  const [canProceed, setCanProceed] = useState(false);
+
+  // Charger l'inventaire au montage
+  useEffect(() => {
+    loadInventory();
+    checkRaidStatus();
+  }, []);
+
+  // Auto-scroll des logs
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs]);
+
+  // Vérifier l'état du RAID actuel
+  const checkRaidStatus = async () => {
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      
+      const response = await axios.get(`${serverUrl}/api/storage/btrfs-status`);
+      
+      if (response.data.success && response.data.status) {
+        const status = response.data.status;
+        
+        // Parser le niveau RAID depuis filesystemDf
+        let currentRaidLevel = 'single';
+        let deviceCount = 1;
+        const devicesInRaid = [];
+        
+        if (status.filesystemDf) {
+          // Chercher "Data, RAID1" ou "Data, RAID1C3" dans la sortie
+          const dataMatch = status.filesystemDf.match(/Data,\s*(\w+):/i);
+          if (dataMatch && dataMatch[1].toLowerCase() !== 'single') {
+            currentRaidLevel = dataMatch[1].toLowerCase();
+          }
+        }
+        
+        if (status.filesystemShow) {
+          // Compter le nombre de devices et extraire leurs paths
+          const deviceMatches = status.filesystemShow.match(/devid\s+\d+/g);
+          if (deviceMatches) {
+            deviceCount = deviceMatches.length;
+          }
+          
+          // Extraire les paths des devices (ex: /dev/sda6, /dev/sdb)
+          const pathMatches = status.filesystemShow.match(/path\s+(\/dev\/\w+)/g);
+          if (pathMatches) {
+            pathMatches.forEach(match => {
+              const path = match.replace('path ', '');
+              // Extraire le disque parent (ex: /dev/sda6 -> /dev/sda, /dev/sdb -> /dev/sdb)
+              const diskMatch = path.match(/\/dev\/(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)/);
+              if (diskMatch) {
+                const diskPath = `/dev/${diskMatch[1]}`;
+                if (!devicesInRaid.includes(diskPath)) {
+                  devicesInRaid.push(diskPath);
+                }
+              }
+            });
+          }
+        }
+        
+        setRaidDevices(devicesInRaid);
+        setRaidStatus({
+          isRaid: currentRaidLevel !== 'single' && deviceCount > 1,
+          level: currentRaidLevel,
+          deviceCount: deviceCount,
+          details: status.filesystemDf
+        });
+      }
+    } catch (error) {
+      console.error('Error checking RAID status:', error);
+    }
+  };
+
+  // Charger l'inventaire des devices
+  const loadInventory = async () => {
     try {
       setLoading(true);
-      setError(null);
-      const mode = getCurrentAccessMode() || 'private';
-      const base = getServerUrl(mode);
-      const resp = await axios.get(`${base}/api/storage/disks`);
-      const list = Array.isArray(resp.data?.disks) ? resp.data.disks : [];
-      setDisks(list);
-      // Sélection automatique: source = disque/partition monté sur /data, cible = premier disque non-système
-      const init = {};
-      let sourceDiskKey = null;
-      list.forEach(d => {
-        const key = d.id || d.device;
-        const hasDataMount = (d.mountpoint === '/data') || (Array.isArray(d.partitions) && d.partitions.some(p => p.mountpoint === '/data'));
-        if (hasDataMount) {
-          sourceDiskKey = key;
-          init[key] = true;
-        } else {
-          init[key] = false;
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      
+      const response = await axios.get(`${serverUrl}/api/storage/inventory`);
+      
+      if (response.data.success) {
+        const { devices: devicesData } = response.data.data;
+        
+        // Extraire seulement les disques (type disk)
+        const disksList = [];
+        if (devicesData.blockdevices) {
+          devicesData.blockdevices.forEach(device => {
+            if (device.type === 'disk' && !device.name.includes('sr')) {
+              // Calculer si le disque est monté (lui ou ses partitions)
+              let isMounted = false;
+              let mountInfo = '';
+              
+              if (device.mountpoints && device.mountpoints.length > 0 && device.mountpoints[0]) {
+                isMounted = true;
+                mountInfo = device.mountpoints[0];
+              }
+              
+              // Vérifier les partitions
+              if (device.children) {
+                device.children.forEach(child => {
+                  if (child.mountpoints && child.mountpoints.length > 0 && child.mountpoints[0]) {
+                    isMounted = true;
+                    if (!mountInfo) mountInfo = child.mountpoints[0];
+                    
+                    // Détecter si c'est la source /data
+                    if (child.mountpoints[0] === '/data' && child.fstype === 'btrfs') {
+                      setDataSource({
+                        device: child.path || `/dev/${child.name}`,
+                        size: child.size,
+                        fstype: child.fstype
+                      });
+                      setSourceDevice(child.path || `/dev/${child.name}`);
+                    }
+                  }
+                });
+              }
+              
+              disksList.push({
+                path: device.path || `/dev/${device.name}`,
+                name: device.name,
+                size: device.size,
+                isMounted,
+                mountInfo,
+                isSystemDisk: mountInfo === '/' || mountInfo.startsWith('/boot')
+              });
+            }
+          });
         }
-      });
-      if (sourceDiskKey) {
-        // pick a default target disk: first non-system and not the source
-        const target = list.find(d => !(d.isSystem) && (d.id || d.device) !== sourceDiskKey);
-        if (target) init[target.id || target.device] = true;
+        
+        setDisks(disksList);
       }
-      setSelected(init);
-    } catch (e) {
-      setError(e?.response?.data?.error || e.message || 'scan_error');
+    } catch (error) {
+      console.error('Error loading inventory:', error);
+      addLog('Failed to load storage inventory: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const humanize = (b) => {
-    const unit = 1024;
-    const n = Number(b || 0);
-    if (n < unit) return `${n|0} B`;
-    const exp = Math.floor(Math.log(n) / Math.log(unit));
-    const pre = 'KMGTPE'.charAt(exp - 1);
-    const val = (n / Math.pow(unit, exp)).toFixed(1);
-    return `${val} ${pre}B`;
+
+  // Gérer la sélection des cibles
+  const handleTargetToggle = (devicePath) => {
+    setTargetDevices(prev => {
+      if (prev.includes(devicePath)) {
+        // Retirer
+        const newTargets = prev.filter(d => d !== devicePath);
+        const newLabels = { ...targetLabels };
+        delete newLabels[devicePath];
+        setTargetLabels(newLabels);
+        return newTargets;
+      } else {
+        // Ajouter
+        const newTargets = [...prev, devicePath];
+        const labelIndex = newTargets.length + 1;
+        setTargetLabels({
+          ...targetLabels,
+          [devicePath]: `DATA${labelIndex}`
+        });
+        return newTargets;
+      }
+    });
   };
 
-  // Étape 3 — Préflight (sans écrire)
-  const runPreflight = async () => {
+  // Gérer le changement de label
+  const handleLabelChange = (devicePath, newLabel) => {
+    setTargetLabels({
+      ...targetLabels,
+      [devicePath]: newLabel
+    });
+  };
+
+  // Ajouter un log
+  const addLog = (message, type = 'info') => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      type,
+      message
+    };
+    setLogs(prev => [...prev, logEntry]);
+  };
+
+  // Copier les logs
+  const copyLogs = () => {
+    const logsText = logs.map(log => `[${log.timestamp}] [${log.type.toUpperCase()}] ${log.message}`).join('\n');
+    navigator.clipboard.writeText(logsText);
+    addLog('Logs copied to clipboard', 'success');
+  };
+
+  // Effectuer les pré-checks
+  const performPrechecks = async () => {
     try {
-      setPreflightLoading(true);
-      setPreflightError(null);
-      setPreflightReport(null);
-      const body = buildRaid1Body();
-      if (!body) {
-        setPreflightError('Impossible de déterminer source=/data et une cible valide.');
-        setPreflightLoading(false);
+      setValidationErrors([]);
+      setValidationWarnings([]);
+      setCanProceed(false);
+      
+      if (!sourceDevice) {
+        setValidationErrors(['No source device selected']);
         return;
       }
-      if (!preflightAck) {
-        setPreflightError("Veuillez cocher l'accusé de compréhension : seuls les disques non-système seront formatés pour créer le RAID.");
-        setPreflightLoading(false);
+      
+      if (targetDevices.length === 0) {
+        setValidationErrors(['No target devices selected']);
         return;
       }
-      const mode = getCurrentAccessMode() || 'private';
-      const base = getServerUrl(mode);
-      const resp = await axios.post(`${base}/api/storage/preflight`, body);
-      setPreflightReport(resp.data);
-    } catch (e) {
-      setPreflightError(e?.response?.data?.error || e.message || 'preflight_error');
-    } finally {
-      setPreflightLoading(false);
+      
+      addLog('Running pre-checks...', 'info');
+      
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      
+      const response = await axios.post(`${serverUrl}/api/storage/btrfs-prechecks`, {
+        source: sourceDevice,
+        targets: targetDevices
+      });
+      
+      if (response.data.success) {
+        const { checks } = response.data;
+        
+        if (checks.warnings.length > 0) {
+          setValidationWarnings(checks.warnings);
+          checks.warnings.forEach(w => addLog(`Warning: ${w}`, 'warning'));
+        }
+        
+        if (checks.errors.length > 0) {
+          setValidationErrors(checks.errors);
+          checks.errors.forEach(e => addLog(`Error: ${e}`, 'error'));
+          setCanProceed(false);
+        } else {
+          addLog('Pre-checks passed successfully', 'success');
+          setCanProceed(true);
+        }
+      } else {
+        setValidationErrors([response.data.error]);
+        addLog(`Pre-checks failed: ${response.data.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error performing pre-checks:', error);
+      const errorMsg = error.response?.data?.error || error.message;
+      setValidationErrors([errorMsg]);
+      addLog(`Pre-checks failed: ${errorMsg}`, 'error');
     }
   };
 
-  useEffect(() => { fetchDisks(); }, []);
+  // Exécuter les pré-checks quand la sélection change
+  useEffect(() => {
+    if (sourceDevice && targetDevices.length > 0) {
+      performPrechecks();
+    } else {
+      setCanProceed(false);
+      setValidationErrors([]);
+      setValidationWarnings([]);
+      // Effacer les logs si pas de sélection complète
+      if (logs.length > 0 && logs[logs.length - 1].type === 'error') {
+        setLogs([]);
+      }
+    }
+  }, [sourceDevice, targetDevices]);
 
-  const toggle = (d) => {
-    if (d.isSystem) return; // Empêcher la désélection du système
-    const key = d.id || d.device;
-    setSelected(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const proposePlan = async () => {
+  // Ouvrir la modale de confirmation
+  const openConfirmModal = async () => {
     try {
-      setProposalLoading(true);
-      setProposalError(null);
-      setProposal(null);
-      const body = buildRaid1Body();
-      if (!body) {
-        setProposalError('Impossible de déterminer source=/data et une cible valide.');
-        setProposalLoading(false);
-        return;
+      // Générer la liste des commandes en mode dry-run
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      
+      const targets = targetDevices.map(device => ({
+        device,
+        label: targetLabels[device] || 'DATA'
+      }));
+      
+      const response = await axios.post(`${serverUrl}/api/storage/btrfs-raid-create`, {
+        source: sourceDevice,
+        targets,
+        dryRun: true,
+        raidLevel
+      }, {
+        timeout: 30000 // 30 secondes pour le dry-run
+      });
+      
+      if (response.data.success) {
+        setCommandsList(response.data.commands);
+        setShowConfirmModal(true);
       }
-      const mode = getCurrentAccessMode() || 'private';
-      const base = getServerUrl(mode);
-      const resp = await axios.post(`${base}/api/storage/proposal`, body);
-      setProposal(resp.data);
-    } catch (e) {
-      setProposalError(e?.response?.data?.error || e.message || 'proposal_error');
-    } finally {
-      setProposalLoading(false);
+    } catch (error) {
+      console.error('Error generating commands:', error);
+      addLog('Failed to generate commands list', 'error');
     }
   };
 
-  // Construit le corps { sourcePartitionId, targetPartitionId } pour RAID1 dégradé
-  const buildRaid1Body = () => {
-    // Trouver la partition montée sur /data comme source
-    const all = Array.isArray(disks) ? disks : [];
-    let sourcePart = null;
-    let sourceDiskKey = null;
-    for (const d of all) {
-      // Cas 1: device de premier niveau monté sur /data (partition levée au top-level)
-      if (d.mountpoint === '/data' && d.device) {
-        sourcePart = d.device; // ex: /dev/sda6
-        sourceDiskKey = d.id || d.device;
-        break;
+  // Exécuter la création du RAID
+  const executeRaidCreation = async () => {
+    try {
+      setShowConfirmModal(false);
+      setExecutionStatus('running');
+      setLogs([]);
+      addLog('Starting RAID creation...', 'info');
+      
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      
+      const targets = targetDevices.map(device => ({
+        device,
+        label: targetLabels[device] || 'DATA'
+      }));
+      
+      // Timeout de 30 minutes pour les opérations Btrfs longues (balance peut prendre du temps)
+      const response = await axios.post(`${serverUrl}/api/storage/btrfs-raid-create`, {
+        source: sourceDevice,
+        targets,
+        dryRun: false,
+        raidLevel
+      }, {
+        timeout: 1800000 // 30 minutes
+      });
+      
+      if (response.data.success) {
+        // Ajouter tous les logs du backend
+        response.data.logs.forEach(log => {
+          setLogs(prev => [...prev, log]);
+        });
+        
+        setExecutionStatus('success');
+        addLog('RAID creation completed successfully!', 'success');
+        
+        // Rafraîchir le statut RAID et l'inventaire
+        setTimeout(() => {
+          checkRaidStatus();
+          loadInventory();
+        }, 2000);
+      } else {
+        setExecutionStatus('error');
+        addLog(`RAID creation failed: ${response.data.error}`, 'error');
       }
-      const key = d.id || d.device;
-      const parts = Array.isArray(d.partitions) ? d.partitions : [];
-      const p = parts.find(x => x.mountpoint === '/data');
-      if (p) { sourcePart = p.path; sourceDiskKey = key; break; }
+    } catch (error) {
+      console.error('Error creating RAID:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
+      setExecutionStatus('error');
+      addLog(`RAID creation failed: ${errorMsg}`, 'error');
     }
-    if (!sourcePart) return null;
+  };
 
-    // Choisir une cible par les cases cochées: privilégier le disque complet sélectionné
-    const selectedKeys = Object.entries(selected).filter(([, v]) => !!v).map(([k]) => k);
-    const targetDisk = all.find(d => selectedKeys.includes(d.id || d.device) && (d.id || d.device) !== sourceDiskKey && !d.isSystem);
-    if (!targetDisk) return null;
-    // Passer le disque complet (ex: /dev/sdb) au backend, qui supporte disque ou partition
-    const targetId = targetDisk.id || targetDisk.device;
-    return { sourcePartitionId: sourcePart, targetPartitionId: targetId };
+  // Formater la taille
+  const formatSize = (size) => {
+    if (!size) return 'N/A';
+    return size;
   };
 
   return (
-    <div style={{ padding: '24px', color: '#0f172a', background: '#f8fafc', minHeight: '100vh' }}>
-      <button onClick={() => navigate('/settings')} style={{ marginBottom: 16 }}>
-        ← Retour aux paramètres
-      </button>
-      <h1 style={{ color: '#111827' }}>Stockage (RAID + Btrfs)</h1>
-      <p style={{ color: '#334155' }}>Assistant en plusieurs étapes pour configurer le stockage Ryvie.</p>
-
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-        <button onClick={fetchDisks} disabled={loading}>{loading ? 'Scan en cours…' : 'Rescanner'}</button>
-        {error && <span style={{ color: 'crimson' }}>Erreur: {String(error)}</span>}
+    <div className="storage-settings-container">
+      <div className="storage-header">
+        <button className="back-button" onClick={() => navigate(-1)}>
+          <FontAwesomeIcon icon={faArrowLeft} /> Retour
+        </button>
+        <h1>
+          <FontAwesomeIcon icon={faHdd} /> Assistant RAID Btrfs
+        </h1>
+        <p className="subtitle">Créer un miroir RAID1 pour /data</p>
       </div>
 
-      <div style={{
-        marginTop: 8,
-        padding: 16,
-        border: '1px solid #cbd5e1',
-        borderRadius: 12,
-        background: '#ffffff',
-        boxShadow: '0 1px 2px rgba(16,24,40,0.06)'
-      }}>
-        <h2 style={{ color: '#0f172a', marginTop: 0 }}>Disques détectés (lecture seule)</h2>
-        {loading ? (
-          <p style={{ color: '#475569' }}>Chargement…</p>
-        ) : disks.length === 0 ? (
-          <p style={{ color: '#475569' }}>Aucun disque détecté.</p>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-              <thead>
-                <tr style={{ background: '#f1f5f9' }}>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', color: '#0f172a' }}>Sélection</th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', color: '#0f172a' }}>Périphérique</th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', color: '#0f172a' }}>Taille</th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', color: '#0f172a' }}>Système</th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', color: '#0f172a' }}>Monté</th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0', padding: '10px 12px', color: '#0f172a' }}>Partitions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  // Filtrer: masquer fd*, loop* et les disques < 1 Go
-                  const all = Array.isArray(disks) ? disks : [];
-                  const visibleDisks = all.filter(d => {
-                    const name = (d.device || '').toString();
-                    const isWeird = name.startsWith('fd') || name.startsWith('loop');
-                    const bigEnough = (d.sizeBytes ?? 0) >= 1_000_000_000;
-                    return !isWeird && bigEnough;
-                  });
-                  const hiddenCount = all.length - visibleDisks.length;
-                  return (
-                    <>
-                      {visibleDisks.map(d => {
-                        const key = d.id || d.device;
-                        return (
-                          <tr key={key}>
-                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                              <input
-                                type="checkbox"
-                                checked={!!selected[key]}
-                                onChange={() => toggle(d)}
-                                disabled={!!d.isSystem}
-                                title={d.isSystem ? 'Disque système non sélectionnable' : ''}
-                              />
-                            </td>
-                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <strong>{d.device}</strong>
-                                <small style={{ color: '#888' }}>{d.id}</small>
-                              </div>
-                            </td>
-                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>{d.sizeHuman || `${d.sizeBytes} B`}</td>
-                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>{d.isSystem ? <span style={{ color: '#b91c1c', background: '#fee2e2', padding: '2px 6px', borderRadius: 6 }}>Oui</span> : <span style={{ color: '#065f46', background: '#d1fae5', padding: '2px 6px', borderRadius: 6 }}>Non</span>}</td>
-                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>{d.isMounted ? <span style={{ color: '#b45309', background: '#fef3c7', padding: '2px 6px', borderRadius: 6 }}>Monté{d.mountpoint ? ` (${d.mountpoint})` : ''}</span> : <span style={{ color: '#334155' }}>Non</span>}</td>
-                            <td style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                              {(() => {
-                                const parts = Array.isArray(d.partitions) ? d.partitions : [];
-                                const visible = parts.filter(p => (p?.sizeBytes ?? 0) >= 1_000_000_000);
-                                const hiddenParts = parts.length - visible.length;
-                                if (visible.length === 0) {
-                                  return <span style={{ color: '#888' }}>Aucune</span>;
-                                }
-                                return (
-                                  <>
-                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                                      {visible.map(p => (
-                                        <li key={p.path}>
-                                          {p.path} — {p.fs || 'no-fs'} — {p.sizeBytes} B
-                                          {p.mountpoint ? (
-                                            <span style={{ marginLeft: 6, color: '#0f766e' }}> (monté: {p.mountpoint})</span>
-                                          ) : null}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                    {hiddenParts > 0 && (
-                                      <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
-                                        {hiddenParts} partition(s) &lt; 1 Go masquée(s)
-                                      </div>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {hiddenCount > 0 && (
-                        <tr>
-                          <td colSpan={6} style={{ padding: '8px 12px', color: '#64748b', fontSize: 12 }}>
-                            {hiddenCount} périphérique(s) non pertinent(s) masqué(s) (fd*, loop*, &lt; 1 Go)
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  );
-                })()}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <p style={{ color: '#475569', marginTop: 12 }}>
-          Les cases sont désactivées pour les disques système (sélectionnés par défaut et non désélectionnables). Un avertissement est affiché si un disque est monté.
-        </p>
-      </div>
-
-      {/* Step 2 — Proposition (dry-run) */}
-       <div style={{
-        marginTop: 16,
-        padding: 16,
-        border: '1px solid #cbd5e1',
-        borderRadius: 12,
-        background: '#ffffff',
-        boxShadow: '0 1px 2px rgba(16,24,40,0.06)'
-      }}>
-        <h2 style={{ color: '#0f172a', marginTop: 0 }}>Étape 2 — Proposition (dry‑run)</h2>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-          <button onClick={proposePlan} disabled={proposalLoading} style={{ background: '#111827', color: '#fff', padding: '8px 12px', border: 0, borderRadius: 8 }}>
-            {proposalLoading ? 'Calcul en cours…' : 'Proposer un plan'}
-          </button>
-          {proposalError && <span style={{ color: '#b91c1c' }}>Erreur: {String(proposalError)}</span>}
+      {loading ? (
+        <div className="loading-container">
+          <FontAwesomeIcon icon={faSpinner} spin size="3x" />
+          <p>Chargement des disques...</p>
         </div>
-        {proposal && (
-          <div style={{ marginTop: 8, color: '#334155' }}>
-            <div>Type: <strong>{proposal.level || proposal.suggested || 'raid1'}</strong></div>
-            <div>Capacité: <strong>{humanize(proposal.capacityBytes)}</strong></div>
-            <div>Tolérance aux pannes: <strong>{proposal.faultTolerance}</strong></div>
-            {proposal.mdName && (
-              <div>Périphérique RAID: <strong>{proposal.mdName}</strong></div>
-            )}
-            {proposal.selection && (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontWeight: 600 }}>Sélection:</div>
-                <ul>
-                  <li>Source: <strong>{proposal.selection.source?.short || proposal.selection.source?.id}</strong>{proposal.selection.source?.mountpoint ? ` (monté: ${proposal.selection.source.mountpoint})` : ''} — {humanize(proposal.selection.source?.sizeBytes)}</li>
-                  <li>Cible: <strong>{proposal.selection.target?.short || proposal.selection.target?.id}</strong>{proposal.selection.target?.mountpoint ? ` (monté: ${proposal.selection.target.mountpoint})` : ''} — {humanize(proposal.selection.target?.sizeBytes)}</li>
-                </ul>
+      ) : (
+        <>
+          {/* Info /data source */}
+          {dataSource && (
+            <div className="data-source-card">
+              <div className="source-icon">
+                <FontAwesomeIcon icon={faHdd} />
+              </div>
+              <div className="source-info">
+                <div className="source-label">Volume /data (source)</div>
+                <div className="source-device">{dataSource.device}</div>
+                <div className="source-meta">{dataSource.size} · {dataSource.fstype}</div>
+              </div>
+              <div className="source-badge">
+                <FontAwesomeIcon icon={faCheck} /> Détecté
+              </div>
+            </div>
+          )}
+
+          {!dataSource && (
+            <div className="alert-error">
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              <div>
+                <strong>Erreur :</strong> Aucune partition Btrfs montée sur /data détectée.
+              </div>
+            </div>
+          )}
+
+          {/* Sélection des disques cibles */}
+          <div className="targets-section">
+            <h2>
+              {raidStatus && raidStatus.isRaid 
+                ? 'Ajouter des disques au RAID existant' 
+                : 'Sélectionnez les disques pour le RAID'}
+            </h2>
+            <p className="section-subtitle">
+              {raidStatus && raidStatus.isRaid
+                ? 'Vous pouvez ajouter des disques supplémentaires à votre RAID existant'
+                : 'Les disques sélectionnés seront formatés et ajoutés au RAID1'}
+            </p>
+            
+            <div className="disks-grid">
+              {disks.map((disk) => {
+                const isSelected = targetDevices.includes(disk.path);
+                const isDisabled = disk.isSystemDisk || disk.isMounted;
+                const canSelect = !isDisabled;
+                const isInRaid = raidDevices.includes(disk.path);
+                
+                return (
+                  <div 
+                    key={disk.path}
+                    className={`disk-card-simple ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''} ${isInRaid ? 'in-raid' : ''}`}
+                    onClick={() => canSelect && handleTargetToggle(disk.path)}
+                  >
+                    {isSelected && (
+                      <div className="disk-check">
+                        <FontAwesomeIcon icon={faCheckCircle} />
+                      </div>
+                    )}
+                    
+                    <div className="disk-icon">
+                      <FontAwesomeIcon icon={faHdd} />
+                    </div>
+                    
+                    <div className="disk-name">{disk.path}</div>
+                    <div className="disk-size">{disk.size}</div>
+                    
+                    <div className="disk-status">
+                      {isInRaid && <span className="badge-raid-active"><FontAwesomeIcon icon={faCheckCircle} /> Dans le RAID</span>}
+                      {!isInRaid && disk.isSystemDisk && <span className="badge-system">Système</span>}
+                      {!isInRaid && disk.isMounted && !disk.isSystemDisk && <span className="badge-mounted">Monté ({disk.mountInfo})</span>}
+                      {!isInRaid && !disk.isMounted && !disk.isSystemDisk && <span className="badge-available">Disponible</span>}
+                    </div>
+                    
+                    {isSelected && (
+                      <div className="disk-label-input">
+                        <input
+                          type="text"
+                          placeholder="Label (ex: DATA2)"
+                          value={targetLabels[disk.path] || ''}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleLabelChange(disk.path, e.target.value);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {disks.length === 0 && (
+              <div className="empty-state">
+                <FontAwesomeIcon icon={faHdd} size="3x" />
+                <p>Aucun disque détecté</p>
               </div>
             )}
-            <div style={{ marginTop: 8 }}>
-              <div>Plan:</div>
-              <ul>
-                {(proposal.planPreview || []).map((text, idx) => (
-                  <li key={idx}>{typeof text === 'string' ? text : JSON.stringify(text)}</li>
-                ))}
-              </ul>
+          </div>
+
+          {/* Options */}
+          <div className="options-section">
+            <div className="options-row">
+              <div className="option-item">
+                <label>Niveau RAID</label>
+                <select value={raidLevel} onChange={(e) => setRaidLevel(e.target.value)}>
+                  <option value="raid1">RAID1 (2 copies)</option>
+                  <option value="raid1c3">RAID1C3 (3 copies)</option>
+                </select>
+              </div>
+
+              <div className="option-item checkbox">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={dryRun}
+                    onChange={(e) => setDryRun(e.target.checked)}
+                  />
+                  <span>Mode simulation (aucune modification)</span>
+                </label>
+              </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Step 3 — Préflight (sans écrire) */}
-      <div style={{
-        marginTop: 16,
-        padding: 16,
-        border: '1px solid #cbd5e1',
-        borderRadius: 12,
-        background: '#ffffff',
-        boxShadow: '0 1px 2px rgba(16,24,40,0.06)'
-      }}>
-        <h2 style={{ color: '#0f172a', marginTop: 0 }}>Étape 3 — Préflight (sans écrire)</h2>
-        <p style={{ color: '#475569', marginTop: 0 }}>
-          Cette étape vérifie les conditions avant toute action destructive.
-        </p>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
-          <input
-            type="checkbox"
-            checked={preflightAck}
-            onChange={e => setPreflightAck(e.target.checked)}
-          />
-          <span>
-            Je comprends que <strong>seuls les disques non‑système</strong> sélectionnés seront <strong>formatés</strong> pour créer le RAID. Le(s) disque(s) système ne seront <strong>jamais formatés</strong>.
-          </span>
-        </label>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-          <button onClick={runPreflight} disabled={preflightLoading} style={{ background: '#0f172a', color: '#fff', padding: '8px 12px', border: 0, borderRadius: 8 }}>
-            {preflightLoading ? 'Vérification…' : 'Lancer le préflight'}
-          </button>
-          {preflightError && <span style={{ color: '#b91c1c' }}>Erreur: {String(preflightError)}</span>}
-        </div>
-        {preflightReport && (
-          <div style={{ marginTop: 12, color: '#334155' }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Rapport de préflight</div>
-            <pre style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, overflowX: 'auto' }}>
-{JSON.stringify(preflightReport, null, 2)}
-            </pre>
+          {/* Validation messages */}
+          {validationErrors.length > 0 && (
+            <div className="alert-error">
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              <div>
+                {validationErrors.map((error, index) => (
+                  <div key={index}>{error}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {validationWarnings.length > 0 && (
+            <div className="alert-warning">
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              <div>
+                {validationWarnings.map((warning, index) => (
+                  <div key={index}>{warning}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Bouton d'exécution */}
+          <div className="action-section">
+            {(() => {
+              // Vérifier si tous les disques sélectionnés sont déjà dans le RAID
+              const allSelectedInRaid = targetDevices.length > 0 && 
+                targetDevices.every(device => raidDevices.includes(device));
+              
+              if (allSelectedInRaid) {
+                return (
+                  <button className="btn-raid-active" disabled>
+                    <FontAwesomeIcon icon={faCheckCircle} /> RAID déjà actif
+                  </button>
+                );
+              }
+              
+              return (
+                <button
+                  className="btn-create-raid"
+                  disabled={!canProceed || executionStatus === 'running'}
+                  onClick={openConfirmModal}
+                >
+                  {executionStatus === 'running' ? (
+                    <>
+                      <FontAwesomeIcon icon={faSpinner} spin /> Création en cours...
+                    </>
+                  ) : (
+                    <>
+                      <FontAwesomeIcon icon={faPlay} /> Créer le RAID
+                    </>
+                  )}
+                </button>
+              );
+            })()}
           </div>
-        )}
-      </div>
 
-      <div style={{
-        marginTop: 24,
-        padding: 16,
-        border: '1px solid #ddd',
-        borderRadius: 8,
-        background: '#fafafa'
-      }}>
-        <h2>Étapes (aperçu)</h2>
-        <ol>
-          <li>Scan lecture seule</li>
-          <li>Proposition (dry‑run)</li>
-          <li>Préflight (sans écrire)</li>
-          <li>Partition (SHR‑like)</li>
-          <li>Création RAID</li>
-          <li>Persistance mdadm</li>
-          <li>Aggregation LVM (si nécessaire)</li>
-          <li>Formatage Btrfs</li>
-          <li>Montage & fstab</li>
-          <li>Sous‑volumes & snapshot initial</li>
-          <li>Statut & progression</li>
-        </ol>
-      </div>
+          {/* Fenêtre de logs */}
+          <div className="logs-section">
+            <div className="logs-header">
+              <h2>Execution Logs</h2>
+              <div className="logs-controls">
+                <span className={`status-badge status-${executionStatus}`}>
+                  {executionStatus === 'idle' && 'Idle'}
+                  {executionStatus === 'running' && <><FontAwesomeIcon icon={faSpinner} spin /> Running</>}
+                  {executionStatus === 'success' && <><FontAwesomeIcon icon={faCheckCircle} /> Success</>}
+                  {executionStatus === 'error' && <><FontAwesomeIcon icon={faExclamationTriangle} /> Error</>}
+                </span>
+                <button className="btn-copy" onClick={copyLogs} disabled={logs.length === 0}>
+                  <FontAwesomeIcon icon={faCopy} /> Copy
+                </button>
+              </div>
+            </div>
+            <div className="logs-container">
+              {logs.length === 0 ? (
+                <p className="logs-placeholder">No logs yet. Configure and execute RAID creation to see logs here.</p>
+              ) : (
+                logs.map((log, index) => (
+                  <div key={index} className={`log-entry log-${log.type}`}>
+                    <span className="log-timestamp">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                    <span className="log-type">[{log.type.toUpperCase()}]</span>
+                    <span className="log-message">{log.message}</span>
+                  </div>
+                ))
+              )}
+              <div ref={logsEndRef} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Modale de confirmation */}
+      {showConfirmModal && (
+        <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Confirm RAID Creation</h2>
+            
+            <div className="modal-section">
+              <h3>Configuration Summary</h3>
+              <div className="summary-grid">
+                <div className="summary-item">
+                  <strong>Source:</strong> {sourceDevice}
+                </div>
+                <div className="summary-item">
+                  <strong>Targets:</strong> {targetDevices.map(d => `${d} (${targetLabels[d]})`).join(', ')}
+                </div>
+                <div className="summary-item">
+                  <strong>RAID Level:</strong> {raidLevel.toUpperCase()}
+                </div>
+                <div className="summary-item">
+                  <strong>Mode:</strong> {dryRun ? 'Dry Run' : 'Live Execution'}
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-section">
+              <h3>Commands to Execute</h3>
+              <div className="commands-list">
+                {commandsList.map((cmd, index) => (
+                  <div key={index} className="command-item">
+                    <div className="command-description">{cmd.description}</div>
+                    <code className="command-code">{cmd.command}</code>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="modal-warning">
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              <strong>Warning:</strong> This operation will format the target devices and is destructive. 
+              Make sure you have backups of any important data.
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowConfirmModal(false)}>
+                Cancel
+              </button>
+              <button className="btn-danger" onClick={executeRaidCreation}>
+                {dryRun ? 'Run Dry Run' : 'Execute RAID Creation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
