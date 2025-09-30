@@ -49,8 +49,11 @@ const StorageSettings = () => {
 
   // Charger l'inventaire au montage
   useEffect(() => {
-    loadInventory();
-    checkRaidStatus();
+    const loadData = async () => {
+      await checkRaidStatus(); // Charger d'abord le statut RAID
+      await loadInventory(); // Puis l'inventaire
+    };
+    loadData();
   }, []);
 
   // Auto-scroll des logs
@@ -66,10 +69,20 @@ const StorageSettings = () => {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       
-      const response = await axios.get(`${serverUrl}/api/storage/btrfs-status`);
+      const response = await axios.get(`${serverUrl}/api/storage/btrfs-status`, {
+        timeout: 30000 // 30 secondes
+      });
       
       if (response.data.success && response.data.status) {
         const status = response.data.status;
+        
+        // Debug: afficher le statut reçu
+        console.log('RAID Status received:', {
+          isRaidIncomplete: status.isRaidIncomplete,
+          hasMixedProfiles: status.hasMixedProfiles,
+          needsRebalance: status.needsRebalance,
+          mixedProfilesWarning: status.mixedProfilesWarning
+        });
         
         // Parser le niveau RAID depuis filesystemDf
         let currentRaidLevel = 'single';
@@ -113,7 +126,11 @@ const StorageSettings = () => {
           isRaid: currentRaidLevel !== 'single' && deviceCount > 1,
           level: currentRaidLevel,
           deviceCount: deviceCount,
-          details: status.filesystemDf
+          details: status.filesystemDf,
+          isIncomplete: status.isRaidIncomplete || false,
+          hasMixedProfiles: status.hasMixedProfiles || false,
+          needsRebalance: status.needsRebalance || false,
+          mixedProfilesWarning: status.mixedProfilesWarning || null
         });
       }
     } catch (error) {
@@ -128,7 +145,9 @@ const StorageSettings = () => {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       
-      const response = await axios.get(`${serverUrl}/api/storage/inventory`);
+      const response = await axios.get(`${serverUrl}/api/storage/inventory`, {
+        timeout: 30000 // 30 secondes
+      });
       
       if (response.data.success) {
         const { devices: devicesData } = response.data.data;
@@ -263,6 +282,8 @@ const StorageSettings = () => {
       const response = await axios.post(`${serverUrl}/api/storage/btrfs-prechecks`, {
         source: sourceDevice,
         targets: targetDevices
+      }, {
+        timeout: 60000 // 60 secondes pour les prechecks
       });
       
       if (response.data.success) {
@@ -391,6 +412,48 @@ const StorageSettings = () => {
     }
   };
 
+  // Relancer le balance pour corriger les profils mixtes
+  const fixMixedProfiles = async () => {
+    try {
+      setExecutionStatus('running');
+      setLogs([]);
+      addLog('Fixing mixed RAID profiles...', 'info');
+      
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      
+      const response = await axios.post(`${serverUrl}/api/storage/btrfs-fix-raid-profiles`, {
+        raidLevel: raidLevel
+      }, {
+        timeout: 1800000 // 30 minutes
+      });
+      
+      if (response.data.success) {
+        // Ajouter tous les logs du backend
+        response.data.logs.forEach(log => {
+          setLogs(prev => [...prev, log]);
+        });
+        
+        setExecutionStatus('success');
+        addLog('RAID profiles fixed successfully!', 'success');
+        
+        // Rafraîchir le statut RAID
+        setTimeout(() => {
+          checkRaidStatus();
+          loadInventory();
+        }, 2000);
+      } else {
+        setExecutionStatus('error');
+        addLog(`Failed to fix RAID profiles: ${response.data.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error fixing RAID profiles:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
+      setExecutionStatus('error');
+      addLog(`Failed to fix RAID profiles: ${errorMsg}`, 'error');
+    }
+  };
+
   // Formater la taille
   const formatSize = (size) => {
     if (!size) return 'N/A';
@@ -419,7 +482,7 @@ const StorageSettings = () => {
           {/* Info /data source */}
           {dataSource && (
             <div className="data-source-card">
-              <div className="source-icon">
+              <div className="storage-source-icon">
                 <FontAwesomeIcon icon={faHdd} />
               </div>
               <div className="source-info">
@@ -438,6 +501,34 @@ const StorageSettings = () => {
               <FontAwesomeIcon icon={faExclamationTriangle} />
               <div>
                 <strong>Erreur :</strong> Aucune partition Btrfs montée sur /data détectée.
+              </div>
+            </div>
+          )}
+
+          {/* Alerte pour profils mixtes */}
+          {raidStatus && raidStatus.isIncomplete && (
+            <div className="alert-warning">
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              <div>
+                <strong>RAID incomplet détecté !</strong>
+                <p>Le RAID n'a pas été complètement converti. Des profils mixtes (single/DUP/RAID) ont été détectés.</p>
+                <p>Cliquez sur le bouton ci-dessous pour terminer la conversion en RAID.</p>
+                <button 
+                  className="btn-create-raid" 
+                  style={{ marginTop: '1rem' }}
+                  onClick={fixMixedProfiles}
+                  disabled={executionStatus === 'running'}
+                >
+                  {executionStatus === 'running' ? (
+                    <>
+                      <FontAwesomeIcon icon={faSpinner} spin /> Correction en cours...
+                    </>
+                  ) : (
+                    <>
+                      <FontAwesomeIcon icon={faPlay} /> Terminer la conversion RAID
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}
@@ -474,7 +565,7 @@ const StorageSettings = () => {
                       </div>
                     )}
                     
-                    <div className="disk-icon">
+                    <div className="storage-disk-icon">
                       <FontAwesomeIcon icon={faHdd} />
                     </div>
                     
@@ -482,10 +573,10 @@ const StorageSettings = () => {
                     <div className="disk-size">{disk.size}</div>
                     
                     <div className="disk-status">
-                      {isInRaid && <span className="badge-raid-active"><FontAwesomeIcon icon={faCheckCircle} /> Dans le RAID</span>}
-                      {!isInRaid && disk.isSystemDisk && <span className="badge-system">Système</span>}
-                      {!isInRaid && disk.isMounted && !disk.isSystemDisk && <span className="badge-mounted">Monté ({disk.mountInfo})</span>}
-                      {!isInRaid && !disk.isMounted && !disk.isSystemDisk && <span className="badge-available">Disponible</span>}
+                      {isInRaid && <span className="storage-badge-raid-active"><FontAwesomeIcon icon={faCheckCircle} /> Dans le RAID</span>}
+                      {!isInRaid && disk.isSystemDisk && <span className="storage-badge-system">Système</span>}
+                      {!isInRaid && disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-mounted">Monté ({disk.mountInfo})</span>}
+                      {!isInRaid && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">Disponible</span>}
                     </div>
                     
                     {isSelected && (
@@ -569,7 +660,8 @@ const StorageSettings = () => {
               const allSelectedInRaid = targetDevices.length > 0 && 
                 targetDevices.every(device => raidDevices.includes(device));
               
-              if (allSelectedInRaid) {
+              // Ne pas afficher "RAID déjà actif" si le RAID est incomplet
+              if (allSelectedInRaid && (!raidStatus || !raidStatus.isIncomplete)) {
                 return (
                   <button className="btn-raid-active" disabled>
                     <FontAwesomeIcon icon={faCheckCircle} /> RAID déjà actif
@@ -602,7 +694,7 @@ const StorageSettings = () => {
             <div className="logs-header">
               <h2>Execution Logs</h2>
               <div className="logs-controls">
-                <span className={`status-badge status-${executionStatus}`}>
+                <span className={`storage-status-badge storage-status-${executionStatus}`}>
                   {executionStatus === 'idle' && 'Idle'}
                   {executionStatus === 'running' && <><FontAwesomeIcon icon={faSpinner} spin /> Running</>}
                   {executionStatus === 'success' && <><FontAwesomeIcon icon={faCheckCircle} /> Success</>}

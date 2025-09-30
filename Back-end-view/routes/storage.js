@@ -394,15 +394,16 @@ router.post('/storage/btrfs-raid-create', authenticateToken, async (req, res) =>
 
     // Étape 4: Conversion en RAID
     log(`=== Step 4: Converting to ${raidLevel.toUpperCase()} ===`, 'step');
-    const balanceCmd = ['sudo', '-n', 'btrfs', 'balance', 'start', `-dconvert=${raidLevel}`, `-mconvert=${raidLevel}`, '/data'];
-    commands.push({ description: `Convert /data to ${raidLevel.toUpperCase()}`, command: balanceCmd.join(' ') });
+    const balanceCmd = ['sudo', '-n', 'btrfs', 'balance', 'start', '--force', `-dconvert=${raidLevel}`, `-mconvert=${raidLevel}`, `-sconvert=${raidLevel}`, '/data'];
+    commands.push({ description: `Convert /data to ${raidLevel.toUpperCase()} (data, metadata, and system)`, command: balanceCmd.join(' ') });
     
     if (!dryRun) {
       log(`Starting balance operation to convert to ${raidLevel}...`, 'info');
+      log('Converting data, metadata, and system to RAID...', 'info');
       log('This may take a while depending on the amount of data...', 'warning');
       
       try {
-        const result = await executeCommand('sudo', ['-n', 'btrfs', 'balance', 'start', `-dconvert=${raidLevel}`, `-mconvert=${raidLevel}`, '/data']);
+        const result = await executeCommand('sudo', ['-n', 'btrfs', 'balance', 'start', '--force', `-dconvert=${raidLevel}`, `-mconvert=${raidLevel}`, `-sconvert=${raidLevel}`, '/data']);
         log(`Balance completed: ${result.stdout}`, 'success');
       } catch (error) {
         log(`Error during balance: ${error.message}`, 'error');
@@ -410,8 +411,78 @@ router.post('/storage/btrfs-raid-create', authenticateToken, async (req, res) =>
       }
     }
 
-    // Étape 5: Contrôles finaux
-    log('=== Step 5: Final checks ===', 'step');
+    // Étape 5: Mise à jour de /etc/fstab pour supporter le mode dégradé
+    log('=== Step 5: Updating /etc/fstab for degraded mode support ===', 'step');
+    
+    if (!dryRun) {
+      log('Updating /etc/fstab to add degraded mount option...', 'info');
+      try {
+        // Lire le fstab actuel
+        const catResult = await executeCommand('cat', ['/etc/fstab']);
+        const fstabContent = catResult.stdout;
+        
+        // Chercher la ligne pour /data
+        const lines = fstabContent.split('\n');
+        let updated = false;
+        const newLines = lines.map(line => {
+          // Ignorer les commentaires et lignes vides
+          if (line.trim().startsWith('#') || line.trim() === '') {
+            return line;
+          }
+          
+          // Chercher la ligne qui monte /data
+          const parts = line.split(/\s+/);
+          if (parts.length >= 4 && parts[1] === '/data' && parts[2] === 'btrfs') {
+            // Extraire les options actuelles
+            let options = parts[3].split(',');
+            
+            // Ajouter 'degraded' si pas déjà présent
+            if (!options.includes('degraded')) {
+              options.push('degraded');
+              log('Adding degraded option to mount options', 'info');
+            }
+            
+            // Reconstruire la ligne
+            parts[3] = options.join(',');
+            updated = true;
+            return parts.join('\t');
+          }
+          return line;
+        });
+        
+        if (updated) {
+          // Écrire le nouveau fstab
+          const newFstabContent = newLines.join('\n');
+          const fs = require('fs');
+          const tmpFile = '/tmp/fstab.new';
+          
+          // Écrire dans un fichier temporaire
+          fs.writeFileSync(tmpFile, newFstabContent);
+          
+          // Copier avec sudo
+          await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/fstab']);
+          
+          // Nettoyer
+          fs.unlinkSync(tmpFile);
+          
+          log('Successfully updated /etc/fstab with degraded option', 'success');
+          log('The system will now be able to boot even if one RAID disk is missing', 'info');
+        } else {
+          log('No /data entry found in /etc/fstab to update', 'warning');
+        }
+      } catch (error) {
+        log(`Warning: Could not update /etc/fstab: ${error.message}`, 'warning');
+        log('You may need to manually add "degraded" to mount options in /etc/fstab', 'warning');
+      }
+    } else {
+      commands.push({ 
+        description: 'Update /etc/fstab to add degraded mount option for /data', 
+        command: 'Edit /etc/fstab and add "degraded" to the mount options for /data' 
+      });
+    }
+    
+    // Étape 6: Contrôles finaux
+    log('=== Step 6: Final checks ===', 'step');
     
     const finalChecks = [
       { cmd: ['sudo', '-n', 'btrfs', 'filesystem', 'df', '/data'], desc: 'Filesystem space usage' },
@@ -453,6 +524,193 @@ router.post('/storage/btrfs-raid-create', authenticateToken, async (req, res) =>
 });
 
 /**
+ * POST /api/storage/btrfs-fix-raid-profiles
+ * Corrige les profils mixtes (single/dup/raid1) en convertissant tout en RAID
+ * Utile quand un balance n'a pas complètement converti le filesystem
+ */
+router.post('/storage/btrfs-fix-raid-profiles', authenticateToken, async (req, res) => {
+  try {
+    const { raidLevel = 'raid1' } = req.body;
+    
+    // Valider le niveau RAID
+    const validRaidLevels = ['raid1', 'raid1c3', 'raid10'];
+    if (!validRaidLevels.includes(raidLevel)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid RAID level: ${raidLevel}`
+      });
+    }
+
+    const logs = [];
+    const log = (message, type = 'info') => {
+      const logEntry = { timestamp: new Date().toISOString(), type, message };
+      logs.push(logEntry);
+      console.log(`[${type.toUpperCase()}] ${message}`);
+    };
+
+    log('Fixing mixed RAID profiles...', 'info');
+    log(`Target RAID level: ${raidLevel.toUpperCase()}`, 'info');
+
+    // Vérifier l'état actuel
+    try {
+      const dfResult = await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'df', '/data']);
+      log(`Current state:\n${dfResult.stdout}`, 'info');
+    } catch (error) {
+      log(`Warning: Could not check current state: ${error.message}`, 'warning');
+    }
+
+    // Lancer le balance complet avec conversion de data, metadata et system
+    log('Starting full balance to convert all profiles to RAID...', 'info');
+    log('This will convert data, metadata, and system to RAID...', 'info');
+    log('This may take several minutes depending on data size...', 'warning');
+
+    try {
+      const result = await executeCommand('sudo', [
+        '-n', 'btrfs', 'balance', 'start',
+        `-dconvert=${raidLevel}`,
+        `-mconvert=${raidLevel}`,
+        `-sconvert=${raidLevel}`,
+        '/data'
+      ]);
+      log(`Balance completed successfully`, 'success');
+      log(`Output: ${result.stdout}`, 'info');
+      if (result.stderr) {
+        log(`Stderr: ${result.stderr}`, 'warning');
+      }
+    } catch (error) {
+      log(`Error during balance: ${error.message}`, 'error');
+      return res.status(500).json({
+        success: false,
+        error: 'Balance operation failed',
+        details: error.message,
+        logs
+      });
+    }
+
+    // Vérifier l'état final
+    try {
+      const dfResult = await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'df', '/data']);
+      log(`Final state:\n${dfResult.stdout}`, 'success');
+      
+      // Vérifier s'il reste des profils mixtes
+      if (dfResult.stdout.includes('single') || dfResult.stdout.includes('DUP')) {
+        log('Warning: Some single or DUP profiles may still exist', 'warning');
+        log('You may need to run the balance again or check for errors', 'warning');
+      } else {
+        log('All profiles successfully converted to RAID!', 'success');
+      }
+    } catch (error) {
+      log(`Warning: Could not verify final state: ${error.message}`, 'warning');
+    }
+
+    res.json({
+      success: true,
+      message: 'RAID profile conversion completed',
+      logs
+    });
+  } catch (error) {
+    console.error('Error fixing RAID profiles:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fix RAID profiles',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/storage/btrfs-enable-degraded
+ * Active le mode dégradé dans /etc/fstab pour /data
+ * Permet au système de démarrer même si un disque du RAID est manquant
+ */
+router.post('/storage/btrfs-enable-degraded', authenticateToken, async (req, res) => {
+  try {
+    const logs = [];
+    const log = (message, type = 'info') => {
+      const logEntry = { timestamp: new Date().toISOString(), type, message };
+      logs.push(logEntry);
+      console.log(`[${type.toUpperCase()}] ${message}`);
+    };
+
+    log('Updating /etc/fstab to enable degraded mode for /data', 'info');
+
+    // Lire le fstab actuel
+    const catResult = await executeCommand('cat', ['/etc/fstab']);
+    const fstabContent = catResult.stdout;
+    
+    // Chercher la ligne pour /data
+    const lines = fstabContent.split('\n');
+    let updated = false;
+    const newLines = lines.map(line => {
+      // Ignorer les commentaires et lignes vides
+      if (line.trim().startsWith('#') || line.trim() === '') {
+        return line;
+      }
+      
+      // Chercher la ligne qui monte /data
+      const parts = line.split(/\s+/);
+      if (parts.length >= 4 && parts[1] === '/data' && parts[2] === 'btrfs') {
+        // Extraire les options actuelles
+        let options = parts[3].split(',');
+        
+        // Ajouter 'degraded' si pas déjà présent
+        if (!options.includes('degraded')) {
+          options.push('degraded');
+          log('Adding degraded option to mount options', 'info');
+          updated = true;
+        } else {
+          log('Degraded option already present', 'info');
+        }
+        
+        // Reconstruire la ligne
+        parts[3] = options.join(',');
+        return parts.join('\t');
+      }
+      return line;
+    });
+    
+    if (updated) {
+      // Écrire le nouveau fstab
+      const newFstabContent = newLines.join('\n');
+      const fs = require('fs');
+      const tmpFile = '/tmp/fstab.new';
+      
+      // Écrire dans un fichier temporaire
+      fs.writeFileSync(tmpFile, newFstabContent);
+      
+      // Copier avec sudo
+      await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/fstab']);
+      
+      // Nettoyer
+      fs.unlinkSync(tmpFile);
+      
+      log('Successfully updated /etc/fstab with degraded option', 'success');
+      log('The system will now be able to boot even if one RAID disk is missing', 'info');
+      
+      res.json({
+        success: true,
+        message: 'Degraded mode enabled in /etc/fstab',
+        logs
+      });
+    } else {
+      log('Degraded option already present in /etc/fstab', 'info');
+      res.json({
+        success: true,
+        message: 'Degraded mode already enabled',
+        logs
+      });
+    }
+  } catch (error) {
+    console.error('Error enabling degraded mode:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to enable degraded mode',
+      details: error.message
+    });
+  }
+});
+
+/**
  * GET /api/storage/btrfs-status
  * Récupère l'état actuel du RAID Btrfs sur /data
  */
@@ -489,6 +747,22 @@ router.get('/storage/btrfs-status', authenticateToken, async (req, res) => {
         const raidMatch = dfResult.stdout.match(/Data,\s*(\w+)/i);
         if (raidMatch) {
           status.raidLevel = raidMatch[1].toLowerCase();
+        }
+
+        // Détecter les profils mixtes (single, DUP, RAID)
+        // Ignorer GlobalReserve qui est toujours en single et n'est pas important
+        const dfOutput = dfResult.stdout;
+        const hasSingle = /^(Data|Metadata|System).*single/im.test(dfOutput);
+        const hasDup = /^(Data|Metadata|System).*DUP/im.test(dfOutput);
+        const hasRaid = /RAID/i.test(dfOutput);
+        
+        // Si on a à la fois RAID et (single ou DUP) sur Data/Metadata/System, le RAID est incomplet
+        status.hasMixedProfiles = hasRaid && (hasSingle || hasDup);
+        status.isRaidIncomplete = status.hasMixedProfiles;
+        
+        if (status.hasMixedProfiles) {
+          status.mixedProfilesWarning = 'RAID conversion incomplete - mixed profiles detected (single/DUP/RAID)';
+          status.needsRebalance = true;
         }
       } catch (error) {
         status.error = `Could not retrieve Btrfs info: ${error.message}`;

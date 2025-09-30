@@ -69,7 +69,7 @@
   border: 2px solid #4caf50;
 }
 
-.source-icon {
+.storage-source-icon {
   width: 60px;
   height: 60px;
   background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
@@ -228,7 +228,7 @@
   font-size: 1.5rem;
 }
 
-.disk-icon {
+.storage-disk-icon {
   width: 50px;
   height: 50px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -241,7 +241,7 @@
   margin-bottom: 1rem;
 }
 
-.disk-card-simple.disabled .disk-icon {
+.disk-card-simple.disabled .storage-disk-icon {
   background: #ccc;
 }
 
@@ -263,10 +263,10 @@
   margin-bottom: 0.75rem;
 }
 
-.badge-system,
-.badge-mounted,
-.badge-available,
-.badge-raid-active {
+.storage-badge-system,
+.storage-badge-mounted,
+.storage-badge-available,
+.storage-badge-raid-active {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -276,22 +276,22 @@
   font-weight: 600;
 }
 
-.badge-system {
+.storage-badge-system {
   background: #ffebee;
   color: #c62828;
 }
 
-.badge-mounted {
+.storage-badge-mounted {
   background: #fff3e0;
   color: #e65100;
 }
 
-.badge-available {
+.storage-badge-available {
   background: #e8f5e9;
   color: #2e7d32;
 }
 
-.badge-raid-active {
+.storage-badge-raid-active {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #fff;
 }
@@ -455,7 +455,7 @@
   gap: 1rem;
 }
 
-.status-badge {
+.storage-status-badge {
   padding: 0.5rem 1rem;
   border-radius: 20px;
   font-size: 0.85rem;
@@ -465,22 +465,22 @@
   gap: 0.5rem;
 }
 
-.status-idle {
+.storage-status-idle {
   background: #f5f5f5;
   color: #666;
 }
 
-.status-running {
+.storage-status-running {
   background: #e3f2fd;
   color: #1976d2;
 }
 
-.status-success {
+.storage-status-success {
   background: #e8f5e9;
   color: #4caf50;
 }
 
-.status-error {
+.storage-status-error {
   background: #ffebee;
   color: #f44336;
 }

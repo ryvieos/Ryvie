@@ -49,6 +49,12 @@ Ou accédez directement à : `#/settings/storage`
 - **RAID1C3** (3 copies) - Recommandé pour 3+ disques
 - **RAID10** - Pour configurations avancées
 
+**Mode dégradé automatique** :
+- ✅ Configuration automatique de l'option `degraded` dans `/etc/fstab`
+- ✅ Permet au système de démarrer même si un disque du RAID est manquant
+- ✅ Évite le passage en emergency mode au boot
+- 📖 Voir [documentation complète](docs/BTRFS_DEGRADED_MODE.md)
+
 **Mode Dry-run** :
 - Prévisualise toutes les commandes sans les exécuter
 - Permet de vérifier la configuration avant application
