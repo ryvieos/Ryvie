@@ -29,8 +29,8 @@ const StorageSettings = () => {
   
   // États pour la sélection
   const [sourceDevice, setSourceDevice] = useState('');
-  const [targetDevices, setTargetDevices] = useState([]);
-  const [targetLabels, setTargetLabels] = useState({});
+  const [selectedDisk, setSelectedDisk] = useState(''); // Pour mdadm: un seul disque à la fois
+  const [raidType, setRaidType] = useState(null); // 'mdadm' ou 'btrfs'
   
   // États pour les options
   const [dryRun, setDryRun] = useState(false);
@@ -41,6 +41,9 @@ const StorageSettings = () => {
   const [executionStatus, setExecutionStatus] = useState('idle'); // idle, running, success, error
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [commandsList, setCommandsList] = useState([]);
+  
+  // États pour la progression du resync
+  const [resyncProgress, setResyncProgress] = useState(null); // { percent, eta, speed }
   
   // États pour les validations
   const [validationErrors, setValidationErrors] = useState([]);
@@ -69,48 +72,26 @@ const StorageSettings = () => {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       
-      const response = await axios.get(`${serverUrl}/api/storage/btrfs-status`, {
+      // Détecter le type de RAID (mdadm ou btrfs)
+      const response = await axios.get(`${serverUrl}/api/storage/mdraid-status`, {
         timeout: 30000 // 30 secondes
       });
       
       if (response.data.success && response.data.status) {
         const status = response.data.status;
         
-        // Debug: afficher le statut reçu
-        console.log('RAID Status received:', {
-          isRaidIncomplete: status.isRaidIncomplete,
-          hasMixedProfiles: status.hasMixedProfiles,
-          needsRebalance: status.needsRebalance,
-          mixedProfilesWarning: status.mixedProfilesWarning
-        });
+        console.log('RAID Status received:', status);
         
-        // Parser le niveau RAID depuis filesystemDf
-        let currentRaidLevel = 'single';
-        let deviceCount = 1;
-        const devicesInRaid = [];
-        
-        if (status.filesystemDf) {
-          // Chercher "Data, RAID1" ou "Data, RAID1C3" dans la sortie
-          const dataMatch = status.filesystemDf.match(/Data,\s*(\w+):/i);
-          if (dataMatch && dataMatch[1].toLowerCase() !== 'single') {
-            currentRaidLevel = dataMatch[1].toLowerCase();
-          }
-        }
-        
-        if (status.filesystemShow) {
-          // Compter le nombre de devices et extraire leurs paths
-          const deviceMatches = status.filesystemShow.match(/devid\s+\d+/g);
-          if (deviceMatches) {
-            deviceCount = deviceMatches.length;
-          }
+        // Déterminer le type de RAID
+        if (status.mounted && status.source === '/dev/md0' && status.fstype === 'btrfs') {
+          // Mode mdadm
+          setRaidType('mdadm');
           
-          // Extraire les paths des devices (ex: /dev/sda6, /dev/sdb)
-          const pathMatches = status.filesystemShow.match(/path\s+(\/dev\/\w+)/g);
-          if (pathMatches) {
-            pathMatches.forEach(match => {
-              const path = match.replace('path ', '');
-              // Extraire le disque parent (ex: /dev/sda6 -> /dev/sda, /dev/sdb -> /dev/sdb)
-              const diskMatch = path.match(/\/dev\/(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)/);
+          const devicesInRaid = [];
+          if (status.members && status.members.length > 0) {
+            status.members.forEach(member => {
+              // Extraire le disque parent de la partition
+              const diskMatch = member.device.match(/\/dev\/(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)/);
               if (diskMatch) {
                 const diskPath = `/dev/${diskMatch[1]}`;
                 if (!devicesInRaid.includes(diskPath)) {
@@ -119,19 +100,24 @@ const StorageSettings = () => {
               }
             });
           }
+          
+          setRaidDevices(devicesInRaid);
+          setRaidStatus({
+            isRaid: status.exists && status.activeDevices > 0,
+            level: 'raid1', // mdadm RAID1
+            deviceCount: status.activeDevices || 0,
+            totalDevices: status.totalDevices || 0,
+            state: status.state,
+            syncProgress: status.syncProgress,
+            details: status.mdstat,
+            type: 'mdadm'
+          });
+        } else {
+          // Pas de mdadm détecté
+          setRaidType(null);
+          setRaidDevices([]);
+          setRaidStatus(null);
         }
-        
-        setRaidDevices(devicesInRaid);
-        setRaidStatus({
-          isRaid: currentRaidLevel !== 'single' && deviceCount > 1,
-          level: currentRaidLevel,
-          deviceCount: deviceCount,
-          details: status.filesystemDf,
-          isIncomplete: status.isRaidIncomplete || false,
-          hasMixedProfiles: status.hasMixedProfiles || false,
-          needsRebalance: status.needsRebalance || false,
-          mixedProfilesWarning: status.mixedProfilesWarning || null
-        });
       }
     } catch (error) {
       console.error('Error checking RAID status:', error);
@@ -154,7 +140,33 @@ const StorageSettings = () => {
         
         // Extraire seulement les disques (type disk)
         const disksList = [];
+        
+        // Fonction récursive pour chercher md0 dans toute la hiérarchie
+        const findMd0 = (devices) => {
+          if (!devices) return;
+          devices.forEach(device => {
+            if (device.name === 'md0' && device.type === 'raid1') {
+              if (device.mountpoints && device.mountpoints.length > 0 && device.mountpoints[0] === '/data') {
+                setDataSource({
+                  device: '/dev/md0',
+                  size: device.size,
+                  fstype: 'btrfs (on mdadm RAID1)'
+                });
+                setSourceDevice('/dev/md0');
+              }
+            }
+            // Chercher récursivement dans les enfants
+            if (device.children) {
+              findMd0(device.children);
+            }
+          });
+        };
+        
         if (devicesData.blockdevices) {
+          // Chercher md0 dans toute la hiérarchie
+          findMd0(devicesData.blockdevices);
+          
+          // Extraire les disques
           devicesData.blockdevices.forEach(device => {
             if (device.type === 'disk' && !device.name.includes('sr')) {
               // Calculer si le disque est monté (lui ou ses partitions)
@@ -172,16 +184,6 @@ const StorageSettings = () => {
                   if (child.mountpoints && child.mountpoints.length > 0 && child.mountpoints[0]) {
                     isMounted = true;
                     if (!mountInfo) mountInfo = child.mountpoints[0];
-                    
-                    // Détecter si c'est la source /data
-                    if (child.mountpoints[0] === '/data' && child.fstype === 'btrfs') {
-                      setDataSource({
-                        device: child.path || `/dev/${child.name}`,
-                        size: child.size,
-                        fstype: child.fstype
-                      });
-                      setSourceDevice(child.path || `/dev/${child.name}`);
-                    }
                   }
                 });
               }
@@ -209,35 +211,13 @@ const StorageSettings = () => {
   };
 
 
-  // Gérer la sélection des cibles
-  const handleTargetToggle = (devicePath) => {
-    setTargetDevices(prev => {
-      if (prev.includes(devicePath)) {
-        // Retirer
-        const newTargets = prev.filter(d => d !== devicePath);
-        const newLabels = { ...targetLabels };
-        delete newLabels[devicePath];
-        setTargetLabels(newLabels);
-        return newTargets;
-      } else {
-        // Ajouter
-        const newTargets = [...prev, devicePath];
-        const labelIndex = newTargets.length + 1;
-        setTargetLabels({
-          ...targetLabels,
-          [devicePath]: `DATA${labelIndex}`
-        });
-        return newTargets;
-      }
-    });
-  };
-
-  // Gérer le changement de label
-  const handleLabelChange = (devicePath, newLabel) => {
-    setTargetLabels({
-      ...targetLabels,
-      [devicePath]: newLabel
-    });
+  // Gérer la sélection d'un disque (mdadm: un seul à la fois)
+  const handleDiskSelect = (devicePath) => {
+    if (selectedDisk === devicePath) {
+      setSelectedDisk('');
+    } else {
+      setSelectedDisk(devicePath);
+    }
   };
 
   // Ajouter un log
@@ -257,20 +237,15 @@ const StorageSettings = () => {
     addLog('Logs copied to clipboard', 'success');
   };
 
-  // Effectuer les pré-checks
+  // Effectuer les pré-checks (mdadm)
   const performPrechecks = async () => {
     try {
       setValidationErrors([]);
       setValidationWarnings([]);
       setCanProceed(false);
       
-      if (!sourceDevice) {
-        setValidationErrors(['No source device selected']);
-        return;
-      }
-      
-      if (targetDevices.length === 0) {
-        setValidationErrors(['No target devices selected']);
+      if (!selectedDisk) {
+        setValidationErrors(['No disk selected']);
         return;
       }
       
@@ -279,28 +254,44 @@ const StorageSettings = () => {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       
-      const response = await axios.post(`${serverUrl}/api/storage/btrfs-prechecks`, {
-        source: sourceDevice,
-        targets: targetDevices
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-prechecks`, {
+        array: '/dev/md0',
+        disk: selectedDisk
       }, {
-        timeout: 60000 // 60 secondes pour les prechecks
+        timeout: 60000
       });
       
       if (response.data.success) {
-        const { checks } = response.data;
+        const { canProceed, reasons, plan } = response.data;
         
-        if (checks.warnings.length > 0) {
-          setValidationWarnings(checks.warnings);
-          checks.warnings.forEach(w => addLog(`Warning: ${w}`, 'warning'));
-        }
+        // Réinitialiser les erreurs et warnings
+        const errors = [];
+        const warnings = [];
         
-        if (checks.errors.length > 0) {
-          setValidationErrors(checks.errors);
-          checks.errors.forEach(e => addLog(`Error: ${e}`, 'error'));
-          setCanProceed(false);
-        } else {
+        // Afficher les raisons
+        reasons.forEach(reason => {
+          if (reason.startsWith('❌')) {
+            errors.push(reason);
+            addLog(reason, 'error');
+          } else if (reason.startsWith('⚠')) {
+            warnings.push(reason);
+            addLog(reason, 'warning');
+          } else {
+            addLog(reason, 'info');
+          }
+        });
+        
+        setValidationErrors(errors);
+        setValidationWarnings(warnings);
+        
+        // Stocker le plan pour la modale
+        setCommandsList(plan.map(cmd => ({ command: cmd, description: cmd })));
+        
+        if (canProceed) {
           addLog('Pre-checks passed successfully', 'success');
           setCanProceed(true);
+        } else {
+          setCanProceed(false);
         }
       } else {
         setValidationErrors([response.data.error]);
@@ -316,143 +307,87 @@ const StorageSettings = () => {
 
   // Exécuter les pré-checks quand la sélection change
   useEffect(() => {
-    if (sourceDevice && targetDevices.length > 0) {
+    if (selectedDisk) {
       performPrechecks();
     } else {
       setCanProceed(false);
       setValidationErrors([]);
       setValidationWarnings([]);
-      // Effacer les logs si pas de sélection complète
-      if (logs.length > 0 && logs[logs.length - 1].type === 'error') {
-        setLogs([]);
-      }
     }
-  }, [sourceDevice, targetDevices]);
+  }, [selectedDisk]);
 
   // Ouvrir la modale de confirmation
   const openConfirmModal = async () => {
-    try {
-      // Générer la liste des commandes en mode dry-run
-      const accessMode = getCurrentAccessMode() || 'private';
-      const serverUrl = getServerUrl(accessMode);
-      
-      const targets = targetDevices.map(device => ({
-        device,
-        label: targetLabels[device] || 'DATA'
-      }));
-      
-      const response = await axios.post(`${serverUrl}/api/storage/btrfs-raid-create`, {
-        source: sourceDevice,
-        targets,
-        dryRun: true,
-        raidLevel
-      }, {
-        timeout: 30000 // 30 secondes pour le dry-run
-      });
-      
-      if (response.data.success) {
-        setCommandsList(response.data.commands);
-        setShowConfirmModal(true);
-      }
-    } catch (error) {
-      console.error('Error generating commands:', error);
-      addLog('Failed to generate commands list', 'error');
-    }
+    // Les commandes sont déjà dans commandsList depuis les prechecks
+    setShowConfirmModal(true);
   };
 
-  // Exécuter la création du RAID
+  // Exécuter l'ajout du disque au RAID
   const executeRaidCreation = async () => {
     try {
       setShowConfirmModal(false);
       setExecutionStatus('running');
       setLogs([]);
-      addLog('Starting RAID creation...', 'info');
+      addLog('Starting disk addition to RAID...', 'info');
       
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       
-      const targets = targetDevices.map(device => ({
-        device,
-        label: targetLabels[device] || 'DATA'
-      }));
-      
-      // Timeout de 30 minutes pour les opérations Btrfs longues (balance peut prendre du temps)
-      const response = await axios.post(`${serverUrl}/api/storage/btrfs-raid-create`, {
-        source: sourceDevice,
-        targets,
-        dryRun: false,
-        raidLevel
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-add-disk`, {
+        array: '/dev/md0',
+        disk: selectedDisk,
+        dryRun: dryRun
       }, {
         timeout: 1800000 // 30 minutes
       });
       
       if (response.data.success) {
-        // Ajouter tous les logs du backend
+        // Ajouter tous les logs du backend et parser la progression
         response.data.logs.forEach(log => {
           setLogs(prev => [...prev, log]);
+          
+          // Parser la progression du resync depuis les logs
+          if (log.message && log.message.includes('Resync progress:')) {
+            const percentMatch = log.message.match(/(\d+\.\d+)%/);
+            const etaMatch = log.message.match(/ETA:\s*([\d.]+min)/);
+            const speedMatch = log.message.match(/Speed:\s*([\d.]+[KMG]\/sec)/);
+            
+            if (percentMatch) {
+              setResyncProgress({
+                percent: parseFloat(percentMatch[1]),
+                eta: etaMatch ? etaMatch[1] : null,
+                speed: speedMatch ? speedMatch[1] : null
+              });
+            }
+          }
+          
+          // Détecter la fin du resync
+          if (log.message && log.message.includes('Resynchronization completed')) {
+            setResyncProgress({ percent: 100, eta: null, speed: null });
+          }
         });
         
         setExecutionStatus('success');
-        addLog('RAID creation completed successfully!', 'success');
+        addLog('Disk added to RAID successfully!', 'success');
         
         // Rafraîchir le statut RAID et l'inventaire
         setTimeout(() => {
           checkRaidStatus();
           loadInventory();
+          setResyncProgress(null); // Réinitialiser la progression
         }, 2000);
       } else {
         setExecutionStatus('error');
-        addLog(`RAID creation failed: ${response.data.error}`, 'error');
+        addLog(`Failed to add disk: ${response.data.error}`, 'error');
       }
     } catch (error) {
-      console.error('Error creating RAID:', error);
+      console.error('Error adding disk to RAID:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
       setExecutionStatus('error');
-      addLog(`RAID creation failed: ${errorMsg}`, 'error');
+      addLog(`Failed to add disk: ${errorMsg}`, 'error');
     }
   };
 
-  // Relancer le balance pour corriger les profils mixtes
-  const fixMixedProfiles = async () => {
-    try {
-      setExecutionStatus('running');
-      setLogs([]);
-      addLog('Fixing mixed RAID profiles...', 'info');
-      
-      const accessMode = getCurrentAccessMode() || 'private';
-      const serverUrl = getServerUrl(accessMode);
-      
-      const response = await axios.post(`${serverUrl}/api/storage/btrfs-fix-raid-profiles`, {
-        raidLevel: raidLevel
-      }, {
-        timeout: 1800000 // 30 minutes
-      });
-      
-      if (response.data.success) {
-        // Ajouter tous les logs du backend
-        response.data.logs.forEach(log => {
-          setLogs(prev => [...prev, log]);
-        });
-        
-        setExecutionStatus('success');
-        addLog('RAID profiles fixed successfully!', 'success');
-        
-        // Rafraîchir le statut RAID
-        setTimeout(() => {
-          checkRaidStatus();
-          loadInventory();
-        }, 2000);
-      } else {
-        setExecutionStatus('error');
-        addLog(`Failed to fix RAID profiles: ${response.data.error}`, 'error');
-      }
-    } catch (error) {
-      console.error('Error fixing RAID profiles:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
-      setExecutionStatus('error');
-      addLog(`Failed to fix RAID profiles: ${errorMsg}`, 'error');
-    }
-  };
 
   // Formater la taille
   const formatSize = (size) => {
@@ -467,9 +402,9 @@ const StorageSettings = () => {
           <FontAwesomeIcon icon={faArrowLeft} /> Retour
         </button>
         <h1>
-          <FontAwesomeIcon icon={faHdd} /> Assistant RAID Btrfs
+          <FontAwesomeIcon icon={faHdd} /> Assistant RAID mdadm
         </h1>
-        <p className="subtitle">Créer un miroir RAID1 pour /data</p>
+        <p className="subtitle">Ajouter des disques au RAID1 /dev/md0</p>
       </div>
 
       {loading ? (
@@ -496,59 +431,39 @@ const StorageSettings = () => {
             </div>
           )}
 
-          {!dataSource && (
-            <div className="alert-error">
-              <FontAwesomeIcon icon={faExclamationTriangle} />
-              <div>
-                <strong>Erreur :</strong> Aucune partition Btrfs montée sur /data détectée.
-              </div>
-            </div>
-          )}
-
-          {/* Alerte pour profils mixtes */}
-          {raidStatus && raidStatus.isIncomplete && (
+          {!dataSource && raidType !== 'mdadm' && (
             <div className="alert-warning">
               <FontAwesomeIcon icon={faExclamationTriangle} />
               <div>
-                <strong>RAID incomplet détecté !</strong>
-                <p>Le RAID n'a pas été complètement converti. Des profils mixtes (single/DUP/RAID) ont été détectés.</p>
-                <p>Cliquez sur le bouton ci-dessous pour terminer la conversion en RAID.</p>
-                <button 
-                  className="btn-create-raid" 
-                  style={{ marginTop: '1rem' }}
-                  onClick={fixMixedProfiles}
-                  disabled={executionStatus === 'running'}
-                >
-                  {executionStatus === 'running' ? (
-                    <>
-                      <FontAwesomeIcon icon={faSpinner} spin /> Correction en cours...
-                    </>
-                  ) : (
-                    <>
-                      <FontAwesomeIcon icon={faPlay} /> Terminer la conversion RAID
-                    </>
-                  )}
-                </button>
+                <strong>Info :</strong> Aucun RAID mdadm détecté sur /data. Assurez-vous que /dev/md0 est monté sur /data.
               </div>
             </div>
           )}
 
-          {/* Sélection des disques cibles */}
+          {/* Info sur l'état du RAID */}
+          {raidStatus && raidStatus.type === 'mdadm' && (
+            <div className="alert-info" style={{ background: '#e3f2fd', border: '1px solid #2196f3', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+              <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#2196f3' }} />
+              <div>
+                <strong>RAID mdadm actif</strong>
+                <p>Array: /dev/md0 | État: {raidStatus.state} | Membres: {raidStatus.deviceCount}/{raidStatus.totalDevices}</p>
+                {raidStatus.syncProgress !== null && (
+                  <p>🔄 Resynchronisation en cours: {raidStatus.syncProgress.toFixed(1)}%</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Sélection du disque à ajouter */}
           <div className="targets-section">
-            <h2>
-              {raidStatus && raidStatus.isRaid 
-                ? 'Ajouter des disques au RAID existant' 
-                : 'Sélectionnez les disques pour le RAID'}
-            </h2>
+            <h2>Sélectionnez un disque à ajouter au RAID</h2>
             <p className="section-subtitle">
-              {raidStatus && raidStatus.isRaid
-                ? 'Vous pouvez ajouter des disques supplémentaires à votre RAID existant'
-                : 'Les disques sélectionnés seront formatés et ajoutés au RAID1'}
+              Le disque sera effacé, partitionné (GPT), et ajouté comme membre du RAID /dev/md0
             </p>
             
             <div className="disks-grid">
               {disks.map((disk) => {
-                const isSelected = targetDevices.includes(disk.path);
+                const isSelected = selectedDisk === disk.path;
                 const isDisabled = disk.isSystemDisk || disk.isMounted;
                 const canSelect = !isDisabled;
                 const isInRaid = raidDevices.includes(disk.path);
@@ -557,7 +472,7 @@ const StorageSettings = () => {
                   <div 
                     key={disk.path}
                     className={`disk-card-simple ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''} ${isInRaid ? 'in-raid' : ''}`}
-                    onClick={() => canSelect && handleTargetToggle(disk.path)}
+                    onClick={() => canSelect && handleDiskSelect(disk.path)}
                   >
                     {isSelected && (
                       <div className="disk-check">
@@ -578,21 +493,6 @@ const StorageSettings = () => {
                       {!isInRaid && disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-mounted">Monté ({disk.mountInfo})</span>}
                       {!isInRaid && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">Disponible</span>}
                     </div>
-                    
-                    {isSelected && (
-                      <div className="disk-label-input">
-                        <input
-                          type="text"
-                          placeholder="Label (ex: DATA2)"
-                          value={targetLabels[disk.path] || ''}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            handleLabelChange(disk.path, e.target.value);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -609,14 +509,6 @@ const StorageSettings = () => {
           {/* Options */}
           <div className="options-section">
             <div className="options-row">
-              <div className="option-item">
-                <label>Niveau RAID</label>
-                <select value={raidLevel} onChange={(e) => setRaidLevel(e.target.value)}>
-                  <option value="raid1">RAID1 (2 copies)</option>
-                  <option value="raid1c3">RAID1C3 (3 copies)</option>
-                </select>
-              </div>
-
               <div className="option-item checkbox">
                 <label>
                   <input
@@ -656,15 +548,13 @@ const StorageSettings = () => {
           {/* Bouton d'exécution */}
           <div className="action-section">
             {(() => {
-              // Vérifier si tous les disques sélectionnés sont déjà dans le RAID
-              const allSelectedInRaid = targetDevices.length > 0 && 
-                targetDevices.every(device => raidDevices.includes(device));
+              // Vérifier si le disque sélectionné est déjà dans le RAID
+              const diskInRaid = selectedDisk && raidDevices.includes(selectedDisk);
               
-              // Ne pas afficher "RAID déjà actif" si le RAID est incomplet
-              if (allSelectedInRaid && (!raidStatus || !raidStatus.isIncomplete)) {
+              if (diskInRaid) {
                 return (
                   <button className="btn-raid-active" disabled>
-                    <FontAwesomeIcon icon={faCheckCircle} /> RAID déjà actif
+                    <FontAwesomeIcon icon={faCheckCircle} /> Ce disque est déjà dans le RAID
                   </button>
                 );
               }
@@ -677,17 +567,73 @@ const StorageSettings = () => {
                 >
                   {executionStatus === 'running' ? (
                     <>
-                      <FontAwesomeIcon icon={faSpinner} spin /> Création en cours...
+                      <FontAwesomeIcon icon={faSpinner} spin /> Ajout en cours...
                     </>
                   ) : (
                     <>
-                      <FontAwesomeIcon icon={faPlay} /> Créer le RAID
+                      <FontAwesomeIcon icon={faPlay} /> Ajouter au RAID
                     </>
                   )}
                 </button>
               );
             })()}
           </div>
+
+          {/* Barre de progression du resync */}
+          {resyncProgress && (
+            <div className="resync-progress-section" style={{ 
+              background: '#fff', 
+              border: '1px solid #e0e0e0', 
+              borderRadius: '8px', 
+              padding: '1.5rem', 
+              marginBottom: '1rem' 
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>
+                  🔄 Resynchronisation en cours
+                </h3>
+                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2196f3' }}>
+                  {resyncProgress.percent.toFixed(1)}%
+                </span>
+              </div>
+              
+              {/* Barre de progression */}
+              <div style={{ 
+                width: '100%', 
+                height: '24px', 
+                background: '#e0e0e0', 
+                borderRadius: '12px', 
+                overflow: 'hidden',
+                marginBottom: '0.5rem'
+              }}>
+                <div style={{ 
+                  width: `${resyncProgress.percent}%`, 
+                  height: '100%', 
+                  background: 'linear-gradient(90deg, #2196f3, #1976d2)',
+                  transition: 'width 0.5s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  paddingRight: '8px',
+                  color: 'white',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold'
+                }}>
+                  {resyncProgress.percent > 10 && `${resyncProgress.percent.toFixed(1)}%`}
+                </div>
+              </div>
+              
+              {/* Infos supplémentaires */}
+              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: '#666' }}>
+                {resyncProgress.eta && (
+                  <span>⏱️ Temps restant: <strong>{resyncProgress.eta}</strong></span>
+                )}
+                {resyncProgress.speed && (
+                  <span>⚡ Vitesse: <strong>{resyncProgress.speed}</strong></span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Fenêtre de logs */}
           <div className="logs-section">
@@ -733,13 +679,10 @@ const StorageSettings = () => {
               <h3>Configuration Summary</h3>
               <div className="summary-grid">
                 <div className="summary-item">
-                  <strong>Source:</strong> {sourceDevice}
+                  <strong>Array:</strong> /dev/md0
                 </div>
                 <div className="summary-item">
-                  <strong>Targets:</strong> {targetDevices.map(d => `${d} (${targetLabels[d]})`).join(', ')}
-                </div>
-                <div className="summary-item">
-                  <strong>RAID Level:</strong> {raidLevel.toUpperCase()}
+                  <strong>Disk to add:</strong> {selectedDisk}
                 </div>
                 <div className="summary-item">
                   <strong>Mode:</strong> {dryRun ? 'Dry Run' : 'Live Execution'}
@@ -761,8 +704,8 @@ const StorageSettings = () => {
 
             <div className="modal-warning">
               <FontAwesomeIcon icon={faExclamationTriangle} />
-              <strong>Warning:</strong> This operation will format the target devices and is destructive. 
-              Make sure you have backups of any important data.
+              <strong>ATTENTION:</strong> Le disque {selectedDisk} sera complètement effacé (wipefs, mklabel gpt). 
+              Toutes les données seront perdues. Assurez-vous d'avoir des sauvegardes.
             </div>
 
             <div className="modal-actions">
@@ -770,7 +713,7 @@ const StorageSettings = () => {
                 Cancel
               </button>
               <button className="btn-danger" onClick={executeRaidCreation}>
-                {dryRun ? 'Run Dry Run' : 'Execute RAID Creation'}
+                {dryRun ? 'Simuler' : 'Ajouter au RAID'}
               </button>
             </div>
           </div>
