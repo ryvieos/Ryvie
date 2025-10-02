@@ -7,6 +7,7 @@ import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg
 import { isElectron } from '../utils/platformUtils';
 const { getServerUrl } = require('../config/urls');
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, connectRyvieSocket } from '../utils/detectAccessMode';
+import StorageSettings from './StorageSettings';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -112,6 +113,8 @@ const Settings = () => {
 
   const [socketConnected, setSocketConnected] = useState(false);
   const [serverConnectionStatus, setServerConnectionStatus] = useState(false);
+  // Overlay Assistant Stockage
+  const [showStorageOverlay, setShowStorageOverlay] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -529,7 +532,7 @@ const Settings = () => {
         <h2>Vue d'ensemble du système</h2>
         <div className="stats-grid">
           {/* Stockage */}
-          <div className="stat-card storage" onClick={handleShowDisks} style={{ cursor: 'pointer' }}>
+          <div className="stat-card storage" style={{ cursor: 'default' }}>
             <h3>Stockage</h3>
             <div className="progress-container">
               <div 
@@ -600,6 +603,71 @@ const Settings = () => {
           </div>
         </div>
       </section>
+
+      {/* Overlay Assistant Stockage */}
+      {showStorageOverlay && (
+        <div
+          className="storage-assistant-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowStorageOverlay(false);
+          }}
+        >
+          <div
+            className="storage-assistant-modal"
+            style={{
+              width: '92vw',
+              height: '86vh',
+              background: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+              overflow: 'hidden',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 20,
+                display: 'flex',
+                gap: 8,
+                zIndex: 2
+              }}
+            >
+              <button
+                onClick={() => setShowStorageOverlay(false)}
+                title="Fermer"
+                style={{
+                  border: '1px solid #ddd',
+                  background: '#fff',
+                  borderRadius: 8,
+                  padding: '6px 10px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            {/* Contenu: composant StorageSettings directement */}
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <StorageSettings />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Détails Disques */}
       {showDisksInfo && systemDisksInfo && (
@@ -1097,7 +1165,8 @@ const Settings = () => {
         <div style={{ marginBottom: 16 }}>
           <button
             className="setting-button"
-            onClick={() => navigate('/settings/storage')}
+            onClick={() => setShowStorageOverlay(true)}
+            style={{ background: '#1976d2', color: '#fff', borderColor: '#1565c0' }}
           >
             Ouvrir l'assistant Stockage (RAID + Btrfs)
           </button>
