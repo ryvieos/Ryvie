@@ -25,7 +25,8 @@ const StorageSettings = () => {
   const [disks, setDisks] = useState([]); // Seulement les disques, pas les partitions
   const [dataSource, setDataSource] = useState(null); // Info sur /data
   const [raidStatus, setRaidStatus] = useState(null); // État du RAID actuel
-  const [raidDevices, setRaidDevices] = useState([]); // Liste des devices déjà dans le RAID
+  const [raidMemberPartitions, setRaidMemberPartitions] = useState([]); // Ex: ['/dev/sda6', '/dev/sdb1']
+  const [raidMemberDisksMap, setRaidMemberDisksMap] = useState({}); // Map disque -> partition membre
   
   // États pour la sélection
   const [sourceDevice, setSourceDevice] = useState('');
@@ -87,21 +88,24 @@ const StorageSettings = () => {
           // Mode mdadm
           setRaidType('mdadm');
           
-          const devicesInRaid = [];
+          // Construire la liste de partitions membres et la map disque -> partition
+          const members = [];
+          const diskMap = {};
           if (status.members && status.members.length > 0) {
             status.members.forEach(member => {
-              // Extraire le disque parent de la partition
-              const diskMatch = member.device.match(/\/dev\/(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)/);
-              if (diskMatch) {
-                const diskPath = `/dev/${diskMatch[1]}`;
-                if (!devicesInRaid.includes(diskPath)) {
-                  devicesInRaid.push(diskPath);
+              const part = member.device; // ex: /dev/sda6
+              if (part) {
+                members.push(part);
+                const diskMatch = part.match(/\/dev\/(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)/);
+                if (diskMatch) {
+                  const diskPath = `/dev/${diskMatch[1]}`;
+                  diskMap[diskPath] = part;
                 }
               }
             });
           }
-          
-          setRaidDevices(devicesInRaid);
+          setRaidMemberPartitions(members);
+          setRaidMemberDisksMap(diskMap);
           setRaidStatus({
             isRaid: status.exists && status.activeDevices > 0,
             level: 'raid1', // mdadm RAID1
@@ -115,7 +119,8 @@ const StorageSettings = () => {
         } else {
           // Pas de mdadm détecté
           setRaidType(null);
-          setRaidDevices([]);
+          setRaidMemberPartitions([]);
+          setRaidMemberDisksMap({});
           setRaidStatus(null);
         }
       }
@@ -187,14 +192,22 @@ const StorageSettings = () => {
                   }
                 });
               }
-              
+              // Enregistrer les enfants minimaux utiles
+              const children = (device.children || []).map(ch => ({
+                path: ch.path || (ch.name ? `/dev/${ch.name}` : null),
+                name: ch.name,
+                size: ch.size,
+                mountpoints: ch.mountpoints || []
+              }));
+
               disksList.push({
                 path: device.path || `/dev/${device.name}`,
                 name: device.name,
                 size: device.size,
                 isMounted,
                 mountInfo,
-                isSystemDisk: mountInfo === '/' || mountInfo.startsWith('/boot')
+                isSystemDisk: mountInfo === '/' || mountInfo.startsWith('/boot'),
+                children
               });
             }
           });
@@ -389,20 +402,34 @@ const StorageSettings = () => {
   };
 
 
-  // Formater la taille
-  const formatSize = (size) => {
-    if (!size) return 'N/A';
-    return size;
+  // Formater une taille en bytes en format lisible
+  const formatBytes = (bytes) => {
+    if (bytes === null || bytes === undefined || isNaN(bytes)) return 'N/A';
+    const units = ['B','KB','MB','GB','TB','PB'];
+    let i = 0;
+    let val = Number(bytes);
+    while (val >= 1024 && i < units.length - 1) { val /= 1024; i++; }
+    return `${val.toFixed(val >= 10 || i === 0 ? 0 : 1)}${units[i]}`;
+  };
+
+  // Parser tailles lsblk (ex: "80G", "59,5G", bytes en number) vers bytes
+  const parseSizeToBytes = (s) => {
+    if (s === null || s === undefined) return NaN;
+    if (typeof s === 'number') return s;
+    const str = String(s).trim().replace(',', '.');
+    const m = str.match(/^(\d+(?:\.\d+)?)(\s*[KMGTP]?B?)?$/i);
+    if (!m) return NaN;
+    const num = parseFloat(m[1]);
+    const unit = (m[2] || '').replace(/\s+/g, '').toUpperCase();
+    const pow = unit.startsWith('P') ? 5 : unit.startsWith('T') ? 4 : unit.startsWith('G') ? 3 : unit.startsWith('M') ? 2 : unit.startsWith('K') ? 1 : 0;
+    return Math.round(num * Math.pow(1024, pow));
   };
 
   return (
     <div className="storage-settings-container">
       <div className="storage-header">
-        <button className="back-button" onClick={() => navigate(-1)}>
-          <FontAwesomeIcon icon={faArrowLeft} /> Retour
-        </button>
         <h1>
-          <FontAwesomeIcon icon={faHdd} /> Assistant RAID mdadm
+          <FontAwesomeIcon icon={faHdd} /> Assistant RAID
         </h1>
         <p className="subtitle">Ajouter des disques au RAID1 /dev/md0</p>
       </div>
@@ -442,13 +469,16 @@ const StorageSettings = () => {
 
           {/* Info sur l'état du RAID */}
           {raidStatus && raidStatus.type === 'mdadm' && (
-            <div className="alert-info" style={{ background: '#e3f2fd', border: '1px solid #2196f3', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-              <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#2196f3' }} />
-              <div>
-                <strong>RAID mdadm actif</strong>
-                <p>Array: /dev/md0 | État: {raidStatus.state} | Membres: {raidStatus.deviceCount}/{raidStatus.totalDevices}</p>
+            <div className="raid-status-card">
+              <div className="raid-status-title">
+                <FontAwesomeIcon icon={faCheckCircle} /> RAID mdadm actif
+              </div>
+              <div className="raid-status-meta">
+                <span className="raid-badge">Array: /dev/md0</span>
+                <span className={`raid-badge raid-badge-state`}>État: {raidStatus.state}</span>
+                <span className="raid-badge">Membres: {raidStatus.deviceCount}/{raidStatus.totalDevices}</span>
                 {raidStatus.syncProgress !== null && (
-                  <p>🔄 Resynchronisation en cours: {raidStatus.syncProgress.toFixed(1)}%</p>
+                  <span className="raid-badge">Resync: {raidStatus.syncProgress.toFixed(1)}%</span>
                 )}
               </div>
             </div>
@@ -464,14 +494,44 @@ const StorageSettings = () => {
             <div className="disks-grid">
               {disks.map((disk) => {
                 const isSelected = selectedDisk === disk.path;
-                const isDisabled = disk.isSystemDisk || disk.isMounted;
+                const diskHasRaidPartition = !!raidMemberDisksMap[disk.path];
+                const isDisabled = disk.isSystemDisk || disk.isMounted || diskHasRaidPartition;
                 const canSelect = !isDisabled;
-                const isInRaid = raidDevices.includes(disk.path);
+                // Calculer taille affichée: si partition RAID présente, sommer tailles des partitions hors partition RAID
+                // Calcul exact en bytes si possible
+                let displaySizeBytes = parseSizeToBytes(disk.size);
+                if (diskHasRaidPartition && Array.isArray(disk.children) && disk.children.length > 0) {
+                  const raidPart = raidMemberDisksMap[disk.path];
+                  let sum = 0;
+                  let counted = 0;
+                  disk.children.forEach(ch => {
+                    const chPath = ch.path || (ch.name ? `/dev/${ch.name}` : null);
+                    if (chPath && chPath !== raidPart) {
+                      const v = parseSizeToBytes(ch.size);
+                      if (!isNaN(v)) { sum += v; counted++; }
+                    }
+                  });
+                  if (counted > 0) {
+                    displaySizeBytes = sum;
+                  } else {
+                    // Fallback: total disque - taille partition RAID
+                    const total = parseSizeToBytes(disk.size);
+                    const raidSize = (() => {
+                      const child = (disk.children || []).find(ch => (ch.path || (ch.name ? `/dev/${ch.name}` : null)) === raidPart);
+                      return child ? parseSizeToBytes(child.size) : NaN;
+                    })();
+                    if (!isNaN(total) && !isNaN(raidSize) && total >= raidSize) {
+                      displaySizeBytes = total - raidSize;
+                    } else {
+                      displaySizeBytes = 0;
+                    }
+                  }
+                }
                 
                 return (
-                  <div 
+                  <div
                     key={disk.path}
-                    className={`disk-card-simple ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''} ${isInRaid ? 'in-raid' : ''}`}
+                    className={`disk-card-simple ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
                     onClick={() => canSelect && handleDiskSelect(disk.path)}
                   >
                     {isSelected && (
@@ -485,13 +545,13 @@ const StorageSettings = () => {
                     </div>
                     
                     <div className="disk-name">{disk.path}</div>
-                    <div className="disk-size">{disk.size}</div>
+                    <div className="disk-size">{formatBytes(displaySizeBytes)}</div>
                     
                     <div className="disk-status">
-                      {isInRaid && <span className="storage-badge-raid-active"><FontAwesomeIcon icon={faCheckCircle} /> Dans le RAID</span>}
-                      {!isInRaid && disk.isSystemDisk && <span className="storage-badge-system">Système</span>}
-                      {!isInRaid && disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-mounted">Monté ({disk.mountInfo})</span>}
-                      {!isInRaid && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">Disponible</span>}
+                      {diskHasRaidPartition && disk.isSystemDisk && <span className="storage-badge-system">Système</span>}
+                      {(!diskHasRaidPartition) && disk.isSystemDisk && <span className="storage-badge-system">Système</span>}
+                      {(!diskHasRaidPartition) && disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-mounted">Monté ({disk.mountInfo})</span>}
+                      {(!diskHasRaidPartition) && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">Disponible</span>}
                     </div>
                   </div>
                 );
@@ -506,21 +566,7 @@ const StorageSettings = () => {
             )}
           </div>
 
-          {/* Options */}
-          <div className="options-section">
-            <div className="options-row">
-              <div className="option-item checkbox">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={dryRun}
-                    onChange={(e) => setDryRun(e.target.checked)}
-                  />
-                  <span>Mode simulation (aucune modification)</span>
-                </label>
-              </div>
-            </div>
-          </div>
+          {/* Options supprimées: mode simulation */}
 
           {/* Validation messages */}
           {validationErrors.length > 0 && (
@@ -548,17 +594,15 @@ const StorageSettings = () => {
           {/* Bouton d'exécution */}
           <div className="action-section">
             {(() => {
-              // Vérifier si le disque sélectionné est déjà dans le RAID
-              const diskInRaid = selectedDisk && raidDevices.includes(selectedDisk);
-              
-              if (diskInRaid) {
+              // Bloquer si le disque sélectionné contient déjà une partition RAID
+              const hasRaidPart = selectedDisk && raidMemberDisksMap[selectedDisk];
+              if (hasRaidPart) {
                 return (
                   <button className="btn-raid-active" disabled>
-                    <FontAwesomeIcon icon={faCheckCircle} /> Ce disque est déjà dans le RAID
+                    <FontAwesomeIcon icon={faCheckCircle} /> Ce disque contient déjà une partition RAID ({raidMemberDisksMap[selectedDisk]})
                   </button>
                 );
               }
-              
               return (
                 <button
                   className="btn-create-raid"

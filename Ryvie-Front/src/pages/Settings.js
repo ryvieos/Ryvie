@@ -115,6 +115,11 @@ const Settings = () => {
   const [serverConnectionStatus, setServerConnectionStatus] = useState(false);
   // Overlay Assistant Stockage
   const [showStorageOverlay, setShowStorageOverlay] = useState(false);
+  // Stockage (lecture seule) - état live
+  const [storageInventory, setStorageInventory] = useState(null);
+  const [mdraidStatus, setMdraidStatus] = useState(null);
+  const [storageLoading, setStorageLoading] = useState(true);
+  const [storageError, setStorageError] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -189,6 +194,62 @@ const Settings = () => {
       clearInterval(intervalId);
     };
   }, [accessMode]); // Réexécute l'effet si le mode d'accès change
+
+  // Récupération live de la configuration stockage (lecture seule)
+  useEffect(() => {
+    const fetchStorage = async () => {
+      if (!accessMode) return;
+      setStorageLoading(true);
+      setStorageError(null);
+      try {
+        const baseUrl = getServerUrl(accessMode);
+        const [inv, md] = await Promise.all([
+          axios.get(`${baseUrl}/api/storage/inventory`, { timeout: 30000 }),
+          axios.get(`${baseUrl}/api/storage/mdraid-status`, { timeout: 30000 })
+        ]);
+        setStorageInventory(inv.data?.data || null);
+        setMdraidStatus(md.data?.status || null);
+      } catch (e) {
+        console.error('[Settings] Erreur récupération stockage:', e);
+        setStorageError(e?.response?.data?.error || e.message);
+      } finally {
+        setStorageLoading(false);
+      }
+    };
+    fetchStorage();
+  }, [accessMode]);
+
+  // Helpers pour extraire des infos depuis lsblk JSON
+  const findBlockByPath = (devices, path) => {
+    if (!devices) return null;
+    const recur = (arr) => {
+      for (const d of arr) {
+        const dPath = d.path || (d.name ? `/dev/${d.name}` : undefined);
+        if (dPath === path) return d;
+        if (d.children) {
+          const r = recur(d.children);
+          if (r) return r;
+        }
+      }
+      return null;
+    };
+    return recur(devices.blockdevices || []);
+  };
+  const getMountPointRootPartition = (devices) => {
+    if (!devices) return null;
+    const recur = (arr, parent) => {
+      for (const d of arr) {
+        const mp = d.mountpoints && d.mountpoints[0];
+        if (mp === '/') return { part: d, parent };
+        if (d.children) {
+          const r = recur(d.children, d);
+          if (r) return r;
+        }
+      }
+      return null;
+    };
+    return recur(devices.blockdevices || [], null);
+  };
   
   // Fonction pour mettre à jour les statistiques du serveur
   const updateServerStats = (data) => {
@@ -604,6 +665,152 @@ const Settings = () => {
         </div>
       </section>
 
+      {/* Section Applications - déplacée juste après la vue d'ensemble */}
+      <section className="settings-section">
+        <h2>Gestion des Applications</h2>
+        {/* Modal pour afficher les détails d'une application */}
+        {selectedApp && (
+          <div className="docker-app-details-modal">
+            <div className="docker-app-details-content">
+              <div className="docker-app-details-header">
+                <h3>{selectedApp.name}</h3>
+                <button className="docker-close-btn" onClick={closeAppDetails}>×</button>
+              </div>
+              <div className="docker-app-details-body">
+                <div className="docker-app-status-info">
+                  <div className={`docker-app-status ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'running' : 'stopped'}`}>
+                    <span className="docker-status-icon"></span>
+                    <span className="docker-status-text">
+                      {selectedApp.status === 'running' && selectedApp.progress > 0 ? 'Opérationnel' : 'Arrêté'}
+                    </span>
+                  </div>
+                  <div className="docker-app-progress">
+                    <div className="docker-progress-bar">
+                      <div 
+                        className="docker-progress-fill" 
+                        style={{ width: `${selectedApp.progress}%` }}
+                      ></div>
+                    </div>
+                    <span className="docker-progress-text">{selectedApp.progress}% ({selectedApp.containersRunning})</span>
+                  </div>
+                </div>
+                <div className="docker-app-info-section">
+                  <h4>Ports</h4>
+                  {selectedApp.ports && selectedApp.ports.length > 0 ? (
+                    <div className="docker-ports-list">
+                      {selectedApp.ports.map(port => (
+                        <div key={port} className="docker-port-tag">
+                          {port}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>Aucun port exposé</p>
+                  )}
+                </div>
+                <div className="docker-app-info-section">
+                  <h4>Conteneurs</h4>
+                  <div className="docker-containers-list">
+                    {selectedApp.containers && selectedApp.containers.map(container => (
+                      <div key={container.id} className="docker-container-item">
+                        <div className="docker-container-name">{container.name}</div>
+                        <div className={`docker-container-status ${container.state}`}>
+                          {container.state}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="docker-app-actions">
+                  <button
+                    className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
+                    onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
+                  >
+                    {(selectedApp.status === 'running' && selectedApp.progress > 0) ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
+                  </button>
+                  <button
+                    className="docker-action-btn-large restart"
+                    onClick={() => handleAppAction(selectedApp.id, 'restart')}
+                    disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
+                  >
+                    Redémarrer tous les conteneurs
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {appsLoading ? (
+          <div className="docker-loading-container">
+            <div className="docker-loading-spinner"></div>
+            <p>Chargement des applications...</p>
+          </div>
+        ) : appsError ? (
+          <div className="docker-error-container">
+            <p className="docker-error-message">{appsError}</p>
+            <button className="docker-retry-button" onClick={fetchApplications}>Réessayer</button>
+          </div>
+        ) : applications.length === 0 ? (
+          <div className="docker-empty-state">
+            <p>Aucune application Docker détectée.</p>
+          </div>
+        ) : (
+          <div className="docker-apps-grid">
+            {applications.map(app => (
+              <div 
+                key={app.id} 
+                className={`docker-app-card ${selectedApp && selectedApp.id === app.id ? 'active' : ''}`}
+                onClick={() => handleAppSelect(app)}
+              >
+                <div className="docker-app-header">
+                  <h3>{app.name}</h3>
+                  <span className={`docker-status-badge ${app.status === 'running' && app.progress > 0 ? 'running' : 'stopped'}`}>
+                    {app.status === 'running' && app.progress > 0 ? 'En cours' : 'Arrêté'}
+                  </span>
+                </div>
+                {appActionStatus.show && appActionStatus.appId === app.id && (
+                  <div className={`docker-action-status ${appActionStatus.success ? 'success' : 'error'}`}>
+                    {appActionStatus.message}
+                  </div>
+                )}
+                <div className="docker-app-controls">
+                  <button
+                    className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
+                    }}
+                  >
+                    {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
+                  </button>
+                  <button
+                    className="docker-action-btn restart"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAppAction(app.id, 'restart')
+                    }}
+                    disabled={!(app.status === 'running' && app.progress > 0)}
+                  >
+                    Redémarrer
+                  </button>
+                  <div className="docker-autostart-control" onClick={(e) => e.stopPropagation()}>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={app.autostart}
+                        onChange={(e) => handleAppAutostart(app.id, e.target.checked)}
+                      />
+                      <span className="slider"></span>
+                    </label>
+                    <span className="docker-autostart-label">Auto</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Overlay Assistant Stockage */}
       {showStorageOverlay && (
         <div
@@ -1006,160 +1213,8 @@ const Settings = () => {
         </div>
       </section>
 
-      {/* Section Applications */}
-      <section className="settings-section">
-        <h2>Gestion des Applications</h2>
-        
-        {/* Modal pour afficher les détails d'une application */}
-        {selectedApp && (
-          <div className="docker-app-details-modal">
-            <div className="docker-app-details-content">
-              <div className="docker-app-details-header">
-                <h3>{selectedApp.name}</h3>
-                <button className="docker-close-btn" onClick={closeAppDetails}>×</button>
-              </div>
-              <div className="docker-app-details-body">
-                <div className="docker-app-status-info">
-                  <div className={`docker-app-status ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'running' : 'stopped'}`}>
-                    <span className="docker-status-icon"></span>
-                    <span className="docker-status-text">
-                      {selectedApp.status === 'running' && selectedApp.progress > 0 ? 'Opérationnel' : 'Arrêté'}
-                    </span>
-                  </div>
-                  <div className="docker-app-progress">
-                    <div className="docker-progress-bar">
-                      <div 
-                        className="docker-progress-fill" 
-                        style={{ width: `${selectedApp.progress}%` }}
-                      ></div>
-                    </div>
-                    <span className="docker-progress-text">{selectedApp.progress}% ({selectedApp.containersRunning})</span>
-                  </div>
-                </div>
-                
-                <div className="docker-app-info-section">
-                  <h4>Ports</h4>
-                  {selectedApp.ports && selectedApp.ports.length > 0 ? (
-                    <div className="docker-ports-list">
-                      {selectedApp.ports.map(port => (
-                        <div key={port} className="docker-port-tag">
-                          {port}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p>Aucun port exposé</p>
-                  )}
-                </div>
-                
-                <div className="docker-app-info-section">
-                  <h4>Conteneurs</h4>
-                  <div className="docker-containers-list">
-                    {selectedApp.containers && selectedApp.containers.map(container => (
-                      <div key={container.id} className="docker-container-item">
-                        <div className="docker-container-name">{container.name}</div>
-                        <div className={`docker-container-status ${container.state}`}>
-                          {container.state}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="docker-app-actions">
-                  <button
-                    className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
-                    onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
-                  >
-                    {(selectedApp.status === 'running' && selectedApp.progress > 0) ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
-                  </button>
-                  <button
-                    className="docker-action-btn-large restart"
-                    onClick={() => handleAppAction(selectedApp.id, 'restart')}
-                    disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
-                  >
-                    Redémarrer tous les conteneurs
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {appsLoading ? (
-          <div className="docker-loading-container">
-            <div className="docker-loading-spinner"></div>
-            <p>Chargement des applications...</p>
-          </div>
-        ) : appsError ? (
-          <div className="docker-error-container">
-            <p className="docker-error-message">{appsError}</p>
-            <button className="docker-retry-button" onClick={fetchApplications}>Réessayer</button>
-          </div>
-        ) : applications.length === 0 ? (
-          <div className="docker-empty-state">
-            <p>Aucune application Docker détectée.</p>
-          </div>
-        ) : (
-          <div className="docker-apps-grid">
-            {applications.map(app => (
-              <div 
-                key={app.id} 
-                className={`docker-app-card ${selectedApp && selectedApp.id === app.id ? 'active' : ''}`}
-                onClick={() => handleAppSelect(app)}
-              >
-                <div className="docker-app-header">
-                  <h3>{app.name}</h3>
-                  <span className={`docker-status-badge ${app.status === 'running' && app.progress > 0 ? 'running' : 'stopped'}`}>
-                    {app.status === 'running' && app.progress > 0 ? 'En cours' : 'Arrêté'}
-                  </span>
-                </div>
-                
-                {appActionStatus.show && appActionStatus.appId === app.id && (
-                  <div className={`docker-action-status ${appActionStatus.success ? 'success' : 'error'}`}>
-                    {appActionStatus.message}
-                  </div>
-                )}
-                
-                <div className="docker-app-controls">
-                  <button
-                    className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
-                    onClick={(e) => {
-                      e.stopPropagation(); // Empêcher le déclenchement du onClick du parent
-                      handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
-                    }}
-                  >
-                    {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
-                  </button>
-                  <button
-                    className="docker-action-btn restart"
-                    onClick={(e) => {
-                      e.stopPropagation(); // Empêcher le déclenchement du onClick du parent
-                      handleAppAction(app.id, 'restart')
-                    }}
-                    disabled={!(app.status === 'running' && app.progress > 0)}
-                  >
-                    Redémarrer
-                  </button>
-                  <div className="docker-autostart-control" onClick={(e) => e.stopPropagation()}>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={app.autostart}
-                        onChange={(e) => handleAppAutostart(app.id, e.target.checked)}
-                      />
-                      <span className="slider"></span>
-                    </label>
-                    <span className="docker-autostart-label">Auto</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
 
-      {/* Section Stockage */}
+      {/* Section Stockage (lecture seule + accès assistant) */}
       <section className="settings-section">
         <h2>Configuration du Stockage</h2>
         <div style={{ marginBottom: 16 }}>
@@ -1168,13 +1223,13 @@ const Settings = () => {
             onClick={() => setShowStorageOverlay(true)}
             style={{ background: '#1976d2', color: '#fff', borderColor: '#1565c0' }}
           >
-            Ouvrir l'assistant Stockage (RAID + Btrfs)
+            Ouvrir l'assistant RAID
           </button>
         </div>
         <div className="storage-options">
-          {/* Emplacement du stockage */}
+          {/* Choix du stockage (comme avant) */}
           <div className="settings-card">
-            <h3>Emplacement des données</h3>
+            <h3>Choix du stockage</h3>
             <div className="setting-item">
               <label>Stockage principal</label>
               <select
@@ -1182,11 +1237,10 @@ const Settings = () => {
                 onChange={(e) => handleSettingChange('storageLocation', e.target.value)}
               >
                 <option value="local">Serveur local</option>
-                <option value="cloud">Cloud Ryvie</option>
-                <option value="hybrid">Hybride (Local + Cloud)</option>
+                <option value="hybrid">Hybride</option>
               </select>
             </div>
-            {settings.storageLocation !== 'local' && (
+            {settings.storageLocation === 'hybrid' && (
               <div className="ryvie-servers">
                 <h4>Serveurs Ryvie disponibles</h4>
                 {ryvieServers.map(server => (
@@ -1205,70 +1259,86 @@ const Settings = () => {
             )}
           </div>
 
-          {/* Gestion des disques */}
+          
+
+          {/* Disques détectés (lecture seule) */}
           <div className="settings-card">
-            <h3>Gestion des Disques</h3>
-            <div className="setting-item">
-              <label>Configuration RAID</label>
-              <select
-                value={settings.redundancyLevel}
-                onChange={(e) => handleSettingChange('redundancyLevel', e.target.value)}
-              >
-                <option value="none">Pas de RAID</option>
-                <option value="raid0">RAID 0 (Performance)</option>
-                <option value="raid1">RAID 1 (Miroir)</option>
-                <option value="raid5">RAID 5 (Sécurité)</option>
-                <option value="raid10">RAID 10 (Performance + Sécurité)</option>
-              </select>
-            </div>
-            <div className="disks-grid">
-              {disks.map(disk => (
-                <div key={disk.id} className="disk-card">
-                  <div className="disk-header">
-                    <div className="disk-name-with-status">
-                      <FontAwesomeIcon icon={faHdd} className={`disk-icon-visual ${disk.status}`}/>
-                      <div className="disk-title-area">
-                        <h4>{disk.name}</h4>
-                        <div className={`disk-status-badge ${disk.status}`}>
-                          <span className="status-dot"></span>
-                          {disk.status}
+            <h3>Disques détectés (lecture seule)</h3>
+            {storageLoading ? (
+              <p>Chargement de l'inventaire des disques...</p>
+            ) : storageError ? (
+              <div className="docker-error-container"><p className="docker-error-message">{storageError}</p></div>
+            ) : (
+              <div className="disks-grid">
+                {(() => {
+                  const items = [];
+                  const block = storageInventory?.devices?.blockdevices || [];
+                  const inRaidPaths = new Set();
+                  // calculer les chemins des membres RAID pour badge
+                  if (mdraidStatus?.members && Array.isArray(mdraidStatus.members)) {
+                    mdraidStatus.members.forEach(m => {
+                      const d = m.device;
+                      if (d) {
+                        const match = d.match(/\/dev\/(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)/);
+                        if (match) inRaidPaths.add(`/dev/${match[1]}`);
+                      }
+                    });
+                  }
+                  block.forEach(device => {
+                    if (device.type === 'disk' && !device.name.includes('sr')) {
+                      let isMounted = false; let mountInfo = '';
+                      if (device.mountpoints && device.mountpoints[0]) {
+                        isMounted = true; mountInfo = device.mountpoints[0];
+                      }
+                      if (device.children) {
+                        device.children.forEach(child => {
+                          if (child.mountpoints && child.mountpoints[0]) {
+                            isMounted = true; if (!mountInfo) mountInfo = child.mountpoints[0];
+                          }
+                        });
+                      }
+                      const path = device.path || `/dev/${device.name}`;
+                      const isSystemDisk = device.children?.some(ch => (ch.mountpoints && ch.mountpoints[0] === '/'));
+                      items.push({
+                        path,
+                        name: device.name,
+                        size: device.size,
+                        isMounted,
+                        mountInfo,
+                        inRaid: inRaidPaths.has(path),
+                        isSystemDisk
+                      });
+                    }
+                  });
+                  if (items.length === 0) return <div className="empty-state"><p>Aucun disque détecté</p></div>;
+                  return items.map(disk => (
+                    <div key={disk.path} className={`disk-card ${disk.isMounted ? 'mounted' : 'unmounted'}`}>
+                      <div className="disk-header">
+                        <div className="disk-name-with-status">
+                          <FontAwesomeIcon icon={faHdd} className={`disk-icon-visual ${disk.isMounted ? 'mounted' : 'unmounted'}`} />
+                          <div className="disk-title-area">
+                            <h4>{disk.path}</h4>
+                            <div className={`disk-status-badge ${disk.isMounted ? 'mounted' : 'unmounted'}`}>
+                              <span className="status-dot"></span>
+                              {disk.isMounted ? `Monté (${disk.mountInfo})` : 'Démonté'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="disk-details">
+                        <div className="disk-info-rows">
+                          <div className="disk-info-row"><span>Taille:</span><strong>{disk.size}</strong></div>
+                          <div className="disk-info-row"><span>RAID :</span><strong>{disk.inRaid ? 'Oui' : 'Non'}</strong></div>
+                          {disk.isSystemDisk && (
+                            <div className="disk-info-row"><span>Rôle:</span><strong>Système</strong></div>
+                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="disk-details">
-                    <div className="disk-info-rows">
-                      <div className="disk-info-row">
-                        <span>Capacité:</span>
-                        <strong>{disk.size}</strong>
-                      </div>
-                      <div className="disk-info-row">
-                        <span>Utilisé:</span>
-                        <strong>{disk.used}</strong>
-                      </div>
-                      <div className="disk-info-row">
-                        <span>Libre:</span>
-                        <strong>{disk.free}</strong>
-                      </div>
-                    </div>
-                    
-                    <div className="disk-usage-bar-container">
-                      <div className="disk-usage-label">
-                        <span>Utilisation:</span>
-                        <strong>{((parseFloat(disk.used.replace(' GB', '')) / parseFloat(disk.size.replace(' GB', ''))) * 100).toFixed(1)}%</strong>
-                      </div>
-                      <div className="disk-usage-bar">
-                        <div 
-                          className="disk-usage-fill" 
-                          style={{ width: `${((parseFloat(disk.used.replace(' GB', '')) / parseFloat(disk.size.replace(' GB', ''))) * 100).toFixed(1)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  ));
+                })()}
+              </div>
+            )}
           </div>
         </div>
       </section>
