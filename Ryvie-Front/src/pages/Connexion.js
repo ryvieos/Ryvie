@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import axios from './utils/setupAxios';
+import axios from '../utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
-import './styles/connexion.css';
-import { getCurrentAccessMode } from './utils/detectAccessMode';
-import { isElectron, WindowManager } from './utils/platformUtils';
-const { getServerUrl } = require('./config/urls');
-import { startSession, getCurrentUser, getCurrentUserRole, getSessionInfo } from './utils/sessionManager';
+import '../styles/connexion.css';
+import { getCurrentAccessMode } from '../utils/detectAccessMode';
+import { isElectron, WindowManager } from '../utils/platformUtils';
+const { getServerUrl } = require('../config/urls');
+import { startSession, getCurrentUser, getCurrentUserRole, getSessionInfo } from '../utils/sessionManager';
 
 const Userlogin = () => {
   const navigate = useNavigate();

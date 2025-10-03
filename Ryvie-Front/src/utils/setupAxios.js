@@ -78,11 +78,14 @@ export const handleTokenError = (errorCode = null) => {
 axios.interceptors.request.use(request => {
   const accessMode = getCurrentAccessMode() || 'private';
   
-  // Augmenter le timeout pour le mode privé car le serveur local peut prendre plus de temps à répondre
-  if (accessMode === 'private') {
-    request.timeout = 10000; // 10 secondes pour le mode privé
-  } else {
-    request.timeout = 5000; // 5 secondes pour le mode public
+  // Ne définir un timeout par défaut que si aucun timeout n'est déjà configuré
+  if (!request.timeout) {
+    // Augmenter le timeout pour le mode privé car le serveur local peut prendre plus de temps à répondre
+    if (accessMode === 'private') {
+      request.timeout = 10000; // 10 secondes pour le mode privé
+    } else {
+      request.timeout = 5000; // 5 secondes pour le mode public
+    }
   }
   
   return request;

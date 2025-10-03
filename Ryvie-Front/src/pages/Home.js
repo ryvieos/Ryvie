@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import './styles/Home.css';
-import './styles/Transitions.css';
-import axios from './utils/setupAxios';
+import '../styles/Home.css';
+import '../styles/Transitions.css';
+import axios from '../utils/setupAxios';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { connectRyvieSocket } from './utils/detectAccessMode';
+import { connectRyvieSocket } from '../utils/detectAccessMode';
 import { Link, useNavigate } from 'react-router-dom';
-import { getCurrentAccessMode } from './utils/detectAccessMode';
-import { isElectron, WindowManager, StorageManager, NotificationManager } from './utils/platformUtils';
-import { endSession, getCurrentUser } from './utils/sessionManager';
-const { getServerUrl, getAppUrl } = require('./config/urls');
-import { generateAppConfig, generateDefaultZones, images } from './config/appConfig';
+import { getCurrentAccessMode } from '../utils/detectAccessMode';
+import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
+import { endSession, getCurrentUser } from '../utils/sessionManager';
+const { getServerUrl, getAppUrl } = require('../config/urls');
+import { generateAppConfig, generateDefaultZones, images } from '../config/appConfig';
 
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
@@ -22,8 +22,8 @@ function importAll(r) {
 }
 localStorage.removeItem('iconZones');
 // Importer les icônes météo
-const weatherImages = importAll(require.context('./weather_icons', false, /\.(png|jpe?g|svg)$/));
-const weatherIcons = importAll(require.context('./weather_icons', false, /\.(png|jpe?g|svg)$/));
+const weatherImages = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
+const weatherIcons = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
 
 // Configuration dynamique des applications
 const APPS_CONFIG = generateAppConfig();

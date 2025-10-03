@@ -1,13 +1,14 @@
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-import Home from './Home';
-import AppStore from './AppStore';
-import User from './User';
-import Login from './Login';
-import Settings from './Settings';
-import Welcome from './Welcome';
-import Userlogin from './connexion';
+import Home from './pages/Home';
+import AppStore from './pages/AppStore';
+import User from './pages/User';
+import Login from './pages/Login';
+import Settings from './pages/Settings';
+import StorageSettings from './pages/StorageSettings';
+import Welcome from './pages/Welcome';
+import Userlogin from './pages/Connexion';
 import { initializeSession, isSessionActive } from './utils/sessionManager';
 import { isElectron } from './utils/platformUtils';
 import { handleAuthError } from './services/authService';
@@ -62,6 +63,11 @@ const App = () => {
         <Route path="/settings" element={
           <ProtectedRoute>
             <Settings />
+          </ProtectedRoute>
+        } />
+        <Route path="/settings/storage" element={
+          <ProtectedRoute>
+            <StorageSettings />
           </ProtectedRoute>
         } />
         <Route path="/welcome" element={
