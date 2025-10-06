@@ -3,7 +3,8 @@
  * Teste la connectivité au serveur local et bascule vers public si nécessaire
  */
 
-const { getServerUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl } = urlsConfig;
 import { io } from 'socket.io-client';
 import { isElectron } from './platformUtils';
 
@@ -82,6 +83,16 @@ export async function detectAccessMode(timeout = 2000) {
  */
 export function getCurrentAccessMode() {
   ensureLoadedFromStorage();
+  
+  // IMPORTANT: Si on est en HTTPS, forcer le mode public pour éviter Mixed Content
+  if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
+    if (currentMode !== 'public') {
+      console.log('[AccessMode] Page HTTPS détectée - forçage du mode PUBLIC');
+      setAccessMode('public');
+    }
+    return 'public';
+  }
+  
   return currentMode;
 }
 

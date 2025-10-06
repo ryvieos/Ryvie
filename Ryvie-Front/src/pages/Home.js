@@ -10,7 +10,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
 import { endSession, getCurrentUser } from '../utils/sessionManager';
-const { getServerUrl, getAppUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl, getAppUrl } = urlsConfig;
 import { 
   generateAppConfig, 
   generateDefaultZones, 
@@ -22,13 +23,9 @@ import {
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
   let images = {};
-  r.keys().forEach((item) => {
-    images[item.replace('./', '')] = r(item);
-  });
+  r.keys().forEach((key) => (images[key] = r(key)));
   return images;
 }
-localStorage.removeItem('iconZones');
-// Importer les icônes météo
 const weatherImages = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
 const weatherIcons = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
 
@@ -311,6 +308,13 @@ const Home = () => {
   const [currentUserName, setCurrentUserName] = useState('');
   const [appsConfig, setAppsConfig] = useState(generateAppConfig()); // Config par défaut
   const [iconImages, setIconImages] = useState(images); // Images locales
+  const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran utilisateur
+  const [weatherCity, setWeatherCity] = useState(null); // Ville configurée par l'utilisateur
+  const [weatherCityLoaded, setWeatherCityLoaded] = useState(false); // Indique si les préférences sont chargées
+  const [showWeatherModal, setShowWeatherModal] = useState(false);
+  const [closingWeatherModal, setClosingWeatherModal] = useState(false);
+  const [tempCity, setTempCity] = useState('');
+  const [savingWeatherCity, setSavingWeatherCity] = useState(false);
   
   // Commencer avec des zones vides, elles seront chargées depuis le serveur
   const [zones, setZones] = useState({
@@ -567,45 +571,90 @@ const Home = () => {
   }, [accessMode]);
   
   useEffect(() => {
+    // Attendre que les préférences soient chargées avant de récupérer la météo
+    if (!weatherCityLoaded) {
+      console.log('[Home] ⏳ En attente du chargement des préférences météo...');
+      return;
+    }
+    
     const fetchWeatherData = async () => {
       try {
-        // 1) Essayer d'abord la géolocalisation du navigateur (position réelle de l'utilisateur)
-        const getPosition = () =>
-          new Promise((resolve, reject) => {
-            if (!navigator.geolocation) return reject(new Error('Geolocation non disponible'));
-            navigator.geolocation.getCurrentPosition(
-              (pos) => resolve(pos),
-              (err) => reject(err),
-              { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
-            );
-          });
-
         let latitude = null;
         let longitude = null;
         let cityName = null;
 
-        try {
-          const pos = await getPosition();
-          latitude = pos.coords.latitude;
-          longitude = pos.coords.longitude;
-
-          // Reverse geocoding pour obtenir le nom de la ville depuis les coordonnées
+        // Si l'utilisateur a configuré une ville, l'utiliser en priorité
+        if (weatherCity && accessMode) {
+          console.log('[Home] 🌍 Utilisation de la ville configurée:', weatherCity);
           try {
-            const reverseUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=fr`;
-            const rev = await axios.get(reverseUrl);
-            cityName = rev?.data?.city || rev?.data?.locality || rev?.data?.principalSubdivision || 'Votre position';
-          } catch (e) {
-            cityName = 'Votre position';
+            // Géocoder la ville via le backend pour éviter CORS
+            const serverUrl = getServerUrl(accessMode);
+            const geocodeResp = await axios.get(`${serverUrl}/api/geocode/${encodeURIComponent(weatherCity)}`);
+            if (geocodeResp.data) {
+              latitude = geocodeResp.data.latitude;
+              longitude = geocodeResp.data.longitude;
+              cityName = geocodeResp.data.name;
+              console.log('[Home] 📍 Ville géocodée:', cityName, latitude, longitude);
+            } else {
+              console.warn('[Home] ⚠️  Ville non trouvée, fallback sur géolocalisation');
+              throw new Error('Ville non trouvée');
+            }
+          } catch (geocodeErr) {
+            console.error('[Home] ❌ Erreur géocodage:', geocodeErr.message);
+            // Continuer avec la géolocalisation automatique
           }
-        } catch (geoErr) {
-          // 2) Repli: géolocalisation par IP (HTTPS)
+        }
+
+        // Si pas de ville configurée ou géocodage échoué, utiliser la géolocalisation
+        if (!latitude || !longitude) {
+          const getPosition = () =>
+            new Promise((resolve, reject) => {
+              if (!navigator.geolocation) return reject(new Error('Geolocation non disponible'));
+              navigator.geolocation.getCurrentPosition(
+                (pos) => resolve(pos),
+                (err) => reject(err),
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+              );
+            });
+
           try {
-            const ipResp = await axios.get('https://ipapi.co/json/');
-            latitude = ipResp.data.latitude;
-            longitude = ipResp.data.longitude;
-            cityName = ipResp.data.city || 'Votre position';
-          } catch (ipErr) {
-            throw new Error('Impossible de récupérer la localisation');
+            const pos = await getPosition();
+            latitude = pos.coords.latitude;
+            longitude = pos.coords.longitude;
+            console.log('[Home] 📍 Géolocalisation navigateur réussie:', latitude, longitude);
+
+            // Reverse geocoding pour obtenir le nom de la ville depuis les coordonnées
+            try {
+              const reverseUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=fr`;
+              const rev = await axios.get(reverseUrl);
+              cityName = rev?.data?.city || rev?.data?.locality || rev?.data?.principalSubdivision || 'Votre position';
+              console.log('[Home] 🏙️  Ville détectée:', cityName);
+            } catch (e) {
+              console.warn('[Home] ⚠️  Reverse geocoding échoué:', e.message);
+              cityName = 'Votre position';
+            }
+          } catch (geoErr) {
+            console.warn('[Home] ⚠️  Géolocalisation navigateur échouée:', geoErr.message);
+            // Fallback: géolocalisation par IP via le backend
+            if (!latitude || !longitude && accessMode) {
+              try {
+                console.log('[Home] 🔄 Tentative géolocalisation par IP via backend...');
+                const serverUrl = getServerUrl(accessMode);
+                const geoResp = await axios.get(`${serverUrl}/api/geolocate`);
+                if (geoResp.data) {
+                  latitude = geoResp.data.latitude;
+                  longitude = geoResp.data.longitude;
+                  cityName = geoResp.data.city;
+                  console.log('[Home] 📍 Géolocalisation IP réussie:', cityName, latitude, longitude);
+                }
+              } catch (ipErr) {
+                console.error('[Home] ❌ Géolocalisation IP échouée:', ipErr.message);
+                // Dernier fallback: Paris
+                latitude = 48.8566;
+                longitude = 2.3522;
+                cityName = 'Paris';
+              }
+            }
           }
         }
 
@@ -669,7 +718,7 @@ const Home = () => {
     fetchWeatherData();
     const intervalId = setInterval(fetchWeatherData, 300000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [weatherCity, weatherCityLoaded]); // Recharger quand la ville change ou quand les préférences sont chargées
 
   // Supprimer ce useEffect dupliqué car géré dans le premier useEffect
 
@@ -703,17 +752,111 @@ const Home = () => {
         console.log('[Home] 🔄 Chargement zones depuis le serveur pour', currentUserName);
         const res = await axios.get(`${serverUrl}/api/user/preferences`);
         
+        // Charger la ville météo configurée
+        if (res.data?.weatherCity) {
+          console.log('[Home] 🌍 Ville météo chargée:', res.data.weatherCity);
+          setWeatherCity(res.data.weatherCity);
+        } else {
+          console.log('[Home] 🌍 Pas de ville configurée, mode auto');
+        }
+        setWeatherCityLoaded(true); // Marquer les préférences comme chargées
+        
+        // Charger le fond d'écran
+        if (res.data?.backgroundImage) {
+          console.log('[Home] 🎨 Fond d\'écran chargé:', res.data.backgroundImage);
+          setBackgroundImage(res.data.backgroundImage);
+        }
+        
         if (res.data?.zones && Object.keys(res.data.zones).length > 0) {
           console.log('[Home] ✅ Zones chargées depuis le serveur:', res.data.zones);
-          console.log('[Home] 🔄 Application des zones...');
-          setZones(res.data.zones);
-          // Sauvegarder en cache local
-          StorageManager.setItem(`iconZones_${currentUserName}`, res.data.zones);
           
-          // Vérifier après un court délai que les zones ont bien été appliquées
-          setTimeout(() => {
-            console.log('[Home] 🔍 Vérification: zones actuelles après setZones:', zones);
-          }, 100);
+          // Vérifier si les zones sont vraiment vides (tous les tableaux vides)
+          const allZonesEmpty = Object.values(res.data.zones).every(
+            zone => Array.isArray(zone) && zone.length === 0
+          );
+          
+          if (allZonesEmpty) {
+            console.log('[Home] ⚠️ Zones vides détectées, génération depuis manifests');
+            const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+            setZones(defaultZones);
+            // Sauvegarder les zones par défaut sur le serveur
+            await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: defaultZones });
+            StorageManager.setItem(`iconZones_${currentUserName}`, defaultZones);
+          } else {
+            // Réconciliation: utiliser les apps réelles depuis l'API
+            // Récupérer la liste des apps installées
+            const appsResponse = await axios.get(`${serverUrl}/api/apps`);
+            const installedApps = appsResponse.data || [];
+            const validAppIds = new Set(installedApps.map(app => `app-${app.id}`));
+            
+            console.log('[Home] 📋 Apps installées détectées:', Array.from(validAppIds));
+            
+            const cleanedZones = {};
+            let hasChanges = false;
+            
+            Object.keys(res.data.zones).forEach(zoneName => {
+              const originalIds = res.data.zones[zoneName] || [];
+              const filteredIds = originalIds.filter(id => {
+                // Garder les IDs qui ne sont pas des apps (ex: icônes taskbar)
+                if (!id.startsWith('app-')) {
+                  return true;
+                }
+                
+                // Pour les apps, vérifier qu'elles existent
+                const isValid = validAppIds.has(id);
+                if (!isValid) {
+                  console.log(`[Home] 🧹 Retrait de l'app inexistante: ${id} de ${zoneName}`);
+                  hasChanges = true;
+                }
+                return isValid;
+              });
+              cleanedZones[zoneName] = filteredIds;
+            });
+            
+            // Détecter les nouvelles apps (présentes dans l'API mais pas dans les zones)
+            const allZonedApps = new Set();
+            Object.values(cleanedZones).forEach(zone => {
+              zone.forEach(id => {
+                if (id.startsWith('app-')) allZonedApps.add(id);
+              });
+            });
+            
+            const newApps = Array.from(validAppIds).filter(id => !allZonedApps.has(id));
+            if (newApps.length > 0) {
+              console.log('[Home] ➕ Nouvelles apps détectées:', newApps);
+              // Placer les nouvelles apps dans les premières zones bottom disponibles
+              let bottomIndex = 1;
+              newApps.forEach(appId => {
+                while (bottomIndex <= 10 && cleanedZones[`bottom${bottomIndex}`].length > 0) {
+                  bottomIndex++;
+                }
+                if (bottomIndex <= 10) {
+                  cleanedZones[`bottom${bottomIndex}`].push(appId);
+                  console.log(`[Home] ➕ Ajout de ${appId} dans bottom${bottomIndex}`);
+                  hasChanges = true;
+                  bottomIndex++;
+                }
+              });
+            }
+            
+            console.log('[Home] 🔄 Application des zones réconciliées:', cleanedZones);
+            setZones(cleanedZones);
+            
+            // Si des apps ont été retirées ou ajoutées, sauvegarder les zones
+            if (hasChanges) {
+              console.log('[Home] 💾 Sauvegarde des zones réconciliées sur le serveur');
+              await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: cleanedZones });
+            }
+            
+            // Sauvegarder en cache local
+            StorageManager.setItem(`iconZones_${currentUserName}`, cleanedZones);
+          }
+          
+          // Charger le fond d'écran utilisateur
+          if (res.data?.backgroundImage) {
+            console.log('[Home] 🎨 Fond d\'écran chargé:', res.data.backgroundImage);
+            setBackgroundImage(res.data.backgroundImage);
+          }
         } else {
           console.log('[Home] ⚠️ Pas de zones sur le serveur, génération depuis manifests');
           const defaultZones = await generateDefaultZonesFromManifests(accessMode);
@@ -870,10 +1013,54 @@ const Home = () => {
     }
   };
 
+  // Fonction pour obtenir le style de fond d'écran
+  const getBackgroundStyle = () => {
+    if (!accessMode) {
+      console.log('[Home] accessMode non défini, pas de fond personnalisé');
+      return {}; // Utilise le CSS par défaut
+    }
+    
+    console.log('[Home] 🎨 Application du fond:', backgroundImage);
+    
+    if (backgroundImage?.startsWith('custom-')) {
+      // Fond personnalisé uploadé - charger via l'API backend
+      const filename = backgroundImage.replace('custom-', '');
+      const serverUrl = getServerUrl(accessMode);
+      const bgUrl = `${serverUrl}/api/backgrounds/${filename}`;
+      console.log('[Home] 🎨 Fond personnalisé:', bgUrl);
+      return {
+        background: `url(${bgUrl}) no-repeat center center fixed`,
+        backgroundSize: 'cover'
+      };
+    }
+    
+    // Si c'est un fond prédéfini (preset-filename.ext) - charger via API backend
+    if (backgroundImage?.startsWith('preset-')) {
+      if (!accessMode) return {};
+      const filename = backgroundImage.replace('preset-', '');
+      const serverUrl = getServerUrl(accessMode);
+      console.log('[Home] 🎨 Fond prédéfini via API:', filename);
+      
+      return {
+        background: `url(${serverUrl}/api/backgrounds/presets/${filename}) no-repeat center center fixed`,
+        backgroundSize: 'cover'
+      };
+    }
+    
+    // Fond par défaut - charger via API backend
+    if (!accessMode) return {};
+    const serverUrl = getServerUrl(accessMode);
+    console.log('[Home] 🎨 Fond par défaut via API');
+    return {
+      background: `url(${serverUrl}/api/backgrounds/presets/default.webp) no-repeat center center fixed`,
+      backgroundSize: 'cover'
+    };
+  };
+
   return (
     <div className={`home-container ${mounted ? 'slide-enter-active' : 'slide-enter'}`}>
       <DndProvider backend={HTML5Backend}>
-        <div className="background">
+        <div className="background" style={getBackgroundStyle()}>
           <div className={`server-status ${serverStatus ? 'connected' : 'disconnected'}`}>
             <span className="status-text">
               {serverStatus ? 'Connecté' : 'Déconnecté'}
@@ -915,18 +1102,27 @@ const Home = () => {
                   setActiveContextMenu={setActiveContextMenu}
                 />
               </div>
-              <div className="widget" style={{ backgroundImage: `url(${weatherImages[weather.icon]})` }}>
+              <div 
+                className="widget" 
+                style={{ backgroundImage: weatherImages[`./${weather.icon}`] ? `url(${weatherImages[`./${weather.icon}`]})` : 'none', cursor: 'pointer' }}
+                onClick={() => {
+                  setTempCity((weatherCity || weather.location || '').toString());
+                  setClosingWeatherModal(false);
+                  setShowWeatherModal(true);
+                }}
+                title="Cliquez pour changer de ville"
+              >
                 <div className="weather-info">
                   <p className="weather-city">{weather.location ? weather.location : 'Localisation non disponible'}</p>
                   <p className="weather-temperature">
                     {weather.temperature ? `${Math.round(weather.temperature)}°C` : '...'}
                   </p>
                   <div className="weather-humidity">
-                    <img src={weatherIcons['humidity.png']} alt="Humidity Icon" className="weather-icon" />
+                    <img src={weatherIcons['./humidity.png']} alt="Humidity Icon" className="weather-icon" />
                     {weather.humidity ? `${weather.humidity}%` : '...'}
                   </div>
                   <div className="weather-wind">
-                    <img src={weatherIcons['wind.png']} alt="Wind Icon" className="weather-icon" />
+                    <img src={weatherIcons['./wind.png']} alt="Wind Icon" className="weather-icon" />
                     {weather.wind ? `${Math.round(weather.wind)} km/h` : '...'}
                   </div>
                 </div>
@@ -1036,6 +1232,101 @@ const Home = () => {
       )}
 
       </DndProvider>
+      
+      {/* Modal changement de ville météo */}
+      {showWeatherModal && (
+        <div
+          className={`weather-modal-backdrop ${closingWeatherModal ? 'closing' : 'open'}`}
+          onClick={() => {
+            if (savingWeatherCity) return;
+            setClosingWeatherModal(true);
+            setTimeout(() => {
+              setShowWeatherModal(false);
+              setClosingWeatherModal(false);
+            }, 220);
+          }}
+        >
+          <div
+            className={`weather-modal ${closingWeatherModal ? 'closing' : 'open'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="weather-modal-header">
+              <h3>Choisir la ville pour la météo</h3>
+              <p>Vous pouvez utiliser votre position actuelle (automatique) ou définir une ville.</p>
+            </div>
+            <div className="weather-modal-body">
+              <label htmlFor="city-input">Ville</label>
+              <input
+                id="city-input"
+                type="text"
+                placeholder="Ex: Lille, Lyon, Marseille"
+                value={tempCity}
+                onChange={(e) => setTempCity(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="weather-modal-actions">
+              <button
+                className="btn success"
+                onClick={async () => {
+                  if (!accessMode) return;
+                  try {
+                    setSavingWeatherCity(true);
+                    const serverUrl = getServerUrl(accessMode);
+                    await axios.patch(`${serverUrl}/api/user/preferences/weather-city`, { weatherCity: '__auto__' });
+                    setWeatherCity(null);
+                    setWeatherCityLoaded(true);
+                    setClosingWeatherModal(true);
+                    setTimeout(() => {
+                      setShowWeatherModal(false);
+                      setClosingWeatherModal(false);
+                    }, 220);
+                  } catch (e) {
+                    console.error('[Home] ❌ Erreur mise en auto:', e);
+                  } finally { setSavingWeatherCity(false); }
+                }}
+                disabled={savingWeatherCity}
+                title="Utiliser la position actuelle (autoriser la géolocalisation)"
+              >
+                {savingWeatherCity ? 'En cours…' : 'Utiliser ma position (auto)'}
+              </button>
+              <div className="spacer" />
+              <button
+                className="btn ghost"
+                onClick={() => {
+                  if (savingWeatherCity) return;
+                  setClosingWeatherModal(true);
+                  setTimeout(() => {
+                    setShowWeatherModal(false);
+                    setClosingWeatherModal(false);
+                  }, 220);
+                }}
+                disabled={savingWeatherCity}
+              >Annuler</button>
+              <button
+                className="btn primary"
+                onClick={async () => {
+                  if (!accessMode || !tempCity.trim()) return;
+                  try {
+                    setSavingWeatherCity(true);
+                    const serverUrl = getServerUrl(accessMode);
+                    await axios.patch(`${serverUrl}/api/user/preferences/weather-city`, { weatherCity: tempCity.trim() });
+                    setWeatherCity(tempCity.trim());
+                    setClosingWeatherModal(true);
+                    setTimeout(() => {
+                      setShowWeatherModal(false);
+                      setClosingWeatherModal(false);
+                    }, 220);
+                  } catch (e) {
+                    console.error('[Home] ❌ Erreur sauvegarde ville:', e);
+                  } finally { setSavingWeatherCity(false); }
+                }}
+                disabled={savingWeatherCity || !tempCity.trim()}
+              >Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

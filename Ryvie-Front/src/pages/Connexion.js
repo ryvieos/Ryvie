@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/connexion.css';
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import { isElectron, WindowManager } from '../utils/platformUtils';
-const { getServerUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl } = urlsConfig;
 import { startSession, getCurrentUser, getCurrentUserRole, getSessionInfo } from '../utils/sessionManager';
 
 const Userlogin = () => {

@@ -1,23 +1,149 @@
-/* Home.css */
-
-/* Styles globaux */
-body, html {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  color: #ffffff; /* Couleur de texte par défaut pour tout le document */
+/* Weather modal: backdrop + panel */
+.weather-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Remove grey/dark overlay while modal is open */
+  background: rgba(0, 0, 0, 0.0);
+  z-index: 9999;
+  animation: modalBackDropIn 220ms ease forwards;
+}
+.weather-modal-backdrop.closing {
+  animation: modalBackDropOut 220ms ease forwards;
 }
 
-/* Animation pulse pour les badges en démarrage */
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(1.1);
-  }
+@keyframes modalBackDropIn {
+  from { background: rgba(0,0,0,0.0); }
+  to   { background: rgba(0,0,0,0.28); }
+}
+@keyframes modalBackDropOut {
+  from { background: rgba(0,0,0,0.28); }
+  to   { background: rgba(0,0,0,0.0); }
+}
+
+.weather-modal {
+  width: min(520px, 92vw);
+  background: #ffffff; /* Light theme */
+  color: #111827;      /* Slate-900 */
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.10);
+  /* Stronger, modern layered shadow to make modal pop without a grey overlay */
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.18),
+    0 2px 8px rgba(0,0,0,0.06),
+    0 0 0 1px rgba(59,130,246,0.06);
+  transform: translateY(12px) scale(0.98);
+  opacity: 0;
+  animation: modalIn 220ms cubic-bezier(.2,.8,.2,1) forwards;
+  overflow: hidden; /* ensure inner fields can't overflow rounded corners */
+}
+.weather-modal.closing {
+  animation: modalOut 220ms cubic-bezier(.2,.8,.2,1) forwards;
+}
+
+@keyframes modalIn {
+  from { transform: translateY(12px) scale(0.98); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes modalOut {
+  from { transform: translateY(0) scale(1); opacity: 1; }
+  to   { transform: translateY(10px) scale(0.98); opacity: 0; }
+}
+
+.weather-modal-header {
+  position: relative;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  background: linear-gradient(180deg,#ffffff 0%,#f9fafb 100%);
+}
+.weather-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #0f172a; /* slate-900 */
+  font-weight: 700;
+}
+.weather-modal-header p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #6b7280; /* slate-500 */
+}
+.weather-modal-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg,#3b82f6 0%, #22c55e 50%, #a855f7 100%);
+  opacity: .9;
+}
+
+.weather-modal-body { padding: 20px; }
+.weather-modal-body label {
+  display: block;
+  font-size: 13px;
+  color: #374151; /* slate-700 */
+}
+.weather-modal-body input[type="text"] {
+  margin-top: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #ffffff;
+  color: #111827;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+  box-sizing: border-box; /* prevent overflow */
+}
+.weather-modal-body input[type="text"]:focus {
+  border-color: rgba(59,130,246,0.35);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+}
+
+.weather-modal-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 16px 20px 20px;
+}
+.weather-modal-actions .spacer { flex: 1; }
+
+.btn {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #f9fafb; /* light base */
+  color: #111827;
+  cursor: pointer;
+  transition: transform 100ms ease, background-color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn:disabled { opacity: 0.6; cursor: default; transform: none; }
+
+.btn.primary {
+  border: none;
+  background: #2563eb;
+  color: #ffffff;
+}
+.btn.primary:hover { background: #1d4ed8; }
+
+.btn.success {
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #0b5;
+  color: white;
+}
+.btn.success:hover { background: #0a4; }
+
+.btn.ghost {
+  background: transparent;
+  color: #374151;
+}
+.btn.ghost:hover {
+  border-color: rgba(0,0,0,0.22);
 }
 
 /* Menu contextuel */
@@ -117,7 +243,7 @@ body, html {
   min-height: 100vh;
   padding: 20px;
   box-sizing: border-box;
-  background: url('./background.webp') no-repeat center center fixed;
+  background: linear-gradient(135deg, #f5f5f5 0%, #e0e9ff 100%) no-repeat center center fixed;
   background-size: cover;
   display: flex;
   flex-direction: row; /* Pour aligner la barre des tâches et le contenu */
@@ -424,6 +550,25 @@ body, html {
   color: #ffffff;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5); /* Ajout d'un ombrage au texte */
   z-index: 1;
+}
+.icon-name {
+  margin-top: 12px;
+  display: block;
+  max-width: 100px;
+  font-size: 16px;
+  line-height: 1.2;
+  color: #ffffff;
+  font-weight: 200;
+  letter-spacing: -0.05px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  /* Style iPhone: ombre douce et subtile pour lisibilité sur tous fonds */
+  text-shadow: 
+    0 0.5px 1px rgba(0, 0, 0, 0.5),
+    0 1px 3px rgba(0, 0, 0, 0.3);
+  /* Pas de fond, pas de bordure - minimaliste comme iOS */
 }
 .weather-icon {
   width: 70px;  /* Taille de l'icône */

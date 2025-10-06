@@ -5,22 +5,43 @@ import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg-icons';
 import { isElectron } from '../utils/platformUtils';
-const { getServerUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl, getFrontendUrl } = urlsConfig;
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, connectRyvieSocket } from '../utils/detectAccessMode';
 import StorageSettings from './StorageSettings';
 
 const Settings = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    storageUsed: 0,
-    storageLimit: 0, // Go
-    cpuUsage: 0,
-    ramUsage: 0,
-    activeUsers: 1,
-    totalFiles: 110,
-    backupStatus: 'Completed',
-    lastBackup: '2024-01-09 14:30',
+  const [stats, setStats] = useState(() => {
+    // Charger depuis le cache localStorage au démarrage
+    const cached = localStorage.getItem('systemStats');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return {
+          storageUsed: 0,
+          storageLimit: 0,
+          cpuUsage: 0,
+          ramUsage: 0,
+          activeUsers: 1,
+          totalFiles: 110,
+          backupStatus: 'Completed',
+          lastBackup: '2024-01-09 14:30',
+        };
+      }
+    }
+    return {
+      storageUsed: 0,
+      storageLimit: 0,
+      cpuUsage: 0,
+      ramUsage: 0,
+      activeUsers: 1,
+      totalFiles: 110,
+      backupStatus: 'Completed',
+      lastBackup: '2024-01-09 14:30',
+    };
   });
 
   const [settings, setSettings] = useState({
@@ -98,6 +119,22 @@ const Settings = () => {
   ]);
 
   const [changeStatus, setChangeStatus] = useState({ show: false, success: false });
+  const [tokenExpiration, setTokenExpiration] = useState(15); // En minutes, par défaut 15
+  const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran
+  const [uploadingBackground, setUploadingBackground] = useState(false);
+  const [customBackgrounds, setCustomBackgrounds] = useState([]); // Liste des fonds personnalisés
+  const [presetBackgrounds, setPresetBackgrounds] = useState(() => {
+    // Charger depuis le cache localStorage au démarrage
+    const cached = localStorage.getItem('presetBackgrounds');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  }); // Liste des fonds prédéfinis
   // Initialiser prudemment pour éviter tout appel privé intempestif
   const [accessMode, setAccessMode] = useState(() => {
     const mode = getCurrentAccessMode();
@@ -164,6 +201,47 @@ const Settings = () => {
     console.log('[Settings] Mode final utilisé ->', mode);
     if (mode !== accessMode) setAccessMode(mode);
   }, []);
+
+  // Charger la durée d'expiration du token, le fond d'écran et la liste des fonds personnalisés
+  useEffect(() => {
+    const loadUserPreferences = async () => {
+      if (!accessMode) return;
+      
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        
+        // Charger durée token
+        const tokenResponse = await axios.get(`${serverUrl}/api/settings/token-expiration`);
+        if (tokenResponse.data.minutes) {
+          setTokenExpiration(tokenResponse.data.minutes);
+        }
+        
+        // Charger fond d'écran
+        const prefsResponse = await axios.get(`${serverUrl}/api/user/preferences`);
+        if (prefsResponse.data?.backgroundImage) {
+          setBackgroundImage(prefsResponse.data.backgroundImage);
+        }
+        
+        // Charger liste des fonds personnalisés
+        const backgroundsResponse = await axios.get(`${serverUrl}/api/user/preferences/backgrounds/list`);
+        if (backgroundsResponse.data?.backgrounds) {
+          setCustomBackgrounds(backgroundsResponse.data.backgrounds);
+        }
+        
+        // Charger liste des fonds prédéfinis
+        const presetsResponse = await axios.get(`${serverUrl}/api/backgrounds/presets`);
+        if (presetsResponse.data?.backgrounds) {
+          setPresetBackgrounds(presetsResponse.data.backgrounds);
+          // Sauvegarder dans le cache localStorage pour chargement instantané
+          localStorage.setItem('presetBackgrounds', JSON.stringify(presetsResponse.data.backgrounds));
+        }
+      } catch (error) {
+        console.log('[Settings] Impossible de charger les préférences utilisateur');
+      }
+    };
+    
+    loadUserPreferences();
+  }, [accessMode]);
 
   // Récupération des informations serveur (HTTP polling)
   useEffect(() => {
@@ -288,13 +366,214 @@ const Settings = () => {
     }
     
     // Mettre à jour les statistiques
-    setStats(prev => ({
-      ...prev,
-      storageUsed: storageUsed,
-      storageLimit: storageTotal,
-      cpuUsage: cpuUsage,
-      ramUsage: ramUsage
-    }));
+    setStats(prev => {
+      const newStats = {
+        ...prev,
+        storageUsed: storageUsed,
+        storageLimit: storageTotal,
+        cpuUsage: cpuUsage,
+        ramUsage: ramUsage
+      };
+      
+      // Sauvegarder dans le cache localStorage pour chargement instantané
+      localStorage.setItem('systemStats', JSON.stringify(newStats));
+      
+      return newStats;
+    });
+  };
+
+  // Fonction pour changer le fond d'écran
+  const handleBackgroundChange = async (newBackground) => {
+    console.log('[Settings] Changement fond d\'écran:', newBackground);
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: newBackground });
+      
+      setBackgroundImage(newBackground);
+      setChangeStatus({
+        show: true,
+        success: true,
+        message: `✓ Fond d'écran modifié`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('[Settings] Erreur changement fond d\'écran:', error);
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: `✗ Erreur lors de la modification`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 5000);
+    }
+  };
+
+  // Fonction pour uploader un fond d'écran personnalisé
+  const handleBackgroundUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    // Vérifier le type de fichier
+    if (!file.type.startsWith('image/')) {
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: '✗ Veuillez sélectionner une image'
+      });
+      setTimeout(() => setChangeStatus({ show: false, success: false, message: '' }), 3000);
+      return;
+    }
+    
+    // Vérifier la taille (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: '✗ Image trop grande (max 5MB)'
+      });
+      setTimeout(() => setChangeStatus({ show: false, success: false, message: '' }), 3000);
+      return;
+    }
+    
+    setUploadingBackground(true);
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      const formData = new FormData();
+      formData.append('background', file);
+      
+      const response = await axios.post(`${serverUrl}/api/user/preferences/background/upload`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      console.log('[Settings] Upload réussi:', response.data);
+      
+      // Le serveur retourne l'ID de l'image uploadée
+      const customBackgroundId = response.data.backgroundImage || 'custom';
+      setBackgroundImage(customBackgroundId);
+      
+      // Recharger la liste des fonds personnalisés
+      const backgroundsResponse = await axios.get(`${serverUrl}/api/user/preferences/backgrounds/list`);
+      if (backgroundsResponse.data?.backgrounds) {
+        setCustomBackgrounds(backgroundsResponse.data.backgrounds);
+      }
+      
+      setChangeStatus({
+        show: true,
+        success: true,
+        message: `✓ Fond d'écran personnalisé uploadé`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('[Settings] Erreur upload fond d\'écran:', error);
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: `✗ Erreur lors de l'upload`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 5000);
+    } finally {
+      setUploadingBackground(false);
+      // Réinitialiser l'input
+      event.target.value = '';
+    }
+  };
+
+  // Fonction pour supprimer un fond personnalisé
+  const handleDeleteBackground = async (filename) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce fond d\'écran ?')) {
+      return;
+    }
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      await axios.delete(`${serverUrl}/api/user/preferences/background/${filename}`);
+      
+      // Recharger la liste
+      const backgroundsResponse = await axios.get(`${serverUrl}/api/user/preferences/backgrounds/list`);
+      if (backgroundsResponse.data?.backgrounds) {
+        setCustomBackgrounds(backgroundsResponse.data.backgrounds);
+      }
+      
+      // Si c'était le fond actif, recharger les préférences
+      const prefsResponse = await axios.get(`${serverUrl}/api/user/preferences`);
+      if (prefsResponse.data?.backgroundImage) {
+        setBackgroundImage(prefsResponse.data.backgroundImage);
+      }
+      
+      setChangeStatus({
+        show: true,
+        success: true,
+        message: `✓ Fond d'écran supprimé`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('[Settings] Erreur suppression fond:', error);
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: `✗ Erreur lors de la suppression`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 5000);
+    }
+  };
+
+  // Fonction pour changer le temps d'expiration du token
+  const handleTokenExpirationChange = async (minutes) => {
+    console.log('[Settings] Changement durée de session:', minutes, 'minutes');
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      const response = await axios.patch(`${serverUrl}/api/settings/token-expiration`, { minutes: parseInt(minutes) });
+      
+      console.log('[Settings] Réponse serveur:', response.data);
+      
+      setTokenExpiration(minutes);
+      setChangeStatus({
+        show: true,
+        success: true,
+        message: `✓ Durée de session modifiée: ${minutes} minute${minutes > 1 ? 's' : ''}`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('[Settings] Erreur lors du changement de durée de session:', error);
+      console.error('[Settings] Détails erreur:', error.response?.data);
+      
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la modification';
+      
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: `✗ ${errorMessage}`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 5000);
+    }
   };
 
   // Fonction pour changer le mode d'accès
@@ -314,13 +593,18 @@ const Settings = () => {
     setChangeStatus({
       show: true,
       success: true,
-      message: `Mode d'accès changé pour: ${newMode === 'public' ? 'Public' : 'Privé'}`
+      message: `Mode d'accès changé pour: ${newMode === 'public' ? 'Public' : 'Privé'}. Redirection...`
     });
     
-    // Masquer le message après 3 secondes
+    // Rediriger vers l'URL correspondante après 1.5 secondes
     setTimeout(() => {
-      setChangeStatus({ show: false, success: false });
-    }, 3000);
+      const frontendUrl = getFrontendUrl(newMode);
+      const currentPath = window.location.pathname; // Conserver le chemin actuel (ex: /settings)
+      const newUrl = `${frontendUrl}${currentPath}`;
+      
+      console.log(`[Settings] Redirection vers ${newMode}: ${newUrl}`);
+      window.location.href = newUrl;
+    }, 1500);
   };
 
   const handleSettingChange = async (setting, value) => {
@@ -587,6 +871,148 @@ const Settings = () => {
         </button>
         <h1>Paramètres du Cloud</h1>
       </div>
+
+      {/* Section Personnalisation */}
+      <section className="settings-section">
+        <h2>Personnalisation</h2>
+        <div className="settings-grid">
+          <div className="settings-card">
+            <h3>Fond d'écran</h3>
+            <p className="setting-description">
+              Personnalisez l'arrière-plan de votre page d'accueil
+            </p>
+            {changeStatus.show && (
+              <div className={`status-message ${changeStatus.success ? 'success' : 'error'}`} style={{ marginBottom: '12px' }}>
+                {changeStatus.message}
+              </div>
+            )}
+            <div className="background-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '16px' }}>
+              {/* Afficher les fonds prédéfinis depuis public/images/backgrounds */}
+              {presetBackgrounds.map((preset) => (
+                <div
+                  key={preset.id}
+                  className={`background-option ${backgroundImage === preset.id ? 'active' : ''}`}
+                  onClick={() => handleBackgroundChange(preset.id)}
+                  style={{
+                    height: '80px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    border: backgroundImage === preset.id ? '3px solid #4a90e2' : '2px solid #ddd',
+                    background: `url(${getServerUrl(accessMode)}/api/backgrounds/presets/${preset.filename}) center/cover`,
+                    position: 'relative',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {backgroundImage === preset.id && (
+                    <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                  )}
+                  <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {preset.name}
+                  </div>
+                </div>
+              ))}
+              
+              {/* Option pour uploader son propre fond */}
+              <div 
+                className={`background-option ${backgroundImage?.startsWith('custom-') ? 'active' : ''}`}
+                onClick={() => document.getElementById('background-upload-input').click()}
+                style={{
+                  height: '80px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  border: backgroundImage?.startsWith('custom-') ? '3px solid #4a90e2' : '2px dashed #999',
+                  background: '#f5f5f5',
+                  position: 'relative',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden'
+                }}
+              >
+                {uploadingBackground ? (
+                  <div style={{ color: '#666', fontSize: '12px' }}>Upload...</div>
+                ) : backgroundImage?.startsWith('custom-') ? (
+                  <>
+                    <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                    <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Personnalisé</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: '32px', color: '#999' }}>+</div>
+                    <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Upload</div>
+                  </>
+                )}
+              </div>
+              <input
+                id="background-upload-input"
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleBackgroundUpload}
+              />
+            </div>
+            
+            {/* Liste des fonds personnalisés */}
+            {customBackgrounds.length > 0 && (
+              <div style={{ marginTop: '24px' }}>
+                <h4 style={{ marginBottom: '12px', fontSize: '14px', color: '#666' }}>Mes fonds d'écran ({customBackgrounds.length})</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px' }}>
+                  {customBackgrounds.map((bg) => (
+                    <div
+                      key={bg.id}
+                      className={`background-option ${backgroundImage === bg.id ? 'active' : ''}`}
+                      style={{
+                        height: '80px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        border: backgroundImage === bg.id ? '3px solid #4a90e2' : '2px solid #ddd',
+                        background: `url(${getServerUrl(accessMode)}/api/backgrounds/${bg.filename}) center/cover`,
+                        position: 'relative',
+                        transition: 'all 0.2s'
+                      }}
+                      onClick={() => handleBackgroundChange(bg.id)}
+                    >
+                      {backgroundImage === bg.id && (
+                        <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteBackground(bg.filename);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '4px',
+                          left: '4px',
+                          background: 'rgba(255, 0, 0, 0.8)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '20px',
+                          height: '20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                        title="Supprimer"
+                      >
+                        ×
+                      </button>
+                      <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {new Date(bg.uploadDate).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Section Statistiques */}
       <section className="settings-section stats-section">
@@ -1079,6 +1505,31 @@ const Settings = () => {
           {/* Sécurité */}
           <div className="settings-card">
             <h3>Sécurité</h3>
+            {changeStatus.show && (
+              <div className={`status-message ${changeStatus.success ? 'success' : 'error'}`} style={{ marginBottom: '12px' }}>
+                {changeStatus.message}
+              </div>
+            )}
+            <div className="setting-item">
+              <label>Durée de session</label>
+              <select
+                value={tokenExpiration}
+                onChange={(e) => handleTokenExpirationChange(e.target.value)}
+                className="setting-select"
+              >
+                <option value="5">5 minutes</option>
+                <option value="15">15 minutes (recommandé)</option>
+                <option value="30">30 minutes</option>
+                <option value="60">1 heure</option>
+                <option value="120">2 heures</option>
+                <option value="240">4 heures</option>
+                <option value="480">8 heures</option>
+                <option value="1440">24 heures</option>
+              </select>
+              <p className="setting-hint" style={{ fontSize: '0.85em', color: '#666', marginTop: '4px' }}>
+                Reconnexion requise après {tokenExpiration} minute{tokenExpiration > 1 ? 's' : ''} d'inactivité
+              </p>
+            </div>
             <div className="setting-item">
               <label>Chiffrement des données</label>
               <label className="switch">
@@ -1226,7 +1677,6 @@ const Settings = () => {
           </div>
         </div>
       </section>
-
 
       {/* Section Stockage (lecture seule + accès assistant) */}
       <section className="settings-section">

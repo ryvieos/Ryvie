@@ -13,7 +13,8 @@ import {
   faArrowLeft,
   faCheck
 } from '@fortawesome/free-solid-svg-icons';
-const { getServerUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl } = urlsConfig;
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 
 const StorageSettings = () => {

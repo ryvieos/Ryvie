@@ -3,7 +3,8 @@
  */
 
 import axios from '../utils/setupAxios';
-const { getServerUrl } = require('./urls');
+import urlsConfig from './urls';
+const { getServerUrl } = urlsConfig;
 
 // Import explicite des icônes critiques de la taskbar (évite les soucis de bundling cross-plateformes)
 import taskSettings from '../icons/task-settings.svg';

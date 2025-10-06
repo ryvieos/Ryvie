@@ -7,7 +7,7 @@ const ldapConfig = require('../config/ldap');
 const { escapeLdapFilterValue, getUserRole } = require('../services/ldapService');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const {
-  JWT_EXPIRES_SECONDS,
+  getTokenExpirationSeconds,
   checkBruteForce,
   recordFailedAttempt,
   clearFailedAttempts,
@@ -121,7 +121,7 @@ router.post('/authenticate', authLimiter, async (req, res) => {
               role,
             };
             const token = signToken(user);
-            (async () => { await allowlistToken(token, user); return res.json({ message: 'Authentification réussie', user, token, expiresIn: JWT_EXPIRES_SECONDS }); })();
+            (async () => { await allowlistToken(token, user); return res.json({ message: 'Authentification réussie', user, token, expiresIn: getTokenExpirationSeconds() }); })();
           }
         });
       }
@@ -143,12 +143,14 @@ router.post('/refresh-token', async (req, res) => {
 
     const { uid, role, name, email } = payload;
     const newPayload = { uid, role, name, email };
-    const newToken = jwt.sign(newPayload, process.env.JWT_SECRET, { expiresIn: `${process.env.JWT_EXPIRES_MINUTES || 15}m` });
+    const expirationSeconds = getTokenExpirationSeconds();
+    const expirationMinutes = Math.floor(expirationSeconds / 60);
+    const newToken = jwt.sign(newPayload, process.env.JWT_SECRET, { expiresIn: `${expirationMinutes}m` });
 
     await redis.del(key);
-    await redis.set(`access:token:${newToken}`, JSON.stringify({ uid, role }), { EX: parseInt(process.env.JWT_EXPIRES_MINUTES || '15', 10) * 60 });
+    await redis.set(`access:token:${newToken}`, JSON.stringify({ uid, role }), { EX: expirationSeconds });
 
-    return res.json({ token: newToken, user: newPayload, expiresIn: parseInt(process.env.JWT_EXPIRES_MINUTES || '15', 10) * 60 });
+    return res.json({ token: newToken, user: newPayload, expiresIn: expirationSeconds });
   } catch (e) {
     return res.status(401).json({ error: 'Token invalide' });
   }

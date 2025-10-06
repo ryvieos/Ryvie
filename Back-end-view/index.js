@@ -58,6 +58,7 @@ const userPreferencesRouter = require('./routes/userPreferences');
 const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
 const { getLocalIP } = require('./utils/network');
+const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
 
 const docker = new Docker();
 const app = express();
@@ -117,12 +118,31 @@ app.use('/api', storageRouter);
 // Mount User Preferences routes
 app.use('/api', userPreferencesRouter);
 
+// Mount Settings routes
+const settingsRouter = require('./routes/settings');
+app.use('/api', settingsRouter);
+
 // Realtime (Socket.IO + Docker events) handled by services/realtimeService.js
 let realtime;
 
  
  
 // Inline realtime code removed; replaced by realtimeService
+
+// Charger les paramètres au démarrage
+const fs = require('fs');
+const SETTINGS_FILE = '/data/config/server-settings.json';
+try {
+  if (fs.existsSync(SETTINGS_FILE)) {
+    const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    if (settings.tokenExpirationMinutes) {
+      process.env.JWT_EXPIRES_MINUTES = settings.tokenExpirationMinutes.toString();
+      console.log(`✅ Durée d'expiration du token chargée: ${settings.tokenExpirationMinutes} minutes`);
+    }
+  }
+} catch (error) {
+  console.warn('⚠️  Impossible de charger les paramètres serveur, utilisation des valeurs par défaut');
+}
 
 // Initialisation et démarrage des serveurs
 async function startServer() {
@@ -131,6 +151,12 @@ async function startServer() {
     realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
     await realtime.initializeActiveContainers();
 
+    // Synchroniser les fonds d'écran au démarrage
+    syncBackgrounds();
+    
+    // Surveiller les changements dans le dossier public/images/backgrounds
+    watchBackgrounds();
+    
     const PORT = process.env.PORT || 3002;
     httpServer.listen(PORT, () => {
       console.log(`HTTP Server running on http://${getLocalIP()}:${PORT}`);
