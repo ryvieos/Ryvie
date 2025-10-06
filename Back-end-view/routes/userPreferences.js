@@ -7,7 +7,7 @@ const { verifyToken } = require('../middleware/auth');
 
 // Répertoire pour stocker les préférences utilisateur
 const PREFERENCES_DIR = '/data/config/user-preferences';
-const BACKGROUNDS_DIR = '/data/apps/Ryvie/Ryvie-Front/public/images/backgrounds';
+const BACKGROUNDS_DIR = '/data/images/backgrounds';
 
 // S'assurer que les répertoires existent
 if (!fs.existsSync(PREFERENCES_DIR)) {
@@ -186,6 +186,37 @@ router.patch('/user/preferences/background', verifyToken, (req, res) => {
   }
 });
 
+// GET /api/user/preferences/backgrounds/list - Lister les fonds personnalisés de l'utilisateur
+router.get('/user/preferences/backgrounds/list', verifyToken, (req, res) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] Liste des fonds pour:', username);
+    
+    // Lire tous les fichiers du dossier backgrounds
+    const files = fs.readdirSync(BACKGROUNDS_DIR);
+    
+    // Filtrer les fichiers de l'utilisateur (format: username-timestamp.ext)
+    const userBackgrounds = files
+      .filter(file => file.startsWith(`${username}-`) && file !== 'background.webp')
+      .map(file => {
+        const filePath = path.join(BACKGROUNDS_DIR, file);
+        const stats = fs.statSync(filePath);
+        return {
+          filename: file,
+          id: `custom-${file}`,
+          uploadDate: stats.mtime,
+          size: stats.size
+        };
+      })
+      .sort((a, b) => b.uploadDate - a.uploadDate); // Plus récent en premier
+    
+    res.json({ backgrounds: userBackgrounds });
+  } catch (error) {
+    console.error('[userPreferences] Erreur liste fonds:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // POST /api/user/preferences/background/upload - Uploader un fond d'écran personnalisé
 router.post('/user/preferences/background/upload', verifyToken, upload.single('background'), async (req, res) => {
   try {
@@ -287,37 +318,6 @@ router.get('/backgrounds/:filename', (req, res) => {
     res.sendFile(imagePath);
   } else {
     res.status(404).json({ error: 'Image non trouvée' });
-  }
-});
-
-// GET /api/user/preferences/backgrounds/list - Lister les fonds personnalisés de l'utilisateur
-router.get('/user/preferences/backgrounds/list', verifyToken, (req, res) => {
-  try {
-    const username = req.user.uid || req.user.username;
-    console.log('[userPreferences] Liste des fonds pour:', username);
-    
-    // Lire tous les fichiers du dossier backgrounds
-    const files = fs.readdirSync(BACKGROUNDS_DIR);
-    
-    // Filtrer les fichiers de l'utilisateur (format: username-timestamp.ext)
-    const userBackgrounds = files
-      .filter(file => file.startsWith(`${username}-`) && file !== 'background.webp')
-      .map(file => {
-        const filePath = path.join(BACKGROUNDS_DIR, file);
-        const stats = fs.statSync(filePath);
-        return {
-          filename: file,
-          id: `custom-${file}`,
-          uploadDate: stats.mtime,
-          size: stats.size
-        };
-      })
-      .sort((a, b) => b.uploadDate - a.uploadDate); // Plus récent en premier
-    
-    res.json({ backgrounds: userBackgrounds });
-  } catch (error) {
-    console.error('[userPreferences] Erreur liste fonds:', error);
-    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

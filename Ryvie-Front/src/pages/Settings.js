@@ -102,6 +102,7 @@ const Settings = () => {
   const [tokenExpiration, setTokenExpiration] = useState(15); // En minutes, par défaut 15
   const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran
   const [uploadingBackground, setUploadingBackground] = useState(false);
+  const [customBackgrounds, setCustomBackgrounds] = useState([]); // Liste des fonds personnalisés
   // Initialiser prudemment pour éviter tout appel privé intempestif
   const [accessMode, setAccessMode] = useState(() => {
     const mode = getCurrentAccessMode();
@@ -169,7 +170,7 @@ const Settings = () => {
     if (mode !== accessMode) setAccessMode(mode);
   }, []);
 
-  // Charger la durée d'expiration du token et le fond d'écran
+  // Charger la durée d'expiration du token, le fond d'écran et la liste des fonds personnalisés
   useEffect(() => {
     const loadUserPreferences = async () => {
       if (!accessMode) return;
@@ -187,6 +188,12 @@ const Settings = () => {
         const prefsResponse = await axios.get(`${serverUrl}/api/user/preferences`);
         if (prefsResponse.data?.backgroundImage) {
           setBackgroundImage(prefsResponse.data.backgroundImage);
+        }
+        
+        // Charger liste des fonds personnalisés
+        const backgroundsResponse = await axios.get(`${serverUrl}/api/user/preferences/backgrounds/list`);
+        if (backgroundsResponse.data?.backgrounds) {
+          setCustomBackgrounds(backgroundsResponse.data.backgrounds);
         }
       } catch (error) {
         console.log('[Settings] Impossible de charger les préférences utilisateur');
@@ -406,6 +413,12 @@ const Settings = () => {
       const customBackgroundId = response.data.backgroundImage || 'custom';
       setBackgroundImage(customBackgroundId);
       
+      // Recharger la liste des fonds personnalisés
+      const backgroundsResponse = await axios.get(`${serverUrl}/api/user/preferences/backgrounds/list`);
+      if (backgroundsResponse.data?.backgrounds) {
+        setCustomBackgrounds(backgroundsResponse.data.backgrounds);
+      }
+      
       setChangeStatus({
         show: true,
         success: true,
@@ -430,6 +443,51 @@ const Settings = () => {
       setUploadingBackground(false);
       // Réinitialiser l'input
       event.target.value = '';
+    }
+  };
+
+  // Fonction pour supprimer un fond personnalisé
+  const handleDeleteBackground = async (filename) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce fond d\'écran ?')) {
+      return;
+    }
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      await axios.delete(`${serverUrl}/api/user/preferences/background/${filename}`);
+      
+      // Recharger la liste
+      const backgroundsResponse = await axios.get(`${serverUrl}/api/user/preferences/backgrounds/list`);
+      if (backgroundsResponse.data?.backgrounds) {
+        setCustomBackgrounds(backgroundsResponse.data.backgrounds);
+      }
+      
+      // Si c'était le fond actif, recharger les préférences
+      const prefsResponse = await axios.get(`${serverUrl}/api/user/preferences`);
+      if (prefsResponse.data?.backgroundImage) {
+        setBackgroundImage(prefsResponse.data.backgroundImage);
+      }
+      
+      setChangeStatus({
+        show: true,
+        success: true,
+        message: `✓ Fond d'écran supprimé`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('[Settings] Erreur suppression fond:', error);
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: `✗ Erreur lors de la suppression`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 5000);
     }
   };
 
@@ -936,6 +994,64 @@ const Settings = () => {
                 onChange={handleBackgroundUpload}
               />
             </div>
+            
+            {/* Liste des fonds personnalisés */}
+            {customBackgrounds.length > 0 && (
+              <div style={{ marginTop: '24px' }}>
+                <h4 style={{ marginBottom: '12px', fontSize: '14px', color: '#666' }}>Mes fonds d'écran ({customBackgrounds.length})</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px' }}>
+                  {customBackgrounds.map((bg) => (
+                    <div
+                      key={bg.id}
+                      className={`background-option ${backgroundImage === bg.id ? 'active' : ''}`}
+                      style={{
+                        height: '80px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        border: backgroundImage === bg.id ? '3px solid #4a90e2' : '2px solid #ddd',
+                        background: `url(${getServerUrl(accessMode)}/api/backgrounds/${bg.filename}) center/cover`,
+                        position: 'relative',
+                        transition: 'all 0.2s'
+                      }}
+                      onClick={() => handleBackgroundChange(bg.id)}
+                    >
+                      {backgroundImage === bg.id && (
+                        <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteBackground(bg.filename);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '4px',
+                          left: '4px',
+                          background: 'rgba(255, 0, 0, 0.8)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '20px',
+                          height: '20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                        title="Supprimer"
+                      >
+                        ×
+                      </button>
+                      <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {new Date(bg.uploadDate).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
