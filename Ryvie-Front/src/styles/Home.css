@@ -383,6 +383,11 @@ body, html {
   color: #ffffff;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5); /* Ajout d'un ombrage au texte */
   z-index: 1; /* Garde la ville au-dessus des autres éléments */
+  /* Empêcher les superpositions: tronquer si trop long */
+  max-width: 85%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .weather-temperature {

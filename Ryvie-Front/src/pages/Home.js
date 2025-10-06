@@ -631,15 +631,38 @@ const Home = () => {
           icon: icon,
         });
       } catch (error) {
-        console.error('Erreur lors de la récupération de la localisation', error);
-        setWeather({
-          location: 'Localisation non disponible',
-          temperature: null,
-          humidity: null,
-          wind: null,
-          description: '',
-          icon: 'default.png',
-        });
+        console.error('Erreur lors de la récupération météo, fallback sur Paris', error);
+        // Fallback: tenter de charger Paris pour avoir de vraies données
+        try {
+          const parisLat = 48.8566;
+          const parisLon = 2.3522;
+          const parisApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${parisLat}&longitude=${parisLon}&current_weather=true&hourly=temperature_2m,weathercode,relative_humidity_2m,windspeed_10m&timezone=auto`;
+          const parisResp = await axios.get(parisApiUrl);
+          const pdata = parisResp.data;
+          const pcode = pdata.current_weather.weathercode;
+          let picon = 'cloudy.png';
+          if (pcode === 0) picon = 'sunny.png';
+          else if ([61, 63, 65].includes(pcode)) picon = 'rainy.png';
+
+          setWeather({
+            location: 'Paris',
+            temperature: pdata.current_weather.temperature,
+            humidity: pdata.hourly.relative_humidity_2m?.[0] ?? null,
+            wind: pdata.current_weather.windspeed,
+            description: pcode,
+            icon: picon,
+          });
+        } catch (e) {
+          // Si vraiment tout échoue: fallback statique Paris nuageux
+          setWeather({
+            location: 'Paris',
+            temperature: null,
+            humidity: null,
+            wind: null,
+            description: 'cloudy',
+            icon: 'cloudy.png',
+          });
+        }
       }
     };
 
