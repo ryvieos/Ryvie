@@ -309,6 +309,12 @@ const Home = () => {
   const [appsConfig, setAppsConfig] = useState(generateAppConfig()); // Config par défaut
   const [iconImages, setIconImages] = useState(images); // Images locales
   const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran utilisateur
+  const [weatherCity, setWeatherCity] = useState(null); // Ville configurée par l'utilisateur
+  const [weatherCityLoaded, setWeatherCityLoaded] = useState(false); // Indique si les préférences sont chargées
+  const [showWeatherModal, setShowWeatherModal] = useState(false);
+  const [closingWeatherModal, setClosingWeatherModal] = useState(false);
+  const [tempCity, setTempCity] = useState('');
+  const [savingWeatherCity, setSavingWeatherCity] = useState(false);
   
   // Commencer avec des zones vides, elles seront chargées depuis le serveur
   const [zones, setZones] = useState({
@@ -565,45 +571,90 @@ const Home = () => {
   }, [accessMode]);
   
   useEffect(() => {
+    // Attendre que les préférences soient chargées avant de récupérer la météo
+    if (!weatherCityLoaded) {
+      console.log('[Home] ⏳ En attente du chargement des préférences météo...');
+      return;
+    }
+    
     const fetchWeatherData = async () => {
       try {
-        // 1) Essayer d'abord la géolocalisation du navigateur (position réelle de l'utilisateur)
-        const getPosition = () =>
-          new Promise((resolve, reject) => {
-            if (!navigator.geolocation) return reject(new Error('Geolocation non disponible'));
-            navigator.geolocation.getCurrentPosition(
-              (pos) => resolve(pos),
-              (err) => reject(err),
-              { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
-            );
-          });
-
         let latitude = null;
         let longitude = null;
         let cityName = null;
 
-        try {
-          const pos = await getPosition();
-          latitude = pos.coords.latitude;
-          longitude = pos.coords.longitude;
-
-          // Reverse geocoding pour obtenir le nom de la ville depuis les coordonnées
+        // Si l'utilisateur a configuré une ville, l'utiliser en priorité
+        if (weatherCity && accessMode) {
+          console.log('[Home] 🌍 Utilisation de la ville configurée:', weatherCity);
           try {
-            const reverseUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=fr`;
-            const rev = await axios.get(reverseUrl);
-            cityName = rev?.data?.city || rev?.data?.locality || rev?.data?.principalSubdivision || 'Votre position';
-          } catch (e) {
-            cityName = 'Votre position';
+            // Géocoder la ville via le backend pour éviter CORS
+            const serverUrl = getServerUrl(accessMode);
+            const geocodeResp = await axios.get(`${serverUrl}/api/geocode/${encodeURIComponent(weatherCity)}`);
+            if (geocodeResp.data) {
+              latitude = geocodeResp.data.latitude;
+              longitude = geocodeResp.data.longitude;
+              cityName = geocodeResp.data.name;
+              console.log('[Home] 📍 Ville géocodée:', cityName, latitude, longitude);
+            } else {
+              console.warn('[Home] ⚠️  Ville non trouvée, fallback sur géolocalisation');
+              throw new Error('Ville non trouvée');
+            }
+          } catch (geocodeErr) {
+            console.error('[Home] ❌ Erreur géocodage:', geocodeErr.message);
+            // Continuer avec la géolocalisation automatique
           }
-        } catch (geoErr) {
-          // 2) Repli: géolocalisation par IP (HTTPS)
+        }
+
+        // Si pas de ville configurée ou géocodage échoué, utiliser la géolocalisation
+        if (!latitude || !longitude) {
+          const getPosition = () =>
+            new Promise((resolve, reject) => {
+              if (!navigator.geolocation) return reject(new Error('Geolocation non disponible'));
+              navigator.geolocation.getCurrentPosition(
+                (pos) => resolve(pos),
+                (err) => reject(err),
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+              );
+            });
+
           try {
-            const ipResp = await axios.get('https://ipapi.co/json/');
-            latitude = ipResp.data.latitude;
-            longitude = ipResp.data.longitude;
-            cityName = ipResp.data.city || 'Votre position';
-          } catch (ipErr) {
-            throw new Error('Impossible de récupérer la localisation');
+            const pos = await getPosition();
+            latitude = pos.coords.latitude;
+            longitude = pos.coords.longitude;
+            console.log('[Home] 📍 Géolocalisation navigateur réussie:', latitude, longitude);
+
+            // Reverse geocoding pour obtenir le nom de la ville depuis les coordonnées
+            try {
+              const reverseUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=fr`;
+              const rev = await axios.get(reverseUrl);
+              cityName = rev?.data?.city || rev?.data?.locality || rev?.data?.principalSubdivision || 'Votre position';
+              console.log('[Home] 🏙️  Ville détectée:', cityName);
+            } catch (e) {
+              console.warn('[Home] ⚠️  Reverse geocoding échoué:', e.message);
+              cityName = 'Votre position';
+            }
+          } catch (geoErr) {
+            console.warn('[Home] ⚠️  Géolocalisation navigateur échouée:', geoErr.message);
+            // Fallback: géolocalisation par IP via le backend
+            if (!latitude || !longitude && accessMode) {
+              try {
+                console.log('[Home] 🔄 Tentative géolocalisation par IP via backend...');
+                const serverUrl = getServerUrl(accessMode);
+                const geoResp = await axios.get(`${serverUrl}/api/geolocate`);
+                if (geoResp.data) {
+                  latitude = geoResp.data.latitude;
+                  longitude = geoResp.data.longitude;
+                  cityName = geoResp.data.city;
+                  console.log('[Home] 📍 Géolocalisation IP réussie:', cityName, latitude, longitude);
+                }
+              } catch (ipErr) {
+                console.error('[Home] ❌ Géolocalisation IP échouée:', ipErr.message);
+                // Dernier fallback: Paris
+                latitude = 48.8566;
+                longitude = 2.3522;
+                cityName = 'Paris';
+              }
+            }
           }
         }
 
@@ -667,7 +718,7 @@ const Home = () => {
     fetchWeatherData();
     const intervalId = setInterval(fetchWeatherData, 300000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [weatherCity, weatherCityLoaded]); // Recharger quand la ville change ou quand les préférences sont chargées
 
   // Supprimer ce useEffect dupliqué car géré dans le premier useEffect
 
@@ -700,6 +751,21 @@ const Home = () => {
         const serverUrl = getServerUrl(accessMode);
         console.log('[Home] 🔄 Chargement zones depuis le serveur pour', currentUserName);
         const res = await axios.get(`${serverUrl}/api/user/preferences`);
+        
+        // Charger la ville météo configurée
+        if (res.data?.weatherCity) {
+          console.log('[Home] 🌍 Ville météo chargée:', res.data.weatherCity);
+          setWeatherCity(res.data.weatherCity);
+        } else {
+          console.log('[Home] 🌍 Pas de ville configurée, mode auto');
+        }
+        setWeatherCityLoaded(true); // Marquer les préférences comme chargées
+        
+        // Charger le fond d'écran
+        if (res.data?.backgroundImage) {
+          console.log('[Home] 🎨 Fond d\'écran chargé:', res.data.backgroundImage);
+          setBackgroundImage(res.data.backgroundImage);
+        }
         
         if (res.data?.zones && Object.keys(res.data.zones).length > 0) {
           console.log('[Home] ✅ Zones chargées depuis le serveur:', res.data.zones);
@@ -1036,7 +1102,16 @@ const Home = () => {
                   setActiveContextMenu={setActiveContextMenu}
                 />
               </div>
-              <div className="widget" style={{ backgroundImage: weatherImages[`./${weather.icon}`] ? `url(${weatherImages[`./${weather.icon}`]})` : 'none' }}>
+              <div 
+                className="widget" 
+                style={{ backgroundImage: weatherImages[`./${weather.icon}`] ? `url(${weatherImages[`./${weather.icon}`]})` : 'none', cursor: 'pointer' }}
+                onClick={() => {
+                  setTempCity((weatherCity || weather.location || '').toString());
+                  setClosingWeatherModal(false);
+                  setShowWeatherModal(true);
+                }}
+                title="Cliquez pour changer de ville"
+              >
                 <div className="weather-info">
                   <p className="weather-city">{weather.location ? weather.location : 'Localisation non disponible'}</p>
                   <p className="weather-temperature">
@@ -1157,6 +1232,101 @@ const Home = () => {
       )}
 
       </DndProvider>
+      
+      {/* Modal changement de ville météo */}
+      {showWeatherModal && (
+        <div
+          className={`weather-modal-backdrop ${closingWeatherModal ? 'closing' : 'open'}`}
+          onClick={() => {
+            if (savingWeatherCity) return;
+            setClosingWeatherModal(true);
+            setTimeout(() => {
+              setShowWeatherModal(false);
+              setClosingWeatherModal(false);
+            }, 220);
+          }}
+        >
+          <div
+            className={`weather-modal ${closingWeatherModal ? 'closing' : 'open'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="weather-modal-header">
+              <h3>Choisir la ville pour la météo</h3>
+              <p>Vous pouvez utiliser votre position actuelle (automatique) ou définir une ville.</p>
+            </div>
+            <div className="weather-modal-body">
+              <label htmlFor="city-input">Ville</label>
+              <input
+                id="city-input"
+                type="text"
+                placeholder="Ex: Lille, Lyon, Marseille"
+                value={tempCity}
+                onChange={(e) => setTempCity(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="weather-modal-actions">
+              <button
+                className="btn success"
+                onClick={async () => {
+                  if (!accessMode) return;
+                  try {
+                    setSavingWeatherCity(true);
+                    const serverUrl = getServerUrl(accessMode);
+                    await axios.patch(`${serverUrl}/api/user/preferences/weather-city`, { weatherCity: '__auto__' });
+                    setWeatherCity(null);
+                    setWeatherCityLoaded(true);
+                    setClosingWeatherModal(true);
+                    setTimeout(() => {
+                      setShowWeatherModal(false);
+                      setClosingWeatherModal(false);
+                    }, 220);
+                  } catch (e) {
+                    console.error('[Home] ❌ Erreur mise en auto:', e);
+                  } finally { setSavingWeatherCity(false); }
+                }}
+                disabled={savingWeatherCity}
+                title="Utiliser la position actuelle (autoriser la géolocalisation)"
+              >
+                {savingWeatherCity ? 'En cours…' : 'Utiliser ma position (auto)'}
+              </button>
+              <div className="spacer" />
+              <button
+                className="btn ghost"
+                onClick={() => {
+                  if (savingWeatherCity) return;
+                  setClosingWeatherModal(true);
+                  setTimeout(() => {
+                    setShowWeatherModal(false);
+                    setClosingWeatherModal(false);
+                  }, 220);
+                }}
+                disabled={savingWeatherCity}
+              >Annuler</button>
+              <button
+                className="btn primary"
+                onClick={async () => {
+                  if (!accessMode || !tempCity.trim()) return;
+                  try {
+                    setSavingWeatherCity(true);
+                    const serverUrl = getServerUrl(accessMode);
+                    await axios.patch(`${serverUrl}/api/user/preferences/weather-city`, { weatherCity: tempCity.trim() });
+                    setWeatherCity(tempCity.trim());
+                    setClosingWeatherModal(true);
+                    setTimeout(() => {
+                      setShowWeatherModal(false);
+                      setClosingWeatherModal(false);
+                    }, 220);
+                  } catch (e) {
+                    console.error('[Home] ❌ Erreur sauvegarde ville:', e);
+                  } finally { setSavingWeatherCity(false); }
+                }}
+                disabled={savingWeatherCity || !tempCity.trim()}
+              >Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

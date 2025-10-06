@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const axios = require('axios');
 const { verifyToken } = require('../middleware/auth');
 
 // Répertoire pour stocker les préférences utilisateur
@@ -13,6 +14,28 @@ const PRESETS_DIR = '/data/apps/Ryvie/Ryvie-Front/public/images/backgrounds'; //
 // S'assurer que les répertoires existent
 if (!fs.existsSync(PREFERENCES_DIR)) {
   fs.mkdirSync(PREFERENCES_DIR, { recursive: true });
+
+// GET /api/geocode/search?q=NAME - Chercher plusieurs villes (auto-complétion)
+router.get('/geocode/search', async (req, res) => {
+  try {
+    const q = (req.query.q || '').toString().trim();
+    if (!q || q.length < 2) return res.json({ results: [] });
+
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=fr&format=json`;
+    const r = await axios.get(url, { timeout: 4000 });
+    const items = (r.data?.results || []).map(it => ({
+      name: it.name,
+      country: it.country,
+      latitude: it.latitude,
+      longitude: it.longitude,
+      admin1: it.admin1 || null
+    }));
+    res.json({ results: items });
+  } catch (e) {
+    console.error('[userPreferences] Erreur geocode/search:', e.message);
+    res.json({ results: [] });
+  }
+});
 }
 if (!fs.existsSync(BACKGROUNDS_DIR)) {
   fs.mkdirSync(BACKGROUNDS_DIR, { recursive: true });
@@ -150,6 +173,42 @@ router.patch('/user/preferences/zones', verifyToken, (req, res) => {
     }
   } catch (error) {
     console.error('[userPreferences] Erreur PATCH zones:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// PATCH /api/user/preferences/weather-city - Mettre à jour la ville météo
+router.patch('/user/preferences/weather-city', verifyToken, (req, res) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] PATCH weather-city pour utilisateur:', username);
+    const { weatherCity } = req.body;
+    
+    // Autoriser la suppression de la ville: if empty or '__auto__'
+    const shouldClear = !weatherCity || weatherCity === '__auto__';
+    
+    // Charger les préférences existantes
+    let preferences = loadUserPreferences(username) || {
+      zones: {},
+      theme: 'default',
+      language: 'fr'
+    };
+    
+    // Mettre à jour ou supprimer la ville météo
+    if (shouldClear) {
+      if (preferences.weatherCity) delete preferences.weatherCity;
+    } else {
+      preferences.weatherCity = weatherCity;
+    }
+    
+    if (saveUserPreferences(username, preferences)) {
+      console.log('[userPreferences] Ville météo sauvegardée:', shouldClear ? '(auto)' : weatherCity, 'pour', username);
+      res.json({ success: true, message: shouldClear ? 'Ville météo supprimée (auto)' : 'Ville météo sauvegardée' });
+    } else {
+      res.status(500).json({ error: 'Échec de la sauvegarde' });
+    }
+  } catch (error) {
+    console.error('[userPreferences] Erreur PATCH weather-city:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -403,6 +462,109 @@ router.delete('/user/preferences/background/:filename', verifyToken, (req, res) 
     res.json({ success: true, message: 'Fond supprimé' });
   } catch (error) {
     console.error('[userPreferences] Erreur suppression fond:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// GET /api/geolocate - Obtenir la position via l'IP du client
+router.get('/geolocate', async (req, res) => {
+  try {
+    // Récupérer l'IP du client
+    let clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress || req.socket.remoteAddress;
+    
+    // Nettoyer l'IP (enlever le préfixe IPv6 si présent)
+    if (clientIp && clientIp.startsWith('::ffff:')) {
+      clientIp = clientIp.replace('::ffff:', '');
+    }
+    
+    // Si l'IP est locale, essayer de récupérer l'IP publique
+    const isLocalIp = !clientIp || 
+                      clientIp === '::1' || 
+                      clientIp === '127.0.0.1' || 
+                      clientIp.startsWith('192.168.') || 
+                      clientIp.startsWith('10.') ||
+                      clientIp.startsWith('172.16.') ||
+                      clientIp.startsWith('172.17.') ||
+                      clientIp.startsWith('172.18.') ||
+                      clientIp.startsWith('172.19.') ||
+                      clientIp.startsWith('172.2') ||
+                      clientIp.startsWith('172.30.') ||
+                      clientIp.startsWith('172.31.');
+    
+    if (isLocalIp) {
+      console.log('[userPreferences] IP locale détectée, récupération IP publique...');
+      try {
+        // Récupérer l'IP publique du serveur
+        const ipResp = await axios.get('https://api.ipify.org?format=json', { timeout: 3000 });
+        clientIp = ipResp.data.ip;
+        console.log('[userPreferences] IP publique récupérée:', clientIp);
+      } catch (ipErr) {
+        console.warn('[userPreferences] Impossible de récupérer IP publique:', ipErr.message);
+      }
+    }
+    
+    console.log('[userPreferences] Géolocalisation IP pour:', clientIp);
+    
+    // Utiliser une API de géolocalisation IP gratuite
+    try {
+      const geoResp = await axios.get(`http://ip-api.com/json/${clientIp}?fields=status,message,country,city,lat,lon`);
+      
+      if (geoResp.data.status === 'success') {
+        console.log('[userPreferences] Géolocalisation réussie:', geoResp.data.city);
+        res.json({
+          city: geoResp.data.city,
+          latitude: geoResp.data.lat,
+          longitude: geoResp.data.lon,
+          country: geoResp.data.country
+        });
+      } else {
+        console.warn('[userPreferences] Géolocalisation échouée, fallback Paris');
+        // Fallback sur Paris si l'IP est locale ou non trouvée
+        res.json({
+          city: 'Paris',
+          latitude: 48.8566,
+          longitude: 2.3522,
+          country: 'France'
+        });
+      }
+    } catch (apiErr) {
+      console.error('[userPreferences] Erreur API géolocalisation:', apiErr.message);
+      // Fallback sur Paris
+      res.json({
+        city: 'Paris',
+        latitude: 48.8566,
+        longitude: 2.3522,
+        country: 'France'
+      });
+    }
+  } catch (error) {
+    console.error('[userPreferences] Erreur géolocalisation:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// GET /api/geocode/:city - Géocoder une ville pour obtenir ses coordonnées
+router.get('/geocode/:city', async (req, res) => {
+  try {
+    const city = req.params.city;
+    console.log('[userPreferences] Géocodage de:', city);
+    
+    const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=fr&format=json`;
+    const geocodeResp = await axios.get(geocodeUrl);
+    
+    if (geocodeResp.data?.results?.[0]) {
+      const result = geocodeResp.data.results[0];
+      res.json({
+        name: result.name,
+        latitude: result.latitude,
+        longitude: result.longitude,
+        country: result.country
+      });
+    } else {
+      res.status(404).json({ error: 'Ville non trouvée' });
+    }
+  } catch (error) {
+    console.error('[userPreferences] Erreur géocodage:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
