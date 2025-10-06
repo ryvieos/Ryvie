@@ -552,22 +552,23 @@
   z-index: 1;
 }
 .icon-name {
-  margin-top: 15px;
-  display: inline-block;
-  max-width: 92px;
-  padding: 4px 8px;
-  font-size: 15px;
+  margin-top: 12px;
+  display: block;
+  max-width: 100px;
+  font-size: 16px;
   line-height: 1.2;
-  color: #000000;
-  font-weight: 400;
-  letter-spacing: 0.6px;
+  color: #ffffff;
+  font-weight: 200;
+  letter-spacing: -0.05px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.482); /* dark pill to ensure contrast */
-  border: 1px solid rgba(255,255,255,0.18);
-  backdrop-filter: blur(4px);
+  text-align: center;
+  /* Style iPhone: ombre douce et subtile pour lisibilité sur tous fonds */
+  text-shadow: 
+    0 0.5px 1px rgba(0, 0, 0, 0.5),
+    0 1px 3px rgba(0, 0, 0, 0.3);
+  /* Pas de fond, pas de bordure - minimaliste comme iOS */
 }
 .weather-icon {
   width: 70px;  /* Taille de l'icône */
