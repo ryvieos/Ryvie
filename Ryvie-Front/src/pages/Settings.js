@@ -103,6 +103,7 @@ const Settings = () => {
   const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran
   const [uploadingBackground, setUploadingBackground] = useState(false);
   const [customBackgrounds, setCustomBackgrounds] = useState([]); // Liste des fonds personnalisés
+  const [presetBackgrounds, setPresetBackgrounds] = useState([]); // Liste des fonds prédéfinis
   // Initialiser prudemment pour éviter tout appel privé intempestif
   const [accessMode, setAccessMode] = useState(() => {
     const mode = getCurrentAccessMode();
@@ -194,6 +195,12 @@ const Settings = () => {
         const backgroundsResponse = await axios.get(`${serverUrl}/api/user/preferences/backgrounds/list`);
         if (backgroundsResponse.data?.backgrounds) {
           setCustomBackgrounds(backgroundsResponse.data.backgrounds);
+        }
+        
+        // Charger liste des fonds prédéfinis
+        const presetsResponse = await axios.get(`${serverUrl}/api/backgrounds/presets`);
+        if (presetsResponse.data?.backgrounds) {
+          setPresetBackgrounds(presetsResponse.data.backgrounds);
         }
       } catch (error) {
         console.log('[Settings] Impossible de charger les préférences utilisateur');
@@ -840,119 +847,30 @@ const Settings = () => {
               </div>
             )}
             <div className="background-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '16px' }}>
-              <div 
-                className={`background-option ${backgroundImage === 'default' ? 'active' : ''}`}
-                onClick={() => handleBackgroundChange('default')}
-                style={{
-                  height: '80px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  border: backgroundImage === 'default' ? '3px solid #4a90e2' : '2px solid #ddd',
-                  background: `url(${getServerUrl(accessMode)}/api/backgrounds/background.webp) center/cover`,
-                  position: 'relative',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {backgroundImage === 'default' && (
-                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
-                )}
-                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Par défaut</div>
-              </div>
-              
-              <div 
-                className={`background-option ${backgroundImage === 'gradient-blue' ? 'active' : ''}`}
-                onClick={() => handleBackgroundChange('gradient-blue')}
-                style={{
-                  height: '80px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  border: backgroundImage === 'gradient-blue' ? '3px solid #4a90e2' : '2px solid #ddd',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  position: 'relative',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {backgroundImage === 'gradient-blue' && (
-                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
-                )}
-                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Bleu violet</div>
-              </div>
-              
-              <div 
-                className={`background-option ${backgroundImage === 'gradient-sunset' ? 'active' : ''}`}
-                onClick={() => handleBackgroundChange('gradient-sunset')}
-                style={{
-                  height: '80px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  border: backgroundImage === 'gradient-sunset' ? '3px solid #4a90e2' : '2px solid #ddd',
-                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                  position: 'relative',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {backgroundImage === 'gradient-sunset' && (
-                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
-                )}
-                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Coucher de soleil</div>
-              </div>
-              
-              <div 
-                className={`background-option ${backgroundImage === 'gradient-ocean' ? 'active' : ''}`}
-                onClick={() => handleBackgroundChange('gradient-ocean')}
-                style={{
-                  height: '80px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  border: backgroundImage === 'gradient-ocean' ? '3px solid #4a90e2' : '2px solid #ddd',
-                  background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                  position: 'relative',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {backgroundImage === 'gradient-ocean' && (
-                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
-                )}
-                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Océan</div>
-              </div>
-              
-              <div 
-                className={`background-option ${backgroundImage === 'gradient-forest' ? 'active' : ''}`}
-                onClick={() => handleBackgroundChange('gradient-forest')}
-                style={{
-                  height: '80px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  border: backgroundImage === 'gradient-forest' ? '3px solid #4a90e2' : '2px solid #ddd',
-                  background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-                  position: 'relative',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {backgroundImage === 'gradient-forest' && (
-                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
-                )}
-                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Forêt</div>
-              </div>
-              
-              <div 
-                className={`background-option ${backgroundImage === 'dark' ? 'active' : ''}`}
-                onClick={() => handleBackgroundChange('dark')}
-                style={{
-                  height: '80px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  border: backgroundImage === 'dark' ? '3px solid #4a90e2' : '2px solid #ddd',
-                  background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)',
-                  position: 'relative',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {backgroundImage === 'dark' && (
-                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
-                )}
-                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(255,255,255,0.8)', color: '#333', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Sombre</div>
-              </div>
+              {/* Afficher les fonds prédéfinis depuis public/images/backgrounds */}
+              {presetBackgrounds.map((preset) => (
+                <div
+                  key={preset.id}
+                  className={`background-option ${backgroundImage === preset.id ? 'active' : ''}`}
+                  onClick={() => handleBackgroundChange(preset.id)}
+                  style={{
+                    height: '80px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    border: backgroundImage === preset.id ? '3px solid #4a90e2' : '2px solid #ddd',
+                    background: `url(${getServerUrl(accessMode)}/api/backgrounds/presets/${preset.filename}) center/cover`,
+                    position: 'relative',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {backgroundImage === preset.id && (
+                    <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                  )}
+                  <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {preset.name}
+                  </div>
+                </div>
+              ))}
               
               {/* Option pour uploader son propre fond */}
               <div 

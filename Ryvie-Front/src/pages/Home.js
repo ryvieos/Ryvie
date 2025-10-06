@@ -968,28 +968,27 @@ const Home = () => {
       };
     }
     
-    switch (backgroundImage) {
-      case 'gradient-blue':
-        return { background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' };
-      case 'gradient-sunset':
-        return { background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' };
-      case 'gradient-ocean':
-        return { background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' };
-      case 'gradient-forest':
-        return { background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' };
-      case 'dark':
-        return { background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)' };
-      case 'default':
-      default:
-        // Charger le fond par défaut via l'API backend
-        if (!accessMode) return {};
-        const serverUrl = getServerUrl(accessMode);
-        console.log('[Home] 🎨 Fond par défaut via API');
-        return {
-          background: `url(${serverUrl}/api/backgrounds/background.webp) no-repeat center center fixed`,
-          backgroundSize: 'cover'
-        };
+    // Si c'est un fond prédéfini (preset-filename.ext) - charger via API backend
+    if (backgroundImage?.startsWith('preset-')) {
+      if (!accessMode) return {};
+      const filename = backgroundImage.replace('preset-', '');
+      const serverUrl = getServerUrl(accessMode);
+      console.log('[Home] 🎨 Fond prédéfini via API:', filename);
+      
+      return {
+        background: `url(${serverUrl}/api/backgrounds/presets/${filename}) no-repeat center center fixed`,
+        backgroundSize: 'cover'
+      };
     }
+    
+    // Fond par défaut - charger via API backend
+    if (!accessMode) return {};
+    const serverUrl = getServerUrl(accessMode);
+    console.log('[Home] 🎨 Fond par défaut via API');
+    return {
+      background: `url(${serverUrl}/api/backgrounds/presets/default.webp) no-repeat center center fixed`,
+      backgroundSize: 'cover'
+    };
   };
 
   return (

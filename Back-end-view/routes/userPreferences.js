@@ -7,7 +7,8 @@ const { verifyToken } = require('../middleware/auth');
 
 // Répertoire pour stocker les préférences utilisateur
 const PREFERENCES_DIR = '/data/config/user-preferences';
-const BACKGROUNDS_DIR = '/data/images/backgrounds';
+const BACKGROUNDS_DIR = '/data/images/backgrounds'; // Fonds uploadés par les utilisateurs
+const PRESETS_DIR = '/data/apps/Ryvie/Ryvie-Front/public/images/backgrounds'; // Fonds prédéfinis
 
 // S'assurer que les répertoires existent
 if (!fs.existsSync(PREFERENCES_DIR)) {
@@ -186,6 +187,39 @@ router.patch('/user/preferences/background', verifyToken, (req, res) => {
   }
 });
 
+// GET /api/backgrounds/presets - Lister tous les fonds d'écran prédéfinis depuis public/
+router.get('/backgrounds/presets', (req, res) => {
+  try {
+    console.log('[userPreferences] Liste des fonds prédéfinis depuis public/');
+    
+    // Lire tous les fichiers du dossier public/images/backgrounds
+    const files = fs.existsSync(PRESETS_DIR) ? fs.readdirSync(PRESETS_DIR) : [];
+    
+    // Filtrer uniquement les images
+    const presetBackgrounds = files
+      .filter(file => /\.(jpg|jpeg|png|webp)$/i.test(file))
+      .map(file => {
+        const filePath = path.join(PRESETS_DIR, file);
+        const stats = fs.statSync(filePath);
+        const nameWithoutExt = path.parse(file).name;
+        
+        return {
+          filename: file,
+          id: `preset-${file}`, // Inclure l'extension dans l'ID
+          name: nameWithoutExt.charAt(0).toUpperCase() + nameWithoutExt.slice(1).replace(/-/g, ' '),
+          uploadDate: stats.mtime,
+          size: stats.size
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name)); // Tri alphabétique
+    
+    res.json({ backgrounds: presetBackgrounds });
+  } catch (error) {
+    console.error('[userPreferences] Erreur liste fonds prédéfinis:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // GET /api/user/preferences/backgrounds/list - Lister les fonds personnalisés de l'utilisateur
 router.get('/user/preferences/backgrounds/list', verifyToken, (req, res) => {
   try {
@@ -197,7 +231,7 @@ router.get('/user/preferences/backgrounds/list', verifyToken, (req, res) => {
     
     // Filtrer les fichiers de l'utilisateur (format: username-timestamp.ext)
     const userBackgrounds = files
-      .filter(file => file.startsWith(`${username}-`) && file !== 'background.webp')
+      .filter(file => file.startsWith(`${username}-`) && /\.(jpg|jpeg|png|webp)$/i.test(file))
       .map(file => {
         const filePath = path.join(BACKGROUNDS_DIR, file);
         const stats = fs.statSync(filePath);
@@ -305,7 +339,23 @@ router.get('/backgrounds/default', (req, res) => {
   }
 });
 
-// GET /api/backgrounds/:filename - Servir une image de fond
+// GET /api/backgrounds/presets/:filename - Servir un fond prédéfini
+router.get('/backgrounds/presets/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const imagePath = path.join(PRESETS_DIR, filename);
+  
+  if (fs.existsSync(imagePath)) {
+    // Headers CORS pour permettre le chargement cross-origin
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache 24h
+    res.sendFile(imagePath);
+  } else {
+    res.status(404).json({ error: 'Image non trouvée' });
+  }
+});
+
+// GET /api/backgrounds/:filename - Servir une image de fond uploadée
 router.get('/backgrounds/:filename', (req, res) => {
   const filename = req.params.filename;
   const imagePath = path.join(BACKGROUNDS_DIR, filename);

@@ -58,6 +58,7 @@ const userPreferencesRouter = require('./routes/userPreferences');
 const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
 const { getLocalIP } = require('./utils/network');
+const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
 
 const docker = new Docker();
 const app = express();
@@ -150,6 +151,12 @@ async function startServer() {
     realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
     await realtime.initializeActiveContainers();
 
+    // Synchroniser les fonds d'écran au démarrage
+    syncBackgrounds();
+    
+    // Surveiller les changements dans le dossier public/images/backgrounds
+    watchBackgrounds();
+    
     const PORT = process.env.PORT || 3002;
     httpServer.listen(PORT, () => {
       console.log(`HTTP Server running on http://${getLocalIP()}:${PORT}`);
