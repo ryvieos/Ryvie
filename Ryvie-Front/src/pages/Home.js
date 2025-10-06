@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import '../styles/Home.css';
 import '../styles/Transitions.css';
 import axios from '../utils/setupAxios';
@@ -37,7 +38,21 @@ const ItemTypes = {
 };
 
 // Composant pour chaque icône
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStatusData, appsConfig }) => {
+// Menu contextuel rendu via portal pour s'afficher au-dessus de tout
+const ContextMenuPortal = ({ children, x, y, onClose }) => {
+  const menu = (
+    <div
+      className="context-menu"
+      style={{ position: 'fixed', top: y, left: x, zIndex: 100000 }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+  return ReactDOM.createPortal(menu, document.body);
+};
+
+const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu }) => {
   const ref = React.useRef(null);
   const appConfig = appsConfig[id] || {};
 
@@ -105,29 +120,89 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStat
     handleClick(id);
   };
 
-  return (
-    <div className="icon-container">
-      <div
-        ref={ref}
-        className="icon"
-        style={{
-          backgroundImage: `url(${src})`,
+  const handleContextMenu = (e) => {
+    // Ne montrer le menu que pour les apps avec showStatus (pas les icônes système)
+    if (!appConfig.showStatus) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Positionner le menu collé à l'icône (à droite par défaut)
+    const iconRect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 180;
+    const menuHeight = 110;
 
-          cursor: isClickable ? 'pointer' : 'not-allowed',
-          position: 'relative',
-          
-        }}
-        onClick={handleIconClick}
-      >
-        {badgeStyle && <div className="status-badge" style={badgeStyle}></div>}
+    // Option droite-centre
+    let x = iconRect.right + 8;
+    let y = iconRect.top + iconRect.height / 2 - menuHeight / 2;
+
+    // Si dépasse à droite, basculer à gauche
+    if (x + menuWidth > window.innerWidth) {
+      x = iconRect.left - menuWidth - 8;
+    }
+    // Empêcher dépassement vertical
+    if (y < 8) y = 8;
+    if (y + menuHeight > window.innerHeight - 8) y = window.innerHeight - menuHeight - 8;
+
+    setActiveContextMenu({ iconId: id, x, y });
+  };
+
+  const handleAppAction = async (action) => {
+    setActiveContextMenu(null);
+    
+    try {
+      const serverUrl = getServerUrl();
+      const response = await axios.post(`${serverUrl}/api/apps/${appConfig.id}/${action}`);
+      console.log(`[Icon] ${action} ${appConfig.name}:`, response.data);
+    } catch (error) {
+      console.error(`[Icon] Erreur ${action}:`, error);
+    }
+  };
+
+  return (
+    <>
+      <div className="icon-container">
+        <div
+          ref={ref}
+          className="icon"
+          style={{
+            backgroundImage: `url(${src})`,
+            cursor: isClickable ? 'pointer' : 'not-allowed',
+            position: 'relative',
+          }}
+          onClick={handleIconClick}
+          onContextMenu={handleContextMenu}
+        >
+          {badgeStyle && <div className="status-badge" style={badgeStyle}></div>}
+        </div>
+        {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
       </div>
-      {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
-    </div>
+      
+      {/* Menu contextuel - affiché uniquement pour cette icône via portal */}
+      {activeContextMenu && activeContextMenu.iconId === id && (
+        <ContextMenuPortal x={activeContextMenu.x} y={activeContextMenu.y}>
+          {appStatusData?.status === 'running' ? (
+            <>
+              <div className="context-menu-item" onClick={() => handleAppAction('stop')}>
+                ⏹️ Arrêter
+              </div>
+              <div className="context-menu-item" onClick={() => handleAppAction('restart')}>
+                🔄 Redémarrer
+              </div>
+            </>
+          ) : (
+            <div className="context-menu-item" onClick={() => handleAppAction('start')}>
+              ▶️ Démarrer
+            </div>
+          )}
+        </ContextMenuPortal>
+      )}
+    </>
   );
 };
 
 // Composant Zone
-const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appsConfig, iconImages }) => {
+const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appsConfig, iconImages, activeContextMenu, setActiveContextMenu }) => {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: ItemTypes.ICON,
     canDrop: () => true,
@@ -157,7 +232,7 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, apps
   return (
     <div ref={drop} className={`zone ${isActive ? 'zone-active' : ''}`}>
       <div className="icon-container">
-        {iconId.length > 0 && (
+        {iconId && iconId.length > 0 && (
           <Icon
             id={iconId[0]}
             src={getIconSrc(iconId[0])}
@@ -167,6 +242,8 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, apps
             showName={showName}
             appStatusData={appStatus[iconId[0]]}
             appsConfig={appsConfig}
+            activeContextMenu={activeContextMenu}
+            setActiveContextMenu={setActiveContextMenu}
           />
         )}
       </div>
@@ -234,7 +311,22 @@ const Home = () => {
   const [currentUserName, setCurrentUserName] = useState('');
   const [appsConfig, setAppsConfig] = useState(generateAppConfig()); // Config par défaut
   const [iconImages, setIconImages] = useState(images); // Images locales
-  const [zones, setZones] = useState(generateDefaultZones()); // Zones par défaut
+  
+  // Commencer avec des zones vides, elles seront chargées depuis le serveur
+  const [zones, setZones] = useState({
+    left: [],
+    right: [],
+    bottom1: [],
+    bottom2: [],
+    bottom3: [],
+    bottom4: [],
+    bottom5: [],
+    bottom6: [],
+    bottom7: [],
+    bottom8: [],
+    bottom9: [],
+    bottom10: []
+  });
 
   const [weather, setWeather] = useState({
     location: 'Loading...',
@@ -254,6 +346,7 @@ const Home = () => {
   const [mounted, setMounted] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [currentSocket, setCurrentSocket] = useState(null);
+  const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
   
   useEffect(() => {
     const initializeAccessMode = () => {
@@ -282,23 +375,7 @@ const Home = () => {
         if (Object.keys(config).length > 0) {
           console.log('[Home] Config chargée depuis manifests:', Object.keys(config).length, 'apps');
           setAppsConfig(config);
-          
-          // Charger les zones sauvegardées ou générer depuis manifests
-          const savedZones = StorageManager.getItem('iconZones');
-          if (savedZones) {
-            try {
-              const parsedZones = typeof savedZones === 'string' ? JSON.parse(savedZones) : savedZones;
-              setZones(parsedZones);
-            } catch (error) {
-              console.error('[Home] Erreur lors de la récupération des zones:', error);
-              const defaultZones = await generateDefaultZonesFromManifests(accessMode);
-              setZones(defaultZones);
-            }
-          } else {
-            const defaultZones = await generateDefaultZonesFromManifests(accessMode);
-            setZones(defaultZones);
-            StorageManager.setItem('iconZones', defaultZones);
-          }
+          // Les zones seront chargées par le useEffect dédié (depuis le serveur)
         } else {
           console.log('[Home] Aucune app trouvée dans les manifests, utilisation de la config par défaut');
         }
@@ -405,7 +482,6 @@ const Home = () => {
         });
         
         console.log('[Home] Nouveau statut calculé:', newAppStatus);
-        console.log('[Home] Zones actuelles:', zones);
         setAppStatus(newAppStatus);
         
       } catch (error) {
@@ -579,12 +655,95 @@ const Home = () => {
     return () => setMounted(false);
   }, []);
 
+  // Fermer le menu contextuel si on clique ailleurs
+  useEffect(() => {
+    const handleClickOutside = () => setActiveContextMenu(null);
+    if (activeContextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [activeContextMenu]);
+
+
+  // Charger les zones depuis le serveur dès que possible
+  useEffect(() => {
+    console.log('[Home] useEffect chargement zones - accessMode:', accessMode, 'currentUserName:', currentUserName);
+    
+    const loadZones = async () => {
+      if (!accessMode || !currentUserName) {
+        console.log('[Home] ⏳ En attente de accessMode et currentUserName...');
+        return;
+      }
+      
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        console.log('[Home] 🔄 Chargement zones depuis le serveur pour', currentUserName);
+        const res = await axios.get(`${serverUrl}/api/user/preferences`);
+        
+        if (res.data?.zones && Object.keys(res.data.zones).length > 0) {
+          console.log('[Home] ✅ Zones chargées depuis le serveur:', res.data.zones);
+          console.log('[Home] 🔄 Application des zones...');
+          setZones(res.data.zones);
+          // Sauvegarder en cache local
+          StorageManager.setItem(`iconZones_${currentUserName}`, res.data.zones);
+          
+          // Vérifier après un court délai que les zones ont bien été appliquées
+          setTimeout(() => {
+            console.log('[Home] 🔍 Vérification: zones actuelles après setZones:', zones);
+          }, 100);
+        } else {
+          console.log('[Home] ⚠️ Pas de zones sur le serveur, génération depuis manifests');
+          const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+          setZones(defaultZones);
+          // Sauvegarder les zones par défaut sur le serveur
+          await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: defaultZones });
+        }
+      } catch (error) {
+        console.error('[Home] ❌ Erreur chargement zones:', error.message);
+        // Fallback sur localStorage uniquement en cas d'erreur
+        const savedZones = StorageManager.getItem(`iconZones_${currentUserName}`);
+        if (savedZones) {
+          console.log('[Home] 💾 Fallback: zones chargées depuis localStorage');
+          setZones(savedZones);
+        } else {
+          console.log('[Home] 🆕 Génération des zones par défaut depuis manifests');
+          const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+          setZones(defaultZones);
+        }
+      }
+    };
+    
+    if (accessMode && currentUserName) {
+      loadZones();
+    }
+  }, [accessMode, currentUserName]);
+
+  // Sauvegarder les zones sur le serveur
+  const saveZonesToServer = React.useCallback(async (newZones) => {
+    if (!accessMode || !currentUserName) {
+      console.log('[Home] Sauvegarde ignorée (pas de mode ou utilisateur)');
+      return;
+    }
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      console.log('[Home] Sauvegarde zones pour', currentUserName, 'vers', serverUrl);
+      await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: newZones });
+      console.log('[Home] Zones sauvegardées sur le serveur');
+    } catch (error) {
+      console.error('[Home] Erreur sauvegarde zones:', error);
+      // Sauvegarder au moins localement
+      if (currentUserName) {
+        StorageManager.setItem(`iconZones_${currentUserName}`, newZones);
+      }
+    }
+  }, [accessMode, currentUserName]);
+
   const moveIcon = (id, fromZoneId, toZoneId) => {
     setZones((prevZones) => {
-      const fromIcons = prevZones[fromZoneId].filter((iconId) => iconId !== id);
-      let toIcons = prevZones[toZoneId];
-
-      if (!toIcons) toIcons = [];
+      // Assurer que les zones existent
+      const fromIcons = (prevZones[fromZoneId] || []).filter((iconId) => iconId !== id);
+      let toIcons = prevZones[toZoneId] || [];
 
       if (toIcons.length === 0) {
         toIcons = [id];
@@ -600,8 +759,11 @@ const Home = () => {
         [toZoneId]: toIcons,
       };
       
-      // Sauvegarder les zones dans StorageManager après chaque modification
-      StorageManager.setItem('iconZones', newZones);
+      // Sauvegarder les zones localement (avec nom d'utilisateur) et sur le serveur
+      if (currentUserName) {
+        StorageManager.setItem(`iconZones_${currentUserName}`, newZones);
+      }
+      saveZonesToServer(newZones);
       
       return newZones;
     });
@@ -726,6 +888,8 @@ const Home = () => {
                   appStatus={appStatus}
                   appsConfig={appsConfig}
                   iconImages={iconImages}
+                  activeContextMenu={activeContextMenu}
+                  setActiveContextMenu={setActiveContextMenu}
                 />
               </div>
               <div className="widget" style={{ backgroundImage: `url(${weatherImages[weather.icon]})` }}>
@@ -753,6 +917,8 @@ const Home = () => {
                   appStatus={appStatus}
                   appsConfig={appsConfig}
                   iconImages={iconImages}
+                  activeContextMenu={activeContextMenu}
+                  setActiveContextMenu={setActiveContextMenu}
                   className="zone-right"
                 />
               </div>
@@ -768,6 +934,8 @@ const Home = () => {
                   appStatus={appStatus}
                   appsConfig={appsConfig}
                   iconImages={iconImages}
+                  activeContextMenu={activeContextMenu}
+                  setActiveContextMenu={setActiveContextMenu}
                 />
               ))}
             </div>

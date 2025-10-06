@@ -234,7 +234,7 @@ async function getAppDockerStatus(appId) {
 }
 
 /**
- * Démarre une app
+ * Démarre une app (démarre tous les containers app-{appId}-*)
  */
 async function startApp(appId) {
   try {
@@ -243,29 +243,36 @@ async function startApp(appId) {
       throw new Error(`App ${appId} non trouvée`);
     }
 
-    const manifestDir = path.join(MANIFESTS_DIR, appId);
+    console.log(`[appManager] Démarrage de tous les containers de ${appId} (app-${appId}-*)`);
+    
+    const containers = await docker.listContainers({ all: true });
+    const appContainers = containers.filter(c => {
+      const containerName = c.Names[0]?.replace('/', '') || '';
+      // Ignorer les containers temporaires
+      if (isTemporaryContainer(containerName)) {
+        return false;
+      }
+      return containerName.startsWith(`app-${appId}-`);
+    });
 
-    // Si l'app a un script de lancement personnalisé
-    if (manifest.customLaunchScript) {
-      const scriptPath = path.join(manifestDir, manifest.customLaunchScript);
-      if (fs.existsSync(scriptPath)) {
-        console.log(`[appManager] Lancement de ${appId} avec script personnalisé`);
-        execSync(`bash ${scriptPath}`, { stdio: 'inherit' });
-        return { success: true, message: `${manifest.name} démarré avec succès` };
+    console.log(`[appManager] ${appContainers.length} container(s) trouvé(s) pour ${appId}`);
+    
+    let startedCount = 0;
+    for (const container of appContainers) {
+      const containerName = container.Names[0]?.replace('/', '');
+      if (container.State !== 'running') {
+        console.log(`[appManager] Démarrage du container ${containerName}`);
+        await docker.getContainer(container.Id).start();
+        startedCount++;
+      } else {
+        console.log(`[appManager] Container ${containerName} déjà démarré`);
       }
     }
-
-    // Sinon, utiliser docker-compose depuis le répertoire source
-    const composePath = path.join(manifest.sourceDir, manifest.dockerComposePath);
-    if (fs.existsSync(composePath)) {
-      console.log(`[appManager] Démarrage de ${appId} avec docker-compose: ${composePath}`);
-      const composeDir = path.dirname(composePath);
-      const composeFile = path.basename(composePath);
-      execSync(`cd ${composeDir} && docker compose -f ${composeFile} up -d`, { stdio: 'inherit' });
-      return { success: true, message: `${manifest.name} démarré avec succès` };
-    }
-
-    throw new Error(`Aucune méthode de lancement trouvée pour ${appId}`);
+    
+    return { 
+      success: true, 
+      message: `${manifest.name} démarré avec succès (${startedCount} container(s))` 
+    };
   } catch (error) {
     console.error(`[appManager] Erreur lors du démarrage de ${appId}:`, error.message);
     return { success: false, message: error.message };
@@ -273,7 +280,7 @@ async function startApp(appId) {
 }
 
 /**
- * Arrête une app
+ * Arrête une app (arrête tous les containers app-{appId}-*)
  */
 async function stopApp(appId) {
   try {
@@ -282,31 +289,36 @@ async function stopApp(appId) {
       throw new Error(`App ${appId} non trouvée`);
     }
 
-    const composePath = path.join(manifest.sourceDir, manifest.dockerComposePath);
-
-    if (fs.existsSync(composePath)) {
-      console.log(`[appManager] Arrêt de ${appId} avec docker-compose`);
-      const composeDir = path.dirname(composePath);
-      const composeFile = path.basename(composePath);
-      execSync(`cd ${composeDir} && docker compose -f ${composeFile} down`, { stdio: 'inherit' });
-      return { success: true, message: `${manifest.name} arrêté avec succès` };
-    }
-
-    // Fallback: arrêter tous les conteneurs de l'app
+    console.log(`[appManager] Arrêt de tous les containers de ${appId} (app-${appId}-*)`);
+    
     const containers = await docker.listContainers({ all: true });
     const appContainers = containers.filter(c => {
-      const labels = c.Labels || {};
       const containerName = c.Names[0]?.replace('/', '') || '';
-      return labels['ryvie.app.id'] === appId || containerName.startsWith(`app-${appId}`);
+      // Ignorer les containers temporaires
+      if (isTemporaryContainer(containerName)) {
+        return false;
+      }
+      return containerName.startsWith(`app-${appId}-`);
     });
 
+    console.log(`[appManager] ${appContainers.length} container(s) trouvé(s) pour ${appId}`);
+    
+    let stoppedCount = 0;
     for (const container of appContainers) {
+      const containerName = container.Names[0]?.replace('/', '');
       if (container.State === 'running') {
+        console.log(`[appManager] Arrêt du container ${containerName}`);
         await docker.getContainer(container.Id).stop();
+        stoppedCount++;
+      } else {
+        console.log(`[appManager] Container ${containerName} déjà arrêté`);
       }
     }
-
-    return { success: true, message: `${manifest.name} arrêté avec succès` };
+    
+    return { 
+      success: true, 
+      message: `${manifest.name} arrêté avec succès (${stoppedCount} container(s))` 
+    };
   } catch (error) {
     console.error(`[appManager] Erreur lors de l'arrêt de ${appId}:`, error.message);
     return { success: false, message: error.message };
