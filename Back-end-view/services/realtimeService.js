@@ -45,19 +45,40 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
     stream.on('data', (data) => {
       try {
         const event = JSON.parse(data.toString());
-        if (event.Type === 'container' && (event.Action === 'start' || event.Action === 'stop')) {
-          const containerName = event.Actor?.Attributes?.name;
-          if (containerName) {
-            if (event.Action === 'start') {
-              if (!activeContainers.includes(containerName)) activeContainers.push(containerName);
-            } else if (event.Action === 'stop') {
-              activeContainers = activeContainers.filter(name => name !== containerName);
+        const containerName = event.Actor?.Attributes?.name;
+        
+        // Gérer les événements de containers
+        if (event.Type === 'container') {
+          // Événements start/stop
+          if (event.Action === 'start' || event.Action === 'stop') {
+            if (containerName) {
+              if (event.Action === 'start') {
+                if (!activeContainers.includes(containerName)) activeContainers.push(containerName);
+              } else if (event.Action === 'stop') {
+                activeContainers = activeContainers.filter(name => name !== containerName);
+              }
+              io.emit('containers', { activeContainers });
+              // Broadcast updated apps status
+              getAppStatus().then(apps => {
+                console.log(`[realtime] Mise à jour statuts après ${event.Action} de ${containerName}`);
+                io.emit('apps-status-update', apps);
+              }).catch(err => {
+                console.error('Erreur lors de la mise à jour des statuts d\'applications:', err);
+              });
             }
-            io.emit('containers', { activeContainers });
-            // Broadcast updated apps status
-            getAppStatus().then(apps => io.emit('apps-status-update', apps)).catch(err => {
-              console.error('Erreur lors de la mise à jour des statuts d\'applications:', err);
-            });
+          }
+          
+          // Événements de santé (health_status)
+          if (event.Action === 'health_status: healthy' || event.Action === 'health_status: unhealthy') {
+            if (containerName) {
+              console.log(`[realtime] Health status changé pour ${containerName}: ${event.Action}`);
+              // Mettre à jour les statuts des apps
+              getAppStatus().then(apps => {
+                io.emit('apps-status-update', apps);
+              }).catch(err => {
+                console.error('Erreur lors de la mise à jour des statuts d\'applications:', err);
+              });
+            }
           }
         }
       } catch (e) {
@@ -66,8 +87,21 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
     });
   });
 
+  // Polling périodique pour s'assurer que les statuts sont à jour
+  // Utile si des événements Docker sont manqués
+  const statusPollingInterval = setInterval(() => {
+    getAppStatus().then(apps => {
+      io.emit('apps-status-update', apps);
+    }).catch(err => {
+      console.error('[realtime] Erreur lors du polling des statuts:', err);
+    });
+  }, 10000); // Toutes les 10 secondes
+
   // Public API for server startup coordination
-  return { initializeActiveContainers: () => initializeActiveContainers().then(() => activeContainers) };
+  return { 
+    initializeActiveContainers: () => initializeActiveContainers().then(() => activeContainers),
+    stopPolling: () => clearInterval(statusPollingInterval)
+  };
 }
 
 module.exports = { setupRealtime };

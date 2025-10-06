@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import '../styles/Home.css';
 import '../styles/Transitions.css';
 import axios from '../utils/setupAxios';
@@ -10,7 +11,13 @@ import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
 import { endSession, getCurrentUser } from '../utils/sessionManager';
 const { getServerUrl, getAppUrl } = require('../config/urls');
-import { generateAppConfig, generateDefaultZones, images } from '../config/appConfig';
+import { 
+  generateAppConfig, 
+  generateDefaultZones, 
+  generateAppConfigFromManifests,
+  generateDefaultZonesFromManifests,
+  images 
+} from '../config/appConfig';
 
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
@@ -25,18 +32,29 @@ localStorage.removeItem('iconZones');
 const weatherImages = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
 const weatherIcons = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
 
-// Configuration dynamique des applications
-const APPS_CONFIG = generateAppConfig();
-
 // Types pour react-dnd
 const ItemTypes = {
   ICON: 'icon',
 };
 
 // Composant pour chaque icône
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActive }) => {
+// Menu contextuel rendu via portal pour s'afficher au-dessus de tout
+const ContextMenuPortal = ({ children, x, y, onClose }) => {
+  const menu = (
+    <div
+      className="context-menu"
+      style={{ position: 'fixed', top: y, left: x, zIndex: 100000 }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+  return ReactDOM.createPortal(menu, document.body);
+};
+
+const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu }) => {
   const ref = React.useRef(null);
-  const appConfig = APPS_CONFIG[id] || {};
+  const appConfig = appsConfig[id] || {};
 
   const [{ isDragging }, drag] = useDrag({
     type: ItemTypes.ICON,
@@ -48,42 +66,143 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActiv
 
   drag(ref);
 
+  // Déterminer la couleur et l'animation du badge selon le statut
+  const getBadgeStyle = () => {
+    // Ne pas afficher de badge pour les icônes de la taskbar
+    if (!appConfig.showStatus) {
+      return null;
+    }
+
+    // Toujours afficher un badge (rouge par défaut si pas de données)
+    let backgroundColor = '#dc3545'; // Rouge par défaut (stopped ou pas de données)
+    let animation = 'none';
+    
+    // Si on a des données de statut, utiliser la vraie couleur
+    if (appStatusData && appStatusData.status) {
+      const { status } = appStatusData;
+      
+      if (status === 'running') {
+        backgroundColor = '#28a745'; // Vert (tous les containers healthy)
+      } else if (status === 'starting') {
+        backgroundColor = '#ffc107'; // Orange (démarrage)
+        animation = 'pulse 1.5s ease-in-out infinite';
+      } else if (status === 'partial') {
+        backgroundColor = '#fd7e14'; // Orange foncé (partiellement running)
+      }
+    }
+
+    return {
+      position: 'absolute',
+      top: '-5px',
+      right: '-5px',
+      width: '16px',
+      height: '16px',
+      borderRadius: '50%',
+      backgroundColor,
+      border: '2px solid white',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+      animation,
+      zIndex: 10
+    };
+  };
+
+  const badgeStyle = getBadgeStyle();
+  
+  // Vérifier si l'app est cliquable (seulement si running)
+  const isClickable = !appConfig.showStatus || (appStatusData && appStatusData.status === 'running');
+  
+  const handleIconClick = () => {
+    // Ne rien faire si l'app n'est pas running (rouge ou orange)
+    if (!isClickable) {
+      console.log('[Icon] App non disponible:', id, 'Status:', appStatusData?.status);
+      return;
+    }
+    handleClick(id);
+  };
+
+  const handleContextMenu = (e) => {
+    // Ne montrer le menu que pour les apps avec showStatus (pas les icônes système)
+    if (!appConfig.showStatus) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Positionner le menu collé à l'icône (à droite par défaut)
+    const iconRect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 180;
+    const menuHeight = 110;
+
+    // Option droite-centre
+    let x = iconRect.right + 8;
+    let y = iconRect.top + iconRect.height / 2 - menuHeight / 2;
+
+    // Si dépasse à droite, basculer à gauche
+    if (x + menuWidth > window.innerWidth) {
+      x = iconRect.left - menuWidth - 8;
+    }
+    // Empêcher dépassement vertical
+    if (y < 8) y = 8;
+    if (y + menuHeight > window.innerHeight - 8) y = window.innerHeight - menuHeight - 8;
+
+    setActiveContextMenu({ iconId: id, x, y });
+  };
+
+  const handleAppAction = async (action) => {
+    setActiveContextMenu(null);
+    
+    try {
+      const serverUrl = getServerUrl();
+      const response = await axios.post(`${serverUrl}/api/apps/${appConfig.id}/${action}`);
+      console.log(`[Icon] ${action} ${appConfig.name}:`, response.data);
+    } catch (error) {
+      console.error(`[Icon] Erreur ${action}:`, error);
+    }
+  };
+
   return (
-    <div className="icon-container">
-      <div
-        ref={ref}
-        className="icon"
-        style={{
-          backgroundImage: `url(${src})`,
-          opacity: isDragging ? 0.5 : 1,
-          cursor: 'pointer',
-          position: 'relative',
-        }}
-        onClick={() => handleClick(id)}
-      >
-        {appConfig.showStatus && (
-          <div
-            className="status-badge"
-            style={{
-              position: 'absolute',
-              top: '-5px',
-              right: '-5px',
-              width: '16px',
-              height: '16px',
-              borderRadius: '50%',
-              backgroundColor: isActive ? 'green' : 'red',
-              border: '2px solid white',
-            }}
-          ></div>
-        )}
+    <>
+      <div className="icon-container">
+        <div
+          ref={ref}
+          className="icon"
+          style={{
+            backgroundImage: `url(${src})`,
+            cursor: isClickable ? 'pointer' : 'not-allowed',
+            position: 'relative',
+          }}
+          onClick={handleIconClick}
+          onContextMenu={handleContextMenu}
+        >
+          {badgeStyle && <div className="status-badge" style={badgeStyle}></div>}
+        </div>
+        {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
       </div>
-      {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
-    </div>
+      
+      {/* Menu contextuel - affiché uniquement pour cette icône via portal */}
+      {activeContextMenu && activeContextMenu.iconId === id && (
+        <ContextMenuPortal x={activeContextMenu.x} y={activeContextMenu.y}>
+          {appStatusData?.status === 'running' ? (
+            <>
+              <div className="context-menu-item" onClick={() => handleAppAction('stop')}>
+                ⏹️ Arrêter
+              </div>
+              <div className="context-menu-item" onClick={() => handleAppAction('restart')}>
+                🔄 Redémarrer
+              </div>
+            </>
+          ) : (
+            <div className="context-menu-item" onClick={() => handleAppAction('start')}>
+              ▶️ Démarrer
+            </div>
+          )}
+        </ContextMenuPortal>
+      )}
+    </>
   );
 };
 
 // Composant Zone
-const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus }) => {
+const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appsConfig, iconImages, activeContextMenu, setActiveContextMenu }) => {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: ItemTypes.ICON,
     canDrop: () => true,
@@ -100,19 +219,31 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus }) =>
   });
 
   const isActive = canDrop && isOver;
+  
+  // Utiliser l'icône depuis la config (URL backend) ou fallback sur images locales
+  const getIconSrc = (id) => {
+    const config = appsConfig[id];
+    if (config && config.icon) {
+      return config.icon; // URL du backend
+    }
+    return iconImages[id] || images[id]; // Fallback sur icônes locales
+  };
 
   return (
     <div ref={drop} className={`zone ${isActive ? 'zone-active' : ''}`}>
       <div className="icon-container">
-        {iconId.length > 0 && (
+        {iconId && iconId.length > 0 && (
           <Icon
             id={iconId[0]}
-            src={images[iconId[0]]}
+            src={getIconSrc(iconId[0])}
             zoneId={zoneId}
             moveIcon={moveIcon}
             handleClick={handleClick}
             showName={showName}
-            isActive={appStatus[iconId[0]]}
+            appStatusData={appStatus[iconId[0]]}
+            appsConfig={appsConfig}
+            activeContextMenu={activeContextMenu}
+            setActiveContextMenu={setActiveContextMenu}
           />
         )}
       </div>
@@ -121,9 +252,9 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus }) =>
 };
 
 // Composant Taskbar
-const Taskbar = ({ handleClick }) => {
+const Taskbar = ({ handleClick, appsConfig }) => {
   // Filtrer les icônes de la barre des tâches à partir de la configuration
-  const taskbarApps = Object.entries(APPS_CONFIG)
+  const taskbarApps = Object.entries(appsConfig)
     .filter(([_, config]) => config.isTaskbarApp)
     .map(([iconId, config]) => ({ iconId, config }));
 
@@ -178,53 +309,23 @@ const Home = () => {
   const navigate = useNavigate();
   const [accessMode, setAccessMode] = useState(null); 
   const [currentUserName, setCurrentUserName] = useState('');
-  const [zones, setZones] = useState(() => {
-    // Essayer de récupérer les zones depuis StorageManager
-    const savedZones = StorageManager.getItem('iconZones');
-    console.log("Zones sauvegardées:", savedZones);
-    if (savedZones) {
-      try {
-        const parsedZones = typeof savedZones === 'string' ? JSON.parse(savedZones) : savedZones;
-        console.log("Zones analysées:", parsedZones);
-        
-        // Migration automatique des anciens noms vers les nouveaux
-        let migrationNeeded = false;
-        const migrationMap = {
-          'AppStore.jpeg': 'app-AppStore.jpeg',
-          'Portainer.png': 'app-Portainer.png',
-          'rDrive.svg': 'app-rDrive.svg',
-          'rPictures.svg': 'app-rPictures.svg',
-          'rDrop.png': 'app-rDrop.png',
-          'rCloud.png': 'app-rDrive.svg',
-          'user.svg': 'task-user.svg',
-          'transfer.svg': 'task-transfer.svg',
-          'settings.svg': 'task-settings.svg'
-        };
-        
-        Object.keys(parsedZones).forEach(zoneKey => {
-          parsedZones[zoneKey] = parsedZones[zoneKey].map(iconId => {
-            if (migrationMap[iconId]) {
-              console.log(`Migration: ${iconId} -> ${migrationMap[iconId]}`);
-              migrationNeeded = true;
-              return migrationMap[iconId];
-            }
-            return iconId;
-          });
-        });
-        
-        if (migrationNeeded) {
-          console.log("Migration effectuée, sauvegarde des nouvelles zones");
-          StorageManager.setItem('iconZones', parsedZones);
-        }
-        
-        return parsedZones;
-      } catch (error) {
-        console.error('Erreur lors de la récupération des zones:', error);
-      }
-    }
-    
-    // Utiliser la génération dynamique des zones par défaut
-    return generateDefaultZones();
+  const [appsConfig, setAppsConfig] = useState(generateAppConfig()); // Config par défaut
+  const [iconImages, setIconImages] = useState(images); // Images locales
+  
+  // Commencer avec des zones vides, elles seront chargées depuis le serveur
+  const [zones, setZones] = useState({
+    left: [],
+    right: [],
+    bottom1: [],
+    bottom2: [],
+    bottom3: [],
+    bottom4: [],
+    bottom5: [],
+    bottom6: [],
+    bottom7: [],
+    bottom8: [],
+    bottom9: [],
+    bottom10: []
   });
 
   const [weather, setWeather] = useState({
@@ -245,6 +346,7 @@ const Home = () => {
   const [mounted, setMounted] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [currentSocket, setCurrentSocket] = useState(null);
+  const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
   
   useEffect(() => {
     const initializeAccessMode = () => {
@@ -260,6 +362,66 @@ const Home = () => {
       setCurrentUserName(getCurrentUser() || '');
     } catch (_) {}
   }, []);
+  
+  // Charger la config depuis les manifests quand le mode d'accès est défini
+  useEffect(() => {
+    if (!accessMode) return;
+    
+    const loadConfigFromManifests = async () => {
+      try {
+        console.log('[Home] Chargement de la config depuis les manifests...');
+        const config = await generateAppConfigFromManifests(accessMode);
+        
+        if (Object.keys(config).length > 0) {
+          console.log('[Home] Config chargée depuis manifests:', Object.keys(config).length, 'apps');
+          setAppsConfig(config);
+          // Les zones seront chargées par le useEffect dédié (depuis le serveur)
+        } else {
+          console.log('[Home] Aucune app trouvée dans les manifests, utilisation de la config par défaut');
+        }
+      } catch (error) {
+        console.error('[Home] Erreur lors du chargement de la config depuis manifests:', error);
+      }
+    };
+    
+    loadConfigFromManifests();
+  }, [accessMode]);
+  
+  // Mettre à jour les statuts quand appsConfig change
+  useEffect(() => {
+    if (!applications || applications.length === 0 || Object.keys(appsConfig).length === 0) {
+      return;
+    }
+    
+    console.log('[Home] Mise à jour des statuts avec appsConfig chargé');
+    const newAppStatus = {};
+    
+    applications.forEach(app => {
+      const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
+        const match = config.name?.toLowerCase() === app.name?.toLowerCase() || 
+                     iconId.includes(app.name?.toLowerCase()) ||
+                     (config.id && config.id === app.id);
+        return match;
+      });
+      
+      if (configEntry) {
+        const [iconId] = configEntry;
+        newAppStatus[iconId] = {
+          status: app.status,
+          progress: app.progress,
+          containersTotal: app.containersTotal,
+          containersRunning: app.containersRunning,
+          containersHealthy: app.containersHealthy,
+          containersStarting: app.containersStarting,
+          containersUnhealthy: app.containersUnhealthy,
+          containersStopped: app.containersStopped
+        };
+      }
+    });
+    
+    console.log('[Home] Statuts mis à jour:', newAppStatus);
+    setAppStatus(newAppStatus);
+  }, [appsConfig, applications]);
   
   useEffect(() => {
     if (!accessMode) {
@@ -291,24 +453,31 @@ const Home = () => {
         
         // Mettre à jour le statut des applications pour Home.js
         const newAppStatus = {};
-        //console.log('[Home] Applications reçues:', apps.map(app => ({ name: app.name, running: app.running, fullApp: app })));
-        //console.log('[Home] APPS_CONFIG disponible:', Object.entries(APPS_CONFIG).map(([id, config]) => ({ id, name: config.name })));
+        console.log('[Home] Apps reçues de l\'API:', apps.map(a => ({ id: a.id, name: a.name, status: a.status })));
+        console.log('[Home] appsConfig disponible:', Object.keys(appsConfig));
         
         apps.forEach(app => {
-          // Trouver la configuration correspondante dans APPS_CONFIG
-          const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
+          // Trouver la configuration correspondante dans appsConfig
+          const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
             const match = config.name.toLowerCase() === app.name.toLowerCase() || 
-                         iconId.includes(app.name.toLowerCase());
-            //console.log(`[Home] Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
+                         iconId.includes(app.name.toLowerCase()) ||
+                         (config.id && config.id === app.id);
             return match;
           });
           
           if (configEntry) {
             const [iconId] = configEntry;
-            //console.log(`[Home] Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
-            newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
-          } else {
-           // console.log(`[Home] Aucun mapping trouvé pour: ${app.name}`);
+            // Stocker l'objet complet avec status, progress, etc.
+            newAppStatus[iconId] = {
+              status: app.status,
+              progress: app.progress,
+              containersTotal: app.containersTotal,
+              containersRunning: app.containersRunning,
+              containersHealthy: app.containersHealthy,
+              containersStarting: app.containersStarting,
+              containersUnhealthy: app.containersUnhealthy,
+              containersStopped: app.containersStopped
+            };
           }
         });
         
@@ -362,22 +531,28 @@ const Home = () => {
         });
 
         const newAppStatus = {};
-        console.log('[Home] Mise à jour apps reçues:', updatedApps.map(app => ({ name: app.name, running: app.running })));
         updatedApps.forEach(app => {
-          const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
-            const match = config.name.toLowerCase() === app.name.toLowerCase() || iconId.includes(app.name.toLowerCase());
-            console.log(`[Home] Mise à jour - Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
+          const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
+            const match = config.name.toLowerCase() === app.name.toLowerCase() || 
+                         iconId.includes(app.name.toLowerCase()) ||
+                         (config.id && config.id === app.id);
             return match;
           });
           if (configEntry) {
             const [iconId] = configEntry;
-            console.log(`[Home] Mise à jour - Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
-            newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
-          } else {
-            console.log(`[Home] Mise à jour - Aucun mapping trouvé pour: ${app.name}`);
+            // Stocker l'objet complet avec status, progress, etc.
+            newAppStatus[iconId] = {
+              status: app.status,
+              progress: app.progress,
+              containersTotal: app.containersTotal,
+              containersRunning: app.containersRunning,
+              containersHealthy: app.containersHealthy,
+              containersStarting: app.containersStarting,
+              containersUnhealthy: app.containersUnhealthy,
+              containersStopped: app.containersStopped
+            };
           }
         });
-        console.log('[Home] Mise à jour - Nouveau statut calculé:', newAppStatus);
         setAppStatus(newAppStatus);
       },
       timeoutMs: 10000,
@@ -456,15 +631,38 @@ const Home = () => {
           icon: icon,
         });
       } catch (error) {
-        console.error('Erreur lors de la récupération de la localisation', error);
-        setWeather({
-          location: 'Localisation non disponible',
-          temperature: null,
-          humidity: null,
-          wind: null,
-          description: '',
-          icon: 'default.png',
-        });
+        console.error('Erreur lors de la récupération météo, fallback sur Paris', error);
+        // Fallback: tenter de charger Paris pour avoir de vraies données
+        try {
+          const parisLat = 48.8566;
+          const parisLon = 2.3522;
+          const parisApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${parisLat}&longitude=${parisLon}&current_weather=true&hourly=temperature_2m,weathercode,relative_humidity_2m,windspeed_10m&timezone=auto`;
+          const parisResp = await axios.get(parisApiUrl);
+          const pdata = parisResp.data;
+          const pcode = pdata.current_weather.weathercode;
+          let picon = 'cloudy.png';
+          if (pcode === 0) picon = 'sunny.png';
+          else if ([61, 63, 65].includes(pcode)) picon = 'rainy.png';
+
+          setWeather({
+            location: 'Paris',
+            temperature: pdata.current_weather.temperature,
+            humidity: pdata.hourly.relative_humidity_2m?.[0] ?? null,
+            wind: pdata.current_weather.windspeed,
+            description: pcode,
+            icon: picon,
+          });
+        } catch (e) {
+          // Si vraiment tout échoue: fallback statique Paris nuageux
+          setWeather({
+            location: 'Paris',
+            temperature: null,
+            humidity: null,
+            wind: null,
+            description: 'cloudy',
+            icon: 'cloudy.png',
+          });
+        }
       }
     };
 
@@ -480,12 +678,95 @@ const Home = () => {
     return () => setMounted(false);
   }, []);
 
+  // Fermer le menu contextuel si on clique ailleurs
+  useEffect(() => {
+    const handleClickOutside = () => setActiveContextMenu(null);
+    if (activeContextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [activeContextMenu]);
+
+
+  // Charger les zones depuis le serveur dès que possible
+  useEffect(() => {
+    console.log('[Home] useEffect chargement zones - accessMode:', accessMode, 'currentUserName:', currentUserName);
+    
+    const loadZones = async () => {
+      if (!accessMode || !currentUserName) {
+        console.log('[Home] ⏳ En attente de accessMode et currentUserName...');
+        return;
+      }
+      
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        console.log('[Home] 🔄 Chargement zones depuis le serveur pour', currentUserName);
+        const res = await axios.get(`${serverUrl}/api/user/preferences`);
+        
+        if (res.data?.zones && Object.keys(res.data.zones).length > 0) {
+          console.log('[Home] ✅ Zones chargées depuis le serveur:', res.data.zones);
+          console.log('[Home] 🔄 Application des zones...');
+          setZones(res.data.zones);
+          // Sauvegarder en cache local
+          StorageManager.setItem(`iconZones_${currentUserName}`, res.data.zones);
+          
+          // Vérifier après un court délai que les zones ont bien été appliquées
+          setTimeout(() => {
+            console.log('[Home] 🔍 Vérification: zones actuelles après setZones:', zones);
+          }, 100);
+        } else {
+          console.log('[Home] ⚠️ Pas de zones sur le serveur, génération depuis manifests');
+          const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+          setZones(defaultZones);
+          // Sauvegarder les zones par défaut sur le serveur
+          await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: defaultZones });
+        }
+      } catch (error) {
+        console.error('[Home] ❌ Erreur chargement zones:', error.message);
+        // Fallback sur localStorage uniquement en cas d'erreur
+        const savedZones = StorageManager.getItem(`iconZones_${currentUserName}`);
+        if (savedZones) {
+          console.log('[Home] 💾 Fallback: zones chargées depuis localStorage');
+          setZones(savedZones);
+        } else {
+          console.log('[Home] 🆕 Génération des zones par défaut depuis manifests');
+          const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+          setZones(defaultZones);
+        }
+      }
+    };
+    
+    if (accessMode && currentUserName) {
+      loadZones();
+    }
+  }, [accessMode, currentUserName]);
+
+  // Sauvegarder les zones sur le serveur
+  const saveZonesToServer = React.useCallback(async (newZones) => {
+    if (!accessMode || !currentUserName) {
+      console.log('[Home] Sauvegarde ignorée (pas de mode ou utilisateur)');
+      return;
+    }
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      console.log('[Home] Sauvegarde zones pour', currentUserName, 'vers', serverUrl);
+      await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: newZones });
+      console.log('[Home] Zones sauvegardées sur le serveur');
+    } catch (error) {
+      console.error('[Home] Erreur sauvegarde zones:', error);
+      // Sauvegarder au moins localement
+      if (currentUserName) {
+        StorageManager.setItem(`iconZones_${currentUserName}`, newZones);
+      }
+    }
+  }, [accessMode, currentUserName]);
+
   const moveIcon = (id, fromZoneId, toZoneId) => {
     setZones((prevZones) => {
-      const fromIcons = prevZones[fromZoneId].filter((iconId) => iconId !== id);
-      let toIcons = prevZones[toZoneId];
-
-      if (!toIcons) toIcons = [];
+      // Assurer que les zones existent
+      const fromIcons = (prevZones[fromZoneId] || []).filter((iconId) => iconId !== id);
+      let toIcons = prevZones[toZoneId] || [];
 
       if (toIcons.length === 0) {
         toIcons = [id];
@@ -501,8 +782,11 @@ const Home = () => {
         [toZoneId]: toIcons,
       };
       
-      // Sauvegarder les zones dans StorageManager après chaque modification
-      StorageManager.setItem('iconZones', newZones);
+      // Sauvegarder les zones localement (avec nom d'utilisateur) et sur le serveur
+      if (currentUserName) {
+        StorageManager.setItem(`iconZones_${currentUserName}`, newZones);
+      }
+      saveZonesToServer(newZones);
       
       return newZones;
     });
@@ -545,11 +829,11 @@ const Home = () => {
   const handleClick = (iconId) => {
     console.log("handleClick appelé avec iconId:", iconId);
     
-    const appConfig = APPS_CONFIG[iconId];
+    const appConfig = appsConfig[iconId];
     
     if (!appConfig) {
       console.log("Pas de configuration trouvée pour cette icône :", iconId);
-      console.log("Configuration disponible:", Object.keys(APPS_CONFIG));
+      console.log("Configuration disponible:", Object.keys(appsConfig));
       return;
     }
     
@@ -608,7 +892,7 @@ const Home = () => {
             </div>
           )}
 
-          <Taskbar handleClick={handleClick} />
+          <Taskbar handleClick={handleClick} appsConfig={appsConfig} />
           {currentUserName && (
             <div className="user-chip" title="Utilisateur connecté">
               <div className="avatar">{String(currentUserName).charAt(0).toUpperCase()}</div>
@@ -625,6 +909,10 @@ const Home = () => {
                   moveIcon={moveIcon}
                   handleClick={handleClick}
                   appStatus={appStatus}
+                  appsConfig={appsConfig}
+                  iconImages={iconImages}
+                  activeContextMenu={activeContextMenu}
+                  setActiveContextMenu={setActiveContextMenu}
                 />
               </div>
               <div className="widget" style={{ backgroundImage: `url(${weatherImages[weather.icon]})` }}>
@@ -650,6 +938,10 @@ const Home = () => {
                   moveIcon={moveIcon}
                   handleClick={handleClick}
                   appStatus={appStatus}
+                  appsConfig={appsConfig}
+                  iconImages={iconImages}
+                  activeContextMenu={activeContextMenu}
+                  setActiveContextMenu={setActiveContextMenu}
                   className="zone-right"
                 />
               </div>
@@ -663,6 +955,10 @@ const Home = () => {
                   moveIcon={moveIcon}
                   handleClick={handleClick}
                   appStatus={appStatus}
+                  appsConfig={appsConfig}
+                  iconImages={iconImages}
+                  activeContextMenu={activeContextMenu}
+                  setActiveContextMenu={setActiveContextMenu}
                 />
               ))}
             </div>

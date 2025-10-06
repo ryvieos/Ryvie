@@ -54,6 +54,7 @@ const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
 const systemRouter = require('./routes/system');
 const storageRouter = require('./routes/storage');
+const userPreferencesRouter = require('./routes/userPreferences');
 const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
 const { getLocalIP } = require('./utils/network');
@@ -112,6 +113,9 @@ app.use('/', systemRouter);
 
 // Mount Storage routes (Step 0 skeleton)
 app.use('/api', storageRouter);
+
+// Mount User Preferences routes
+app.use('/api', userPreferencesRouter);
 
 // Realtime (Socket.IO + Docker events) handled by services/realtimeService.js
 let realtime;
