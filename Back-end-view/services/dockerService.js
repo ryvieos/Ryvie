@@ -1,5 +1,6 @@
 const Docker = require('dockerode');
 const os = require('os');
+const appManager = require('./appManagerService');
 
 const docker = new Docker();
 
@@ -32,6 +33,31 @@ async function getAllContainers() {
 }
 
 async function getAppStatus() {
+  try {
+    // Essayer d'abord d'utiliser le nouveau système avec manifests
+    const installedApps = await appManager.listInstalledApps();
+    
+    if (installedApps && installedApps.length > 0) {
+      console.log('[dockerService] Utilisation du système de manifests');
+      return installedApps.map(app => ({
+        id: app.id,
+        name: app.name,
+        status: app.status,
+        progress: app.progress,
+        containersRunning: `${app.containersRunning}/${app.containersTotal}`,
+        ports: app.ports,
+        containers: app.containers,
+        icon: app.icon,
+        category: app.category,
+        description: app.description
+      }));
+    }
+  } catch (error) {
+    console.log('[dockerService] Erreur avec appManager, fallback sur ancien système:', error.message);
+  }
+
+  // Fallback: ancien système si pas de manifests
+  console.log('[dockerService] Utilisation de l\'ancien système (sans manifests)');
   const containers = await getAllContainers();
   const apps = {};
 
@@ -82,7 +108,12 @@ async function getAppStatus() {
     name: app.name,
     status: app.running ? 'running' : 'stopped',
     progress: app.total > 0 ? Math.round((app.active / app.total) * 100) : 0,
-    containersRunning: `${app.active}/${app.total}`,
+    containersTotal: app.total,
+    containersRunning: app.active,
+    containersHealthy: app.active, // Approximation pour l'ancien système
+    containersStarting: 0,
+    containersUnhealthy: 0,
+    containersStopped: app.total - app.active,
     ports: app.ports.sort((a, b) => a - b),
     containers: app.containers,
   }));

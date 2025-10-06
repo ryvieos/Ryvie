@@ -8,6 +8,18 @@ body, html {
   color: #ffffff; /* Couleur de texte par défaut pour tout le document */
 }
 
+/* Animation pulse pour les badges en démarrage */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
 /* Conteneur principal */
 .home-container {
   min-height: 100vh;

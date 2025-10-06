@@ -1238,6 +1238,12 @@ select:disabled {
   color: #0d9b5c;
 }
 
+.docker-status-badge.starting {
+  background-color: #fff3cd;
+  color: #856404;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
 .docker-status-badge.stopped {
   background-color: #f7e5e5;
   color: #d13438;
@@ -1442,9 +1448,13 @@ select:disabled {
   border-radius: 50%;
   margin-right: 8px;
 }
-
 .docker-app-status.running .docker-status-icon {
   background-color: #0d9b5c;
+}
+
+.docker-app-status.starting .docker-status-icon {
+  background-color: #ffc107;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .docker-app-status.stopped .docker-status-icon {
@@ -1452,11 +1462,16 @@ select:disabled {
 }
 
 .docker-status-text {
+  font-size: 14px;
   font-weight: 500;
 }
 
 .docker-app-status.running .docker-status-text {
   color: #0d9b5c;
+}
+
+.docker-app-status.starting .docker-status-text {
+  color: #856404;
 }
 
 .docker-app-status.stopped .docker-status-text {

@@ -10,7 +10,13 @@ import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
 import { endSession, getCurrentUser } from '../utils/sessionManager';
 const { getServerUrl, getAppUrl } = require('../config/urls');
-import { generateAppConfig, generateDefaultZones, images } from '../config/appConfig';
+import { 
+  generateAppConfig, 
+  generateDefaultZones, 
+  generateAppConfigFromManifests,
+  generateDefaultZonesFromManifests,
+  images 
+} from '../config/appConfig';
 
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
@@ -25,18 +31,15 @@ localStorage.removeItem('iconZones');
 const weatherImages = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
 const weatherIcons = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
 
-// Configuration dynamique des applications
-const APPS_CONFIG = generateAppConfig();
-
 // Types pour react-dnd
 const ItemTypes = {
   ICON: 'icon',
 };
 
 // Composant pour chaque icône
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActive }) => {
+const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStatusData, appsConfig }) => {
   const ref = React.useRef(null);
-  const appConfig = APPS_CONFIG[id] || {};
+  const appConfig = appsConfig[id] || {};
 
   const [{ isDragging }, drag] = useDrag({
     type: ItemTypes.ICON,
@@ -48,6 +51,60 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActiv
 
   drag(ref);
 
+  // Déterminer la couleur et l'animation du badge selon le statut
+  const getBadgeStyle = () => {
+    // Ne pas afficher de badge pour les icônes de la taskbar
+    if (!appConfig.showStatus) {
+      return null;
+    }
+
+    // Toujours afficher un badge (rouge par défaut si pas de données)
+    let backgroundColor = '#dc3545'; // Rouge par défaut (stopped ou pas de données)
+    let animation = 'none';
+    
+    // Si on a des données de statut, utiliser la vraie couleur
+    if (appStatusData && appStatusData.status) {
+      const { status } = appStatusData;
+      
+      if (status === 'running') {
+        backgroundColor = '#28a745'; // Vert (tous les containers healthy)
+      } else if (status === 'starting') {
+        backgroundColor = '#ffc107'; // Orange (démarrage)
+        animation = 'pulse 1.5s ease-in-out infinite';
+      } else if (status === 'partial') {
+        backgroundColor = '#fd7e14'; // Orange foncé (partiellement running)
+      }
+    }
+
+    return {
+      position: 'absolute',
+      top: '-5px',
+      right: '-5px',
+      width: '16px',
+      height: '16px',
+      borderRadius: '50%',
+      backgroundColor,
+      border: '2px solid white',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+      animation,
+      zIndex: 10
+    };
+  };
+
+  const badgeStyle = getBadgeStyle();
+  
+  // Vérifier si l'app est cliquable (seulement si running)
+  const isClickable = !appConfig.showStatus || (appStatusData && appStatusData.status === 'running');
+  
+  const handleIconClick = () => {
+    // Ne rien faire si l'app n'est pas running (rouge ou orange)
+    if (!isClickable) {
+      console.log('[Icon] App non disponible:', id, 'Status:', appStatusData?.status);
+      return;
+    }
+    handleClick(id);
+  };
+
   return (
     <div className="icon-container">
       <div
@@ -55,27 +112,14 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActiv
         className="icon"
         style={{
           backgroundImage: `url(${src})`,
-          opacity: isDragging ? 0.5 : 1,
-          cursor: 'pointer',
+
+          cursor: isClickable ? 'pointer' : 'not-allowed',
           position: 'relative',
+          
         }}
-        onClick={() => handleClick(id)}
+        onClick={handleIconClick}
       >
-        {appConfig.showStatus && (
-          <div
-            className="status-badge"
-            style={{
-              position: 'absolute',
-              top: '-5px',
-              right: '-5px',
-              width: '16px',
-              height: '16px',
-              borderRadius: '50%',
-              backgroundColor: isActive ? 'green' : 'red',
-              border: '2px solid white',
-            }}
-          ></div>
-        )}
+        {badgeStyle && <div className="status-badge" style={badgeStyle}></div>}
       </div>
       {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
     </div>
@@ -83,7 +127,7 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, isActiv
 };
 
 // Composant Zone
-const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus }) => {
+const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appsConfig, iconImages }) => {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: ItemTypes.ICON,
     canDrop: () => true,
@@ -100,6 +144,15 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus }) =>
   });
 
   const isActive = canDrop && isOver;
+  
+  // Utiliser l'icône depuis la config (URL backend) ou fallback sur images locales
+  const getIconSrc = (id) => {
+    const config = appsConfig[id];
+    if (config && config.icon) {
+      return config.icon; // URL du backend
+    }
+    return iconImages[id] || images[id]; // Fallback sur icônes locales
+  };
 
   return (
     <div ref={drop} className={`zone ${isActive ? 'zone-active' : ''}`}>
@@ -107,12 +160,13 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus }) =>
         {iconId.length > 0 && (
           <Icon
             id={iconId[0]}
-            src={images[iconId[0]]}
+            src={getIconSrc(iconId[0])}
             zoneId={zoneId}
             moveIcon={moveIcon}
             handleClick={handleClick}
             showName={showName}
-            isActive={appStatus[iconId[0]]}
+            appStatusData={appStatus[iconId[0]]}
+            appsConfig={appsConfig}
           />
         )}
       </div>
@@ -121,9 +175,9 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus }) =>
 };
 
 // Composant Taskbar
-const Taskbar = ({ handleClick }) => {
+const Taskbar = ({ handleClick, appsConfig }) => {
   // Filtrer les icônes de la barre des tâches à partir de la configuration
-  const taskbarApps = Object.entries(APPS_CONFIG)
+  const taskbarApps = Object.entries(appsConfig)
     .filter(([_, config]) => config.isTaskbarApp)
     .map(([iconId, config]) => ({ iconId, config }));
 
@@ -178,54 +232,9 @@ const Home = () => {
   const navigate = useNavigate();
   const [accessMode, setAccessMode] = useState(null); 
   const [currentUserName, setCurrentUserName] = useState('');
-  const [zones, setZones] = useState(() => {
-    // Essayer de récupérer les zones depuis StorageManager
-    const savedZones = StorageManager.getItem('iconZones');
-    console.log("Zones sauvegardées:", savedZones);
-    if (savedZones) {
-      try {
-        const parsedZones = typeof savedZones === 'string' ? JSON.parse(savedZones) : savedZones;
-        console.log("Zones analysées:", parsedZones);
-        
-        // Migration automatique des anciens noms vers les nouveaux
-        let migrationNeeded = false;
-        const migrationMap = {
-          'AppStore.jpeg': 'app-AppStore.jpeg',
-          'Portainer.png': 'app-Portainer.png',
-          'rDrive.svg': 'app-rDrive.svg',
-          'rPictures.svg': 'app-rPictures.svg',
-          'rDrop.png': 'app-rDrop.png',
-          'rCloud.png': 'app-rDrive.svg',
-          'user.svg': 'task-user.svg',
-          'transfer.svg': 'task-transfer.svg',
-          'settings.svg': 'task-settings.svg'
-        };
-        
-        Object.keys(parsedZones).forEach(zoneKey => {
-          parsedZones[zoneKey] = parsedZones[zoneKey].map(iconId => {
-            if (migrationMap[iconId]) {
-              console.log(`Migration: ${iconId} -> ${migrationMap[iconId]}`);
-              migrationNeeded = true;
-              return migrationMap[iconId];
-            }
-            return iconId;
-          });
-        });
-        
-        if (migrationNeeded) {
-          console.log("Migration effectuée, sauvegarde des nouvelles zones");
-          StorageManager.setItem('iconZones', parsedZones);
-        }
-        
-        return parsedZones;
-      } catch (error) {
-        console.error('Erreur lors de la récupération des zones:', error);
-      }
-    }
-    
-    // Utiliser la génération dynamique des zones par défaut
-    return generateDefaultZones();
-  });
+  const [appsConfig, setAppsConfig] = useState(generateAppConfig()); // Config par défaut
+  const [iconImages, setIconImages] = useState(images); // Images locales
+  const [zones, setZones] = useState(generateDefaultZones()); // Zones par défaut
 
   const [weather, setWeather] = useState({
     location: 'Loading...',
@@ -261,6 +270,82 @@ const Home = () => {
     } catch (_) {}
   }, []);
   
+  // Charger la config depuis les manifests quand le mode d'accès est défini
+  useEffect(() => {
+    if (!accessMode) return;
+    
+    const loadConfigFromManifests = async () => {
+      try {
+        console.log('[Home] Chargement de la config depuis les manifests...');
+        const config = await generateAppConfigFromManifests(accessMode);
+        
+        if (Object.keys(config).length > 0) {
+          console.log('[Home] Config chargée depuis manifests:', Object.keys(config).length, 'apps');
+          setAppsConfig(config);
+          
+          // Charger les zones sauvegardées ou générer depuis manifests
+          const savedZones = StorageManager.getItem('iconZones');
+          if (savedZones) {
+            try {
+              const parsedZones = typeof savedZones === 'string' ? JSON.parse(savedZones) : savedZones;
+              setZones(parsedZones);
+            } catch (error) {
+              console.error('[Home] Erreur lors de la récupération des zones:', error);
+              const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+              setZones(defaultZones);
+            }
+          } else {
+            const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+            setZones(defaultZones);
+            StorageManager.setItem('iconZones', defaultZones);
+          }
+        } else {
+          console.log('[Home] Aucune app trouvée dans les manifests, utilisation de la config par défaut');
+        }
+      } catch (error) {
+        console.error('[Home] Erreur lors du chargement de la config depuis manifests:', error);
+      }
+    };
+    
+    loadConfigFromManifests();
+  }, [accessMode]);
+  
+  // Mettre à jour les statuts quand appsConfig change
+  useEffect(() => {
+    if (!applications || applications.length === 0 || Object.keys(appsConfig).length === 0) {
+      return;
+    }
+    
+    console.log('[Home] Mise à jour des statuts avec appsConfig chargé');
+    const newAppStatus = {};
+    
+    applications.forEach(app => {
+      const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
+        const match = config.name?.toLowerCase() === app.name?.toLowerCase() || 
+                     iconId.includes(app.name?.toLowerCase()) ||
+                     (config.id && config.id === app.id);
+        return match;
+      });
+      
+      if (configEntry) {
+        const [iconId] = configEntry;
+        newAppStatus[iconId] = {
+          status: app.status,
+          progress: app.progress,
+          containersTotal: app.containersTotal,
+          containersRunning: app.containersRunning,
+          containersHealthy: app.containersHealthy,
+          containersStarting: app.containersStarting,
+          containersUnhealthy: app.containersUnhealthy,
+          containersStopped: app.containersStopped
+        };
+      }
+    });
+    
+    console.log('[Home] Statuts mis à jour:', newAppStatus);
+    setAppStatus(newAppStatus);
+  }, [appsConfig, applications]);
+  
   useEffect(() => {
     if (!accessMode) {
       console.log('[Home] Aucun mode défini - aucune tentative de connexion Socket.io');
@@ -291,28 +376,36 @@ const Home = () => {
         
         // Mettre à jour le statut des applications pour Home.js
         const newAppStatus = {};
-        //console.log('[Home] Applications reçues:', apps.map(app => ({ name: app.name, running: app.running, fullApp: app })));
-        //console.log('[Home] APPS_CONFIG disponible:', Object.entries(APPS_CONFIG).map(([id, config]) => ({ id, name: config.name })));
+        console.log('[Home] Apps reçues de l\'API:', apps.map(a => ({ id: a.id, name: a.name, status: a.status })));
+        console.log('[Home] appsConfig disponible:', Object.keys(appsConfig));
         
         apps.forEach(app => {
-          // Trouver la configuration correspondante dans APPS_CONFIG
-          const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
+          // Trouver la configuration correspondante dans appsConfig
+          const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
             const match = config.name.toLowerCase() === app.name.toLowerCase() || 
-                         iconId.includes(app.name.toLowerCase());
-            //console.log(`[Home] Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
+                         iconId.includes(app.name.toLowerCase()) ||
+                         (config.id && config.id === app.id);
             return match;
           });
           
           if (configEntry) {
             const [iconId] = configEntry;
-            //console.log(`[Home] Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
-            newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
-          } else {
-           // console.log(`[Home] Aucun mapping trouvé pour: ${app.name}`);
+            // Stocker l'objet complet avec status, progress, etc.
+            newAppStatus[iconId] = {
+              status: app.status,
+              progress: app.progress,
+              containersTotal: app.containersTotal,
+              containersRunning: app.containersRunning,
+              containersHealthy: app.containersHealthy,
+              containersStarting: app.containersStarting,
+              containersUnhealthy: app.containersUnhealthy,
+              containersStopped: app.containersStopped
+            };
           }
         });
         
         console.log('[Home] Nouveau statut calculé:', newAppStatus);
+        console.log('[Home] Zones actuelles:', zones);
         setAppStatus(newAppStatus);
         
       } catch (error) {
@@ -362,22 +455,28 @@ const Home = () => {
         });
 
         const newAppStatus = {};
-        console.log('[Home] Mise à jour apps reçues:', updatedApps.map(app => ({ name: app.name, running: app.running })));
         updatedApps.forEach(app => {
-          const configEntry = Object.entries(APPS_CONFIG).find(([iconId, config]) => {
-            const match = config.name.toLowerCase() === app.name.toLowerCase() || iconId.includes(app.name.toLowerCase());
-            console.log(`[Home] Mise à jour - Comparaison: ${app.name} vs ${config.name} (${iconId}) = ${match}`);
+          const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
+            const match = config.name.toLowerCase() === app.name.toLowerCase() || 
+                         iconId.includes(app.name.toLowerCase()) ||
+                         (config.id && config.id === app.id);
             return match;
           });
           if (configEntry) {
             const [iconId] = configEntry;
-            console.log(`[Home] Mise à jour - Mapping trouvé: ${app.name} (status: ${app.status}) -> ${iconId}`);
-            newAppStatus[iconId] = (app.status === 'running' && app.progress > 0);
-          } else {
-            console.log(`[Home] Mise à jour - Aucun mapping trouvé pour: ${app.name}`);
+            // Stocker l'objet complet avec status, progress, etc.
+            newAppStatus[iconId] = {
+              status: app.status,
+              progress: app.progress,
+              containersTotal: app.containersTotal,
+              containersRunning: app.containersRunning,
+              containersHealthy: app.containersHealthy,
+              containersStarting: app.containersStarting,
+              containersUnhealthy: app.containersUnhealthy,
+              containersStopped: app.containersStopped
+            };
           }
         });
-        console.log('[Home] Mise à jour - Nouveau statut calculé:', newAppStatus);
         setAppStatus(newAppStatus);
       },
       timeoutMs: 10000,
@@ -545,11 +644,11 @@ const Home = () => {
   const handleClick = (iconId) => {
     console.log("handleClick appelé avec iconId:", iconId);
     
-    const appConfig = APPS_CONFIG[iconId];
+    const appConfig = appsConfig[iconId];
     
     if (!appConfig) {
       console.log("Pas de configuration trouvée pour cette icône :", iconId);
-      console.log("Configuration disponible:", Object.keys(APPS_CONFIG));
+      console.log("Configuration disponible:", Object.keys(appsConfig));
       return;
     }
     
@@ -608,7 +707,7 @@ const Home = () => {
             </div>
           )}
 
-          <Taskbar handleClick={handleClick} />
+          <Taskbar handleClick={handleClick} appsConfig={appsConfig} />
           {currentUserName && (
             <div className="user-chip" title="Utilisateur connecté">
               <div className="avatar">{String(currentUserName).charAt(0).toUpperCase()}</div>
@@ -625,6 +724,8 @@ const Home = () => {
                   moveIcon={moveIcon}
                   handleClick={handleClick}
                   appStatus={appStatus}
+                  appsConfig={appsConfig}
+                  iconImages={iconImages}
                 />
               </div>
               <div className="widget" style={{ backgroundImage: `url(${weatherImages[weather.icon]})` }}>
@@ -650,6 +751,8 @@ const Home = () => {
                   moveIcon={moveIcon}
                   handleClick={handleClick}
                   appStatus={appStatus}
+                  appsConfig={appsConfig}
+                  iconImages={iconImages}
                   className="zone-right"
                 />
               </div>
@@ -663,6 +766,8 @@ const Home = () => {
                   moveIcon={moveIcon}
                   handleClick={handleClick}
                   appStatus={appStatus}
+                  appsConfig={appsConfig}
+                  iconImages={iconImages}
                 />
               ))}
             </div>

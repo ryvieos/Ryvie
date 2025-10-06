@@ -678,10 +678,17 @@ const Settings = () => {
               </div>
               <div className="docker-app-details-body">
                 <div className="docker-app-status-info">
-                  <div className={`docker-app-status ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'running' : 'stopped'}`}>
+                  <div className={`docker-app-status ${
+                    selectedApp.status === 'running' && selectedApp.progress === 100 ? 'running' : 
+                    selectedApp.status === 'starting' || selectedApp.status === 'partial' ? 'starting' : 
+                    'stopped'
+                  }`}>
                     <span className="docker-status-icon"></span>
                     <span className="docker-status-text">
-                      {selectedApp.status === 'running' && selectedApp.progress > 0 ? 'Opérationnel' : 'Arrêté'}
+                      {selectedApp.status === 'running' && selectedApp.progress === 100 ? 'Opérationnel' : 
+                       selectedApp.status === 'starting' ? 'En train de démarrer...' :
+                       selectedApp.status === 'partial' ? 'Démarrage partiel' :
+                       'Arrêté'}
                     </span>
                   </div>
                   <div className="docker-app-progress">
@@ -764,8 +771,15 @@ const Settings = () => {
               >
                 <div className="docker-app-header">
                   <h3>{app.name}</h3>
-                  <span className={`docker-status-badge ${app.status === 'running' && app.progress > 0 ? 'running' : 'stopped'}`}>
-                    {app.status === 'running' && app.progress > 0 ? 'En cours' : 'Arrêté'}
+                  <span className={`docker-status-badge ${
+                    app.status === 'running' && app.progress === 100 ? 'running' : 
+                    app.status === 'starting' || app.status === 'partial' ? 'starting' : 
+                    'stopped'
+                  }`}>
+                    {app.status === 'running' && app.progress === 100 ? 'En cours' : 
+                     app.status === 'starting' ? 'Démarrage...' :
+                     app.status === 'partial' ? 'Partiel' :
+                     'Arrêté'}
                   </span>
                 </div>
                 {appActionStatus.show && appActionStatus.appId === app.id && (
