@@ -290,4 +290,71 @@ router.get('/backgrounds/:filename', (req, res) => {
   }
 });
 
+// GET /api/user/preferences/backgrounds/list - Lister les fonds personnalisés de l'utilisateur
+router.get('/user/preferences/backgrounds/list', verifyToken, (req, res) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] Liste des fonds pour:', username);
+    
+    // Lire tous les fichiers du dossier backgrounds
+    const files = fs.readdirSync(BACKGROUNDS_DIR);
+    
+    // Filtrer les fichiers de l'utilisateur (format: username-timestamp.ext)
+    const userBackgrounds = files
+      .filter(file => file.startsWith(`${username}-`) && file !== 'background.webp')
+      .map(file => {
+        const filePath = path.join(BACKGROUNDS_DIR, file);
+        const stats = fs.statSync(filePath);
+        return {
+          filename: file,
+          id: `custom-${file}`,
+          uploadDate: stats.mtime,
+          size: stats.size
+        };
+      })
+      .sort((a, b) => b.uploadDate - a.uploadDate); // Plus récent en premier
+    
+    res.json({ backgrounds: userBackgrounds });
+  } catch (error) {
+    console.error('[userPreferences] Erreur liste fonds:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// DELETE /api/user/preferences/background/:filename - Supprimer un fond personnalisé
+router.delete('/user/preferences/background/:filename', verifyToken, (req, res) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    const filename = req.params.filename;
+    
+    // Vérifier que le fichier appartient bien à l'utilisateur
+    if (!filename.startsWith(`${username}-`)) {
+      return res.status(403).json({ error: 'Accès interdit' });
+    }
+    
+    const filePath = path.join(BACKGROUNDS_DIR, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Fichier non trouvé' });
+    }
+    
+    // Supprimer le fichier
+    fs.unlinkSync(filePath);
+    console.log('[userPreferences] Fond supprimé:', filename);
+    
+    // Si c'était le fond actif, remettre le fond par défaut
+    const preferences = loadUserPreferences(username);
+    if (preferences?.backgroundImage === `custom-${filename}`) {
+      preferences.backgroundImage = 'default';
+      saveUserPreferences(username, preferences);
+      console.log('[userPreferences] Fond actif remis par défaut');
+    }
+    
+    res.json({ success: true, message: 'Fond supprimé' });
+  } catch (error) {
+    console.error('[userPreferences] Erreur suppression fond:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;
