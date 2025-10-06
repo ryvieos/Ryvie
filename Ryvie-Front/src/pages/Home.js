@@ -23,13 +23,9 @@ import {
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
   let images = {};
-  r.keys().forEach((item) => {
-    images[item.replace('./', '')] = r(item);
-  });
+  r.keys().forEach((key) => (images[key] = r(key)));
   return images;
 }
-localStorage.removeItem('iconZones');
-// Importer les icônes météo
 const weatherImages = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
 const weatherIcons = importAll(require.context('../weather_icons', false, /\.(png|jpe?g|svg)$/));
 
@@ -312,6 +308,7 @@ const Home = () => {
   const [currentUserName, setCurrentUserName] = useState('');
   const [appsConfig, setAppsConfig] = useState(generateAppConfig()); // Config par défaut
   const [iconImages, setIconImages] = useState(images); // Images locales
+  const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran utilisateur
   
   // Commencer avec des zones vides, elles seront chargées depuis le serveur
   const [zones, setZones] = useState({
@@ -706,15 +703,94 @@ const Home = () => {
         
         if (res.data?.zones && Object.keys(res.data.zones).length > 0) {
           console.log('[Home] ✅ Zones chargées depuis le serveur:', res.data.zones);
-          console.log('[Home] 🔄 Application des zones...');
-          setZones(res.data.zones);
-          // Sauvegarder en cache local
-          StorageManager.setItem(`iconZones_${currentUserName}`, res.data.zones);
           
-          // Vérifier après un court délai que les zones ont bien été appliquées
-          setTimeout(() => {
-            console.log('[Home] 🔍 Vérification: zones actuelles après setZones:', zones);
-          }, 100);
+          // Vérifier si les zones sont vraiment vides (tous les tableaux vides)
+          const allZonesEmpty = Object.values(res.data.zones).every(
+            zone => Array.isArray(zone) && zone.length === 0
+          );
+          
+          if (allZonesEmpty) {
+            console.log('[Home] ⚠️ Zones vides détectées, génération depuis manifests');
+            const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+            setZones(defaultZones);
+            // Sauvegarder les zones par défaut sur le serveur
+            await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: defaultZones });
+            StorageManager.setItem(`iconZones_${currentUserName}`, defaultZones);
+          } else {
+            // Réconciliation: utiliser les apps réelles depuis l'API
+            // Récupérer la liste des apps installées
+            const appsResponse = await axios.get(`${serverUrl}/api/apps`);
+            const installedApps = appsResponse.data || [];
+            const validAppIds = new Set(installedApps.map(app => `app-${app.id}`));
+            
+            console.log('[Home] 📋 Apps installées détectées:', Array.from(validAppIds));
+            
+            const cleanedZones = {};
+            let hasChanges = false;
+            
+            Object.keys(res.data.zones).forEach(zoneName => {
+              const originalIds = res.data.zones[zoneName] || [];
+              const filteredIds = originalIds.filter(id => {
+                // Garder les IDs qui ne sont pas des apps (ex: icônes taskbar)
+                if (!id.startsWith('app-')) {
+                  return true;
+                }
+                
+                // Pour les apps, vérifier qu'elles existent
+                const isValid = validAppIds.has(id);
+                if (!isValid) {
+                  console.log(`[Home] 🧹 Retrait de l'app inexistante: ${id} de ${zoneName}`);
+                  hasChanges = true;
+                }
+                return isValid;
+              });
+              cleanedZones[zoneName] = filteredIds;
+            });
+            
+            // Détecter les nouvelles apps (présentes dans l'API mais pas dans les zones)
+            const allZonedApps = new Set();
+            Object.values(cleanedZones).forEach(zone => {
+              zone.forEach(id => {
+                if (id.startsWith('app-')) allZonedApps.add(id);
+              });
+            });
+            
+            const newApps = Array.from(validAppIds).filter(id => !allZonedApps.has(id));
+            if (newApps.length > 0) {
+              console.log('[Home] ➕ Nouvelles apps détectées:', newApps);
+              // Placer les nouvelles apps dans les premières zones bottom disponibles
+              let bottomIndex = 1;
+              newApps.forEach(appId => {
+                while (bottomIndex <= 10 && cleanedZones[`bottom${bottomIndex}`].length > 0) {
+                  bottomIndex++;
+                }
+                if (bottomIndex <= 10) {
+                  cleanedZones[`bottom${bottomIndex}`].push(appId);
+                  console.log(`[Home] ➕ Ajout de ${appId} dans bottom${bottomIndex}`);
+                  hasChanges = true;
+                  bottomIndex++;
+                }
+              });
+            }
+            
+            console.log('[Home] 🔄 Application des zones réconciliées:', cleanedZones);
+            setZones(cleanedZones);
+            
+            // Si des apps ont été retirées ou ajoutées, sauvegarder les zones
+            if (hasChanges) {
+              console.log('[Home] 💾 Sauvegarde des zones réconciliées sur le serveur');
+              await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: cleanedZones });
+            }
+            
+            // Sauvegarder en cache local
+            StorageManager.setItem(`iconZones_${currentUserName}`, cleanedZones);
+          }
+          
+          // Charger le fond d'écran utilisateur
+          if (res.data?.backgroundImage) {
+            console.log('[Home] 🎨 Fond d\'écran chargé:', res.data.backgroundImage);
+            setBackgroundImage(res.data.backgroundImage);
+          }
         } else {
           console.log('[Home] ⚠️ Pas de zones sur le serveur, génération depuis manifests');
           const defaultZones = await generateDefaultZonesFromManifests(accessMode);
@@ -871,10 +947,55 @@ const Home = () => {
     }
   };
 
+  // Fonction pour obtenir le style de fond d'écran
+  const getBackgroundStyle = () => {
+    if (!accessMode) {
+      console.log('[Home] accessMode non défini, pas de fond personnalisé');
+      return {}; // Utilise le CSS par défaut
+    }
+    
+    console.log('[Home] 🎨 Application du fond:', backgroundImage);
+    
+    if (backgroundImage?.startsWith('custom-')) {
+      // Fond personnalisé uploadé - charger via l'API backend
+      const filename = backgroundImage.replace('custom-', '');
+      const serverUrl = getServerUrl(accessMode);
+      const bgUrl = `${serverUrl}/api/backgrounds/${filename}`;
+      console.log('[Home] 🎨 Fond personnalisé:', bgUrl);
+      return {
+        background: `url(${bgUrl}) no-repeat center center fixed`,
+        backgroundSize: 'cover'
+      };
+    }
+    
+    switch (backgroundImage) {
+      case 'gradient-blue':
+        return { background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' };
+      case 'gradient-sunset':
+        return { background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' };
+      case 'gradient-ocean':
+        return { background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' };
+      case 'gradient-forest':
+        return { background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' };
+      case 'dark':
+        return { background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)' };
+      case 'default':
+      default:
+        // Charger le fond par défaut via l'API backend
+        if (!accessMode) return {};
+        const serverUrl = getServerUrl(accessMode);
+        console.log('[Home] 🎨 Fond par défaut via API');
+        return {
+          background: `url(${serverUrl}/api/backgrounds/background.webp) no-repeat center center fixed`,
+          backgroundSize: 'cover'
+        };
+    }
+  };
+
   return (
     <div className={`home-container ${mounted ? 'slide-enter-active' : 'slide-enter'}`}>
       <DndProvider backend={HTML5Backend}>
-        <div className="background">
+        <div className="background" style={getBackgroundStyle()}>
           <div className={`server-status ${serverStatus ? 'connected' : 'disconnected'}`}>
             <span className="status-text">
               {serverStatus ? 'Connecté' : 'Déconnecté'}
@@ -916,18 +1037,18 @@ const Home = () => {
                   setActiveContextMenu={setActiveContextMenu}
                 />
               </div>
-              <div className="widget" style={{ backgroundImage: `url(${weatherImages[weather.icon]})` }}>
+              <div className="widget" style={{ backgroundImage: weatherImages[`./${weather.icon}`] ? `url(${weatherImages[`./${weather.icon}`]})` : 'none' }}>
                 <div className="weather-info">
                   <p className="weather-city">{weather.location ? weather.location : 'Localisation non disponible'}</p>
                   <p className="weather-temperature">
                     {weather.temperature ? `${Math.round(weather.temperature)}°C` : '...'}
                   </p>
                   <div className="weather-humidity">
-                    <img src={weatherIcons['humidity.png']} alt="Humidity Icon" className="weather-icon" />
+                    <img src={weatherIcons['./humidity.png']} alt="Humidity Icon" className="weather-icon" />
                     {weather.humidity ? `${weather.humidity}%` : '...'}
                   </div>
                   <div className="weather-wind">
-                    <img src={weatherIcons['wind.png']} alt="Wind Icon" className="weather-icon" />
+                    <img src={weatherIcons['./wind.png']} alt="Wind Icon" className="weather-icon" />
                     {weather.wind ? `${Math.round(weather.wind)} km/h` : '...'}
                   </div>
                 </div>

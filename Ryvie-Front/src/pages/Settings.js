@@ -99,6 +99,9 @@ const Settings = () => {
   ]);
 
   const [changeStatus, setChangeStatus] = useState({ show: false, success: false });
+  const [tokenExpiration, setTokenExpiration] = useState(15); // En minutes, par défaut 15
+  const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran
+  const [uploadingBackground, setUploadingBackground] = useState(false);
   // Initialiser prudemment pour éviter tout appel privé intempestif
   const [accessMode, setAccessMode] = useState(() => {
     const mode = getCurrentAccessMode();
@@ -165,6 +168,33 @@ const Settings = () => {
     console.log('[Settings] Mode final utilisé ->', mode);
     if (mode !== accessMode) setAccessMode(mode);
   }, []);
+
+  // Charger la durée d'expiration du token et le fond d'écran
+  useEffect(() => {
+    const loadUserPreferences = async () => {
+      if (!accessMode) return;
+      
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        
+        // Charger durée token
+        const tokenResponse = await axios.get(`${serverUrl}/api/settings/token-expiration`);
+        if (tokenResponse.data.minutes) {
+          setTokenExpiration(tokenResponse.data.minutes);
+        }
+        
+        // Charger fond d'écran
+        const prefsResponse = await axios.get(`${serverUrl}/api/user/preferences`);
+        if (prefsResponse.data?.backgroundImage) {
+          setBackgroundImage(prefsResponse.data.backgroundImage);
+        }
+      } catch (error) {
+        console.log('[Settings] Impossible de charger les préférences utilisateur');
+      }
+    };
+    
+    loadUserPreferences();
+  }, [accessMode]);
 
   // Récupération des informations serveur (HTTP polling)
   useEffect(() => {
@@ -296,6 +326,149 @@ const Settings = () => {
       cpuUsage: cpuUsage,
       ramUsage: ramUsage
     }));
+  };
+
+  // Fonction pour changer le fond d'écran
+  const handleBackgroundChange = async (newBackground) => {
+    console.log('[Settings] Changement fond d\'écran:', newBackground);
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: newBackground });
+      
+      setBackgroundImage(newBackground);
+      setChangeStatus({
+        show: true,
+        success: true,
+        message: `✓ Fond d'écran modifié`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('[Settings] Erreur changement fond d\'écran:', error);
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: `✗ Erreur lors de la modification`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 5000);
+    }
+  };
+
+  // Fonction pour uploader un fond d'écran personnalisé
+  const handleBackgroundUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    // Vérifier le type de fichier
+    if (!file.type.startsWith('image/')) {
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: '✗ Veuillez sélectionner une image'
+      });
+      setTimeout(() => setChangeStatus({ show: false, success: false, message: '' }), 3000);
+      return;
+    }
+    
+    // Vérifier la taille (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: '✗ Image trop grande (max 5MB)'
+      });
+      setTimeout(() => setChangeStatus({ show: false, success: false, message: '' }), 3000);
+      return;
+    }
+    
+    setUploadingBackground(true);
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      const formData = new FormData();
+      formData.append('background', file);
+      
+      const response = await axios.post(`${serverUrl}/api/user/preferences/background/upload`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      console.log('[Settings] Upload réussi:', response.data);
+      
+      // Le serveur retourne l'ID de l'image uploadée
+      const customBackgroundId = response.data.backgroundImage || 'custom';
+      setBackgroundImage(customBackgroundId);
+      
+      setChangeStatus({
+        show: true,
+        success: true,
+        message: `✓ Fond d'écran personnalisé uploadé`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('[Settings] Erreur upload fond d\'écran:', error);
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: `✗ Erreur lors de l'upload`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 5000);
+    } finally {
+      setUploadingBackground(false);
+      // Réinitialiser l'input
+      event.target.value = '';
+    }
+  };
+
+  // Fonction pour changer le temps d'expiration du token
+  const handleTokenExpirationChange = async (minutes) => {
+    console.log('[Settings] Changement durée de session:', minutes, 'minutes');
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      const response = await axios.patch(`${serverUrl}/api/settings/token-expiration`, { minutes: parseInt(minutes) });
+      
+      console.log('[Settings] Réponse serveur:', response.data);
+      
+      setTokenExpiration(minutes);
+      setChangeStatus({
+        show: true,
+        success: true,
+        message: `✓ Durée de session modifiée: ${minutes} minute${minutes > 1 ? 's' : ''}`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('[Settings] Erreur lors du changement de durée de session:', error);
+      console.error('[Settings] Détails erreur:', error.response?.data);
+      
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la modification';
+      
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: `✗ ${errorMessage}`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 5000);
+    }
   };
 
   // Fonction pour changer le mode d'accès
@@ -593,6 +766,179 @@ const Settings = () => {
         </button>
         <h1>Paramètres du Cloud</h1>
       </div>
+
+      {/* Section Personnalisation */}
+      <section className="settings-section">
+        <h2>Personnalisation</h2>
+        <div className="settings-grid">
+          <div className="settings-card">
+            <h3>Fond d'écran</h3>
+            <p className="setting-description">
+              Personnalisez l'arrière-plan de votre page d'accueil
+            </p>
+            {changeStatus.show && (
+              <div className={`status-message ${changeStatus.success ? 'success' : 'error'}`} style={{ marginBottom: '12px' }}>
+                {changeStatus.message}
+              </div>
+            )}
+            <div className="background-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '16px' }}>
+              <div 
+                className={`background-option ${backgroundImage === 'default' ? 'active' : ''}`}
+                onClick={() => handleBackgroundChange('default')}
+                style={{
+                  height: '80px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  border: backgroundImage === 'default' ? '3px solid #4a90e2' : '2px solid #ddd',
+                  background: `url(${getServerUrl(accessMode)}/api/backgrounds/background.webp) center/cover`,
+                  position: 'relative',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {backgroundImage === 'default' && (
+                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                )}
+                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Par défaut</div>
+              </div>
+              
+              <div 
+                className={`background-option ${backgroundImage === 'gradient-blue' ? 'active' : ''}`}
+                onClick={() => handleBackgroundChange('gradient-blue')}
+                style={{
+                  height: '80px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  border: backgroundImage === 'gradient-blue' ? '3px solid #4a90e2' : '2px solid #ddd',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  position: 'relative',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {backgroundImage === 'gradient-blue' && (
+                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                )}
+                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Bleu violet</div>
+              </div>
+              
+              <div 
+                className={`background-option ${backgroundImage === 'gradient-sunset' ? 'active' : ''}`}
+                onClick={() => handleBackgroundChange('gradient-sunset')}
+                style={{
+                  height: '80px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  border: backgroundImage === 'gradient-sunset' ? '3px solid #4a90e2' : '2px solid #ddd',
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  position: 'relative',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {backgroundImage === 'gradient-sunset' && (
+                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                )}
+                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Coucher de soleil</div>
+              </div>
+              
+              <div 
+                className={`background-option ${backgroundImage === 'gradient-ocean' ? 'active' : ''}`}
+                onClick={() => handleBackgroundChange('gradient-ocean')}
+                style={{
+                  height: '80px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  border: backgroundImage === 'gradient-ocean' ? '3px solid #4a90e2' : '2px solid #ddd',
+                  background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                  position: 'relative',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {backgroundImage === 'gradient-ocean' && (
+                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                )}
+                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Océan</div>
+              </div>
+              
+              <div 
+                className={`background-option ${backgroundImage === 'gradient-forest' ? 'active' : ''}`}
+                onClick={() => handleBackgroundChange('gradient-forest')}
+                style={{
+                  height: '80px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  border: backgroundImage === 'gradient-forest' ? '3px solid #4a90e2' : '2px solid #ddd',
+                  background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                  position: 'relative',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {backgroundImage === 'gradient-forest' && (
+                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                )}
+                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Forêt</div>
+              </div>
+              
+              <div 
+                className={`background-option ${backgroundImage === 'dark' ? 'active' : ''}`}
+                onClick={() => handleBackgroundChange('dark')}
+                style={{
+                  height: '80px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  border: backgroundImage === 'dark' ? '3px solid #4a90e2' : '2px solid #ddd',
+                  background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)',
+                  position: 'relative',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {backgroundImage === 'dark' && (
+                  <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                )}
+                <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(255,255,255,0.8)', color: '#333', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Sombre</div>
+              </div>
+              
+              {/* Option pour uploader son propre fond */}
+              <div 
+                className={`background-option ${backgroundImage?.startsWith('custom-') ? 'active' : ''}`}
+                onClick={() => document.getElementById('background-upload-input').click()}
+                style={{
+                  height: '80px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  border: backgroundImage?.startsWith('custom-') ? '3px solid #4a90e2' : '2px dashed #999',
+                  background: '#f5f5f5',
+                  position: 'relative',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden'
+                }}
+              >
+                {uploadingBackground ? (
+                  <div style={{ color: '#666', fontSize: '12px' }}>Upload...</div>
+                ) : backgroundImage?.startsWith('custom-') ? (
+                  <>
+                    <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                    <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Personnalisé</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: '32px', color: '#999' }}>+</div>
+                    <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Upload</div>
+                  </>
+                )}
+              </div>
+              <input
+                id="background-upload-input"
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleBackgroundUpload}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Section Statistiques */}
       <section className="settings-section stats-section">
@@ -1085,6 +1431,31 @@ const Settings = () => {
           {/* Sécurité */}
           <div className="settings-card">
             <h3>Sécurité</h3>
+            {changeStatus.show && (
+              <div className={`status-message ${changeStatus.success ? 'success' : 'error'}`} style={{ marginBottom: '12px' }}>
+                {changeStatus.message}
+              </div>
+            )}
+            <div className="setting-item">
+              <label>Durée de session</label>
+              <select
+                value={tokenExpiration}
+                onChange={(e) => handleTokenExpirationChange(e.target.value)}
+                className="setting-select"
+              >
+                <option value="5">5 minutes</option>
+                <option value="15">15 minutes (recommandé)</option>
+                <option value="30">30 minutes</option>
+                <option value="60">1 heure</option>
+                <option value="120">2 heures</option>
+                <option value="240">4 heures</option>
+                <option value="480">8 heures</option>
+                <option value="1440">24 heures</option>
+              </select>
+              <p className="setting-hint" style={{ fontSize: '0.85em', color: '#666', marginTop: '4px' }}>
+                Reconnexion requise après {tokenExpiration} minute{tokenExpiration > 1 ? 's' : ''} d'inactivité
+              </p>
+            </div>
             <div className="setting-item">
               <label>Chiffrement des données</label>
               <label className="switch">
@@ -1232,7 +1603,6 @@ const Settings = () => {
           </div>
         </div>
       </section>
-
 
       {/* Section Stockage (lecture seule + accès assistant) */}
       <section className="settings-section">
