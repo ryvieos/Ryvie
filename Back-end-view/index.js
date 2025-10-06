@@ -147,6 +147,19 @@ try {
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
+    // Générer les manifests au démarrage
+    console.log('🔄 Génération des manifests...');
+    try {
+      const { execSync } = require('child_process');
+      const path = require('path');
+      const manifestScript = path.join(__dirname, '..', 'generate-manifests.js');
+      execSync(`node ${manifestScript}`, { stdio: 'inherit' });
+      console.log('✅ Manifests générés avec succès');
+    } catch (manifestError) {
+      console.error('⚠️  Erreur lors de la génération des manifests:', manifestError.message);
+      console.log('Le serveur continuera sans les manifests mis à jour');
+    }
+
     // Initialize realtime service
     realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
     await realtime.initializeActiveContainers();
