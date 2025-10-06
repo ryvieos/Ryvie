@@ -8,6 +8,7 @@ import netbirdDataRaw from './netbird-data.json';
 
 // Mapping des services vers les ports locaux
 const LOCAL_PORTS = {
+  FRONTEND: 3000,
   SERVER: 3002,
   APPSTORE: 5173,
   RDRIVE: 3010,
@@ -28,6 +29,12 @@ const generateBaseUrls = () => {
   const domains = netbirdData.domains;
   
   return {
+    // URLs du frontend
+    FRONTEND: {
+      PUBLIC: `https://${domains.app}`,
+      PRIVATE: `http://ryvie.local:${LOCAL_PORTS.FRONTEND}`
+    },
+
     // URLs du serveur principal
     SERVER: {
       PUBLIC: `https://${domains.status}`,
@@ -189,18 +196,13 @@ const getAutoUrl = (type, name) => {
 };
 
 // Exporter les fonctions et constantes (ES modules)
-export {
-  BASE_URLS,
-  netbirdData,
-  getUrl,
-  getServerUrl,
-  getAppUrl,
-  getRdriveBackendUrl,
-  getNetbirdDomain,
-  getNetbirdInfo,
-  getAccessMode,
-  getAutoUrl
-};
+/**
+ * @param {string} mode - 'public' ou 'private'
+ * @returns {string} - L'URL du frontend
+ */
+function getFrontendUrl(mode = 'public') {
+  return mode === 'public' ? BASE_URLS.FRONTEND.PUBLIC : BASE_URLS.FRONTEND.PRIVATE;
+}
 
 // Export par défaut pour la compatibilité
 export default {
@@ -213,5 +215,6 @@ export default {
   getNetbirdDomain,
   getNetbirdInfo,
   getAccessMode,
-  getAutoUrl
+  getAutoUrl,
+  getFrontendUrl
 };

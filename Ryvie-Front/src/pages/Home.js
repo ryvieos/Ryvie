@@ -10,7 +10,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
 import { endSession, getCurrentUser } from '../utils/sessionManager';
-const { getServerUrl, getAppUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl, getAppUrl } = urlsConfig;
 import { 
   generateAppConfig, 
   generateDefaultZones, 

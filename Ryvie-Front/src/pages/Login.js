@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from '../utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
 import '../styles/Login.css';
-const { getServerUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl } = urlsConfig;
 import { isSessionActive, startSession } from '../utils/sessionManager';
 import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode } from '../utils/detectAccessMode';
 
@@ -154,6 +155,18 @@ const Login = () => {
     const newMode = accessMode === 'private' ? 'public' : 'private';
     setAccessMode(newMode);
     persistAccessMode(newMode);
+    
+    // Rediriger vers l'URL correspondante
+    const frontendUrl = urlsConfig.getFrontendUrl(newMode);
+    const currentPath = window.location.pathname; // Conserver le chemin actuel
+    const newUrl = `${frontendUrl}${currentPath}`;
+    
+    console.log(`[Login] Redirection vers ${newMode}: ${newUrl}`);
+    
+    // Redirection immédiate
+    setTimeout(() => {
+      window.location.href = newUrl;
+    }, 100);
   };
 
   return (

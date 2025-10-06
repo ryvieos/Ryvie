@@ -3,7 +3,8 @@
  * Gère les cas où les serveurs ne sont pas accessibles ou n'ont pas CORS configuré
  */
 
-const { getServerUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl } = urlsConfig;
 
 /**
  * Teste la connectivité avec une approche progressive

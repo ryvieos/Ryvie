@@ -5,7 +5,8 @@ import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg-icons';
 import { isElectron } from '../utils/platformUtils';
-const { getServerUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl, getFrontendUrl } = urlsConfig;
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, connectRyvieSocket } from '../utils/detectAccessMode';
 import StorageSettings from './StorageSettings';
 
@@ -314,13 +315,18 @@ const Settings = () => {
     setChangeStatus({
       show: true,
       success: true,
-      message: `Mode d'accès changé pour: ${newMode === 'public' ? 'Public' : 'Privé'}`
+      message: `Mode d'accès changé pour: ${newMode === 'public' ? 'Public' : 'Privé'}. Redirection...`
     });
     
-    // Masquer le message après 3 secondes
+    // Rediriger vers l'URL correspondante après 1.5 secondes
     setTimeout(() => {
-      setChangeStatus({ show: false, success: false });
-    }, 3000);
+      const frontendUrl = getFrontendUrl(newMode);
+      const currentPath = window.location.pathname; // Conserver le chemin actuel (ex: /settings)
+      const newUrl = `${frontendUrl}${currentPath}`;
+      
+      console.log(`[Settings] Redirection vers ${newMode}: ${newUrl}`);
+      window.location.href = newUrl;
+    }, 1500);
   };
 
   const handleSettingChange = async (setting, value) => {
