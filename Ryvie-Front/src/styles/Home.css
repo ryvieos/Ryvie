@@ -555,10 +555,10 @@
   margin-top: 12px;
   display: block;
   max-width: 100px;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.2;
   color: #ffffff;
-  font-weight: 200;
+  font-weight: 800;
   letter-spacing: -0.05px;
   white-space: nowrap;
   overflow: hidden;
@@ -566,8 +566,8 @@
   text-align: center;
   /* Style iPhone: ombre douce et subtile pour lisibilité sur tous fonds */
   text-shadow: 
-    0 0.5px 1px rgba(0, 0, 0, 0.5),
-    0 1px 3px rgba(0, 0, 0, 0.3);
+    0 0.5px 1px rgba(0, 0, 0, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.2);
   /* Pas de fond, pas de bordure - minimaliste comme iOS */
 }
 .weather-icon {
