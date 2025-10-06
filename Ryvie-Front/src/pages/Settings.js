@@ -13,15 +13,35 @@ import StorageSettings from './StorageSettings';
 const Settings = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    storageUsed: 0,
-    storageLimit: 0, // Go
-    cpuUsage: 0,
-    ramUsage: 0,
-    activeUsers: 1,
-    totalFiles: 110,
-    backupStatus: 'Completed',
-    lastBackup: '2024-01-09 14:30',
+  const [stats, setStats] = useState(() => {
+    // Charger depuis le cache localStorage au démarrage
+    const cached = localStorage.getItem('systemStats');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return {
+          storageUsed: 0,
+          storageLimit: 0,
+          cpuUsage: 0,
+          ramUsage: 0,
+          activeUsers: 1,
+          totalFiles: 110,
+          backupStatus: 'Completed',
+          lastBackup: '2024-01-09 14:30',
+        };
+      }
+    }
+    return {
+      storageUsed: 0,
+      storageLimit: 0,
+      cpuUsage: 0,
+      ramUsage: 0,
+      activeUsers: 1,
+      totalFiles: 110,
+      backupStatus: 'Completed',
+      lastBackup: '2024-01-09 14:30',
+    };
   });
 
   const [settings, setSettings] = useState({
@@ -103,7 +123,18 @@ const Settings = () => {
   const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran
   const [uploadingBackground, setUploadingBackground] = useState(false);
   const [customBackgrounds, setCustomBackgrounds] = useState([]); // Liste des fonds personnalisés
-  const [presetBackgrounds, setPresetBackgrounds] = useState([]); // Liste des fonds prédéfinis
+  const [presetBackgrounds, setPresetBackgrounds] = useState(() => {
+    // Charger depuis le cache localStorage au démarrage
+    const cached = localStorage.getItem('presetBackgrounds');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  }); // Liste des fonds prédéfinis
   // Initialiser prudemment pour éviter tout appel privé intempestif
   const [accessMode, setAccessMode] = useState(() => {
     const mode = getCurrentAccessMode();
@@ -201,6 +232,8 @@ const Settings = () => {
         const presetsResponse = await axios.get(`${serverUrl}/api/backgrounds/presets`);
         if (presetsResponse.data?.backgrounds) {
           setPresetBackgrounds(presetsResponse.data.backgrounds);
+          // Sauvegarder dans le cache localStorage pour chargement instantané
+          localStorage.setItem('presetBackgrounds', JSON.stringify(presetsResponse.data.backgrounds));
         }
       } catch (error) {
         console.log('[Settings] Impossible de charger les préférences utilisateur');
@@ -333,13 +366,20 @@ const Settings = () => {
     }
     
     // Mettre à jour les statistiques
-    setStats(prev => ({
-      ...prev,
-      storageUsed: storageUsed,
-      storageLimit: storageTotal,
-      cpuUsage: cpuUsage,
-      ramUsage: ramUsage
-    }));
+    setStats(prev => {
+      const newStats = {
+        ...prev,
+        storageUsed: storageUsed,
+        storageLimit: storageTotal,
+        cpuUsage: cpuUsage,
+        ramUsage: ramUsage
+      };
+      
+      // Sauvegarder dans le cache localStorage pour chargement instantané
+      localStorage.setItem('systemStats', JSON.stringify(newStats));
+      
+      return newStats;
+    });
   };
 
   // Fonction pour changer le fond d'écran
