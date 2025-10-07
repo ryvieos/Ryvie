@@ -3,7 +3,7 @@ import '../styles/Settings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg-icons';
+import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy } from '@fortawesome/free-solid-svg-icons';
 import { isElectron } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getFrontendUrl } = urlsConfig;
@@ -157,6 +157,9 @@ const Settings = () => {
   const [mdraidStatus, setMdraidStatus] = useState(null);
   const [storageLoading, setStorageLoading] = useState(true);
   const [storageError, setStorageError] = useState(null);
+  // État pour les adresses publiques
+  const [publicAddresses, setPublicAddresses] = useState(null);
+  const [copiedAddress, setCopiedAddress] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -174,6 +177,16 @@ const Settings = () => {
             ...prev,
             downloadPath: 'Téléchargements (navigateur)'
           }));
+        }
+        
+        // Charger les adresses publiques depuis netbird-data.json
+        try {
+          const netbirdData = await import('../config/netbird-data.json');
+          if (netbirdData && netbirdData.domains) {
+            setPublicAddresses(netbirdData.domains);
+          }
+        } catch (error) {
+          console.log('[Settings] Impossible de charger netbird-data.json:', error);
         }
         
         setLoading(false);
@@ -1806,6 +1819,95 @@ const Settings = () => {
           </div>
         </div>
       </section>
+
+      {/* Section Adresses Publiques */}
+      {publicAddresses && (
+        <section className="settings-section">
+          <h2>
+            <FontAwesomeIcon icon={faGlobe} style={{ marginRight: '8px' }} />
+            Adresses Publiques
+          </h2>
+          <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
+            Vos applications sont accessibles via ces adresses publiques
+          </p>
+          <div className="settings-grid">
+            <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                {Object.entries(publicAddresses).map(([key, domain]) => {
+                  const fullUrl = `https://${domain}`;
+                  const isCopied = copiedAddress === fullUrl;
+                  
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        padding: '12px 16px',
+                        background: '#f8f9fa',
+                        borderRadius: '8px',
+                        border: '1px solid #e0e0e0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' }}>
+                          {key}
+                        </div>
+                        <a
+                          href={fullUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize: '14px',
+                            color: '#1976d2',
+                            textDecoration: 'none',
+                            display: 'block',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title={fullUrl}
+                        >
+                          {domain}
+                        </a>
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(fullUrl);
+                          setCopiedAddress(fullUrl);
+                          setTimeout(() => setCopiedAddress(null), 2000);
+                        }}
+                        style={{
+                          padding: '8px 12px',
+                          background: isCopied ? '#4caf50' : '#fff',
+                          color: isCopied ? '#fff' : '#666',
+                          border: isCopied ? '1px solid #4caf50' : '1px solid #ddd',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.2s',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title="Copier l'adresse"
+                      >
+                        <FontAwesomeIcon icon={isCopied ? faCheck : faCopy} />
+                        {isCopied ? 'Copié !' : 'Copier'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 };
