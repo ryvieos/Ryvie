@@ -160,6 +160,7 @@ const Settings = () => {
   // État pour les adresses publiques
   const [publicAddresses, setPublicAddresses] = useState(null);
   const [copiedAddress, setCopiedAddress] = useState(null);
+  const [showPublicAddresses, setShowPublicAddresses] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1830,82 +1831,133 @@ const Settings = () => {
           <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
             Vos applications sont accessibles via ces adresses publiques
           </p>
-          <div className="settings-grid">
-            <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
-                {Object.entries(publicAddresses).map(([key, domain]) => {
-                  const fullUrl = `https://${domain}`;
-                  const isCopied = copiedAddress === fullUrl;
-                  
-                  return (
-                    <div
-                      key={key}
-                      style={{
-                        padding: '12px 16px',
-                        background: '#f8f9fa',
-                        borderRadius: '8px',
-                        border: '1px solid #e0e0e0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '12px',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' }}>
-                          {key}
-                        </div>
-                        <a
-                          href={fullUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            fontSize: '14px',
-                            color: '#1976d2',
-                            textDecoration: 'none',
-                            display: 'block',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}
-                          title={fullUrl}
-                        >
-                          {domain}
-                        </a>
-                      </div>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(fullUrl);
-                          setCopiedAddress(fullUrl);
-                          setTimeout(() => setCopiedAddress(null), 2000);
-                        }}
+          
+          {!showPublicAddresses ? (
+            <div style={{ textAlign: 'center', padding: '20px' }}>
+              <button
+                onClick={() => setShowPublicAddresses(true)}
+                style={{
+                  padding: '12px 24px',
+                  background: '#1976d2',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = '#1565c0'}
+                onMouseOut={(e) => e.currentTarget.style.background = '#1976d2'}
+              >
+                <FontAwesomeIcon icon={faGlobe} />
+                Découvrir les adresses
+              </button>
+            </div>
+          ) : (
+            <div className="settings-grid">
+              <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                  {Object.entries(publicAddresses).map(([key, domain]) => {
+                    const fullUrl = `https://${domain}`;
+                    const isCopied = copiedAddress === fullUrl;
+                    
+                    return (
+                      <div
+                        key={key}
                         style={{
-                          padding: '8px 12px',
-                          background: isCopied ? '#4caf50' : '#fff',
-                          color: isCopied ? '#fff' : '#666',
-                          border: isCopied ? '1px solid #4caf50' : '1px solid #ddd',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          fontWeight: '500',
+                          padding: '12px 16px',
+                          background: '#f8f9fa',
+                          borderRadius: '8px',
+                          border: '1px solid #e0e0e0',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          transition: 'all 0.2s',
-                          whiteSpace: 'nowrap'
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                          transition: 'all 0.2s'
                         }}
-                        title="Copier l'adresse"
                       >
-                        <FontAwesomeIcon icon={isCopied ? faCheck : faCopy} />
-                        {isCopied ? 'Copié !' : 'Copier'}
-                      </button>
-                    </div>
-                  );
-                })}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' }}>
+                            {key}
+                          </div>
+                          <a
+                            href={fullUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: '14px',
+                              color: '#1976d2',
+                              textDecoration: 'none',
+                              display: 'block',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={fullUrl}
+                          >
+                            {domain}
+                          </a>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              if (navigator.clipboard && navigator.clipboard.writeText) {
+                                await navigator.clipboard.writeText(fullUrl);
+                                setCopiedAddress(fullUrl);
+                                setTimeout(() => setCopiedAddress(null), 2000);
+                              } else {
+                                // Fallback pour les navigateurs qui ne supportent pas clipboard API
+                                const textArea = document.createElement('textarea');
+                                textArea.value = fullUrl;
+                                textArea.style.position = 'fixed';
+                                textArea.style.left = '-999999px';
+                                document.body.appendChild(textArea);
+                                textArea.select();
+                                try {
+                                  document.execCommand('copy');
+                                  setCopiedAddress(fullUrl);
+                                  setTimeout(() => setCopiedAddress(null), 2000);
+                                } catch (err) {
+                                  console.error('Erreur lors de la copie:', err);
+                                }
+                                document.body.removeChild(textArea);
+                              }
+                            } catch (err) {
+                              console.error('Erreur lors de la copie:', err);
+                            }
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            background: isCopied ? '#4caf50' : '#fff',
+                            color: isCopied ? '#fff' : '#666',
+                            border: isCopied ? '1px solid #4caf50' : '1px solid #ddd',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            fontWeight: '500',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title="Copier l'adresse"
+                        >
+                          <FontAwesomeIcon icon={isCopied ? faCheck : faCopy} />
+                          {isCopied ? 'Copié !' : 'Copier'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </section>
       )}
     </div>
