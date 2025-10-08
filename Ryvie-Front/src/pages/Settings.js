@@ -8,6 +8,7 @@ import { isElectron } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getFrontendUrl } = urlsConfig;
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, connectRyvieSocket } from '../utils/detectAccessMode';
+import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
 
 const Settings = () => {
@@ -161,10 +162,50 @@ const Settings = () => {
   const [publicAddresses, setPublicAddresses] = useState(null);
   const [copiedAddress, setCopiedAddress] = useState(null);
   const [showPublicAddresses, setShowPublicAddresses] = useState(false);
+  // Rôle de l'utilisateur pour contrôler l'accès aux boutons
+  const [userRole, setUserRole] = useState('User');
+  const isAdmin = String(userRole || '').toLowerCase() === 'admin';
   // État pour le détail du stockage
   const [showStorageDetail, setShowStorageDetail] = useState(false);
   const [storageDetail, setStorageDetail] = useState(null);
   const [storageDetailLoading, setStorageDetailLoading] = useState(false);
+
+  useEffect(() => {
+    // Restaurer la session depuis les paramètres URL si preserve_session=true
+    const urlParams = new URLSearchParams(window.location.search);
+    const preserveSession = urlParams.get('preserve_session');
+    const user = urlParams.get('user');
+    const role = urlParams.get('role');
+    const token = urlParams.get('token');
+    const targetMode = urlParams.get('mode');
+    
+    // Forcer le mode d'accès si spécifié
+    if (targetMode) {
+      console.log(`[Settings] Application du mode forcé: ${targetMode}`);
+      setGlobalAccessMode(targetMode);
+      setAccessMode(targetMode);
+    }
+    
+    if (preserveSession === 'true' && user && token) {
+      console.log(`[Settings] Restauration de la session pour: ${user}`);
+      
+      // Restaurer la session
+      startSession({
+        token: token,
+        userId: user,
+        userName: user,
+        userRole: role || 'User',
+        userEmail: ''
+      });
+      
+      // Nettoyer les paramètres URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    
+    // Récupérer le rôle de l'utilisateur
+    const currentRole = getCurrentUserRole() || 'User';
+    setUserRole(currentRole);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -598,6 +639,15 @@ const Settings = () => {
 
   // Fonction pour changer le mode d'accès
   const handleAccessModeChange = (newMode) => {
+    // Récupérer les informations de l'utilisateur actuel avant le changement
+    const currentUser = getCurrentUser();
+    const currentRole = getCurrentUserRole();
+    const sessionInfo = getSessionInfo();
+    const currentToken = sessionInfo.token;
+    
+    console.log(`[Settings] Changement de mode: ${accessMode} -> ${newMode}`);
+    console.log(`[Settings] Utilisateur actuel: ${currentUser}, Rôle: ${currentRole}`);
+    
     // Mettre à jour le mode via le gestionnaire centralisé
     setGlobalAccessMode(newMode);
     
@@ -620,8 +670,21 @@ const Settings = () => {
     setTimeout(() => {
       const frontendUrl = getFrontendUrl(newMode);
       const currentPath = window.location.pathname; // Conserver le chemin actuel (ex: /settings)
-      const newUrl = `${frontendUrl}${currentPath}`;
       
+      // Construire l'URL avec les paramètres de session
+      const url = new URL(`${frontendUrl}${currentPath}`);
+      // Ajouter le mode cible pour forcer la détection
+      url.searchParams.set('mode', newMode);
+      if (currentUser) {
+        url.searchParams.set('preserve_session', 'true');
+        url.searchParams.set('user', currentUser);
+        url.searchParams.set('role', currentRole);
+        if (currentToken) {
+          url.searchParams.set('token', currentToken);
+        }
+      }
+      
+      const newUrl = url.toString();
       console.log(`[Settings] Redirection vers ${newMode}: ${newUrl}`);
       window.location.href = newUrl;
     }, 1500);
@@ -1200,21 +1263,23 @@ const Settings = () => {
                     ))}
                   </div>
                 </div>
-                <div className="docker-app-actions">
-                  <button
-                    className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
-                    onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
-                  >
-                    {(selectedApp.status === 'running' && selectedApp.progress > 0) ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
-                  </button>
-                  <button
-                    className="docker-action-btn-large restart"
-                    onClick={() => handleAppAction(selectedApp.id, 'restart')}
-                    disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
-                  >
-                    Redémarrer tous les conteneurs
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="docker-app-actions">
+                    <button
+                      className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
+                      onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
+                    >
+                      {(selectedApp.status === 'running' && selectedApp.progress > 0) ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
+                    </button>
+                    <button
+                      className="docker-action-btn-large restart"
+                      onClick={() => handleAppAction(selectedApp.id, 'restart')}
+                      disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
+                    >
+                      Redémarrer tous les conteneurs
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1259,38 +1324,40 @@ const Settings = () => {
                     {appActionStatus.message}
                   </div>
                 )}
-                <div className="docker-app-controls">
-                  <button
-                    className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
-                    }}
-                  >
-                    {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
-                  </button>
-                  <button
-                    className="docker-action-btn restart"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAppAction(app.id, 'restart')
-                    }}
-                    disabled={!(app.status === 'running' && app.progress > 0)}
-                  >
-                    Redémarrer
-                  </button>
-                  <div className="docker-autostart-control" onClick={(e) => e.stopPropagation()}>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={app.autostart}
-                        onChange={(e) => handleAppAutostart(app.id, e.target.checked)}
-                      />
-                      <span className="slider"></span>
-                    </label>
-                    <span className="docker-autostart-label">Auto</span>
+                {isAdmin && (
+                  <div className="docker-app-controls">
+                    <button
+                      className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
+                      }}
+                    >
+                      {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
+                    </button>
+                    <button
+                      className="docker-action-btn restart"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAppAction(app.id, 'restart')
+                      }}
+                      disabled={!(app.status === 'running' && app.progress > 0)}
+                    >
+                      Redémarrer
+                    </button>
+                    <div className="docker-autostart-control" onClick={(e) => e.stopPropagation()}>
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={app.autostart}
+                          onChange={(e) => handleAppAutostart(app.id, e.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                      <span className="docker-autostart-label">Auto</span>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>

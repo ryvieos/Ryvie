@@ -18,7 +18,7 @@ const MANIFESTS_DIR = '/data/config/manifests';
 const GENERIC_ICON_PATH = path.join(__dirname, 'Ryvie-Front/src/icons/app-generic.svg');
 
 /**
- * Scanne automatiquement les dossiers Ryvie-* dans /data/apps/
+ * Scanne automatiquement tous les dossiers dans /data/apps/
  */
 function scanAppsDirectories() {
   const apps = [];
@@ -27,11 +27,19 @@ function scanAppsDirectories() {
     const entries = fs.readdirSync(APPS_SOURCE_DIR, { withFileTypes: true });
     
     entries.forEach(entry => {
-      // Ne traiter que les dossiers qui commencent par "Ryvie-"
-      if (entry.isDirectory() && entry.name.startsWith('Ryvie-')) {
+      // Traiter tous les dossiers
+      if (entry.isDirectory()) {
         const appDir = path.join(APPS_SOURCE_DIR, entry.name);
-        const appId = entry.name.replace('Ryvie-', '').toLowerCase();
-        const appName = entry.name.replace('Ryvie-', '');
+        
+        // Si le dossier commence par "Ryvie-", enlever le préfixe
+        let appId, appName;
+        if (entry.name.startsWith('Ryvie-')) {
+          appId = entry.name.replace('Ryvie-', '').toLowerCase();
+          appName = entry.name.replace('Ryvie-', '');
+        } else {
+          appId = entry.name.toLowerCase();
+          appName = entry.name;
+        }
         
         // Chercher le docker-compose.yml
         const dockerComposePath = findDockerCompose(appDir);
@@ -63,26 +71,41 @@ function scanAppsDirectories() {
 }
 
 /**
- * Cherche le docker-compose.yml dans un dossier d'app
+ * Cherche le docker-compose.yml récursivement dans un dossier d'app
  */
 function findDockerCompose(appDir) {
-  // Liste des chemins possibles pour docker-compose
-  const possiblePaths = [
-    'docker-compose.yml',
-    'docker-compose.yaml',
-    'docker/docker-compose.yml',
-    'docker/docker-compose.yaml',
-    'docker/docker-compose.ryvie.yml',
-    'docker/docker-compose.prod.yml',
-    'snapdrop-master/snapdrop-master/docker-compose.yml',
-    'tdrive/docker-compose.minimal.yml'
-  ];
+  const foundPath = searchDockerComposeRecursive(appDir, appDir, 0, 5);
+  return foundPath;
+}
+
+/**
+ * Recherche récursive du docker-compose.yml
+ */
+function searchDockerComposeRecursive(baseDir, currentDir, depth, maxDepth) {
+  if (depth >= maxDepth) return null;
   
-  for (const relativePath of possiblePaths) {
-    const fullPath = path.join(appDir, relativePath);
-    if (fs.existsSync(fullPath)) {
-      return relativePath;
+  try {
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    
+    // D'abord chercher docker-compose.yml dans le dossier actuel
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name === 'docker-compose.yml') {
+        const fullPath = path.join(currentDir, entry.name);
+        const relativePath = path.relative(baseDir, fullPath);
+        console.log(`   ✅ docker-compose.yml trouvé: ${relativePath}`);
+        return relativePath;
+      }
     }
+    
+    // Puis chercher dans les sous-dossiers
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+        const found = searchDockerComposeRecursive(baseDir, path.join(currentDir, entry.name), depth + 1, maxDepth);
+        if (found) return found;
+      }
+    }
+  } catch (error) {
+    // Ignorer les erreurs de permission
   }
   
   return null;
@@ -371,12 +394,12 @@ function main() {
   }
   
   // Scanner automatiquement les apps
-  console.log('🔍 Scan automatique des dossiers Ryvie-*...\n');
+  console.log('🔍 Scan automatique de tous les dossiers dans /data/apps/...\n');
   const scannedApps = scanAppsDirectories();
   
   if (scannedApps.length === 0) {
     console.log('❌ Aucune app trouvée dans /data/apps/');
-    console.log('💡 Assurez-vous que vos apps sont dans des dossiers nommés "Ryvie-*"');
+    console.log('💡 Assurez-vous que vos apps sont dans des dossiers avec un docker-compose.yml');
     return;
   }
   

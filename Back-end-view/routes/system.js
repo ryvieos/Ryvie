@@ -55,13 +55,21 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
         console.log(`[Storage Detail] Calcul taille pour app: ${app.id} (${app.name})`);
 
         // Taille du dossier de l'app dans /data/apps
-        // Chercher le dossier en ignorant la casse (peut être Ryvie-rDrive ou Ryvie-rdrive)
+        // Chercher le dossier avec ou sans préfixe "Ryvie-"
         let appFolder = null;
         try {
-          const { stdout } = await execPromise(`find /data/apps -maxdepth 1 -type d -iname "Ryvie-${app.id}"`, { timeout: 5000 });
+          // D'abord essayer avec le préfixe Ryvie-
+          let { stdout } = await execPromise(`find /data/apps -maxdepth 1 -type d -iname "Ryvie-${app.id}"`, { timeout: 5000 });
           appFolder = stdout.trim();
+          
+          // Si pas trouvé, essayer sans préfixe
           if (!appFolder) {
-            // Fallback sur le format attendu
+            const result = await execPromise(`find /data/apps -maxdepth 1 -type d -iname "${app.id}"`, { timeout: 5000 });
+            appFolder = result.stdout.trim();
+          }
+          
+          // Fallback final
+          if (!appFolder) {
             appFolder = `/data/apps/Ryvie-${app.id}`;
           }
         } catch (error) {

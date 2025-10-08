@@ -7,9 +7,9 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { connectRyvieSocket } from '../utils/detectAccessMode';
 import { Link, useNavigate } from 'react-router-dom';
-import { getCurrentAccessMode } from '../utils/detectAccessMode';
+import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
-import { endSession, getCurrentUser } from '../utils/sessionManager';
+import { endSession, getCurrentUser, getCurrentUserRole, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getAppUrl } = urlsConfig;
 import { 
@@ -49,7 +49,7 @@ const ContextMenuPortal = ({ children, x, y, onClose }) => {
   return ReactDOM.createPortal(menu, document.body);
 };
 
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu }) => {
+const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin }) => {
   const ref = React.useRef(null);
   const appConfig = appsConfig[id] || {};
 
@@ -120,6 +120,9 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStat
   const handleContextMenu = (e) => {
     // Ne montrer le menu que pour les apps avec showStatus (pas les icônes système)
     if (!appConfig.showStatus) return;
+    
+    // Ne montrer le menu que pour les admins
+    if (!isAdmin) return;
     
     e.preventDefault();
     e.stopPropagation();
@@ -199,7 +202,7 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStat
 };
 
 // Composant Zone
-const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appsConfig, iconImages, activeContextMenu, setActiveContextMenu }) => {
+const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appsConfig, iconImages, activeContextMenu, setActiveContextMenu, isAdmin }) => {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: ItemTypes.ICON,
     canDrop: () => true,
@@ -241,6 +244,7 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, apps
             appsConfig={appsConfig}
             activeContextMenu={activeContextMenu}
             setActiveContextMenu={setActiveContextMenu}
+            isAdmin={isAdmin}
           />
         )}
       </div>
@@ -306,6 +310,8 @@ const Home = () => {
   const navigate = useNavigate();
   const [accessMode, setAccessMode] = useState(null); 
   const [currentUserName, setCurrentUserName] = useState('');
+  const [userRole, setUserRole] = useState('User');
+  const isAdmin = String(userRole || '').toLowerCase() === 'admin';
   const [appsConfig, setAppsConfig] = useState(generateAppConfig()); // Config par défaut
   const [iconImages, setIconImages] = useState(images); // Images locales
   const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran utilisateur
@@ -360,10 +366,43 @@ const Home = () => {
       console.log(`[Home] Mode d'accès récupéré depuis le stockage: ${mode}`);
     };
 
-    initializeAccessMode();
+    // Restaurer la session depuis les paramètres URL si preserve_session=true
+    const urlParams = new URLSearchParams(window.location.search);
+    const preserveSession = urlParams.get('preserve_session');
+    const user = urlParams.get('user');
+    const role = urlParams.get('role');
+    const token = urlParams.get('token');
+    const targetMode = urlParams.get('mode');
+    
+    // Forcer le mode d'accès si spécifié (avant initializeAccessMode)
+    if (targetMode) {
+      console.log(`[Home] Application du mode forcé: ${targetMode}`);
+      setGlobalAccessMode(targetMode);
+      setAccessMode(targetMode);
+    } else {
+      initializeAccessMode();
+    }
+    
+    if (preserveSession === 'true' && user && token) {
+      console.log(`[Home] Restauration de la session pour: ${user}`);
+      
+      // Restaurer la session
+      startSession({
+        token: token,
+        userId: user,
+        userName: user,
+        userRole: role || 'User',
+        userEmail: ''
+      });
+      
+      // Nettoyer les paramètres URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    
     // Récupérer l'utilisateur connecté
     try {
       setCurrentUserName(getCurrentUser() || '');
+      setUserRole(getCurrentUserRole() || 'User');
     } catch (_) {}
   }, []);
   
@@ -1100,6 +1139,7 @@ const Home = () => {
                   iconImages={iconImages}
                   activeContextMenu={activeContextMenu}
                   setActiveContextMenu={setActiveContextMenu}
+                  isAdmin={isAdmin}
                 />
               </div>
               <div 
@@ -1138,6 +1178,7 @@ const Home = () => {
                   iconImages={iconImages}
                   activeContextMenu={activeContextMenu}
                   setActiveContextMenu={setActiveContextMenu}
+                  isAdmin={isAdmin}
                   className="zone-right"
                 />
               </div>
@@ -1155,6 +1196,7 @@ const Home = () => {
                   iconImages={iconImages}
                   activeContextMenu={activeContextMenu}
                   setActiveContextMenu={setActiveContextMenu}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>
