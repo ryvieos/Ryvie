@@ -40,7 +40,6 @@ const ContextMenuPortal = ({ children, x, y, onClose }) => {
   const menu = (
     <div
       className="context-menu"
-      style={{ position: 'fixed', top: y, left: x, zIndex: 100000 }}
       onClick={(e) => e.stopPropagation()}
     >
       {children}
@@ -48,11 +47,33 @@ const ContextMenuPortal = ({ children, x, y, onClose }) => {
   );
   return ReactDOM.createPortal(menu, document.body);
 };
-
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin }) => {
-  const ref = React.useRef(null);
+// Composant Icon
+const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin }) => {
   const appConfig = appsConfig[id] || {};
+  const [imgSrc, setImgSrc] = React.useState(src);
+  const [imgError, setImgError] = React.useState(false);
+  
+  // Mettre à jour l'image source quand elle change
+  React.useEffect(() => {
+    setImgSrc(src);
+    setImgError(false);
+  }, [src]);
+  
+  // Gérer les erreurs de chargement d'image
+  const handleImageError = () => {
+    if (!imgError) {
+      console.log(`[Icon] Erreur de chargement pour ${id}, utilisation du fallback`);
+      setImgError(true);
+      // Fallback vers l'icône locale si disponible
+      const fallbackSrc = images[id];
+      if (fallbackSrc && fallbackSrc !== src) {
+        setImgSrc(fallbackSrc);
+      }
+    }
+  };
 
+  const ref = React.useRef(null);
+  
   const [{ isDragging }, drag] = useDrag({
     type: ItemTypes.ICON,
     item: { id, zoneId },
@@ -312,8 +333,16 @@ const Home = () => {
   const [currentUserName, setCurrentUserName] = useState('');
   const [userRole, setUserRole] = useState('User');
   const isAdmin = String(userRole || '').toLowerCase() === 'admin';
-  const [appsConfig, setAppsConfig] = useState(generateAppConfig()); // Config par défaut
-  const [iconImages, setIconImages] = useState(images); // Images locales
+  const [appsConfig, setAppsConfig] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('appsConfig_cache');
+    return cached || generateAppConfig();
+  }); // Config par défaut
+  const [iconImages, setIconImages] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('iconImages_cache');
+    return cached || images;
+  }); // Images locales
   const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran utilisateur
   const [weatherCity, setWeatherCity] = useState(null); // Ville configurée par l'utilisateur
   const [weatherCityLoaded, setWeatherCityLoaded] = useState(false); // Indique si les préférences sont chargées
@@ -338,16 +367,28 @@ const Home = () => {
     bottom10: []
   });
 
-  const [weather, setWeather] = useState({
-    location: 'Loading...',
-    temperature: null,
-    description: '',
-    icon: 'default.png',
+  const [weather, setWeather] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('weather_cache');
+    return cached || {
+      location: 'Loading...',
+      temperature: null,
+      description: '',
+      icon: 'default.png',
+    };
   });
 
   const [serverStatus, setServerStatus] = useState(false);
-  const [appStatus, setAppStatus] = useState({});
-  const [applications, setApplications] = useState([]);
+  const [appStatus, setAppStatus] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('appStatus_cache');
+    return cached || {};
+  });
+  const [applications, setApplications] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('applications_cache');
+    return cached || [];
+  });
   const [isLoading, setIsLoading] = useState(false);
   // Overlay AppStore
   const [overlayVisible, setOverlayVisible] = useState(false);
@@ -418,6 +459,20 @@ const Home = () => {
         if (Object.keys(config).length > 0) {
           console.log('[Home] Config chargée depuis manifests:', Object.keys(config).length, 'apps');
           setAppsConfig(config);
+          // Sauvegarder dans le cache
+          StorageManager.setItem('appsConfig_cache', config);
+          
+          // Extraire et mettre à jour les icônes
+          const newIconImages = { ...images }; // Commencer avec les icônes par défaut
+          Object.keys(config).forEach(iconId => {
+            if (config[iconId].icon) {
+              newIconImages[iconId] = config[iconId].icon;
+            }
+          });
+          setIconImages(newIconImages);
+          StorageManager.setItem('iconImages_cache', newIconImages);
+          console.log('[Home] Icônes mises à jour:', Object.keys(newIconImages).length);
+          
           // Les zones seront chargées par le useEffect dédié (depuis le serveur)
         } else {
           console.log('[Home] Aucune app trouvée dans les manifests, utilisation de la config par défaut');
@@ -464,6 +519,8 @@ const Home = () => {
     
     console.log('[Home] Statuts mis à jour:', newAppStatus);
     setAppStatus(newAppStatus);
+    // Sauvegarder dans le cache
+    StorageManager.setItem('appStatus_cache', newAppStatus);
   }, [appsConfig, applications]);
   
   useEffect(() => {
@@ -526,6 +583,9 @@ const Home = () => {
         
         console.log('[Home] Nouveau statut calculé:', newAppStatus);
         setAppStatus(newAppStatus);
+        // Sauvegarder dans le cache
+        StorageManager.setItem('appStatus_cache', newAppStatus);
+        StorageManager.setItem('applications_cache', apps);
         
       } catch (error) {
         console.error('[Home] Erreur lors de la récupération des applications:', error);
@@ -597,6 +657,8 @@ const Home = () => {
           }
         });
         setAppStatus(newAppStatus);
+        // Sauvegarder dans le cache
+        StorageManager.setItem('appStatus_cache', newAppStatus);
       },
       timeoutMs: 10000,
     });
@@ -710,14 +772,16 @@ const Home = () => {
           icon = 'rainy.png';
         }
 
-        setWeather({
+        const newWeather = {
           location: cityName,
           temperature: data.current_weather.temperature,
           humidity: data.hourly.relative_humidity_2m[0],
           wind: data.current_weather.windspeed,
           description: weatherCode,
           icon: icon,
-        });
+        };
+        setWeather(newWeather);
+        StorageManager.setItem('weather_cache', newWeather);
       } catch (error) {
         console.error('Erreur lors de la récupération météo, fallback sur Paris', error);
         // Fallback: tenter de charger Paris pour avoir de vraies données
@@ -732,14 +796,16 @@ const Home = () => {
           if (pcode === 0) picon = 'sunny.png';
           else if ([61, 63, 65].includes(pcode)) picon = 'rainy.png';
 
-          setWeather({
+          const parisWeather = {
             location: 'Paris',
             temperature: pdata.current_weather.temperature,
             humidity: pdata.hourly.relative_humidity_2m?.[0] ?? null,
             wind: pdata.current_weather.windspeed,
             description: pcode,
             icon: picon,
-          });
+          };
+          setWeather(parisWeather);
+          StorageManager.setItem('weather_cache', parisWeather);
         } catch (e) {
           // Si vraiment tout échoue: fallback statique Paris nuageux
           setWeather({
@@ -1134,6 +1200,7 @@ const Home = () => {
                   iconId={zones['left']}
                   moveIcon={moveIcon}
                   handleClick={handleClick}
+                  showName={true}
                   appStatus={appStatus}
                   appsConfig={appsConfig}
                   iconImages={iconImages}
@@ -1173,6 +1240,7 @@ const Home = () => {
                   iconId={zones['right']}
                   moveIcon={moveIcon}
                   handleClick={handleClick}
+                  showName={true}
                   appStatus={appStatus}
                   appsConfig={appsConfig}
                   iconImages={iconImages}
@@ -1191,6 +1259,7 @@ const Home = () => {
                   iconId={zones[`bottom${i + 1}`]}
                   moveIcon={moveIcon}
                   handleClick={handleClick}
+                  showName={true}
                   appStatus={appStatus}
                   appsConfig={appsConfig}
                   iconImages={iconImages}

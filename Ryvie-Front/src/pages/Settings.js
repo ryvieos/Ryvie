@@ -1376,7 +1376,8 @@ const Settings = () => {
             zIndex: 9999,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            animation: 'fadeIn 0.3s ease-out'
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowStorageOverlay(false);
@@ -1393,7 +1394,8 @@ const Settings = () => {
               overflow: 'hidden',
               position: 'relative',
               display: 'flex',
-              flexDirection: 'column'
+              flexDirection: 'column',
+              animation: 'modalSlideUp 0.4s ease-out'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1422,7 +1424,11 @@ const Settings = () => {
               </button>
             </div>
             {/* Contenu: composant StorageSettings directement */}
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div style={{ 
+              flex: 1, 
+              overflow: 'auto',
+              animation: 'fadeIn 0.4s ease-out 0.2s backwards'
+            }}>
               <StorageSettings />
             </div>
           </div>
@@ -1796,11 +1802,27 @@ const Settings = () => {
         <h2>Configuration du Stockage</h2>
         <div style={{ marginBottom: 16 }}>
           <button
-            className="setting-button"
+            className="setting-button raid-assistant-btn"
             onClick={() => setShowStorageOverlay(true)}
-            style={{ background: '#1976d2', color: '#fff', borderColor: '#1565c0' }}
+            style={{ 
+              background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+              color: '#fff',
+              border: 'none',
+              padding: '14px 24px',
+              fontSize: '16px',
+              fontWeight: '600',
+              boxShadow: '0 4px 12px rgba(25, 118, 210, 0.3)',
+              transition: 'all 0.3s ease',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
           >
-            Ouvrir l'assistant RAID
+            <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>
+              </svg>
+              Ouvrir l'assistant RAID
+            </span>
           </button>
         </div>
         <div className="storage-options">
