@@ -244,6 +244,17 @@ const Settings = () => {
     fetchData();
   }, []);
 
+  // Appliquer le mode sombre
+  useEffect(() => {
+    if (settings.darkMode) {
+      document.body.classList.add('dark-mode');
+      console.log('[Settings] Mode sombre appliqué');
+    } else {
+      document.body.classList.remove('dark-mode');
+      console.log('[Settings] Mode sombre désactivé');
+    }
+  }, [settings.darkMode]);
+
   // S'assurer que accessMode est cohérent et persistant au montage
   useEffect(() => {
     let mode = getCurrentAccessMode();
@@ -275,10 +286,19 @@ const Settings = () => {
           setTokenExpiration(tokenResponse.data.minutes);
         }
         
-        // Charger fond d'écran
+        // Charger fond d'écran et mode sombre
         const prefsResponse = await axios.get(`${serverUrl}/api/user/preferences`);
         if (prefsResponse.data?.backgroundImage) {
           setBackgroundImage(prefsResponse.data.backgroundImage);
+        }
+        
+        // Charger le mode sombre
+        if (prefsResponse.data?.darkMode !== undefined) {
+          console.log('[Settings] Mode sombre chargé:', prefsResponse.data.darkMode);
+          setSettings(prev => ({
+            ...prev,
+            darkMode: prefsResponse.data.darkMode
+          }));
         }
         
         // Charger liste des fonds personnalisés
@@ -714,6 +734,34 @@ const Settings = () => {
           message: "Modification du dossier de téléchargement non disponible en mode web" 
         });
         setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+      }
+    } else if (setting === 'darkMode') {
+      // Gestion spéciale pour le mode sombre
+      setSettings(prev => ({
+        ...prev,
+        darkMode: value
+      }));
+      
+      // Sauvegarder dans le backend
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        await axios.patch(`${serverUrl}/api/user/preferences/dark-mode`, { darkMode: value });
+        console.log('[Settings] Mode sombre sauvegardé:', value);
+        
+        // Changer automatiquement le fond d'écran
+        if (value && (backgroundImage === 'preset-default.webp' || backgroundImage === 'default')) {
+          // Activer mode sombre + fond default → changer pour night
+          await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-night.png' });
+          setBackgroundImage('preset-night.png');
+          console.log('[Settings] Fond d\'écran changé pour night');
+        } else if (!value && backgroundImage === 'preset-night.png') {
+          // Désactiver mode sombre + fond night → revenir à default
+          await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-default.webp' });
+          setBackgroundImage('preset-default.webp');
+          console.log('[Settings] Fond d\'écran changé pour default');
+        }
+      } catch (error) {
+        console.error('[Settings] Erreur sauvegarde mode sombre:', error);
       }
     } else {
       setSettings(prev => ({
