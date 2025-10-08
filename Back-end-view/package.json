@@ -8,8 +8,8 @@
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "diskusage": "^1.2.0",
-    "dockerode": "^4.0.7",
-    "dotenv": "^17.2.1",
+    "dockerode": "^4.0.9",
+    "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.0.1",
     "helmet": "^8.1.0",
@@ -19,6 +19,6 @@
     "os-utils": "^0.0.14",
     "redis": "^5.8.0",
     "socket.io": "^4.8.1",
-    "systeminformation": "^5.27.7"
+    "systeminformation": "^5.27.11"
   }
 }

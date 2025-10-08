@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const SOURCE_DIR = '/data/apps/Ryvie/Ryvie-Front/public/images/backgrounds';
+const SOURCE_DIR = '/opt/Ryvie/Ryvie-Front/public/images/backgrounds';
 const DEST_DIR = '/data/images/backgrounds';
 
 /**

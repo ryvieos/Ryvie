@@ -9,11 +9,15 @@ const { verifyToken } = require('../middleware/auth');
 // Répertoire pour stocker les préférences utilisateur
 const PREFERENCES_DIR = '/data/config/user-preferences';
 const BACKGROUNDS_DIR = '/data/images/backgrounds'; // Fonds uploadés par les utilisateurs
-const PRESETS_DIR = '/data/apps/Ryvie/Ryvie-Front/public/images/backgrounds'; // Fonds prédéfinis
+const PRESETS_DIR = '/opt/Ryvie/Ryvie-Front/public/images/backgrounds'; // Fonds prédéfinis
 
 // S'assurer que les répertoires existent
 if (!fs.existsSync(PREFERENCES_DIR)) {
   fs.mkdirSync(PREFERENCES_DIR, { recursive: true });
+}
+if (!fs.existsSync(BACKGROUNDS_DIR)) {
+  fs.mkdirSync(BACKGROUNDS_DIR, { recursive: true });
+}
 
 // GET /api/geocode/search?q=NAME - Chercher plusieurs villes (auto-complétion)
 router.get('/geocode/search', async (req, res) => {
@@ -36,10 +40,6 @@ router.get('/geocode/search', async (req, res) => {
     res.json({ results: [] });
   }
 });
-}
-if (!fs.existsSync(BACKGROUNDS_DIR)) {
-  fs.mkdirSync(BACKGROUNDS_DIR, { recursive: true });
-}
 
 // Configuration de multer pour l'upload des fonds d'écran
 const storage = multer.diskStorage({

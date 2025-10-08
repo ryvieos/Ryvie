@@ -4,7 +4,7 @@ import axios from '../utils/setupAxios'; // Centralized axios instance with inte
 import '../styles/Welcome.css';
 import serverIcon from '../icons/lettre-r.png';
 import { setAccessMode as setGlobalAccessMode, getCurrentAccessMode } from '../utils/detectAccessMode';
-import { getCurrentUser, getCurrentUserRole, setCurrentUserName, initializeSession, isSessionActive } from '../utils/sessionManager';
+import { getCurrentUser, getCurrentUserRole, setCurrentUserName, initializeSession, isSessionActive, startSession } from '../utils/sessionManager';
 
 const Welcome = () => {
   const navigate = useNavigate();
@@ -13,6 +13,45 @@ const Welcome = () => {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [currentAccessMode, setCurrentAccessMode] = useState(null);
+
+  // Restaurer la session depuis les paramètres URL si preserve_session=true
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const preserveSession = urlParams.get('preserve_session');
+    const user = urlParams.get('user');
+    const role = urlParams.get('role');
+    const token = urlParams.get('token');
+    const targetMode = urlParams.get('mode');
+    
+    // Forcer le mode d'accès si spécifié
+    if (targetMode) {
+      console.log(`[Welcome] Application du mode forcé: ${targetMode}`);
+      setGlobalAccessMode(targetMode);
+    }
+    
+    if (preserveSession === 'true' && user && token) {
+      console.log(`[Welcome] Restauration de la session pour: ${user}`);
+      
+      // Restaurer la session
+      startSession({
+        token: token,
+        userId: user,
+        userName: user,
+        userRole: role || 'User',
+        userEmail: ''
+      });
+      
+      setCurrentUser(user);
+      
+      // Nettoyer les paramètres URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Rediriger vers /home si déjà connecté
+      if (isSessionActive()) {
+        navigate('/home', { replace: true });
+      }
+    }
+  }, [navigate]);
 
   // Initialize session headers and receive user ID from Electron main process
   useEffect(() => {

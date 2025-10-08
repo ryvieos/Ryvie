@@ -3,11 +3,12 @@ import '../styles/Settings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faServer, faHdd, faDatabase, faPlug } from '@fortawesome/free-solid-svg-icons';
+import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy } from '@fortawesome/free-solid-svg-icons';
 import { isElectron } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getFrontendUrl } = urlsConfig;
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, connectRyvieSocket } from '../utils/detectAccessMode';
+import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
 
 const Settings = () => {
@@ -157,6 +158,54 @@ const Settings = () => {
   const [mdraidStatus, setMdraidStatus] = useState(null);
   const [storageLoading, setStorageLoading] = useState(true);
   const [storageError, setStorageError] = useState(null);
+  // État pour les adresses publiques
+  const [publicAddresses, setPublicAddresses] = useState(null);
+  const [copiedAddress, setCopiedAddress] = useState(null);
+  const [showPublicAddresses, setShowPublicAddresses] = useState(false);
+  // Rôle de l'utilisateur pour contrôler l'accès aux boutons
+  const [userRole, setUserRole] = useState('User');
+  const isAdmin = String(userRole || '').toLowerCase() === 'admin';
+  // État pour le détail du stockage
+  const [showStorageDetail, setShowStorageDetail] = useState(false);
+  const [storageDetail, setStorageDetail] = useState(null);
+  const [storageDetailLoading, setStorageDetailLoading] = useState(false);
+
+  useEffect(() => {
+    // Restaurer la session depuis les paramètres URL si preserve_session=true
+    const urlParams = new URLSearchParams(window.location.search);
+    const preserveSession = urlParams.get('preserve_session');
+    const user = urlParams.get('user');
+    const role = urlParams.get('role');
+    const token = urlParams.get('token');
+    const targetMode = urlParams.get('mode');
+    
+    // Forcer le mode d'accès si spécifié
+    if (targetMode) {
+      console.log(`[Settings] Application du mode forcé: ${targetMode}`);
+      setGlobalAccessMode(targetMode);
+      setAccessMode(targetMode);
+    }
+    
+    if (preserveSession === 'true' && user && token) {
+      console.log(`[Settings] Restauration de la session pour: ${user}`);
+      
+      // Restaurer la session
+      startSession({
+        token: token,
+        userId: user,
+        userName: user,
+        userRole: role || 'User',
+        userEmail: ''
+      });
+      
+      // Nettoyer les paramètres URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    
+    // Récupérer le rôle de l'utilisateur
+    const currentRole = getCurrentUserRole() || 'User';
+    setUserRole(currentRole);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -174,6 +223,16 @@ const Settings = () => {
             ...prev,
             downloadPath: 'Téléchargements (navigateur)'
           }));
+        }
+        
+        // Charger les adresses publiques depuis netbird-data.json
+        try {
+          const netbirdData = await import('../config/netbird-data.json');
+          if (netbirdData && netbirdData.domains) {
+            setPublicAddresses(netbirdData.domains);
+          }
+        } catch (error) {
+          console.log('[Settings] Impossible de charger netbird-data.json:', error);
         }
         
         setLoading(false);
@@ -253,7 +312,9 @@ const Settings = () => {
     // Fonction pour récupérer les informations serveur
     const fetchServerInfo = async () => {
       try {
-        const response = await axios.get(`${baseUrl}/api/server-info`);
+        const response = await axios.get(`${baseUrl}/api/server-info`, {
+          timeout: 15000 // Timeout augmenté à 15s pour les calculs de stockage
+        });
         console.log('Informations serveur reçues:', response.data);
         updateServerStats(response.data);
       } catch (error) {
@@ -264,8 +325,8 @@ const Settings = () => {
     // Appel initial
     fetchServerInfo();
     
-    // Configuration de l'intervalle pour les mises à jour régulières
-    const intervalId = setInterval(fetchServerInfo, 2000);
+    // Configuration de l'intervalle pour les mises à jour régulières (toutes les 5s au lieu de 2s)
+    const intervalId = setInterval(fetchServerInfo, 5000);
     
     // Nettoyage lors du démontage du composant
     return () => {
@@ -578,6 +639,15 @@ const Settings = () => {
 
   // Fonction pour changer le mode d'accès
   const handleAccessModeChange = (newMode) => {
+    // Récupérer les informations de l'utilisateur actuel avant le changement
+    const currentUser = getCurrentUser();
+    const currentRole = getCurrentUserRole();
+    const sessionInfo = getSessionInfo();
+    const currentToken = sessionInfo.token;
+    
+    console.log(`[Settings] Changement de mode: ${accessMode} -> ${newMode}`);
+    console.log(`[Settings] Utilisateur actuel: ${currentUser}, Rôle: ${currentRole}`);
+    
     // Mettre à jour le mode via le gestionnaire centralisé
     setGlobalAccessMode(newMode);
     
@@ -600,8 +670,21 @@ const Settings = () => {
     setTimeout(() => {
       const frontendUrl = getFrontendUrl(newMode);
       const currentPath = window.location.pathname; // Conserver le chemin actuel (ex: /settings)
-      const newUrl = `${frontendUrl}${currentPath}`;
       
+      // Construire l'URL avec les paramètres de session
+      const url = new URL(`${frontendUrl}${currentPath}`);
+      // Ajouter le mode cible pour forcer la détection
+      url.searchParams.set('mode', newMode);
+      if (currentUser) {
+        url.searchParams.set('preserve_session', 'true');
+        url.searchParams.set('user', currentUser);
+        url.searchParams.set('role', currentRole);
+        if (currentToken) {
+          url.searchParams.set('token', currentToken);
+        }
+      }
+      
+      const newUrl = url.toString();
       console.log(`[Settings] Redirection vers ${newMode}: ${newUrl}`);
       window.location.href = newUrl;
     }, 1500);
@@ -637,6 +720,28 @@ const Settings = () => {
         ...prev,
         [setting]: value
       }));
+    }
+  };
+
+  // Fonction pour récupérer le détail du stockage
+  const fetchStorageDetail = async () => {
+    // Ouvrir la modal d'abord
+    setShowStorageDetail(true);
+    setStorageDetailLoading(true);
+    setStorageDetail(null);
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      console.log('[Settings] Récupération du détail du stockage depuis:', serverUrl);
+      const response = await axios.get(`${serverUrl}/api/storage-detail`, { timeout: 120000 }); // 2 minutes timeout
+      console.log('[Settings] Détail du stockage reçu:', response.data);
+      setStorageDetail(response.data);
+    } catch (error) {
+      console.error('[Settings] Erreur récupération détail stockage:', error);
+      alert('Erreur lors de la récupération du détail du stockage: ' + (error.response?.data?.error || error.message));
+      setShowStorageDetail(false);
+    } finally {
+      setStorageDetailLoading(false);
     }
   };
 
@@ -1019,7 +1124,11 @@ const Settings = () => {
         <h2>Vue d'ensemble du système</h2>
         <div className="stats-grid">
           {/* Stockage */}
-          <div className="stat-card storage" style={{ cursor: 'default' }}>
+          <div 
+            className="stat-card storage" 
+            style={{ cursor: 'pointer' }}
+            onClick={fetchStorageDetail}
+          >
             <h3>Stockage</h3>
             <div className="progress-container">
               <div 
@@ -1154,21 +1263,23 @@ const Settings = () => {
                     ))}
                   </div>
                 </div>
-                <div className="docker-app-actions">
-                  <button
-                    className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
-                    onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
-                  >
-                    {(selectedApp.status === 'running' && selectedApp.progress > 0) ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
-                  </button>
-                  <button
-                    className="docker-action-btn-large restart"
-                    onClick={() => handleAppAction(selectedApp.id, 'restart')}
-                    disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
-                  >
-                    Redémarrer tous les conteneurs
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="docker-app-actions">
+                    <button
+                      className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
+                      onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
+                    >
+                      {(selectedApp.status === 'running' && selectedApp.progress > 0) ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
+                    </button>
+                    <button
+                      className="docker-action-btn-large restart"
+                      onClick={() => handleAppAction(selectedApp.id, 'restart')}
+                      disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
+                    >
+                      Redémarrer tous les conteneurs
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1213,38 +1324,40 @@ const Settings = () => {
                     {appActionStatus.message}
                   </div>
                 )}
-                <div className="docker-app-controls">
-                  <button
-                    className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
-                    }}
-                  >
-                    {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
-                  </button>
-                  <button
-                    className="docker-action-btn restart"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAppAction(app.id, 'restart')
-                    }}
-                    disabled={!(app.status === 'running' && app.progress > 0)}
-                  >
-                    Redémarrer
-                  </button>
-                  <div className="docker-autostart-control" onClick={(e) => e.stopPropagation()}>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={app.autostart}
-                        onChange={(e) => handleAppAutostart(app.id, e.target.checked)}
-                      />
-                      <span className="slider"></span>
-                    </label>
-                    <span className="docker-autostart-label">Auto</span>
+                {isAdmin && (
+                  <div className="docker-app-controls">
+                    <button
+                      className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
+                      }}
+                    >
+                      {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
+                    </button>
+                    <button
+                      className="docker-action-btn restart"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAppAction(app.id, 'restart')
+                      }}
+                      disabled={!(app.status === 'running' && app.progress > 0)}
+                    >
+                      Redémarrer
+                    </button>
+                    <div className="docker-autostart-control" onClick={(e) => e.stopPropagation()}>
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={app.autostart}
+                          onChange={(e) => handleAppAutostart(app.id, e.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                      <span className="docker-autostart-label">Auto</span>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>
@@ -1806,6 +1919,358 @@ const Settings = () => {
           </div>
         </div>
       </section>
+
+      {/* Section Adresses Publiques */}
+      {publicAddresses && (
+        <section className="settings-section">
+          <h2>
+            <FontAwesomeIcon icon={faGlobe} style={{ marginRight: '8px' }} />
+            Adresses Publiques
+          </h2>
+          <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
+            Vos applications sont accessibles via ces adresses publiques
+          </p>
+          
+          {!showPublicAddresses ? (
+            <div style={{ textAlign: 'center', padding: '20px' }}>
+              <button
+                onClick={() => setShowPublicAddresses(true)}
+                style={{
+                  padding: '12px 24px',
+                  background: '#1976d2',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = '#1565c0'}
+                onMouseOut={(e) => e.currentTarget.style.background = '#1976d2'}
+              >
+                <FontAwesomeIcon icon={faGlobe} />
+                Découvrir les adresses
+              </button>
+            </div>
+          ) : (
+            <div className="settings-grid">
+              <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                  {Object.entries(publicAddresses).map(([key, domain]) => {
+                    const fullUrl = `https://${domain}`;
+                    const isCopied = copiedAddress === fullUrl;
+                    
+                    return (
+                      <div
+                        key={key}
+                        style={{
+                          padding: '12px 16px',
+                          background: '#f8f9fa',
+                          borderRadius: '8px',
+                          border: '1px solid #e0e0e0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' }}>
+                            {key}
+                          </div>
+                          <a
+                            href={fullUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: '14px',
+                              color: '#1976d2',
+                              textDecoration: 'none',
+                              display: 'block',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={fullUrl}
+                          >
+                            {domain}
+                          </a>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              if (navigator.clipboard && navigator.clipboard.writeText) {
+                                await navigator.clipboard.writeText(fullUrl);
+                                setCopiedAddress(fullUrl);
+                                setTimeout(() => setCopiedAddress(null), 2000);
+                              } else {
+                                // Fallback pour les navigateurs qui ne supportent pas clipboard API
+                                const textArea = document.createElement('textarea');
+                                textArea.value = fullUrl;
+                                textArea.style.position = 'fixed';
+                                textArea.style.left = '-999999px';
+                                document.body.appendChild(textArea);
+                                textArea.select();
+                                try {
+                                  document.execCommand('copy');
+                                  setCopiedAddress(fullUrl);
+                                  setTimeout(() => setCopiedAddress(null), 2000);
+                                } catch (err) {
+                                  console.error('Erreur lors de la copie:', err);
+                                }
+                                document.body.removeChild(textArea);
+                              }
+                            } catch (err) {
+                              console.error('Erreur lors de la copie:', err);
+                            }
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            background: isCopied ? '#4caf50' : '#fff',
+                            color: isCopied ? '#fff' : '#666',
+                            border: isCopied ? '1px solid #4caf50' : '1px solid #ddd',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            fontWeight: '500',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title="Copier l'adresse"
+                        >
+                          <FontAwesomeIcon icon={isCopied ? faCheck : faCopy} />
+                          {isCopied ? 'Copié !' : 'Copier'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Modal Détail du Stockage */}
+      {showStorageDetail && (
+        <div 
+          className="storage-detail-overlay"
+          onClick={() => setShowStorageDetail(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}
+        >
+          <div 
+            className="storage-detail-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff',
+              borderRadius: '16px',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              padding: '24px 24px 16px',
+              borderBottom: '1px solid #f0f0f0'
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '600' }}>Stockage</h2>
+                <button
+                  onClick={() => setShowStorageDetail(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '28px',
+                    cursor: 'pointer',
+                    color: '#666',
+                    padding: '0',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              {storageDetail && (
+                <div style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
+                  {storageDetail.summary.usedFormatted} utilisés sur {storageDetail.summary.totalFormatted}
+                </div>
+              )}
+            </div>
+
+            {/* État de chargement ou contenu */}
+            {storageDetailLoading ? (
+              <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: '16px', color: '#666', marginBottom: '12px' }}>
+                  Analyse du stockage en cours...
+                </div>
+                <div style={{ fontSize: '14px', color: '#999' }}>
+                  Cela peut prendre quelques secondes
+                </div>
+              </div>
+            ) : storageDetail ? (
+              <>
+                {/* Barre de visualisation */}
+                <div style={{ padding: '24px' }}>
+              <div style={{
+                height: '40px',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                display: 'flex',
+                background: '#f0f0f0'
+              }}>
+                {/* Système */}
+                <div style={{
+                  width: `${(storageDetail.summary.system / storageDetail.summary.total) * 100}%`,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  transition: 'width 0.3s'
+                }} />
+                {/* Apps */}
+                <div style={{
+                  width: `${(storageDetail.summary.apps / storageDetail.summary.total) * 100}%`,
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  transition: 'width 0.3s'
+                }} />
+                {/* Autres */}
+                <div style={{
+                  width: `${(storageDetail.summary.others / storageDetail.summary.total) * 100}%`,
+                  background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                  transition: 'width 0.3s'
+                }} />
+              </div>
+
+              {/* Légende */}
+              <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    }} />
+                    <span style={{ fontSize: '14px' }}>Système</span>
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: '600' }}>
+                    {storageDetail.summary.systemFormatted}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
+                    }} />
+                    <span style={{ fontSize: '14px' }}>Applications</span>
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: '600' }}>
+                    {storageDetail.summary.appsFormatted}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
+                    }} />
+                    <span style={{ fontSize: '14px' }}>Autres</span>
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: '600' }}>
+                    {storageDetail.summary.othersFormatted}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Liste des applications */}
+            <div style={{
+              padding: '0 24px 24px',
+              borderTop: '1px solid #f0f0f0'
+            }}>
+              <h3 style={{ margin: '16px 0 12px', fontSize: '18px', fontWeight: '600' }}>
+                Applications ({storageDetail.apps.length})
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {storageDetail.apps.map((app) => {
+                  const serverUrl = getServerUrl(accessMode);
+                  return (
+                    <div
+                      key={app.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px',
+                        background: '#f9f9f9',
+                        borderRadius: '8px',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = '#f9f9f9'}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        {app.icon && (
+                          <img
+                            src={`${serverUrl}${app.icon}`}
+                            alt={app.name}
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '8px',
+                              objectFit: 'cover'
+                            }}
+                          />
+                        )}
+                        <span style={{ fontSize: '15px', fontWeight: '500' }}>{app.name}</span>
+                      </div>
+                      <span style={{ fontSize: '15px', fontWeight: '600', color: '#666' }}>
+                        {app.sizeFormatted}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
