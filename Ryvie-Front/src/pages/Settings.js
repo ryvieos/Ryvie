@@ -2146,7 +2146,8 @@ const Settings = () => {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 10000,
-            padding: '20px'
+            padding: '20px',
+            animation: 'fadeIn 0.3s ease-out'
           }}
         >
           <div 
@@ -2159,7 +2160,8 @@ const Settings = () => {
               width: '100%',
               maxHeight: '90vh',
               overflow: 'auto',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              animation: 'modalSlideUp 0.4s ease-out'
             }}
           >
             {/* Header */}
@@ -2202,6 +2204,15 @@ const Settings = () => {
             {/* État de chargement ou contenu */}
             {storageDetailLoading ? (
               <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+                <div style={{
+                  width: '50px',
+                  height: '50px',
+                  border: '4px solid rgba(0, 0, 0, 0.1)',
+                  borderTop: '4px solid #1976d2',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                  margin: '0 auto 20px'
+                }}></div>
                 <div style={{ fontSize: '16px', color: '#666', marginBottom: '12px' }}>
                   Analyse du stockage en cours...
                 </div>
@@ -2210,7 +2221,7 @@ const Settings = () => {
                 </div>
               </div>
             ) : storageDetail ? (
-              <>
+              <div style={{ animation: 'fadeIn 0.5s ease-out' }}>
                 {/* Barre de visualisation */}
                 <div style={{ padding: '24px' }}>
               <div style={{
@@ -2224,25 +2235,28 @@ const Settings = () => {
                 <div style={{
                   width: `${(storageDetail.summary.system / storageDetail.summary.total) * 100}%`,
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  transition: 'width 0.3s'
+                  transition: 'width 0.3s',
+                  animation: 'progressFill 0.8s ease-out'
                 }} />
                 {/* Apps */}
                 <div style={{
                   width: `${(storageDetail.summary.apps / storageDetail.summary.total) * 100}%`,
                   background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                  transition: 'width 0.3s'
+                  transition: 'width 0.3s',
+                  animation: 'progressFill 0.8s ease-out 0.1s both'
                 }} />
                 {/* Autres */}
                 <div style={{
                   width: `${(storageDetail.summary.others / storageDetail.summary.total) * 100}%`,
                   background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                  transition: 'width 0.3s'
+                  transition: 'width 0.3s',
+                  animation: 'progressFill 0.8s ease-out 0.2s both'
                 }} />
               </div>
 
               {/* Légende */}
               <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.3s both' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{
                       width: '12px',
@@ -2256,7 +2270,7 @@ const Settings = () => {
                     {storageDetail.summary.systemFormatted}
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.35s both' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{
                       width: '12px',
@@ -2270,7 +2284,7 @@ const Settings = () => {
                     {storageDetail.summary.appsFormatted}
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.4s both' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{
                       width: '12px',
@@ -2296,7 +2310,7 @@ const Settings = () => {
                 Applications ({storageDetail.apps.length})
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {storageDetail.apps.map((app) => {
+                {storageDetail.apps.map((app, idx) => {
                   const serverUrl = getServerUrl(accessMode);
                   return (
                     <div
@@ -2308,7 +2322,8 @@ const Settings = () => {
                         padding: '12px',
                         background: '#f9f9f9',
                         borderRadius: '8px',
-                        transition: 'background 0.2s'
+                        transition: 'background 0.2s',
+                        animation: `slideInLeft 0.4s ease-out ${idx * 0.05}s both`
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
                       onMouseLeave={(e) => e.currentTarget.style.background = '#f9f9f9'}
@@ -2336,7 +2351,7 @@ const Settings = () => {
                 })}
               </div>
             </div>
-              </>
+              </div>
             ) : null}
           </div>
         </div>
