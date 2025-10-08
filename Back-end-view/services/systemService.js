@@ -34,15 +34,15 @@ async function getServerInfo() {
     totalUsed = systemPartitionSize;
     
     // Ajouter l'espace réellement utilisé dans /data via du
+    // Timeout réduit à 5s pour éviter de bloquer l'API, fallback sur dataPartition.used
     try {
-      const { stdout } = await execPromise('sudo du -sb /data 2>/dev/null | cut -f1', { timeout: 60000 });
+      const { stdout } = await execPromise('sudo du -sb /data 2>/dev/null | cut -f1', { timeout: 5000 });
       const dataUsageBytes = parseInt(stdout.trim());
       if (dataUsageBytes && !isNaN(dataUsageBytes)) {
         totalUsed += dataUsageBytes / 1e9;
       }
     } catch (error) {
-      console.error('Erreur lors du calcul de l\'espace /data:', error.message);
-      // Fallback sur dataPartition.used si du échoue
+      // Fallback sur dataPartition.used si du échoue ou timeout
       if (dataPartition) {
         totalUsed += dataPartition.used / 1e9;
       }

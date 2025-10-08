@@ -271,7 +271,9 @@ const Settings = () => {
     // Fonction pour récupérer les informations serveur
     const fetchServerInfo = async () => {
       try {
-        const response = await axios.get(`${baseUrl}/api/server-info`);
+        const response = await axios.get(`${baseUrl}/api/server-info`, {
+          timeout: 15000 // Timeout augmenté à 15s pour les calculs de stockage
+        });
         console.log('Informations serveur reçues:', response.data);
         updateServerStats(response.data);
       } catch (error) {
@@ -282,8 +284,8 @@ const Settings = () => {
     // Appel initial
     fetchServerInfo();
     
-    // Configuration de l'intervalle pour les mises à jour régulières
-    const intervalId = setInterval(fetchServerInfo, 2000);
+    // Configuration de l'intervalle pour les mises à jour régulières (toutes les 5s au lieu de 2s)
+    const intervalId = setInterval(fetchServerInfo, 5000);
     
     // Nettoyage lors du démontage du composant
     return () => {

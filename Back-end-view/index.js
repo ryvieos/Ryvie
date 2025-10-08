@@ -151,6 +151,17 @@ async function startServer() {
     realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
     await realtime.initializeActiveContainers();
 
+    // Générer les manifests des applications au démarrage
+    console.log('🔧 Génération des manifests des applications...');
+    try {
+      const { execSync } = require('child_process');
+      const manifestScript = require('path').join(__dirname, '..', 'generate-manifests.js');
+      execSync(`node ${manifestScript}`, { stdio: 'inherit' });
+      console.log('✅ Manifests générés avec succès');
+    } catch (manifestError) {
+      console.error('⚠️  Erreur lors de la génération des manifests:', manifestError.message);
+    }
+
     // Synchroniser les fonds d'écran au démarrage
     syncBackgrounds();
     
