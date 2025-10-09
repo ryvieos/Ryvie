@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../styles/Settings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
@@ -120,9 +120,42 @@ const Settings = () => {
   ]);
 
   const [changeStatus, setChangeStatus] = useState({ show: false, success: false });
+  const [toasts, setToasts] = useState([]);
+  const [confirmDialog, setConfirmDialog] = useState({ show: false, title: '', message: '', onConfirm: null });
   const [tokenExpiration, setTokenExpiration] = useState(15); // En minutes, par défaut 15
+  
+  // Fonction pour afficher un toast moderne
+  const showToast = (message, type = 'success') => {
+    const id = Date.now();
+    const newToast = { id, message, type };
+    setToasts(prev => [...prev, newToast]);
+    
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
+  
+  // Fonction pour afficher une confirmation moderne
+  const showConfirm = (title, message) => {
+    return new Promise((resolve) => {
+      setConfirmDialog({
+        show: true,
+        title,
+        message,
+        onConfirm: () => {
+          setConfirmDialog({ show: false, title: '', message: '', onConfirm: null });
+          resolve(true);
+        },
+        onCancel: () => {
+          setConfirmDialog({ show: false, title: '', message: '', onConfirm: null });
+          resolve(false);
+        }
+      });
+    });
+  };
   const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran
   const [uploadingBackground, setUploadingBackground] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [customBackgrounds, setCustomBackgrounds] = useState([]); // Liste des fonds personnalisés
   const [presetBackgrounds, setPresetBackgrounds] = useState(() => {
     // Charger depuis le cache localStorage au démarrage
@@ -472,53 +505,42 @@ const Settings = () => {
       await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: newBackground });
       
       setBackgroundImage(newBackground);
-      setChangeStatus({
-        show: true,
-        success: true,
-        message: `✓ Fond d'écran modifié`
-      });
-      
-      setTimeout(() => {
-        setChangeStatus({ show: false, success: false, message: '' });
-      }, 3000);
+      showToast('Fond d\'écran modifié', 'success');
     } catch (error) {
       console.error('[Settings] Erreur changement fond d\'écran:', error);
-      setChangeStatus({
-        show: true,
-        success: false,
-        message: `✗ Erreur lors de la modification`
-      });
-      
-      setTimeout(() => {
-        setChangeStatus({ show: false, success: false, message: '' });
-      }, 5000);
+      showToast('Erreur lors de la modification', 'error');
     }
   };
 
   // Fonction pour uploader un fond d'écran personnalisé
   const handleBackgroundUpload = async (event) => {
-    const file = event.target.files?.[0];
+    let files = [];
+    
+    if (event instanceof File) {
+      files = [event];
+    } else if (event.target?.files) {
+      files = Array.from(event.target.files);
+    }
+    
+    if (files.length === 0) return;
+    
+    for (const file of files) {
+      await uploadSingleBackground(file);
+    }
+  };
+  
+  const uploadSingleBackground = async (file) => {
     if (!file) return;
     
     // Vérifier le type de fichier
     if (!file.type.startsWith('image/')) {
-      setChangeStatus({
-        show: true,
-        success: false,
-        message: '✗ Veuillez sélectionner une image'
-      });
-      setTimeout(() => setChangeStatus({ show: false, success: false, message: '' }), 3000);
+      showToast('Veuillez sélectionner une image', 'error');
       return;
     }
     
     // Vérifier la taille (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setChangeStatus({
-        show: true,
-        success: false,
-        message: '✗ Image trop grande (max 5MB)'
-      });
-      setTimeout(() => setChangeStatus({ show: false, success: false, message: '' }), 3000);
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Image trop grande (max 10MB)', 'error');
       return;
     }
     
@@ -547,38 +569,67 @@ const Settings = () => {
         setCustomBackgrounds(backgroundsResponse.data.backgrounds);
       }
       
-      setChangeStatus({
-        show: true,
-        success: true,
-        message: `✓ Fond d'écran personnalisé uploadé`
-      });
-      
-      setTimeout(() => {
-        setChangeStatus({ show: false, success: false, message: '' });
-      }, 3000);
+      showToast(`${file.name} uploadé avec succès`, 'success');
     } catch (error) {
       console.error('[Settings] Erreur upload fond d\'écran:', error);
-      setChangeStatus({
-        show: true,
-        success: false,
-        message: `✗ Erreur lors de l'upload`
-      });
-      
-      setTimeout(() => {
-        setChangeStatus({ show: false, success: false, message: '' });
-      }, 5000);
+      showToast('Erreur lors de l\'upload', 'error');
     } finally {
       setUploadingBackground(false);
-      // Réinitialiser l'input
-      event.target.value = '';
+    }
+  };
+  
+  // Handlers pour le drag and drop
+  const dragCounter = useRef(0);
+  
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  
+  const handleDragIn = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setDragActive(true);
+    }
+  };
+  
+  const handleDragOut = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setDragActive(false);
+    }
+  };
+  
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+      
+      if (files.length === 0) {
+        showToast('Veuillez déposer des images', 'error');
+        return;
+      }
+      
+      files.forEach(file => handleBackgroundUpload(file));
     }
   };
 
   // Fonction pour supprimer un fond personnalisé
   const handleDeleteBackground = async (filename) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce fond d\'écran ?')) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      'Supprimer le fond d\'écran',
+      'Êtes-vous sûr de vouloir supprimer ce fond d\'écran ?'
+    );
+    
+    if (!confirmed) return;
     
     try {
       const serverUrl = getServerUrl(accessMode);
@@ -596,26 +647,10 @@ const Settings = () => {
         setBackgroundImage(prefsResponse.data.backgroundImage);
       }
       
-      setChangeStatus({
-        show: true,
-        success: true,
-        message: `✓ Fond d'écran supprimé`
-      });
-      
-      setTimeout(() => {
-        setChangeStatus({ show: false, success: false, message: '' });
-      }, 3000);
+      showToast('Fond d\'écran supprimé', 'success');
     } catch (error) {
       console.error('[Settings] Erreur suppression fond:', error);
-      setChangeStatus({
-        show: true,
-        success: false,
-        message: `✗ Erreur lors de la suppression`
-      });
-      
-      setTimeout(() => {
-        setChangeStatus({ show: false, success: false, message: '' });
-      }, 5000);
+      showToast('Erreur lors de la suppression', 'error');
     }
   };
 
@@ -630,30 +665,13 @@ const Settings = () => {
       console.log('[Settings] Réponse serveur:', response.data);
       
       setTokenExpiration(minutes);
-      setChangeStatus({
-        show: true,
-        success: true,
-        message: `✓ Durée de session modifiée: ${minutes} minute${minutes > 1 ? 's' : ''}`
-      });
-      
-      setTimeout(() => {
-        setChangeStatus({ show: false, success: false, message: '' });
-      }, 3000);
+      showToast(`Durée de session modifiée: ${minutes} minute${minutes > 1 ? 's' : ''}`, 'success');
     } catch (error) {
       console.error('[Settings] Erreur lors du changement de durée de session:', error);
       console.error('[Settings] Détails erreur:', error.response?.data);
       
       const errorMessage = error.response?.data?.error || 'Erreur lors de la modification';
-      
-      setChangeStatus({
-        show: true,
-        success: false,
-        message: `✗ ${errorMessage}`
-      });
-      
-      setTimeout(() => {
-        setChangeStatus({ show: false, success: false, message: '' });
-      }, 5000);
+      showToast(errorMessage, 'error');
     }
   };
 
@@ -720,20 +738,13 @@ const Settings = () => {
             ...prev,
             downloadPath: newPath
           }));
-          setChangeStatus({ show: true, success: true });
-          setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+          showToast('Dossier de téléchargement modifié', 'success');
         } else {
-          setChangeStatus({ show: true, success: false });
-          setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+          showToast('Erreur lors de la modification', 'error');
         }
       } else {
         // En mode web, afficher un message informatif
-        setChangeStatus({ 
-          show: true, 
-          success: false, 
-          message: "Modification du dossier de téléchargement non disponible en mode web" 
-        });
-        setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+        showToast('Modification du dossier de téléchargement non disponible en mode web', 'info');
       }
     } else if (setting === 'darkMode') {
       // Gestion spéciale pour le mode sombre
@@ -948,9 +959,12 @@ const Settings = () => {
 
   // Fonction pour redémarrer le serveur
   const handleServerRestart = async () => {
-    if (!window.confirm('⚠️ ATTENTION : Êtes-vous sûr de vouloir redémarrer complètement le serveur ?\n\nCette action va redémarrer le système entier et interrompre tous les services pendant quelques minutes.')) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      '⚠️ Redémarrage du Système',
+      'Êtes-vous sûr de vouloir redémarrer complètement le serveur ? Cette action va redémarrer le système entier et interrompre tous les services pendant quelques minutes.'
+    );
+    
+    if (!confirmed) return;
     
     try {
       const serverUrl = getServerUrl(accessMode);
@@ -963,16 +977,7 @@ const Settings = () => {
     } catch (error) {
       console.error('[Settings] Erreur lors du redémarrage du serveur:', error);
       const errorMessage = error.response?.data?.error || 'Erreur lors du redémarrage du serveur';
-      
-      setChangeStatus({
-        show: true,
-        success: false,
-        message: `✗ ${errorMessage}`
-      });
-      
-      setTimeout(() => {
-        setChangeStatus({ show: false, success: false, message: '' });
-      }, 5000);
+      showToast(errorMessage, 'error');
     }
   };
 
@@ -1059,16 +1064,38 @@ const Settings = () => {
       <section className="settings-section">
         <h2>Personnalisation</h2>
         <div className="settings-grid">
-          <div className="settings-card">
-            <h3>Fond d'écran</h3>
-            <p className="setting-description">
-              Personnalisez l'arrière-plan de votre page d'accueil
-            </p>
-            {changeStatus.show && (
-              <div className={`status-message ${changeStatus.success ? 'success' : 'error'}`} style={{ marginBottom: '12px' }}>
-                {changeStatus.message}
+          <div 
+            className="settings-card"
+            onDragEnter={handleDragIn}
+            onDragLeave={handleDragOut}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            style={{
+              position: 'relative',
+              border: dragActive ? '3px dashed #4a90e2' : undefined,
+              background: dragActive ? 'linear-gradient(135deg, rgba(74, 144, 226, 0.08) 0%, rgba(74, 144, 226, 0.03) 100%)' : undefined,
+              transition: 'all 0.3s ease',
+              boxShadow: dragActive ? '0 8px 24px rgba(74, 144, 226, 0.15)' : undefined
+            }}
+          >
+            {dragActive && (
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                fontSize: '64px',
+                zIndex: 10,
+                pointerEvents: 'none',
+                animation: 'bounce 0.5s ease infinite'
+              }}>
+                📥
               </div>
             )}
+            <h3>Fond d'écran</h3>
+            <p className="setting-description">
+              Personnalisez l'arrière-plan de votre page d'accueil. Vous pouvez ajouter plusieurs fonds d'écran.
+            </p>
             <div className="background-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '16px' }}>
               {/* Afficher les fonds prédéfinis depuis public/images/backgrounds */}
               {presetBackgrounds.map((preset) => (
@@ -1095,15 +1122,71 @@ const Settings = () => {
                 </div>
               ))}
               
-              {/* Option pour uploader son propre fond */}
+              {/* Fonds personnalisés uploadés - affichés dans la même grille */}
+              {customBackgrounds.map((bg) => (
+                <div
+                  key={bg.id}
+                  className={`background-option ${backgroundImage === bg.id ? 'active' : ''}`}
+                  style={{
+                    height: '80px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    border: backgroundImage === bg.id ? '3px solid #4a90e2' : '2px solid #ddd',
+                    background: `url(${getServerUrl(accessMode)}/api/backgrounds/${bg.filename}) center/cover`,
+                    position: 'relative',
+                    transition: 'all 0.2s'
+                  }}
+                  onClick={() => handleBackgroundChange(bg.id)}
+                >
+                  {backgroundImage === bg.id && (
+                    <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+                  )}
+                  {/* Bouton supprimer - uniquement sur les fonds personnalisés */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteBackground(bg.filename);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: '4px',
+                      left: '4px',
+                      background: 'rgba(220, 38, 38, 0.9)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: '24px',
+                      height: '24px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      padding: 0,
+                      transition: 'all 0.2s',
+                      opacity: 0.8
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+                    title="Supprimer ce fond"
+                  >
+                    ×
+                  </button>
+                  <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Perso
+                  </div>
+                </div>
+              ))}
+              
+              {/* Bouton pour ajouter un nouveau fond */}
               <div 
-                className={`background-option ${backgroundImage?.startsWith('custom-') ? 'active' : ''}`}
+                className="background-option"
                 onClick={() => document.getElementById('background-upload-input').click()}
                 style={{
                   height: '80px',
                   borderRadius: '8px',
                   cursor: 'pointer',
-                  border: backgroundImage?.startsWith('custom-') ? '3px solid #4a90e2' : '2px dashed #999',
+                  border: '2px dashed #999',
                   background: '#f5f5f5',
                   position: 'relative',
                   transition: 'all 0.2s',
@@ -1115,84 +1198,23 @@ const Settings = () => {
               >
                 {uploadingBackground ? (
                   <div style={{ color: '#666', fontSize: '12px' }}>Upload...</div>
-                ) : backgroundImage?.startsWith('custom-') ? (
-                  <>
-                    <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
-                    <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Personnalisé</div>
-                  </>
                 ) : (
                   <>
                     <div style={{ fontSize: '32px', color: '#999' }}>+</div>
-                    <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Upload</div>
+                    <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Ajouter</div>
                   </>
                 )}
               </div>
+              
               <input
                 id="background-upload-input"
                 type="file"
                 accept="image/*"
+                multiple
                 style={{ display: 'none' }}
                 onChange={handleBackgroundUpload}
               />
             </div>
-            
-            {/* Liste des fonds personnalisés */}
-            {customBackgrounds.length > 0 && (
-              <div style={{ marginTop: '24px' }}>
-                <h4 style={{ marginBottom: '12px', fontSize: '14px', color: '#666' }}>Mes fonds d'écran ({customBackgrounds.length})</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px' }}>
-                  {customBackgrounds.map((bg) => (
-                    <div
-                      key={bg.id}
-                      className={`background-option ${backgroundImage === bg.id ? 'active' : ''}`}
-                      style={{
-                        height: '80px',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        border: backgroundImage === bg.id ? '3px solid #4a90e2' : '2px solid #ddd',
-                        background: `url(${getServerUrl(accessMode)}/api/backgrounds/${bg.filename}) center/cover`,
-                        position: 'relative',
-                        transition: 'all 0.2s'
-                      }}
-                      onClick={() => handleBackgroundChange(bg.id)}
-                    >
-                      {backgroundImage === bg.id && (
-                        <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
-                      )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteBackground(bg.filename);
-                        }}
-                        style={{
-                          position: 'absolute',
-                          top: '4px',
-                          left: '4px',
-                          background: 'rgba(255, 0, 0, 0.8)',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '50%',
-                          width: '20px',
-                          height: '20px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          padding: 0
-                        }}
-                        title="Supprimer"
-                      >
-                        ×
-                      </button>
-                      <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {new Date(bg.uploadDate).toLocaleDateString()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </section>
@@ -2452,6 +2474,216 @@ const Settings = () => {
           </div>
         </section>
       )}
+
+      {/* Système de Toast Notifications Moderne */}
+      <div style={{
+        position: 'fixed',
+        bottom: '24px',
+        right: '24px',
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        maxWidth: '400px'
+      }}>
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            style={{
+              background: toast.type === 'success' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 
+                          toast.type === 'error' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' :
+                          'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              color: 'white',
+              padding: '16px 20px',
+              borderRadius: '12px',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              minWidth: '320px',
+              animation: 'slideInRight 0.3s ease-out, fadeOut 0.5s ease-in 3.5s',
+              fontSize: '14px',
+              fontWeight: '500',
+              backdropFilter: 'blur(10px)'
+            }}
+          >
+            <span style={{ fontSize: '20px' }}>
+              {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✗' : 'ℹ'}
+            </span>
+            <span style={{ flex: 1 }}>{toast.message}</span>
+            <button
+              onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                border: 'none',
+                color: 'white',
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '16px',
+                padding: 0,
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Dialog de Confirmation Moderne */}
+      {confirmDialog.show && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+          onClick={confirmDialog.onCancel}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '480px',
+              width: '90%',
+              boxShadow: '0 24px 48px rgba(0, 0, 0, 0.2)',
+              animation: 'scaleIn 0.3s ease-out'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{
+              margin: '0 0 16px 0',
+              fontSize: '24px',
+              fontWeight: '600',
+              color: '#1f2937'
+            }}>
+              {confirmDialog.title}
+            </h2>
+            <p style={{
+              margin: '0 0 32px 0',
+              fontSize: '16px',
+              lineHeight: '1.6',
+              color: '#6b7280'
+            }}>
+              {confirmDialog.message}
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={confirmDialog.onCancel}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '10px',
+                  border: '2px solid #e5e7eb',
+                  background: 'white',
+                  color: '#6b7280',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f9fafb';
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'white';
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmDialog.onConfirm}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                  color: 'white',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(400px);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        
+        @keyframes fadeOut {
+          from {
+            opacity: 1;
+          }
+          to {
+            opacity: 0;
+          }
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        
+        @keyframes scaleIn {
+          from {
+            transform: scale(0.9);
+            opacity: 0;
+          }
+          to {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 };
