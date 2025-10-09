@@ -49,16 +49,28 @@ const ContextMenuPortal = ({ children, x, y, onClose }) => {
   return ReactDOM.createPortal(menu, document.body);
 };
 // Composant Icon
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin }) => {
+const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus }) => {
   const appConfig = appsConfig[id] || {};
   const [imgSrc, setImgSrc] = React.useState(src);
   const [imgError, setImgError] = React.useState(false);
+  const [pendingAction, setPendingAction] = React.useState(null); // 'stopping', 'starting', null
   
   // Mettre à jour l'image source quand elle change
   React.useEffect(() => {
     setImgSrc(src);
     setImgError(false);
   }, [src]);
+  
+  // Réinitialiser pendingAction quand le statut final est atteint
+  React.useEffect(() => {
+    if (pendingAction === 'stopping' && appStatusData?.status === 'stopped') {
+      console.log(`[Icon] ${appConfig.name} - Arrêt terminé, reset pendingAction`);
+      setPendingAction(null);
+    } else if (pendingAction === 'starting' && appStatusData?.status === 'running') {
+      console.log(`[Icon] ${appConfig.name} - Démarrage terminé, reset pendingAction`);
+      setPendingAction(null);
+    }
+  }, [appStatusData?.status, pendingAction, appConfig.name]);
   
   // Gérer les erreurs de chargement d'image
   const handleImageError = () => {
@@ -96,17 +108,38 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     let backgroundColor = '#dc3545'; // Rouge par défaut (stopped ou pas de données)
     let animation = 'none';
     
-    // Si on a des données de statut, utiliser la vraie couleur
-    if (appStatusData && appStatusData.status) {
-      const { status } = appStatusData;
-      
-      if (status === 'running') {
-        backgroundColor = '#28a745'; // Vert (tous les containers healthy)
-      } else if (status === 'starting') {
+    // Si on a une action en cours, forcer certains statuts
+    if (pendingAction === 'stopping') {
+      // Pendant un arrêt, ne jamais revenir au vert
+      const currentStatus = appStatusData?.status;
+      if (currentStatus === 'stopped') {
+        backgroundColor = '#dc3545'; // Rouge (arrêté)
+      } else {
+        backgroundColor = '#fd7e14'; // Orange foncé (arrêt en cours)
+        animation = 'pulse 1.5s ease-in-out infinite';
+      }
+    } else if (pendingAction === 'starting') {
+      // Pendant un démarrage/restart
+      const currentStatus = appStatusData?.status;
+      if (currentStatus === 'running') {
+        backgroundColor = '#28a745'; // Vert (démarré)
+      } else {
         backgroundColor = '#ffc107'; // Orange (démarrage)
         animation = 'pulse 1.5s ease-in-out infinite';
-      } else if (status === 'partial') {
-        backgroundColor = '#fd7e14'; // Orange foncé (partiellement running)
+      }
+    } else {
+      // Pas d'action en cours, utiliser le statut réel
+      if (appStatusData && appStatusData.status) {
+        const { status } = appStatusData;
+        
+        if (status === 'running') {
+          backgroundColor = '#28a745'; // Vert (tous les containers healthy)
+        } else if (status === 'starting') {
+          backgroundColor = '#ffc107'; // Orange (démarrage)
+          animation = 'pulse 1.5s ease-in-out infinite';
+        } else if (status === 'partial') {
+          backgroundColor = '#fd7e14'; // Orange foncé (partiellement running)
+        }
       }
     }
 
@@ -172,12 +205,88 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
   const handleAppAction = async (action) => {
     setActiveContextMenu(null);
     
+    // Vérifier que l'ID existe
+    if (!appConfig.id) {
+      console.error(`[Icon] Impossible d'effectuer ${action}: appConfig.id manquant pour`, id);
+      console.error('[Icon] appConfig:', appConfig);
+      alert(`Erreur: ID de l'application manquant (${id})`);
+      return;
+    }
+    
+    console.log(`[Icon] ${action} de ${appConfig.name} (ID: ${appConfig.id})...`);
+    
+    // Définir l'action en cours pour verrouiller les transitions de statut
+    if (action === 'stop') {
+      setPendingAction('stopping');
+    } else if (action === 'start' || action === 'restart') {
+      setPendingAction('starting');
+    }
+    
+    // MISE À JOUR OPTIMISTE IMMÉDIATE - AVANT l'appel API
+    if (setAppStatus && appConfig.id) {
+      const appKey = `app-${appConfig.id}`;
+      setAppStatus(prevStatus => {
+        const newStatus = { ...prevStatus };
+        
+        if (action === 'stop') {
+          console.log(`[Icon] ⏹️  ${appConfig.name} - Changement IMMÉDIAT du statut vers "partial" (arrêt en cours)`);
+          newStatus[appKey] = {
+            ...newStatus[appKey],
+            status: 'partial', // Orange (arrêt en cours)
+            progress: 50
+          };
+        } else if (action === 'start') {
+          console.log(`[Icon] ▶️  ${appConfig.name} - Changement IMMÉDIAT du statut vers "starting"`);
+          newStatus[appKey] = {
+            ...newStatus[appKey],
+            status: 'starting', // Orange (en cours de démarrage)
+            progress: 50
+          };
+        } else if (action === 'restart') {
+          console.log(`[Icon] 🔄 ${appConfig.name} - Changement IMMÉDIAT du statut vers "starting"`);
+          newStatus[appKey] = {
+            ...newStatus[appKey],
+            status: 'starting', // Orange (en cours de redémarrage)
+            progress: 50
+          };
+        }
+        
+        return newStatus;
+      });
+    }
+    
+    // Puis faire l'appel API en arrière-plan
     try {
       const serverUrl = getServerUrl();
-      const response = await axios.post(`${serverUrl}/api/apps/${appConfig.id}/${action}`);
-      console.log(`[Icon] ${action} ${appConfig.name}:`, response.data);
+      const url = `${serverUrl}/api/apps/${appConfig.id}/${action}`;
+      console.log(`[Icon] Appel API: ${url}`);
+      
+      // Timeout de 120 secondes pour les opérations start/stop/restart (conteneurs multiples)
+      const response = await axios.post(url, {}, { timeout: 120000 });
+      console.log(`[Icon] ✓ ${action} ${appConfig.name} terminé:`, response.data);
+      
     } catch (error) {
-      console.error(`[Icon] Erreur ${action}:`, error);
+      console.error(`[Icon] ❌ Erreur lors du ${action} de ${appConfig.name}:`, error);
+      console.error(`[Icon] Détails:`, error.response?.data || error.message);
+      
+      // Réinitialiser l'action en cours
+      setPendingAction(null);
+      
+      // En cas d'erreur, remettre le statut précédent
+      if (setAppStatus && appConfig.id && appStatusData) {
+        console.log(`[Icon] Restauration du statut précédent suite à l'erreur`);
+        setAppStatus(prevStatus => ({
+          ...prevStatus,
+          [`app-${appConfig.id}`]: appStatusData
+        }));
+      }
+      
+      // Message d'erreur plus détaillé
+      let errorMsg = error.response?.data?.message || error.message;
+      if (error.code === 'ECONNABORTED') {
+        errorMsg = 'Timeout dépassé - l\'opération prend plus de 2 minutes';
+      }
+      alert(`Erreur lors du ${action} de ${appConfig.name}: ${errorMsg}`);
     }
   };
 
@@ -224,7 +333,7 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
 };
 
 // Composant Zone
-const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appsConfig, iconImages, activeContextMenu, setActiveContextMenu, isAdmin }) => {
+const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appsConfig, iconImages, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus }) => {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: ItemTypes.ICON,
     canDrop: () => true,
@@ -267,6 +376,7 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, apps
             activeContextMenu={activeContextMenu}
             setActiveContextMenu={setActiveContextMenu}
             isAdmin={isAdmin}
+            setAppStatus={setAppStatus}
           />
         )}
       </div>
@@ -1256,6 +1366,7 @@ const Home = () => {
                   activeContextMenu={activeContextMenu}
                   setActiveContextMenu={setActiveContextMenu}
                   isAdmin={isAdmin}
+                  setAppStatus={setAppStatus}
                 />
               </div>
               <div 
@@ -1296,6 +1407,7 @@ const Home = () => {
                   activeContextMenu={activeContextMenu}
                   setActiveContextMenu={setActiveContextMenu}
                   isAdmin={isAdmin}
+                  setAppStatus={setAppStatus}
                   className="zone-right"
                 />
               </div>
@@ -1315,6 +1427,7 @@ const Home = () => {
                   activeContextMenu={activeContextMenu}
                   setActiveContextMenu={setActiveContextMenu}
                   isAdmin={isAdmin}
+                  setAppStatus={setAppStatus}
                 />
               ))}
             </div>

@@ -112,14 +112,9 @@ function searchDockerComposeRecursive(baseDir, currentDir, depth, maxDepth) {
 }
 
 /**
- * Détecte le type de lancement (docker-compose ou custom)
+ * Détecte le type de lancement (docker-compose standard pour toutes les apps)
  */
 function detectLaunchType(appId, dockerComposePath) {
-  // rDrive nécessite un lancement custom
-  if (appId === 'rdrive' || dockerComposePath.includes('tdrive')) {
-    return 'custom';
-  }
-  
   return 'docker-compose';
 }
 
@@ -276,11 +271,6 @@ function generateManifest(appData) {
     installedAt: new Date().toISOString()
   };
   
-  // Ajouter le script de lancement personnalisé si nécessaire
-  if (metadata.customLaunchScript) {
-    manifest.customLaunchScript = metadata.customLaunchScript;
-  }
-  
   // Créer le dossier de destination dans /data/config/manifests/
   const destDir = path.join(MANIFESTS_DIR, metadata.id);
   if (!fs.existsSync(destDir)) {
@@ -307,54 +297,7 @@ function generateManifest(appData) {
   fs.copyFileSync(iconPath, destIconPath);
   console.log(`   ✅ Icône copiée: ${destIconPath}`);
   
-  // Créer le script de lancement personnalisé pour rDrive
-  if (metadata.customLaunchScript) {
-    createCustomLaunchScript(destDir, metadata, appDir);
-  }
-  
   return manifest;
-}
-
-/**
- * Crée un script de lancement personnalisé pour les apps complexes (rDrive)
- */
-function createCustomLaunchScript(destDir, metadata, appDir) {
-  const scriptPath = path.join(destDir, metadata.customLaunchScript);
-  
-  let scriptContent = '';
-  
-  if (metadata.id === 'rdrive') {
-    scriptContent = `#!/bin/bash
-# Script de lancement personnalisé pour rDrive
-set -e
-
-RDRIVE_DIR="${appDir}/tdrive"
-cd "$RDRIVE_DIR"
-
-echo "🔹 Démarrage de OnlyOffice..."
-docker compose -f docker-compose.dev.onlyoffice.yml \\
-   -f docker-compose.onlyoffice-connector-override.yml \\
-   up -d
-
-echo "🔹 Build du service node..."
-docker compose -f docker-compose.minimal.yml build node
-
-echo "🔹 Démarrage du service node..."
-docker compose -f docker-compose.minimal.yml up -d node
-
-echo "🔹 Démarrage du service frontend..."
-docker compose -f docker-compose.minimal.yml up -d frontend
-
-echo "🔹 Démarrage du reste des services..."
-docker compose -f docker-compose.minimal.yml up -d
-
-echo "✅ rDrive lancé avec succès"
-`;
-  }
-  
-  fs.writeFileSync(scriptPath, scriptContent);
-  fs.chmodSync(scriptPath, '755');
-  console.log(`   ✅ Script de lancement créé: ${scriptPath}`);
 }
 
 /**

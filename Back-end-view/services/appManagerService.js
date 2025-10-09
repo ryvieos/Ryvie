@@ -258,20 +258,34 @@ async function startApp(appId) {
     console.log(`[appManager] ${appContainers.length} container(s) trouvé(s) pour ${appId}`);
     
     let startedCount = 0;
+    let errorCount = 0;
+    
     for (const container of appContainers) {
       const containerName = container.Names[0]?.replace('/', '');
       if (container.State !== 'running') {
-        console.log(`[appManager] Démarrage du container ${containerName}`);
-        await docker.getContainer(container.Id).start();
-        startedCount++;
+        try {
+          console.log(`[appManager] Démarrage du container ${containerName}...`);
+          await docker.getContainer(container.Id).start();
+          startedCount++;
+          console.log(`[appManager] ✓ Container ${containerName} démarré`);
+        } catch (startError) {
+          console.error(`[appManager] Erreur lors du démarrage de ${containerName}:`, startError.message);
+          errorCount++;
+        }
       } else {
         console.log(`[appManager] Container ${containerName} déjà démarré`);
       }
     }
     
+    const message = errorCount > 0 
+      ? `${manifest.name} démarré partiellement (${startedCount} container(s), ${errorCount} erreur(s))`
+      : `${manifest.name} démarré avec succès (${startedCount} container(s))`;
+    
     return { 
-      success: true, 
-      message: `${manifest.name} démarré avec succès (${startedCount} container(s))` 
+      success: errorCount === 0, 
+      message: message,
+      startedCount,
+      errorCount
     };
   } catch (error) {
     console.error(`[appManager] Erreur lors du démarrage de ${appId}:`, error.message);
@@ -304,20 +318,47 @@ async function stopApp(appId) {
     console.log(`[appManager] ${appContainers.length} container(s) trouvé(s) pour ${appId}`);
     
     let stoppedCount = 0;
+    let errorCount = 0;
+    
     for (const container of appContainers) {
       const containerName = container.Names[0]?.replace('/', '');
       if (container.State === 'running') {
-        console.log(`[appManager] Arrêt du container ${containerName}`);
-        await docker.getContainer(container.Id).stop();
-        stoppedCount++;
+        try {
+          console.log(`[appManager] Arrêt du container ${containerName}...`);
+          
+          // Timeout de 5 secondes avant SIGKILL (suffisant pour la plupart des apps)
+          await docker.getContainer(container.Id).stop({ t: 5 });
+          stoppedCount++;
+          console.log(`[appManager] ✓ Container ${containerName} arrêté`);
+          
+        } catch (stopError) {
+          console.error(`[appManager] Erreur lors de l'arrêt de ${containerName}:`, stopError.message);
+          
+          // Si l'arrêt normal échoue, tenter un kill forcé
+          try {
+            console.log(`[appManager] Tentative de kill forcé sur ${containerName}...`);
+            await docker.getContainer(container.Id).kill();
+            stoppedCount++;
+            console.log(`[appManager] ✓ Container ${containerName} killé avec succès`);
+          } catch (killError) {
+            console.error(`[appManager] Échec du kill forcé sur ${containerName}:`, killError.message);
+            errorCount++;
+          }
+        }
       } else {
         console.log(`[appManager] Container ${containerName} déjà arrêté`);
       }
     }
     
+    const message = errorCount > 0 
+      ? `${manifest.name} arrêté partiellement (${stoppedCount} container(s), ${errorCount} erreur(s))`
+      : `${manifest.name} arrêté avec succès (${stoppedCount} container(s))`;
+    
     return { 
-      success: true, 
-      message: `${manifest.name} arrêté avec succès (${stoppedCount} container(s))` 
+      success: errorCount === 0, 
+      message: message,
+      stoppedCount,
+      errorCount
     };
   } catch (error) {
     console.error(`[appManager] Erreur lors de l'arrêt de ${appId}:`, error.message);
@@ -330,9 +371,27 @@ async function stopApp(appId) {
  */
 async function restartApp(appId) {
   try {
-    await stopApp(appId);
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Attendre 2s
-    return await startApp(appId);
+    console.log(`[appManager] Redémarrage de ${appId}...`);
+    
+    // Arrêter l'app
+    const stopResult = await stopApp(appId);
+    if (!stopResult.success) {
+      console.warn(`[appManager] Arrêt partiel de ${appId}, poursuite du redémarrage...`);
+    }
+    
+    // Attendre 5 secondes pour que les conteneurs soient complètement arrêtés
+    console.log(`[appManager] Attente de 5 secondes...`);
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Redémarrer l'app
+    const startResult = await startApp(appId);
+    
+    return {
+      success: startResult.success,
+      message: `Redémarrage: ${stopResult.message} puis ${startResult.message}`,
+      stopResult,
+      startResult
+    };
   } catch (error) {
     console.error(`[appManager] Erreur lors du redémarrage de ${appId}:`, error.message);
     return { success: false, message: error.message };
