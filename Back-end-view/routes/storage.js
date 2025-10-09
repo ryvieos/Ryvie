@@ -3,6 +3,14 @@ const router = express.Router();
 const { spawn } = require('child_process');
 const { authenticateToken } = require('../middleware/auth');
 
+// Instance Socket.IO pour les logs en temps réel
+let io = null;
+
+// Fonction pour initialiser Socket.IO
+function setSocketIO(socketIO) {
+  io = socketIO;
+}
+
 /**
  * Utilitaire pour exécuter une commande shell et retourner le résultat
  * @param {string} command - La commande à exécuter
@@ -316,6 +324,8 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
     plan.push(`parted -s ${disk} name 1 ${nextPartLabel}`);
     plan.push(`parted -s ${disk} set 1 raid on`);
     plan.push(`partprobe ${disk} && udevadm settle`);
+    plan.push(`wipefs -a ${newPartitionPath}`);
+    plan.push(`udevadm settle --timeout=10 && sleep 2`);
     plan.push(`mdadm --zero-superblock ${newPartitionPath}`);
     plan.push(`mdadm --add ${array} ${newPartitionPath}`);
     plan.push(`mdadm --detail --scan > /etc/mdadm/mdadm.conf`);
@@ -359,6 +369,11 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
     };
     logs.push(logEntry);
     console.log(`[${type.toUpperCase()}] ${message}`);
+    
+    // Envoyer le log en temps réel via Socket.IO
+    if (io) {
+      io.emit('mdraid-log', logEntry);
+    }
   };
 
   try {
@@ -435,6 +450,8 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       log(`parted -s ${disk} name 1 ${nextPartLabel}`, 'info');
       log(`parted -s ${disk} set 1 raid on`, 'info');
       log(`partprobe ${disk} && udevadm settle`, 'info');
+      log(`wipefs -a ${newPartitionPath}`, 'info');
+      log(`udevadm settle --timeout=10 && sleep 2`, 'info');
       log(`mdadm --zero-superblock ${newPartitionPath}`, 'info');
       log(`mdadm --add ${array} ${newPartitionPath}`, 'info');
       log(`mdadm --detail --scan > /etc/mdadm/mdadm.conf`, 'info');
@@ -513,18 +530,138 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
     // Étape 4: Assainir & ajouter au RAID
     log('=== Step 4: Adding partition to RAID array ===', 'step');
     
-    // Nettoyer tout superbloc existant (peut échouer si aucun n'existe)
+    // Vérifier si la partition appartient déjà à un autre array RAID
     try {
-      log(`Checking for existing superblock on ${newPartitionPath}...`, 'info');
+      log(`Checking if ${newPartitionPath} belongs to an existing RAID array...`, 'info');
       const examineResult = await executeCommand('sudo', ['-n', 'mdadm', '--examine', newPartitionPath]);
+      
       if (examineResult.stdout.includes('Magic')) {
-        log(`Found existing mdadm superblock, zeroing it...`, 'info');
+        // Extraire le nom de l'array existant
+        const arrayMatch = examineResult.stdout.match(/Array\s+:\s+(\/dev\/md\d+)/);
+        const existingArray = arrayMatch ? arrayMatch[1] : null;
+        
+        log(`⚠️  Found existing RAID membership on ${newPartitionPath}`, 'warning');
+        if (existingArray) {
+          log(`Partition is member of ${existingArray}`, 'info');
+        }
+        
+        // Vérifier si l'array existe encore
+        try {
+          // Utiliser /proc/mdstat pour une détection fiable
+          const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+          const mdArrays = [];
+          const mdstatLines = mdstatResult.stdout.split('\n');
+          
+          for (const line of mdstatLines) {
+            // Les lignes des arrays commencent par "md" suivi d'un nombre
+            const match = line.match(/^(md\d+)\s*:/);
+            if (match) {
+              mdArrays.push('/dev/' + match[1]);
+            }
+          }
+          
+          log(`Detected active RAID arrays: ${mdArrays.join(', ')}`, 'info');
+          
+          for (const mdArray of mdArrays) {
+            if (mdArray === array) continue; // Skip l'array cible
+            
+            try {
+              const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdArray]);
+              if (detailResult.stdout.includes(newPartitionPath)) {
+                log(`Found ${newPartitionPath} in ${mdArray}, removing it...`, 'info');
+                
+                // Essayer de fail puis remove
+                try {
+                  await executeCommand('sudo', ['-n', 'mdadm', '--fail', mdArray, newPartitionPath]);
+                  log(`✓ Marked ${newPartitionPath} as failed in ${mdArray}`, 'success');
+                } catch (e) {
+                  log(`Note: Could not mark as failed (may already be): ${e.message}`, 'info');
+                }
+                
+                await executeCommand('sudo', ['-n', 'mdadm', '--remove', mdArray, newPartitionPath]);
+                log(`✓ Removed ${newPartitionPath} from ${mdArray}`, 'success');
+                
+                // Arrêter l'array s'il est vide/dégradé
+                try {
+                  const checkDetail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdArray]);
+                  if (checkDetail.stdout.includes('Total Devices : 0') || 
+                      checkDetail.stdout.includes('Total Devices : 1')) {
+                    log(`Stopping empty/degraded array ${mdArray}...`, 'info');
+                    await executeCommand('sudo', ['-n', 'mdadm', '--stop', mdArray]);
+                    log(`✓ Stopped ${mdArray}`, 'success');
+                    
+                    // Attendre que le kernel libère complètement le device
+                    await executeCommand('sleep', ['2']);
+                    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
+                  }
+                } catch (e) {
+                  log(`Note: Could not stop ${mdArray}: ${e.message}`, 'info');
+                }
+              }
+            } catch (e) {
+              // Array n'existe pas ou erreur, continuer
+            }
+          }
+        } catch (e) {
+          log(`Warning checking existing arrays: ${e.message}`, 'warning');
+        }
+        
+        // Nettoyer tous les arrays vides/dégradés restants
+        try {
+          const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+          const mdstatLines = mdstatResult.stdout.split('\n');
+          
+          for (const line of mdstatLines) {
+            const match = line.match(/^(md\d+)\s*:\s*active.*\[(\d+)\/(\d+)\]/);
+            if (match) {
+              const mdArray = '/dev/' + match[1];
+              const activeDevs = parseInt(match[3]);
+              
+              if (mdArray !== array && activeDevs <= 1) {
+                try {
+                  log(`Stopping orphaned/degraded array ${mdArray}...`, 'info');
+                  await executeCommand('sudo', ['-n', 'mdadm', '--stop', mdArray]);
+                  log(`✓ Stopped ${mdArray}`, 'success');
+                  await executeCommand('sleep', ['1']);
+                } catch (e) {
+                  log(`Note: Could not stop ${mdArray}: ${e.message}`, 'info');
+                }
+              }
+            }
+          }
+        } catch (e) {
+          log(`Warning cleaning orphaned arrays: ${e.message}`, 'warning');
+        }
+        
+        // Maintenant zéroter le superbloc
+        log(`Zeroing superblock on ${newPartitionPath}...`, 'info');
         await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', newPartitionPath]);
-        log(`✓ Zeroed existing superblock`, 'success');
+        log(`✓ Zeroed superblock`, 'success');
+      } else {
+        log(`✓ No existing RAID membership found`, 'success');
       }
     } catch (error) {
       // Pas de superbloc existant, c'est OK
       log(`✓ No existing superblock found (clean partition)`, 'success');
+    }
+    
+    // Wiper toutes les signatures de la partition (filesystem, etc.)
+    try {
+      log(`Wiping all signatures from ${newPartitionPath}...`, 'info');
+      await executeCommand('sudo', ['-n', 'wipefs', '-a', newPartitionPath]);
+      log(`✓ Wiped partition signatures`, 'success');
+    } catch (error) {
+      log(`Warning: wipefs on partition: ${error.message}`, 'warning');
+    }
+    
+    // Attendre que udev se stabilise après le wipe
+    try {
+      log(`Waiting for udev to settle after cleanup...`, 'info');
+      await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
+      await executeCommand('sleep', ['2']);
+      log(`✓ Device settled`, 'success');
+    } catch (error) {
+      log(`Warning: udev settle: ${error.message}`, 'warning');
     }
 
     try {
@@ -598,8 +735,8 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
         const startTime = Date.now();
         
         while (!resyncComplete) {
-          // Attendre 5 secondes entre chaque vérification
-          await executeCommand('sleep', ['5']);
+          // Attendre 2 secondes entre chaque vérification (plus réactif)
+          await executeCommand('sleep', ['2']);
           
           // Vérifier le timeout
           const elapsedMinutes = (Date.now() - startTime) / 1000 / 60;
@@ -618,8 +755,8 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
           if (progressMatch) {
             const progress = parseFloat(progressMatch[1]);
             
-            // Afficher seulement si la progression a changé significativement
-            if (Math.abs(progress - lastProgress) >= 1.0) {
+            // Afficher plus fréquemment pour une meilleure UX (tous les 0.5%)
+            if (Math.abs(progress - lastProgress) >= 0.5 || lastProgress === -1) {
               const finishMatch = mdstatOutput.match(/finish\s*=\s*([\d.]+min)/);
               const speedMatch = mdstatOutput.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
               
@@ -628,15 +765,31 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
               if (speedMatch) progressMsg += ` | Speed: ${speedMatch[1]}`;
               
               log(progressMsg, 'info');
+              
+              // Envoyer aussi un événement dédié pour la progression
+              if (io) {
+                io.emit('mdraid-resync-progress', {
+                  percent: progress,
+                  eta: finishMatch ? finishMatch[1] : null,
+                  speed: speedMatch ? speedMatch[1] : null
+                });
+              }
+              
               lastProgress = progress;
             }
           } else if (mdstatOutput.includes('[UU]')) {
             // Resync terminé !
             log('✅ Resynchronization completed! Array is now fully synchronized.', 'success');
+            if (io) {
+              io.emit('mdraid-resync-progress', { percent: 100, eta: null, speed: null, completed: true });
+            }
             resyncComplete = true;
           } else if (!mdstatOutput.includes('recovery') && !mdstatOutput.includes('resync')) {
             // Plus de resync en cours
             log('✅ Resynchronization completed!', 'success');
+            if (io) {
+              io.emit('mdraid-resync-progress', { percent: 100, eta: null, speed: null, completed: true });
+            }
             resyncComplete = true;
           }
         }
@@ -787,3 +940,4 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
 
 
 module.exports = router;
+module.exports.setSocketIO = setSocketIO;
