@@ -2298,6 +2298,25 @@ const Settings = () => {
                     {storageDetail.summary.othersFormatted}
                   </span>
                 </div>
+                
+                {/* Séparateur */}
+                <div style={{ height: '1px', background: '#e0e0e0', margin: '8px 0' }} />
+                
+                {/* Disponible pour écriture */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.45s both' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)'
+                    }} />
+                    <span style={{ fontSize: '14px', fontWeight: '500' }}>Disponible</span>
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: '600', color: '#11998e' }}>
+                    {storageDetail.summary.availableFormatted}
+                  </span>
+                </div>
               </div>
             </div>
 

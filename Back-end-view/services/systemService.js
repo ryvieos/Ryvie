@@ -28,24 +28,15 @@ async function getServerInfo() {
       totalSize += dataPartition.size / 1e9;
     }
     
-    // Utilisé = taille partition système (sans /data) + espace réellement utilisé dans /data
-    // Calculer la taille de la partition système sans /data
+    // Utilisé = taille partition système + espace utilisé dans /data
     let systemPartitionSize = rootPartition.size / 1e9;
     totalUsed = systemPartitionSize;
     
-    // Ajouter l'espace réellement utilisé dans /data via du
-    // Timeout réduit à 5s pour éviter de bloquer l'API, fallback sur dataPartition.used
-    try {
-      const { stdout } = await execPromise('sudo du -sb /data 2>/dev/null | cut -f1', { timeout: 5000 });
-      const dataUsageBytes = parseInt(stdout.trim());
-      if (dataUsageBytes && !isNaN(dataUsageBytes)) {
-        totalUsed += dataUsageBytes / 1e9;
-      }
-    } catch (error) {
-      // Fallback sur dataPartition.used si du échoue ou timeout
-      if (dataPartition) {
-        totalUsed += dataPartition.used / 1e9;
-      }
+    // Ajouter l'espace utilisé dans /data (utiliser dataPartition.used qui est cohérent)
+    if (dataPartition) {
+      const dataUsedGB = dataPartition.used / 1e9;
+      totalUsed += dataUsedGB;
+      console.log(`[systemService] Système: ${systemPartitionSize.toFixed(1)} GB, /data utilisé: ${dataUsedGB.toFixed(1)} GB, Total: ${totalUsed.toFixed(1)} GB`);
     }
     
     totalFree = totalSize - totalUsed;
