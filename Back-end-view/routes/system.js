@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
-const { getServerInfo } = require('../services/systemService');
+const { getServerInfo, restartServer } = require('../services/systemService');
 const si = require('systeminformation');
 const { getLocalIP } = require('../utils/network');
 
@@ -43,7 +43,7 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
     const { listInstalledApps } = require('../services/appManagerService');
     const apps = await listInstalledApps();
 
-    // 3. Calculer la taille de chaque app
+    // 3. Calculer la taille de chaque app (dossier + volumes + images)
     const appsDetails = [];
     let totalAppsSize = 0;
     const fs = require('fs');
@@ -55,40 +55,36 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
         console.log(`[Storage Detail] Calcul taille pour app: ${app.id} (${app.name})`);
 
         // Taille du dossier de l'app dans /data/apps
-        // Chercher le dossier avec ou sans préfixe "Ryvie-"
-        let appFolder = null;
+        // Chercher tous les dossiers qui contiennent l'id de l'app (insensible à la casse)
         try {
-          // D'abord essayer avec le préfixe Ryvie-
-          let { stdout } = await execPromise(`find /data/apps -maxdepth 1 -type d -iname "Ryvie-${app.id}"`, { timeout: 5000 });
-          appFolder = stdout.trim();
-          
-          // Si pas trouvé, essayer sans préfixe
-          if (!appFolder) {
-            const result = await execPromise(`find /data/apps -maxdepth 1 -type d -iname "${app.id}"`, { timeout: 5000 });
-            appFolder = result.stdout.trim();
-          }
-          
-          // Fallback final
-          if (!appFolder) {
-            appFolder = `/data/apps/Ryvie-${app.id}`;
+          if (fs.existsSync('/data/apps')) {
+            const appsDirs = fs.readdirSync('/data/apps', { withFileTypes: true })
+              .filter(dirent => dirent.isDirectory())
+              .map(dirent => dirent.name);
+            
+            // Chercher un dossier qui contient l'id de l'app
+            const matchingDir = appsDirs.find(dir => 
+              dir.toLowerCase().includes(app.id.toLowerCase())
+            );
+            
+            if (matchingDir) {
+              const appFolder = `/data/apps/${matchingDir}`;
+              console.log(`[Storage Detail] Dossier trouvé: ${appFolder}`);
+              
+              const { stdout } = await execPromise(`sudo du -sb ${appFolder} 2>/dev/null | cut -f1`, { timeout: 30000 });
+              const folderSize = parseInt(stdout.trim()) || 0;
+              const folderSizeGB = folderSize / 1e9;
+              console.log(`[Storage Detail] Taille dossier ${appFolder}: ${folderSize} bytes (${folderSizeGB.toFixed(2)} GB)`);
+              appSize += folderSizeGB;
+            } else {
+              console.log(`[Storage Detail] Aucun dossier trouvé pour ${app.id} dans /data/apps`);
+            }
           }
         } catch (error) {
-          appFolder = `/data/apps/Ryvie-${app.id}`;
-        }
-        
-        console.log(`[Storage Detail] Vérification dossier: ${appFolder}`);
-        
-        try {
-          const { stdout } = await execPromise(`sudo du -sb ${appFolder} 2>/dev/null | cut -f1`, { timeout: 30000 });
-          const folderSize = parseInt(stdout.trim()) || 0;
-          const folderSizeGB = folderSize / 1e9;
-          console.log(`[Storage Detail] Taille dossier ${appFolder}: ${folderSize} bytes (${folderSizeGB.toFixed(2)} GB)`);
-          appSize += folderSizeGB;
-        } catch (error) {
-          console.error(`[Storage Detail] Erreur calcul taille dossier ${appFolder}:`, error.message);
+          console.error(`[Storage Detail] Erreur recherche dossier ${app.id}:`, error.message);
         }
 
-        // Taille des volumes Docker de l'app (liés aux containers de l'app)
+        // Taille des volumes Docker de l'app
         try {
           const containers = await docker.listContainers({ all: true });
           const appContainers = containers.filter(c => {
@@ -125,55 +121,9 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
           console.error(`[Storage Detail] Erreur récupération volumes ${app.id}:`, error.message);
         }
 
-        // Taille des images Docker de l'app (liées aux containers de l'app)
-        try {
-          const containers = await docker.listContainers({ all: true });
-          const appContainers = containers.filter(c => {
-            const containerName = c.Names[0]?.replace('/', '') || '';
-            return containerName.startsWith(`app-${app.id}-`);
-          });
-          
-          const imageIds = new Set();
-          for (const container of appContainers) {
-            if (container.ImageID) {
-              imageIds.add(container.ImageID);
-            }
-          }
-          
-          console.log(`[Storage Detail] Images trouvées pour ${app.id}:`, imageIds.size);
-          
-          const images = await docker.listImages();
-          for (const imageId of imageIds) {
-            const img = images.find(i => i.Id === imageId);
-            if (img) {
-              const imgSize = (img.Size || 0) / 1e9;
-              console.log(`[Storage Detail] Image ${img.RepoTags?.[0] || img.Id.substring(0, 12)}: ${imgSize.toFixed(4)} GB`);
-              appSize += imgSize;
-            }
-          }
-        } catch (error) {
-          console.error(`[Storage Detail] Erreur récupération images ${app.id}:`, error.message);
-        }
-
-        // Taille SizeRw des containers
-        try {
-          const containers = await docker.listContainers({ all: true });
-          const appContainers = containers.filter(c => {
-            const containerName = c.Names[0]?.replace('/', '') || '';
-            return containerName.startsWith(`app-${app.id}-`);
-          });
-          console.log(`[Storage Detail] Containers trouvés pour ${app.id}:`, appContainers.length);
-          
-          for (const container of appContainers) {
-            const containerInfo = await docker.getContainer(container.Id).inspect();
-            const sizeRw = (containerInfo.SizeRw || 0) / 1e9;
-            console.log(`[Storage Detail] SizeRw container ${container.Names[0]}: ${sizeRw.toFixed(4)} GB`);
-            appSize += sizeRw;
-          }
-        } catch (error) {
-          console.error(`[Storage Detail] Erreur calcul SizeRw ${app.id}:`, error.message);
-        }
-
+        // Note: On ne compte PAS les images Docker car elles ont des layers partagés
+        // qui seraient comptés en double. Les images sont déjà incluses dans df /data
+        
         // Récupérer l'icône depuis /data/config/manifests/{appId}/
         let iconUrl = null;
         const manifestDir = `/data/config/manifests/${app.id}`;
@@ -207,37 +157,82 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
       }
     }
 
-    // Trier par taille décroissante
-    appsDetails.sort((a, b) => b.size - a.size);
-
-    // 4. Calculer "Autres" (espace utilisé dans /data moins les apps)
+    // 4. Calculer "Autres" (tous les dossiers dans /data SAUF apps et docker)
     const dataPartition = fsSizes.find(f => f.mount === '/data');
-    let dataUsed = 0;
+    let othersSize = 0;
+    
     try {
-      const { stdout } = await execPromise('sudo du -sb /data 2>/dev/null | cut -f1', { timeout: 60000 });
-      dataUsed = parseInt(stdout.trim()) / 1e9;
+      // Lister tous les dossiers dans /data
+      const { stdout } = await execPromise('ls -1 /data', { timeout: 5000 });
+      const dataDirs = stdout.trim().split('\n').filter(d => d && d !== 'apps' && d !== 'docker');
+      
+      console.log(`[Storage Detail] Calcul "Autres" pour les dossiers:`, dataDirs);
+      
+      // Calculer la taille de chaque dossier (sauf apps et docker)
+      for (const dir of dataDirs) {
+        try {
+          const { stdout: sizeOut } = await execPromise(`sudo du -sb /data/${dir} 2>/dev/null | cut -f1`, { timeout: 30000 });
+          const dirSize = parseInt(sizeOut.trim()) / 1e9 || 0;
+          console.log(`[Storage Detail] /data/${dir}: ${dirSize.toFixed(4)} GB`);
+          othersSize += dirSize;
+        } catch (error) {
+          console.error(`[Storage Detail] Erreur calcul /data/${dir}:`, error.message);
+        }
+      }
+      
+      console.log(`[Storage Detail] Total "Autres": ${othersSize.toFixed(2)} GB`);
     } catch (error) {
-      dataUsed = dataPartition ? dataPartition.used / 1e9 : 0;
+      console.error(`[Storage Detail] Erreur calcul "Autres":`, error.message);
+      othersSize = 0;
     }
 
-    const othersSize = Math.max(0, dataUsed - totalAppsSize);
-
-    // 5. Calculer le total
-    const totalUsed = systemSize + dataUsed;
+    // 5. Répartir proportionnellement l'espace non identifié entre les apps
+    const dataUsedReal = dataPartition ? dataPartition.used / 1e9 : (totalAppsSize + othersSize);
+    
+    // Espace non identifié = total /data utilisé - apps calculées - autres
+    const unidentifiedSpace = Math.max(0, dataUsedReal - totalAppsSize - othersSize);
+    
+    console.log(`[Storage Detail] /data utilisé: ${dataUsedReal.toFixed(2)} GB, Apps calculées: ${totalAppsSize.toFixed(2)} GB, Autres: ${othersSize.toFixed(2)} GB, Non identifié: ${unidentifiedSpace.toFixed(2)} GB`);
+    
+    // Répartir l'espace non identifié proportionnellement entre les apps
+    let totalAppsAdjusted = 0;
+    for (const appDetail of appsDetails) {
+      if (totalAppsSize > 0) {
+        const proportion = appDetail.size / totalAppsSize;
+        const additionalSpace = proportion * unidentifiedSpace;
+        const adjustedSize = appDetail.size + additionalSpace;
+        
+        console.log(`[Storage Detail] ${appDetail.name}: ${appDetail.size.toFixed(2)} GB + ${additionalSpace.toFixed(2)} GB = ${adjustedSize.toFixed(2)} GB`);
+        
+        appDetail.size = adjustedSize;
+        appDetail.sizeFormatted = `${adjustedSize.toFixed(2)} GB`;
+        totalAppsAdjusted += adjustedSize;
+      }
+    }
+    
+    // Trier par taille décroissante après ajustement
+    appsDetails.sort((a, b) => b.size - a.size);
+    
+    const totalUsed = systemSize + dataUsedReal;
     const totalSize = systemSize + (dataPartition ? dataPartition.size / 1e9 : 0);
+    const dataAvailable = (dataPartition ? dataPartition.size / 1e9 : 0) - dataUsedReal;
+    
+    console.log(`[Storage Detail] Apps ajustées total: ${totalAppsAdjusted.toFixed(2)} GB, Système: ${systemSize.toFixed(1)} GB, Total utilisé: ${totalUsed.toFixed(1)} GB`);
 
     res.json({
       success: true,
       summary: {
         total: totalSize,
         used: totalUsed,
+        available: dataAvailable,
         system: systemSize,
-        apps: totalAppsSize,
+        apps: totalAppsAdjusted,
         others: othersSize,
         totalFormatted: `${totalSize.toFixed(1)} GB`,
         usedFormatted: `${totalUsed.toFixed(1)} GB`,
+        availableFormatted: `${dataAvailable.toFixed(1)} GB`,
         systemFormatted: `${systemSize.toFixed(1)} GB`,
-        appsFormatted: `${totalAppsSize.toFixed(1)} GB`,
+        appsFormatted: `${totalAppsAdjusted.toFixed(1)} GB`,
         othersFormatted: `${othersSize.toFixed(1)} GB`
       },
       apps: appsDetails
@@ -291,6 +286,23 @@ router.get('/disks', async (req, res) => {
   } catch (err) {
     console.error('Erreur récupération info disques :', err);
     res.status(500).json({ error: 'Impossible de récupérer les informations de disques' });
+  }
+});
+
+// POST /api/server-restart
+router.post('/server-restart', verifyToken, async (req, res) => {
+  try {
+    // Vérifier que l'utilisateur est admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ error: 'Accès refusé. Seuls les administrateurs peuvent redémarrer le serveur.' });
+    }
+    
+    console.log(`[System] Redémarrage du serveur demandé par ${req.user.username}`);
+    const result = await restartServer();
+    res.json(result);
+  } catch (error) {
+    console.error('Erreur lors du redémarrage du serveur:', error);
+    res.status(500).json({ error: 'Erreur serveur lors du redémarrage' });
   }
 });
 
