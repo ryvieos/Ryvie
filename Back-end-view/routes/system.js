@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
-const { getServerInfo } = require('../services/systemService');
+const { getServerInfo, restartServer } = require('../services/systemService');
 const si = require('systeminformation');
 const { getLocalIP } = require('../utils/network');
 
@@ -286,6 +286,23 @@ router.get('/disks', async (req, res) => {
   } catch (err) {
     console.error('Erreur récupération info disques :', err);
     res.status(500).json({ error: 'Impossible de récupérer les informations de disques' });
+  }
+});
+
+// POST /api/server-restart
+router.post('/server-restart', verifyToken, async (req, res) => {
+  try {
+    // Vérifier que l'utilisateur est admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ error: 'Accès refusé. Seuls les administrateurs peuvent redémarrer le serveur.' });
+    }
+    
+    console.log(`[System] Redémarrage du serveur demandé par ${req.user.username}`);
+    const result = await restartServer();
+    res.json(result);
+  } catch (error) {
+    console.error('Erreur lors du redémarrage du serveur:', error);
+    res.status(500).json({ error: 'Erreur serveur lors du redémarrage' });
   }
 });
 

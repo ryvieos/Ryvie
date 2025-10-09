@@ -946,6 +946,36 @@ const Settings = () => {
     setSelectedApp(null);
   };
 
+  // Fonction pour redémarrer le serveur
+  const handleServerRestart = async () => {
+    if (!window.confirm('⚠️ ATTENTION : Êtes-vous sûr de vouloir redémarrer complètement le serveur ?\n\nCette action va redémarrer le système entier et interrompre tous les services pendant quelques minutes.')) {
+      return;
+    }
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      
+      // Envoyer la commande de redémarrage
+      await axios.post(`${serverUrl}/api/server-restart`);
+      
+      // Rediriger immédiatement vers la page de redémarrage
+      navigate('/server-restarting');
+    } catch (error) {
+      console.error('[Settings] Erreur lors du redémarrage du serveur:', error);
+      const errorMessage = error.response?.data?.error || 'Erreur lors du redémarrage du serveur';
+      
+      setChangeStatus({
+        show: true,
+        success: false,
+        message: `✗ ${errorMessage}`
+      });
+      
+      setTimeout(() => {
+        setChangeStatus({ show: false, success: false, message: '' });
+      }, 5000);
+    }
+  };
+
   const formatSize = (size) => {
     if (size < 1024) return size + ' GB';
     return (size / 1024).toFixed(1) + ' TB';
@@ -2374,6 +2404,53 @@ const Settings = () => {
             ) : null}
           </div>
         </div>
+      )}
+
+      {/* Section Redémarrage du Serveur */}
+      {isAdmin && (
+        <section className="settings-section" style={{ marginTop: '40px', marginBottom: '40px' }}>
+          <h2 style={{ color: '#d32f2f', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <FontAwesomeIcon icon={faServer} />
+            Zone Dangereuse
+          </h2>
+          <div className="settings-card" style={{ border: '2px solid #ffebee', background: '#fff' }}>
+            <div style={{ padding: '20px' }}>
+              <h3 style={{ marginTop: 0, color: '#d32f2f' }}>Redémarrer le Système</h3>
+              <p className="setting-description" style={{ marginBottom: '20px', color: '#666' }}>
+                Cette action effectuera un redémarrage complet du système (reboot). Tous les services seront interrompus pendant quelques minutes.
+              </p>
+              <button
+                onClick={handleServerRestart}
+                style={{
+                  padding: '14px 28px',
+                  background: 'linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  transition: 'all 0.3s',
+                  boxShadow: '0 4px 12px rgba(211, 47, 47, 0.3)'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(211, 47, 47, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(211, 47, 47, 0.3)';
+                }}
+              >
+                <FontAwesomeIcon icon={faServer} />
+                Redémarrer le Système (Reboot)
+              </button>
+            </div>
+          </div>
+        </section>
       )}
     </div>
   );

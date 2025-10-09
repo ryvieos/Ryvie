@@ -75,4 +75,29 @@ async function getServerInfo() {
   };
 }
 
-module.exports = { getServerInfo };
+async function restartServer() {
+  const { exec } = require('child_process');
+  const util = require('util');
+  const execPromise = util.promisify(exec);
+  
+  try {
+    console.log('[systemService] Redémarrage du système demandé');
+    
+    // Redémarrer le système complet
+    // Utiliser sudo reboot pour redémarrer la machine
+    setTimeout(async () => {
+      try {
+        await execPromise('sudo reboot');
+      } catch (error) {
+        console.error('[systemService] Erreur lors du reboot:', error);
+      }
+    }, 1000);
+    
+    return { success: true, message: 'Le serveur va redémarrer dans quelques secondes...' };
+  } catch (error) {
+    console.error('[systemService] Erreur lors du redémarrage:', error);
+    throw error;
+  }
+}
+
+module.exports = { getServerInfo, restartServer };
