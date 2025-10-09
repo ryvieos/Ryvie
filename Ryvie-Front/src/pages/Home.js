@@ -40,6 +40,7 @@ const ContextMenuPortal = ({ children, x, y, onClose }) => {
   const menu = (
     <div
       className="context-menu"
+      style={{ position: 'fixed', left: `${x}px`, top: `${y}px`, zIndex: 10000 }}
       onClick={(e) => e.stopPropagation()}
     >
       {children}
@@ -302,7 +303,7 @@ const Taskbar = ({ handleClick, appsConfig }) => {
 
         return (
           <div key={index} className="taskbar-circle" aria-label={label} title={label}>
-            {config.route ? (
+            {config.route && config.route !== '/userlogin' ? (
               <Link to={config.route} aria-label={label} title={label} style={{ width: '100%', height: '100%' }}>
                 {imgSrc ? <Img /> : null}
               </Link>
@@ -390,14 +391,46 @@ const Home = () => {
     return cached || [];
   });
   const [isLoading, setIsLoading] = useState(false);
-  // Overlay AppStore
+  // Overlay AppStore et Userlogin
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [overlayUrl, setOverlayUrl] = useState('');
+  const [closingOverlay, setClosingOverlay] = useState(false);
+  const [overlayTitle, setOverlayTitle] = useState('App Store');
 
   const [mounted, setMounted] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [currentSocket, setCurrentSocket] = useState(null);
   const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
+  
+  // Écouteur de messages pour fermer l'overlay depuis l'iframe
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Vérifier l'origine du message pour la sécurité (optionnel mais recommandé)
+      // if (event.origin !== window.location.origin) return;
+      
+      if (event.data && event.data.type === 'CLOSE_OVERLAY') {
+        console.log('[Home] Réception du message CLOSE_OVERLAY');
+        setClosingOverlay(true);
+        setTimeout(() => {
+          setOverlayVisible(false);
+          setClosingOverlay(false);
+        }, 250);
+      } else if (event.data && event.data.type === 'CLOSE_OVERLAY_AND_NAVIGATE') {
+        console.log('[Home] Réception du message CLOSE_OVERLAY_AND_NAVIGATE', event.data.path);
+        setClosingOverlay(true);
+        setTimeout(() => {
+          setOverlayVisible(false);
+          setClosingOverlay(false);
+          if (event.data.path) {
+            navigate(event.data.path);
+          }
+        }, 250);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [navigate]);
   
   useEffect(() => {
     const initializeAccessMode = () => {
@@ -1092,10 +1125,26 @@ const Home = () => {
         const base = window.location.origin + window.location.pathname;
         const url = `${base}#/appstore`;
         setOverlayUrl(url);
+        setOverlayTitle('App Store');
         setOverlayVisible(true);
       } catch (e) {
         console.warn('[Home] Impossible d\'ouvrir l\'AppStore en overlay, navigation de secours /appstore');
         navigate('/appstore');
+      }
+      return;
+    }
+    
+    // Cas spécial: Userlogin (transfer) -> ouvrir un overlay plein écran
+    if (appConfig.route === '/userlogin') {
+      try {
+        const base = window.location.origin + window.location.pathname;
+        const url = `${base}#/userlogin`;
+        setOverlayUrl(url);
+        setOverlayTitle('Nouvelle session utilisateur');
+        setOverlayVisible(true);
+      } catch (e) {
+        console.warn('[Home] Impossible d\'ouvrir Userlogin en overlay, navigation de secours /userlogin');
+        navigate('/userlogin');
       }
       return;
     }
@@ -1279,34 +1328,20 @@ const Home = () => {
       
       {overlayVisible && (
         <div
-          className="appstore-overlay"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(2px)',
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
+          className={`appstore-overlay-backdrop ${closingOverlay ? 'closing' : ''}`}
           onClick={(e) => {
             // fermer uniquement si on clique sur l'arrière-plan (pas à l'intérieur de la modale)
             if (e.target === e.currentTarget) {
-              setOverlayVisible(false);
+              setClosingOverlay(true);
+              setTimeout(() => {
+                setOverlayVisible(false);
+                setClosingOverlay(false);
+              }, 250);
             }
           }}
         >
           <div
-            style={{
-              width: '92vw',
-              height: '86vh',
-              background: '#fff',
-              borderRadius: 12,
-              boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-              overflow: 'hidden',
-              position: 'relative'
-            }}
+            className={`appstore-overlay-window ${closingOverlay ? 'closing' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div
@@ -1320,7 +1355,13 @@ const Home = () => {
               }}
             >
               <button
-                onClick={() => setOverlayVisible(false)}
+                onClick={() => {
+                  setClosingOverlay(true);
+                  setTimeout(() => {
+                    setOverlayVisible(false);
+                    setClosingOverlay(false);
+                  }, 250);
+                }}
                 title="Fermer"
                 style={{
                   border: '1px solid #ddd',
@@ -1334,7 +1375,7 @@ const Home = () => {
               </button>
             </div>
             <iframe
-              title="App Store"
+              title={overlayTitle}
               src={overlayUrl}
               style={{ width: '100%', height: '100%', border: 'none' }}
             />

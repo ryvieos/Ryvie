@@ -840,3 +840,79 @@
     transform: scale(1.1);
   }
 }
+
+/* AppStore overlay animations */
+.appstore-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 9999;
+  animation: appstoreBackdropIn 250ms ease forwards;
+}
+
+.appstore-overlay-backdrop.closing {
+  animation: appstoreBackdropOut 250ms ease forwards;
+}
+
+@keyframes appstoreBackdropIn {
+  from {
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+  }
+  to {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+  }
+}
+
+@keyframes appstoreBackdropOut {
+  from {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+  }
+  to {
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+  }
+}
+
+.appstore-overlay-window {
+  width: 92vw;
+  height: 86vh;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  position: relative;
+  animation: appstoreWindowIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.appstore-overlay-window.closing {
+  animation: appstoreWindowOut 250ms cubic-bezier(0.6, 0, 0.8, 0.4) forwards;
+}
+
+@keyframes appstoreWindowIn {
+  from {
+    opacity: 0;
+    transform: scale(0.85) translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes appstoreWindowOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+}
