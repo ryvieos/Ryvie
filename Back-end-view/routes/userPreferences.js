@@ -317,6 +317,39 @@ router.patch('/user/preferences/background', verifyToken, (req, res) => {
   }
 });
 
+// PATCH /api/user/preferences/dark-mode - Mettre à jour le mode sombre
+router.patch('/user/preferences/dark-mode', verifyToken, (req, res) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] PATCH dark-mode pour utilisateur:', username);
+    const { darkMode } = req.body;
+    
+    if (darkMode === undefined) {
+      return res.status(400).json({ error: 'darkMode requis' });
+    }
+    
+    // Charger les préférences existantes
+    let preferences = loadUserPreferences(username) || {
+      zones: {},
+      theme: 'default',
+      language: 'fr'
+    };
+    
+    // Mettre à jour le mode sombre
+    preferences.darkMode = darkMode;
+    
+    if (saveUserPreferences(username, preferences)) {
+      console.log('[userPreferences] Mode sombre sauvegardé:', darkMode, 'pour', username);
+      res.json({ success: true, message: 'Mode sombre sauvegardé', darkMode });
+    } else {
+      res.status(500).json({ error: 'Échec de la sauvegarde' });
+    }
+  } catch (error) {
+    console.error('[userPreferences] Erreur PATCH dark-mode:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // GET /api/backgrounds/presets - Lister tous les fonds d'écran prédéfinis depuis public/
 router.get('/backgrounds/presets', (req, res) => {
   try {

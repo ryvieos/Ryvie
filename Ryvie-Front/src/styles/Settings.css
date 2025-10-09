@@ -14,6 +14,332 @@
   margin: 0 auto;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   color: #000000;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Bouton RAID Assistant */
+.raid-assistant-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.raid-assistant-btn:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+.raid-assistant-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(25, 118, 210, 0.4) !important;
+}
+
+.raid-assistant-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3) !important;
+}
+
+/* ==================== MODE SOMBRE ==================== */
+body.dark-mode {
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+body.dark-mode .settings-container {
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+/* Sections */
+body.dark-mode .settings-section {
+  background: #2a2a2a;
+  color: #e0e0e0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .settings-section h2 {
+  color: #ffffff;
+}
+
+/* Cards */
+body.dark-mode .settings-card {
+  background: #333333;
+  border-color: #444444;
+}
+
+body.dark-mode .settings-card h3 {
+  color: #ffffff;
+}
+
+/* Stats et App cards */
+body.dark-mode .stat-card,
+body.dark-mode .app-card {
+  background: #333333 !important;
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .stat-card h3,
+body.dark-mode .app-card h3,
+body.dark-mode .stat-label {
+  color: #ffffff !important;
+}
+
+body.dark-mode .stat-value {
+  color: #e0e0e0 !important;
+}
+
+/* Headers */
+body.dark-mode .settings-header h1,
+body.dark-mode h2,
+body.dark-mode h3 {
+  color: #ffffff !important;
+}
+
+/* Settings items */
+body.dark-mode .setting-item label,
+body.dark-mode .setting-info h3 {
+  color: #ffffff !important;
+}
+
+body.dark-mode .setting-item p,
+body.dark-mode .setting-info p,
+body.dark-mode .setting-description {
+  color: #b0b0b0 !important;
+}
+
+body.dark-mode .setting-value {
+  color: #b0b0b0 !important;
+}
+
+/* Inputs & Selects */
+body.dark-mode input[type="text"],
+body.dark-mode input[type="email"],
+body.dark-mode input[type="password"],
+body.dark-mode input[type="number"],
+body.dark-mode textarea,
+body.dark-mode select {
+  background: #2a2a2a !important;
+  color: #e0e0e0 !important;
+  border-color: #444444 !important;
+}
+
+/* Boutons */
+body.dark-mode .setting-button,
+body.dark-mode .back-btn {
+  background: #3a3a3a;
+  color: #e0e0e0;
+  border-color: #444444;
+}
+
+body.dark-mode .setting-button:hover,
+body.dark-mode .back-btn:hover {
+  background: #4a4a4a;
+  border-color: #555555;
+}
+
+/* Modals */
+body.dark-mode .storage-detail-modal,
+body.dark-mode .disks-modal,
+body.dark-mode .storage-assistant-modal {
+  background: #2a2a2a !important;
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .storage-detail-modal h2,
+body.dark-mode .disks-modal h3 {
+  color: #ffffff !important;
+}
+
+/* Applications Docker */
+body.dark-mode .docker-app-card {
+  background: #333333 !important;
+  border-color: #444444 !important;
+}
+
+body.dark-mode .docker-app-header h3 {
+  color: #ffffff !important;
+}
+
+body.dark-mode .docker-loading-container p,
+body.dark-mode .docker-error-message,
+body.dark-mode .docker-empty-state p {
+  color: #b0b0b0 !important;
+}
+
+body.dark-mode .docker-app-details-modal {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
+body.dark-mode .docker-app-details-content {
+  background: #2a2a2a !important;
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .docker-app-details-header h3,
+body.dark-mode .docker-app-info-section h4 {
+  color: #ffffff !important;
+}
+
+body.dark-mode .docker-app-info-section p {
+  color: #b0b0b0 !important;
+}
+
+body.dark-mode .docker-container-name {
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .docker-autostart-label,
+body.dark-mode .app-autostart-label {
+  color: #b0b0b0 !important;
+}
+
+/* Disques */
+body.dark-mode .disk-card {
+  background: #333333 !important;
+  border-color: #444444 !important;
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .disk-header {
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .disk-name,
+body.dark-mode .disk-title-area h4 {
+  color: #ffffff !important;
+}
+
+body.dark-mode .disk-path,
+body.dark-mode .disk-size,
+body.dark-mode .disk-type {
+  color: #b0b0b0 !important;
+}
+
+body.dark-mode .disk-status-badge {
+  background: #3a3a3a !important;
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .disk-details,
+body.dark-mode .disk-total-content {
+  background: #2a2a2a !important;
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .disk-info-rows {
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .disk-info-row span,
+body.dark-mode .disk-label {
+  color: #b0b0b0 !important;
+}
+
+body.dark-mode .disk-info-row strong,
+body.dark-mode .disk-value {
+  color: #ffffff !important;
+}
+
+body.dark-mode .disks-modal-overlay {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
+body.dark-mode .empty-state p {
+  color: #b0b0b0 !important;
+}
+
+/* ==================== FIN MODE SOMBRE ==================== */
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes progressFill {
+  from {
+    width: 0;
+  }
+}
+
+/* Animations pour le détail du stockage */
+.storage-detail-modal .disk-info-row,
+.storage-detail-modal .stat-label {
+  animation: slideInLeft 0.4s ease-out;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 /* En-tête */
@@ -56,7 +382,15 @@
   padding: 20px;
   margin-bottom: 20px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  animation: fadeInUp 0.5s ease-out backwards;
 }
+
+.settings-section:nth-child(1) { animation-delay: 0.1s; }
+.settings-section:nth-child(2) { animation-delay: 0.2s; }
+.settings-section:nth-child(3) { animation-delay: 0.3s; }
+.settings-section:nth-child(4) { animation-delay: 0.4s; }
+.settings-section:nth-child(5) { animation-delay: 0.5s; }
+.settings-section:nth-child(6) { animation-delay: 0.6s; }
 
 .settings-section h2 {
   margin: 0 0 24px 0;

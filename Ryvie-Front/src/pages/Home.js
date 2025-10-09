@@ -40,7 +40,7 @@ const ContextMenuPortal = ({ children, x, y, onClose }) => {
   const menu = (
     <div
       className="context-menu"
-      style={{ position: 'fixed', top: y, left: x, zIndex: 100000 }}
+      style={{ position: 'fixed', left: `${x}px`, top: `${y}px`, zIndex: 10000 }}
       onClick={(e) => e.stopPropagation()}
     >
       {children}
@@ -48,11 +48,33 @@ const ContextMenuPortal = ({ children, x, y, onClose }) => {
   );
   return ReactDOM.createPortal(menu, document.body);
 };
-
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName = true, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin }) => {
-  const ref = React.useRef(null);
+// Composant Icon
+const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin }) => {
   const appConfig = appsConfig[id] || {};
+  const [imgSrc, setImgSrc] = React.useState(src);
+  const [imgError, setImgError] = React.useState(false);
+  
+  // Mettre à jour l'image source quand elle change
+  React.useEffect(() => {
+    setImgSrc(src);
+    setImgError(false);
+  }, [src]);
+  
+  // Gérer les erreurs de chargement d'image
+  const handleImageError = () => {
+    if (!imgError) {
+      console.log(`[Icon] Erreur de chargement pour ${id}, utilisation du fallback`);
+      setImgError(true);
+      // Fallback vers l'icône locale si disponible
+      const fallbackSrc = images[id];
+      if (fallbackSrc && fallbackSrc !== src) {
+        setImgSrc(fallbackSrc);
+      }
+    }
+  };
 
+  const ref = React.useRef(null);
+  
   const [{ isDragging }, drag] = useDrag({
     type: ItemTypes.ICON,
     item: { id, zoneId },
@@ -281,7 +303,7 @@ const Taskbar = ({ handleClick, appsConfig }) => {
 
         return (
           <div key={index} className="taskbar-circle" aria-label={label} title={label}>
-            {config.route ? (
+            {config.route && config.route !== '/userlogin' ? (
               <Link to={config.route} aria-label={label} title={label} style={{ width: '100%', height: '100%' }}>
                 {imgSrc ? <Img /> : null}
               </Link>
@@ -312,8 +334,16 @@ const Home = () => {
   const [currentUserName, setCurrentUserName] = useState('');
   const [userRole, setUserRole] = useState('User');
   const isAdmin = String(userRole || '').toLowerCase() === 'admin';
-  const [appsConfig, setAppsConfig] = useState(generateAppConfig()); // Config par défaut
-  const [iconImages, setIconImages] = useState(images); // Images locales
+  const [appsConfig, setAppsConfig] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('appsConfig_cache');
+    return cached || generateAppConfig();
+  }); // Config par défaut
+  const [iconImages, setIconImages] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('iconImages_cache');
+    return cached || images;
+  }); // Images locales
   const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran utilisateur
   const [weatherCity, setWeatherCity] = useState(null); // Ville configurée par l'utilisateur
   const [weatherCityLoaded, setWeatherCityLoaded] = useState(false); // Indique si les préférences sont chargées
@@ -338,25 +368,69 @@ const Home = () => {
     bottom10: []
   });
 
-  const [weather, setWeather] = useState({
-    location: 'Loading...',
-    temperature: null,
-    description: '',
-    icon: 'default.png',
+  const [weather, setWeather] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('weather_cache');
+    return cached || {
+      location: 'Loading...',
+      temperature: null,
+      description: '',
+      icon: 'default.png',
+    };
   });
 
   const [serverStatus, setServerStatus] = useState(false);
-  const [appStatus, setAppStatus] = useState({});
-  const [applications, setApplications] = useState([]);
+  const [appStatus, setAppStatus] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('appStatus_cache');
+    return cached || {};
+  });
+  const [applications, setApplications] = useState(() => {
+    // Charger depuis le cache au démarrage
+    const cached = StorageManager.getItem('applications_cache');
+    return cached || [];
+  });
   const [isLoading, setIsLoading] = useState(false);
-  // Overlay AppStore
+  // Overlay AppStore et Userlogin
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [overlayUrl, setOverlayUrl] = useState('');
+  const [closingOverlay, setClosingOverlay] = useState(false);
+  const [overlayTitle, setOverlayTitle] = useState('App Store');
 
   const [mounted, setMounted] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [currentSocket, setCurrentSocket] = useState(null);
   const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
+  
+  // Écouteur de messages pour fermer l'overlay depuis l'iframe
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Vérifier l'origine du message pour la sécurité (optionnel mais recommandé)
+      // if (event.origin !== window.location.origin) return;
+      
+      if (event.data && event.data.type === 'CLOSE_OVERLAY') {
+        console.log('[Home] Réception du message CLOSE_OVERLAY');
+        setClosingOverlay(true);
+        setTimeout(() => {
+          setOverlayVisible(false);
+          setClosingOverlay(false);
+        }, 250);
+      } else if (event.data && event.data.type === 'CLOSE_OVERLAY_AND_NAVIGATE') {
+        console.log('[Home] Réception du message CLOSE_OVERLAY_AND_NAVIGATE', event.data.path);
+        setClosingOverlay(true);
+        setTimeout(() => {
+          setOverlayVisible(false);
+          setClosingOverlay(false);
+          if (event.data.path) {
+            navigate(event.data.path);
+          }
+        }, 250);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [navigate]);
   
   useEffect(() => {
     const initializeAccessMode = () => {
@@ -418,6 +492,20 @@ const Home = () => {
         if (Object.keys(config).length > 0) {
           console.log('[Home] Config chargée depuis manifests:', Object.keys(config).length, 'apps');
           setAppsConfig(config);
+          // Sauvegarder dans le cache
+          StorageManager.setItem('appsConfig_cache', config);
+          
+          // Extraire et mettre à jour les icônes
+          const newIconImages = { ...images }; // Commencer avec les icônes par défaut
+          Object.keys(config).forEach(iconId => {
+            if (config[iconId].icon) {
+              newIconImages[iconId] = config[iconId].icon;
+            }
+          });
+          setIconImages(newIconImages);
+          StorageManager.setItem('iconImages_cache', newIconImages);
+          console.log('[Home] Icônes mises à jour:', Object.keys(newIconImages).length);
+          
           // Les zones seront chargées par le useEffect dédié (depuis le serveur)
         } else {
           console.log('[Home] Aucune app trouvée dans les manifests, utilisation de la config par défaut');
@@ -464,6 +552,8 @@ const Home = () => {
     
     console.log('[Home] Statuts mis à jour:', newAppStatus);
     setAppStatus(newAppStatus);
+    // Sauvegarder dans le cache
+    StorageManager.setItem('appStatus_cache', newAppStatus);
   }, [appsConfig, applications]);
   
   useEffect(() => {
@@ -526,6 +616,9 @@ const Home = () => {
         
         console.log('[Home] Nouveau statut calculé:', newAppStatus);
         setAppStatus(newAppStatus);
+        // Sauvegarder dans le cache
+        StorageManager.setItem('appStatus_cache', newAppStatus);
+        StorageManager.setItem('applications_cache', apps);
         
       } catch (error) {
         console.error('[Home] Erreur lors de la récupération des applications:', error);
@@ -597,6 +690,8 @@ const Home = () => {
           }
         });
         setAppStatus(newAppStatus);
+        // Sauvegarder dans le cache
+        StorageManager.setItem('appStatus_cache', newAppStatus);
       },
       timeoutMs: 10000,
     });
@@ -710,14 +805,16 @@ const Home = () => {
           icon = 'rainy.png';
         }
 
-        setWeather({
+        const newWeather = {
           location: cityName,
           temperature: data.current_weather.temperature,
           humidity: data.hourly.relative_humidity_2m[0],
           wind: data.current_weather.windspeed,
           description: weatherCode,
           icon: icon,
-        });
+        };
+        setWeather(newWeather);
+        StorageManager.setItem('weather_cache', newWeather);
       } catch (error) {
         console.error('Erreur lors de la récupération météo, fallback sur Paris', error);
         // Fallback: tenter de charger Paris pour avoir de vraies données
@@ -732,14 +829,16 @@ const Home = () => {
           if (pcode === 0) picon = 'sunny.png';
           else if ([61, 63, 65].includes(pcode)) picon = 'rainy.png';
 
-          setWeather({
+          const parisWeather = {
             location: 'Paris',
             temperature: pdata.current_weather.temperature,
             humidity: pdata.hourly.relative_humidity_2m?.[0] ?? null,
             wind: pdata.current_weather.windspeed,
             description: pcode,
             icon: picon,
-          });
+          };
+          setWeather(parisWeather);
+          StorageManager.setItem('weather_cache', parisWeather);
         } catch (e) {
           // Si vraiment tout échoue: fallback statique Paris nuageux
           setWeather({
@@ -1026,10 +1125,26 @@ const Home = () => {
         const base = window.location.origin + window.location.pathname;
         const url = `${base}#/appstore`;
         setOverlayUrl(url);
+        setOverlayTitle('App Store');
         setOverlayVisible(true);
       } catch (e) {
         console.warn('[Home] Impossible d\'ouvrir l\'AppStore en overlay, navigation de secours /appstore');
         navigate('/appstore');
+      }
+      return;
+    }
+    
+    // Cas spécial: Userlogin (transfer) -> ouvrir un overlay plein écran
+    if (appConfig.route === '/userlogin') {
+      try {
+        const base = window.location.origin + window.location.pathname;
+        const url = `${base}#/userlogin`;
+        setOverlayUrl(url);
+        setOverlayTitle('Nouvelle session utilisateur');
+        setOverlayVisible(true);
+      } catch (e) {
+        console.warn('[Home] Impossible d\'ouvrir Userlogin en overlay, navigation de secours /userlogin');
+        navigate('/userlogin');
       }
       return;
     }
@@ -1134,6 +1249,7 @@ const Home = () => {
                   iconId={zones['left']}
                   moveIcon={moveIcon}
                   handleClick={handleClick}
+                  showName={true}
                   appStatus={appStatus}
                   appsConfig={appsConfig}
                   iconImages={iconImages}
@@ -1173,6 +1289,7 @@ const Home = () => {
                   iconId={zones['right']}
                   moveIcon={moveIcon}
                   handleClick={handleClick}
+                  showName={true}
                   appStatus={appStatus}
                   appsConfig={appsConfig}
                   iconImages={iconImages}
@@ -1191,6 +1308,7 @@ const Home = () => {
                   iconId={zones[`bottom${i + 1}`]}
                   moveIcon={moveIcon}
                   handleClick={handleClick}
+                  showName={true}
                   appStatus={appStatus}
                   appsConfig={appsConfig}
                   iconImages={iconImages}
@@ -1210,34 +1328,20 @@ const Home = () => {
       
       {overlayVisible && (
         <div
-          className="appstore-overlay"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(2px)',
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
+          className={`appstore-overlay-backdrop ${closingOverlay ? 'closing' : ''}`}
           onClick={(e) => {
             // fermer uniquement si on clique sur l'arrière-plan (pas à l'intérieur de la modale)
             if (e.target === e.currentTarget) {
-              setOverlayVisible(false);
+              setClosingOverlay(true);
+              setTimeout(() => {
+                setOverlayVisible(false);
+                setClosingOverlay(false);
+              }, 250);
             }
           }}
         >
           <div
-            style={{
-              width: '92vw',
-              height: '86vh',
-              background: '#fff',
-              borderRadius: 12,
-              boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-              overflow: 'hidden',
-              position: 'relative'
-            }}
+            className={`appstore-overlay-window ${closingOverlay ? 'closing' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div
@@ -1251,7 +1355,13 @@ const Home = () => {
               }}
             >
               <button
-                onClick={() => setOverlayVisible(false)}
+                onClick={() => {
+                  setClosingOverlay(true);
+                  setTimeout(() => {
+                    setOverlayVisible(false);
+                    setClosingOverlay(false);
+                  }, 250);
+                }}
                 title="Fermer"
                 style={{
                   border: '1px solid #ddd',
@@ -1265,7 +1375,7 @@ const Home = () => {
               </button>
             </div>
             <iframe
-              title="App Store"
+              title={overlayTitle}
               src={overlayUrl}
               style={{ width: '100%', height: '100%', border: 'none' }}
             />

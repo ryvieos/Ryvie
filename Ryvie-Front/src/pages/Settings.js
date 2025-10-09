@@ -244,6 +244,17 @@ const Settings = () => {
     fetchData();
   }, []);
 
+  // Appliquer le mode sombre
+  useEffect(() => {
+    if (settings.darkMode) {
+      document.body.classList.add('dark-mode');
+      console.log('[Settings] Mode sombre appliqué');
+    } else {
+      document.body.classList.remove('dark-mode');
+      console.log('[Settings] Mode sombre désactivé');
+    }
+  }, [settings.darkMode]);
+
   // S'assurer que accessMode est cohérent et persistant au montage
   useEffect(() => {
     let mode = getCurrentAccessMode();
@@ -275,10 +286,19 @@ const Settings = () => {
           setTokenExpiration(tokenResponse.data.minutes);
         }
         
-        // Charger fond d'écran
+        // Charger fond d'écran et mode sombre
         const prefsResponse = await axios.get(`${serverUrl}/api/user/preferences`);
         if (prefsResponse.data?.backgroundImage) {
           setBackgroundImage(prefsResponse.data.backgroundImage);
+        }
+        
+        // Charger le mode sombre
+        if (prefsResponse.data?.darkMode !== undefined) {
+          console.log('[Settings] Mode sombre chargé:', prefsResponse.data.darkMode);
+          setSettings(prev => ({
+            ...prev,
+            darkMode: prefsResponse.data.darkMode
+          }));
         }
         
         // Charger liste des fonds personnalisés
@@ -714,6 +734,34 @@ const Settings = () => {
           message: "Modification du dossier de téléchargement non disponible en mode web" 
         });
         setTimeout(() => setChangeStatus({ show: false, success: false }), 3000);
+      }
+    } else if (setting === 'darkMode') {
+      // Gestion spéciale pour le mode sombre
+      setSettings(prev => ({
+        ...prev,
+        darkMode: value
+      }));
+      
+      // Sauvegarder dans le backend
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        await axios.patch(`${serverUrl}/api/user/preferences/dark-mode`, { darkMode: value });
+        console.log('[Settings] Mode sombre sauvegardé:', value);
+        
+        // Changer automatiquement le fond d'écran
+        if (value && (backgroundImage === 'preset-default.webp' || backgroundImage === 'default')) {
+          // Activer mode sombre + fond default → changer pour night
+          await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-night.png' });
+          setBackgroundImage('preset-night.png');
+          console.log('[Settings] Fond d\'écran changé pour night');
+        } else if (!value && backgroundImage === 'preset-night.png') {
+          // Désactiver mode sombre + fond night → revenir à default
+          await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-default.webp' });
+          setBackgroundImage('preset-default.webp');
+          console.log('[Settings] Fond d\'écran changé pour default');
+        }
+      } catch (error) {
+        console.error('[Settings] Erreur sauvegarde mode sombre:', error);
       }
     } else {
       setSettings(prev => ({
@@ -1376,7 +1424,8 @@ const Settings = () => {
             zIndex: 9999,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            animation: 'fadeIn 0.3s ease-out'
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowStorageOverlay(false);
@@ -1393,7 +1442,8 @@ const Settings = () => {
               overflow: 'hidden',
               position: 'relative',
               display: 'flex',
-              flexDirection: 'column'
+              flexDirection: 'column',
+              animation: 'modalSlideUp 0.4s ease-out'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1422,7 +1472,11 @@ const Settings = () => {
               </button>
             </div>
             {/* Contenu: composant StorageSettings directement */}
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div style={{ 
+              flex: 1, 
+              overflow: 'auto',
+              animation: 'fadeIn 0.4s ease-out 0.2s backwards'
+            }}>
               <StorageSettings />
             </div>
           </div>
@@ -1796,11 +1850,27 @@ const Settings = () => {
         <h2>Configuration du Stockage</h2>
         <div style={{ marginBottom: 16 }}>
           <button
-            className="setting-button"
+            className="setting-button raid-assistant-btn"
             onClick={() => setShowStorageOverlay(true)}
-            style={{ background: '#1976d2', color: '#fff', borderColor: '#1565c0' }}
+            style={{ 
+              background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+              color: '#fff',
+              border: 'none',
+              padding: '14px 24px',
+              fontSize: '16px',
+              fontWeight: '600',
+              boxShadow: '0 4px 12px rgba(25, 118, 210, 0.3)',
+              transition: 'all 0.3s ease',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
           >
-            Ouvrir l'assistant RAID
+            <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>
+              </svg>
+              Ouvrir l'assistant RAID
+            </span>
           </button>
         </div>
         <div className="storage-options">
@@ -2076,7 +2146,8 @@ const Settings = () => {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 10000,
-            padding: '20px'
+            padding: '20px',
+            animation: 'fadeIn 0.3s ease-out'
           }}
         >
           <div 
@@ -2089,7 +2160,8 @@ const Settings = () => {
               width: '100%',
               maxHeight: '90vh',
               overflow: 'auto',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              animation: 'modalSlideUp 0.4s ease-out'
             }}
           >
             {/* Header */}
@@ -2132,6 +2204,15 @@ const Settings = () => {
             {/* État de chargement ou contenu */}
             {storageDetailLoading ? (
               <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+                <div style={{
+                  width: '50px',
+                  height: '50px',
+                  border: '4px solid rgba(0, 0, 0, 0.1)',
+                  borderTop: '4px solid #1976d2',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                  margin: '0 auto 20px'
+                }}></div>
                 <div style={{ fontSize: '16px', color: '#666', marginBottom: '12px' }}>
                   Analyse du stockage en cours...
                 </div>
@@ -2140,7 +2221,7 @@ const Settings = () => {
                 </div>
               </div>
             ) : storageDetail ? (
-              <>
+              <div style={{ animation: 'fadeIn 0.5s ease-out' }}>
                 {/* Barre de visualisation */}
                 <div style={{ padding: '24px' }}>
               <div style={{
@@ -2154,25 +2235,28 @@ const Settings = () => {
                 <div style={{
                   width: `${(storageDetail.summary.system / storageDetail.summary.total) * 100}%`,
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  transition: 'width 0.3s'
+                  transition: 'width 0.3s',
+                  animation: 'progressFill 0.8s ease-out'
                 }} />
                 {/* Apps */}
                 <div style={{
                   width: `${(storageDetail.summary.apps / storageDetail.summary.total) * 100}%`,
                   background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                  transition: 'width 0.3s'
+                  transition: 'width 0.3s',
+                  animation: 'progressFill 0.8s ease-out 0.1s both'
                 }} />
                 {/* Autres */}
                 <div style={{
                   width: `${(storageDetail.summary.others / storageDetail.summary.total) * 100}%`,
                   background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                  transition: 'width 0.3s'
+                  transition: 'width 0.3s',
+                  animation: 'progressFill 0.8s ease-out 0.2s both'
                 }} />
               </div>
 
               {/* Légende */}
               <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.3s both' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{
                       width: '12px',
@@ -2186,7 +2270,7 @@ const Settings = () => {
                     {storageDetail.summary.systemFormatted}
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.35s both' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{
                       width: '12px',
@@ -2200,7 +2284,7 @@ const Settings = () => {
                     {storageDetail.summary.appsFormatted}
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.4s both' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{
                       width: '12px',
@@ -2226,7 +2310,7 @@ const Settings = () => {
                 Applications ({storageDetail.apps.length})
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {storageDetail.apps.map((app) => {
+                {storageDetail.apps.map((app, idx) => {
                   const serverUrl = getServerUrl(accessMode);
                   return (
                     <div
@@ -2238,7 +2322,8 @@ const Settings = () => {
                         padding: '12px',
                         background: '#f9f9f9',
                         borderRadius: '8px',
-                        transition: 'background 0.2s'
+                        transition: 'background 0.2s',
+                        animation: `slideInLeft 0.4s ease-out ${idx * 0.05}s both`
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
                       onMouseLeave={(e) => e.currentTarget.style.background = '#f9f9f9'}
@@ -2266,7 +2351,7 @@ const Settings = () => {
                 })}
               </div>
             </div>
-              </>
+              </div>
             ) : null}
           </div>
         </div>
