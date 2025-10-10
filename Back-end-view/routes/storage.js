@@ -495,6 +495,30 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
       await executeCommand('sudo', ['-n', 'mdadm', '--remove', array, smartOptimization.smallestMember]);
       log(`✓ Removed ${smartOptimization.smallestMember}`, 'success');
       await executeCommand('sleep', ['2']);
+      
+      // IMPORTANT: Effacer le superblock mdadm pour éviter le réassemblage au boot
+      log(`Wiping mdadm superblock from ${smartOptimization.smallestMember}...`, 'info');
+      try {
+        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', smartOptimization.smallestMember]);
+        log(`✓ Superblock wiped from ${smartOptimization.smallestMember}`, 'success');
+      } catch (e) {
+        log(`Warning: Could not wipe superblock: ${e.message}`, 'warning');
+      }
+      
+      // Optionnel: Supprimer la partition pour nettoyer complètement
+      log(`Deleting partition ${smartOptimization.smallestMember}...`, 'info');
+      try {
+        const partMatch = smartOptimization.smallestMember.match(/^(\/dev\/[a-z]+)(\d+)$/);
+        if (partMatch) {
+          const disk = partMatch[1];
+          const partNum = partMatch[2];
+          await executeCommand('sudo', ['-n', 'parted', disk, 'rm', partNum]);
+          await executeCommand('sudo', ['-n', 'partprobe', disk]);
+          log(`✓ Partition ${smartOptimization.smallestMember} deleted`, 'success');
+        }
+      } catch (e) {
+        log(`Note: Could not delete partition: ${e.message}`, 'warning');
+      }
     } catch (error) {
       log(`Error removing smallest member: ${error.message}`, 'error');
       throw error;
