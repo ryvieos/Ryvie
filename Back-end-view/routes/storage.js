@@ -1254,7 +1254,8 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
       exists: false,
       mounted: false,
       members: [],
-      syncProgress: null
+      syncProgress: null,
+      syncing: false
     };
 
     // Vérifier si /data est monté
@@ -1339,7 +1340,8 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
         status.syncing = false;
       }
     } catch (error) {
-      // Erreur lecture mdstat
+      // Erreur lecture mdstat - s'assurer que syncing est false
+      status.syncing = false;
     }
 
     res.json({

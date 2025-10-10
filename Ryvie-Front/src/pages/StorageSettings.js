@@ -71,8 +71,8 @@ const StorageSettings = () => {
         const state = JSON.parse(savedState);
         const age = Date.now() - (state.timestamp || 0);
         
-        // Restaurer seulement si < 5 minutes (pour éviter les données obsolètes)
-        if (age < 5 * 60 * 1000) {
+        // Restaurer seulement si < 2 minutes (réduit pour éviter les données obsolètes)
+        if (age < 2 * 60 * 1000) {
           // Ajouter un log de restauration
           const ageSeconds = Math.floor(age / 1000);
           const restoredLogs = state.logs || [];
@@ -84,7 +84,11 @@ const StorageSettings = () => {
           
           setLogs(restoredLogs);
           if (state.executionStatus) setExecutionStatus(state.executionStatus);
-          if (state.resyncProgress) setResyncProgress(state.resyncProgress);
+          if (state.resyncProgress) {
+            setResyncProgress(state.resyncProgress);
+            // Vérifier immédiatement si le resync est vraiment en cours
+            setTimeout(() => checkRaidStatus(), 1000);
+          }
           console.log('[StorageSettings] État restauré depuis localStorage');
         } else {
           // Nettoyer les données obsolètes
@@ -200,10 +204,11 @@ const StorageSettings = () => {
       } catch (error) {
         console.error('[StorageSettings] Erreur sauvegarde état:', error);
       }
-    } else if (executionStatus === 'success' || executionStatus === 'error') {
-      // Nettoyer après succès/erreur (avec délai pour permettre la lecture)
+    } else if (executionStatus === 'success' || executionStatus === 'error' || (!resyncProgress && executionStatus !== 'running')) {
+      // Nettoyer après succès/erreur ou si plus de resync en cours (avec délai pour permettre la lecture)
       setTimeout(() => {
         localStorage.removeItem('raidResyncState');
+        console.log('[StorageSettings] localStorage nettoyé');
       }, 10000); // 10 secondes
     }
   }, [logs, executionStatus, resyncProgress]);
@@ -267,14 +272,17 @@ const StorageSettings = () => {
           });
           
           // Détecter si une resynchronisation est en cours
-          if (status.syncing && status.syncProgress !== undefined) {
+          if (status.syncing === true && status.syncProgress !== undefined) {
             setResyncProgress({
               percent: status.syncProgress,
               eta: status.syncETA || null,
               speed: status.syncSpeed || null
             });
-          } else if (!status.syncing && resyncProgress) {
-            // La resynchronisation est terminée
+          } else if (status.syncing === false) {
+            // La resynchronisation est terminée ou n'a jamais été en cours
+            if (resyncProgress) {
+              console.log('[StorageSettings] Resync terminé, nettoyage de resyncProgress');
+            }
             setResyncProgress(null);
           }
           
