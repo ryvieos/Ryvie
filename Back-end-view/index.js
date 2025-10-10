@@ -115,6 +115,11 @@ app.use('/', systemRouter);
 // Mount Storage routes (Step 0 skeleton)
 app.use('/api', storageRouter);
 
+// Initialiser Socket.IO dans le router storage pour les logs en temps réel
+if (storageRouter.setSocketIO) {
+  storageRouter.setSocketIO(io);
+}
+
 // Mount User Preferences routes
 app.use('/api', userPreferencesRouter);
 

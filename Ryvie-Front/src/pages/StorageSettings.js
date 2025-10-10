@@ -15,7 +15,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
-import { getCurrentAccessMode } from '../utils/detectAccessMode';
+import { getCurrentAccessMode, connectRyvieSocket } from '../utils/detectAccessMode';
 
 const StorageSettings = () => {
   const navigate = useNavigate();
@@ -47,6 +47,39 @@ const StorageSettings = () => {
   // États pour la progression du resync
   const [resyncProgress, setResyncProgress] = useState(null); // { percent, eta, speed }
   
+  // Restaurer l'état depuis localStorage au montage
+  useEffect(() => {
+    try {
+      const savedState = localStorage.getItem('raidResyncState');
+      if (savedState) {
+        const state = JSON.parse(savedState);
+        const age = Date.now() - (state.timestamp || 0);
+        
+        // Restaurer seulement si < 5 minutes (pour éviter les données obsolètes)
+        if (age < 5 * 60 * 1000) {
+          // Ajouter un log de restauration
+          const ageSeconds = Math.floor(age / 1000);
+          const restoredLogs = state.logs || [];
+          restoredLogs.push({
+            timestamp: new Date().toISOString(),
+            type: 'info',
+            message: `📦 Session restaurée (il y a ${ageSeconds}s)`
+          });
+          
+          setLogs(restoredLogs);
+          if (state.executionStatus) setExecutionStatus(state.executionStatus);
+          if (state.resyncProgress) setResyncProgress(state.resyncProgress);
+          console.log('[StorageSettings] État restauré depuis localStorage');
+        } else {
+          // Nettoyer les données obsolètes
+          localStorage.removeItem('raidResyncState');
+        }
+      }
+    } catch (error) {
+      console.error('[StorageSettings] Erreur restauration état:', error);
+    }
+  }, []);
+  
   // États pour les validations
   const [validationErrors, setValidationErrors] = useState([]);
   const [validationWarnings, setValidationWarnings] = useState([]);
@@ -60,6 +93,97 @@ const StorageSettings = () => {
     };
     loadData();
   }, []);
+
+  // Connexion Socket.IO pour les logs en temps réel
+  useEffect(() => {
+    const accessMode = getCurrentAccessMode() || 'private';
+    
+    const socket = connectRyvieSocket({
+      mode: accessMode,
+      onConnect: (sock) => {
+        console.log('[StorageSettings] Socket.IO connecté pour les logs RAID');
+      },
+      onDisconnect: () => {
+        console.log('[StorageSettings] Socket.IO déconnecté');
+      },
+      onError: (err) => {
+        console.error('[StorageSettings] Erreur Socket.IO:', err);
+      }
+    });
+
+    if (socket) {
+      // Écouter les logs RAID en temps réel
+      socket.on('mdraid-log', (logEntry) => {
+        setLogs(prev => [...prev, logEntry]);
+        
+        // Détecter le début du resync
+        if (logEntry.message && logEntry.message.includes('Resynchronization started')) {
+          setResyncProgress({ percent: 0, eta: null, speed: null });
+        }
+        
+        // Détecter la fin du resync
+        if (logEntry.message && logEntry.message.includes('Resynchronization completed')) {
+          setResyncProgress({ percent: 100, eta: null, speed: null });
+          // Mettre à jour le statut après la fin
+          setTimeout(() => {
+            setExecutionStatus('success');
+            checkRaidStatus();
+            loadInventory();
+          }, 1000);
+        }
+      });
+
+      // Écouter les événements de progression dédiés
+      socket.on('mdraid-resync-progress', (progressData) => {
+        setResyncProgress({
+          percent: progressData.percent || 0,
+          eta: progressData.eta,
+          speed: progressData.speed
+        });
+        
+        // Si le resync est terminé
+        if (progressData.completed) {
+          setTimeout(() => {
+            setResyncProgress(null);
+            setExecutionStatus('success');
+            checkRaidStatus();
+            loadInventory();
+          }, 2000);
+        }
+      });
+
+      // Nettoyage à la destruction du composant
+      return () => {
+        console.log('[StorageSettings] Déconnexion Socket.IO');
+        socket.off('mdraid-log');
+        socket.off('mdraid-resync-progress');
+        socket.disconnect();
+      };
+    }
+  }, []);
+
+  // Sauvegarder l'état dans localStorage à chaque changement
+  useEffect(() => {
+    // Ne sauvegarder que si on est en cours d'exécution ou si un resync est en cours
+    if (executionStatus === 'running' || resyncProgress) {
+      try {
+        const state = {
+          logs,
+          executionStatus,
+          resyncProgress,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('raidResyncState', JSON.stringify(state));
+      } catch (error) {
+        console.error('[StorageSettings] Erreur sauvegarde état:', error);
+      }
+    } else if (executionStatus === 'success' || executionStatus === 'error') {
+      // Nettoyer après succès/erreur (avec délai pour permettre la lecture)
+      setTimeout(() => {
+        localStorage.removeItem('raidResyncState');
+      }, 10000); // 10 secondes
+    }
+  }, [logs, executionStatus, resyncProgress]);
 
   // Auto-scroll des logs
   useEffect(() => {
@@ -342,7 +466,7 @@ const StorageSettings = () => {
       setShowConfirmModal(false);
       setExecutionStatus('running');
       setLogs([]);
-      addLog('Starting disk addition to RAID...', 'info');
+      setResyncProgress(null); // Réinitialiser la progression
       
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
@@ -356,49 +480,41 @@ const StorageSettings = () => {
       });
       
       if (response.data.success) {
-        // Ajouter tous les logs du backend et parser la progression
-        response.data.logs.forEach(log => {
-          setLogs(prev => [...prev, log]);
-          
-          // Parser la progression du resync depuis les logs
-          if (log.message && log.message.includes('Resync progress:')) {
-            const percentMatch = log.message.match(/(\d+\.\d+)%/);
-            const etaMatch = log.message.match(/ETA:\s*([\d.]+min)/);
-            const speedMatch = log.message.match(/Speed:\s*([\d.]+[KMG]\/sec)/);
-            
-            if (percentMatch) {
-              setResyncProgress({
-                percent: parseFloat(percentMatch[1]),
-                eta: etaMatch ? etaMatch[1] : null,
-                speed: speedMatch ? speedMatch[1] : null
-              });
-            }
-          }
-          
-          // Détecter la fin du resync
-          if (log.message && log.message.includes('Resynchronization completed')) {
-            setResyncProgress({ percent: 100, eta: null, speed: null });
-          }
-        });
+        // Les logs arrivent en temps réel via Socket.IO
+        // Le statut 'success' sera mis à jour automatiquement par l'événement
+        // 'mdraid-resync-progress' quand completed: true
+        // On ne fait rien ici pour ne pas marquer le succès trop tôt
         
-        setExecutionStatus('success');
-        addLog('Disk added to RAID successfully!', 'success');
-        
-        // Rafraîchir le statut RAID et l'inventaire
-        setTimeout(() => {
-          checkRaidStatus();
-          loadInventory();
-          setResyncProgress(null); // Réinitialiser la progression
-        }, 2000);
+        // Si jamais il n'y avait pas de resync, mettre à jour maintenant
+        if (!resyncProgress) {
+          setExecutionStatus('success');
+          setTimeout(() => {
+            checkRaidStatus();
+            loadInventory();
+          }, 2000);
+        }
       } else {
         setExecutionStatus('error');
-        addLog(`Failed to add disk: ${response.data.error}`, 'error');
+        setResyncProgress(null);
+        
+        // Ajouter l'erreur seulement si elle n'est pas déjà dans les logs
+        const errorMsg = response.data.error;
+        const alreadyLogged = logs.some(log => log.message.includes(errorMsg));
+        if (!alreadyLogged) {
+          addLog(`Failed to add disk: ${errorMsg}`, 'error');
+        }
       }
     } catch (error) {
       console.error('Error adding disk to RAID:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
       setExecutionStatus('error');
-      addLog(`Failed to add disk: ${errorMsg}`, 'error');
+      setResyncProgress(null);
+      
+      // Vérifier si l'erreur n'est pas déjà loggée
+      const alreadyLogged = logs.some(log => log.message.includes(errorMsg));
+      if (!alreadyLogged) {
+        addLog(`Failed to add disk: ${errorMsg}`, 'error');
+      }
     }
   };
 

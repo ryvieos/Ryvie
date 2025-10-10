@@ -1293,8 +1293,11 @@ const Home = () => {
       const bgUrl = `${serverUrl}/api/backgrounds/${filename}`;
       console.log('[Home] 🎨 Fond personnalisé:', bgUrl);
       return {
-        background: `url(${bgUrl}) no-repeat center center fixed`,
-        backgroundSize: 'cover'
+        backgroundImage: `url(${bgUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
       };
     }
     
@@ -1306,8 +1309,11 @@ const Home = () => {
       console.log('[Home] 🎨 Fond prédéfini via API:', filename);
       
       return {
-        background: `url(${serverUrl}/api/backgrounds/presets/${filename}) no-repeat center center fixed`,
-        backgroundSize: 'cover'
+        backgroundImage: `url(${serverUrl}/api/backgrounds/presets/${filename})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
       };
     }
     
@@ -1316,8 +1322,11 @@ const Home = () => {
     const serverUrl = getServerUrl(accessMode);
     console.log('[Home] 🎨 Fond par défaut via API');
     return {
-      background: `url(${serverUrl}/api/backgrounds/presets/default.webp) no-repeat center center fixed`,
-      backgroundSize: 'cover'
+      backgroundImage: `url(${serverUrl}/api/backgrounds/presets/default.webp)`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center center',
+      backgroundRepeat: 'no-repeat',
+      backgroundAttachment: 'fixed'
     };
   };
 
