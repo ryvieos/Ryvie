@@ -128,8 +128,8 @@ async function getUsedDevSize(arrayDevice) {
       const lsblkResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', memberDevice]);
       const memberSize = parseInt(lsblkResult.stdout.trim());
       if (memberSize > 0) {
-        // Ajouter 256 MiB de marge pour être sûr
-        return memberSize + (256 * 1024 * 1024);
+        // Retourner la taille exacte du membre (la marge sera appliquée lors de la vérification)
+        return memberSize;
       }
     }
     
@@ -137,8 +137,8 @@ async function getUsedDevSize(arrayDevice) {
     const arraySizeMatch = detailOutput.match(/Array Size\s*:\s*(\d+)\s*\(/i);
     if (arraySizeMatch) {
       const arraySizeKiB = parseInt(arraySizeMatch[1]);
-      // Ajouter 256 MiB de marge
-      return (arraySizeKiB * 1024) + (256 * 1024 * 1024);
+      // Retourner la taille exacte (la marge sera appliquée lors de la vérification)
+      return arraySizeKiB * 1024;
     }
     
     // Par défaut, retourner une taille minimale
@@ -382,17 +382,17 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
       endBytes = Math.min(smartOptimization.targetExpandSize, deviceSizeBytes - safetyMargin);
       endMiB = Math.ceil(endBytes / 1024 / 1024);
     } else {
-      // Mode standard : utiliser la taille requise actuelle avec marge de 512 MiB
-      const safetyMargin = 512 * 1024 * 1024; // 512 MiB
-      const minRequired = requiredSizeBytes + safetyMargin;
+      // Mode standard : vérifier que le disque est assez grand
+      const safetyMargin = 2 * 1024 * 1024; // 2 MiB (suffisant pour GPT et alignement)
       
-      if (deviceSizeBytes < minRequired) {
-        reasons.push(`❌ Disk ${disk} is too small (${Math.floor(deviceSizeBytes / 1024 / 1024)} MiB < ${Math.floor(minRequired / 1024 / 1024)} MiB required)`);
+      if (deviceSizeBytes < requiredSizeBytes) {
+        reasons.push(`❌ Disk ${disk} is too small (${Math.floor(deviceSizeBytes / 1024 / 1024)} MiB < ${Math.floor(requiredSizeBytes / 1024 / 1024)} MiB required)`);
         canProceed = false;
       }
       
-      endBytes = Math.min(requiredSizeBytes, deviceSizeBytes - safetyMargin);
-      endMiB = Math.ceil(endBytes / 1024 / 1024);
+      // Utiliser toute la capacité disponible (mdadm accepte des membres plus grands)
+      endBytes = deviceSizeBytes - safetyMargin;
+      endMiB = Math.floor(endBytes / 1024 / 1024);
     }
 
     // 8. Déterminer le prochain PARTLABEL
@@ -822,14 +822,16 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
     const lsblkResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', disk]);
     const deviceSizeBytes = parseInt(lsblkResult.stdout.trim());
     
-    // Calculer la taille de partition avec marge minimale
-    const endBytes = Math.min(requiredSizeBytes, deviceSizeBytes - (2 * 1024 * 1024));
-    const endMiB = Math.ceil(endBytes / 1024 / 1024); // Arrondir vers le HAUT
+    // Calculer la taille de partition : utiliser toute la capacité disponible (moins 2 MiB pour GPT)
+    // Ne PAS limiter à requiredSizeBytes car mdadm accepte des membres plus grands
+    const endBytes = deviceSizeBytes - (2 * 1024 * 1024);
+    const endMiB = Math.floor(endBytes / 1024 / 1024); // Arrondir vers le BAS pour sécurité
     const nextPartLabel = await getNextPartLabel(array);
     const newPartitionPath = getPartitionPath(disk, 1);
 
     log(`Required size: ${Math.floor(requiredSizeBytes / 1024 / 1024)} MiB`, 'info');
     log(`Device size: ${Math.floor(deviceSizeBytes / 1024 / 1024)} MiB`, 'info');
+    log(`Partition size: ${endMiB} MiB`, 'info');
     log(`Partition will be: ${newPartitionPath} (${nextPartLabel})`, 'info');
 
     if (dryRun) {
