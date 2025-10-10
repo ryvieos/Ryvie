@@ -330,8 +330,12 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
             const diskSizeResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', secondMemberDisk]);
             const secondDiskTotalSize = parseInt(diskSizeResult.stdout.trim());
             
-            // Si le disque parent a assez d'espace pour agrandir la partition
-            const targetSize = Math.min(deviceSizeBytes, secondDiskTotalSize - (2 * 1024 * 1024 * 1024)); // -2GB de marge
+            // Calculer la taille cible avec une marge de sécurité de 512 MiB
+            const safetyMargin = 512 * 1024 * 1024; // 512 MiB
+            const targetSize = Math.min(
+              deviceSizeBytes - safetyMargin,
+              secondDiskTotalSize - (2 * 1024 * 1024 * 1024)
+            );
             
             if (targetSize > secondSmallestMember.size * 1.2 && targetSize <= secondDiskTotalSize) {
               // OPTIMISATION POSSIBLE !
@@ -342,14 +346,14 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
                 memberToExpand: secondSmallestMember.device,
                 expandDisk: secondMemberDisk,
                 currentExpandSize: secondSmallestMember.size,
-                targetExpandSize: Math.min(deviceSizeBytes, targetSize),
+                targetExpandSize: targetSize,
                 newDisk: disk,
                 newDiskSize: deviceSizeBytes,
-                finalRaidCapacity: Math.min(deviceSizeBytes, targetSize),
-                message: `💡 Optimisation détectée : En retirant ${smallestMember.device} (${Math.floor(smallestMember.size / 1024 / 1024 / 1024)}G) et en agrandissant ${secondSmallestMember.device} à ${Math.floor(Math.min(deviceSizeBytes, targetSize) / 1024 / 1024 / 1024)}G, vous pourrez avoir un RAID de ${Math.floor(Math.min(deviceSizeBytes, targetSize) / 1024 / 1024 / 1024)}G au lieu de ${Math.floor(smallestMember.size / 1024 / 1024 / 1024)}G !`
+                finalRaidCapacity: targetSize,
+                message: `Optimisation détectée : En retirant ${smallestMember.device} (${Math.floor(smallestMember.size / 1024 / 1024 / 1024)}G) et en agrandissant ${secondSmallestMember.device} à ${Math.floor(targetSize / 1024 / 1024 / 1024)}G, vous pourrez avoir un RAID de ${Math.floor(targetSize / 1024 / 1024 / 1024)}G au lieu de ${Math.floor(smallestMember.size / 1024 / 1024 / 1024)}G !`
               };
               
-              reasons.push(`💡 Smart optimization available: Remove ${smallestMember.device} and expand ${secondSmallestMember.device} for ${Math.floor(Math.min(deviceSizeBytes, targetSize) / 1024 / 1024)}G RAID capacity`);
+              reasons.push(`Smart optimization available: Remove ${smallestMember.device} and expand ${secondSmallestMember.device} for ${Math.floor(targetSize / 1024 / 1024)}G RAID capacity`);
             }
           } catch (e) {
             // Pas grave si on ne peut pas détecter l'optimisation
@@ -373,18 +377,21 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
     let endBytes, endMiB;
     
     if (smartOptimization) {
-      // Utiliser la taille optimale pour maximiser la capacité
-      endBytes = Math.min(smartOptimization.targetExpandSize, deviceSizeBytes - (2 * 1024 * 1024));
+      // Utiliser la taille optimale pour maximiser la capacité avec marge de 512 MiB
+      const safetyMargin = 512 * 1024 * 1024; // 512 MiB
+      endBytes = Math.min(smartOptimization.targetExpandSize, deviceSizeBytes - safetyMargin);
       endMiB = Math.ceil(endBytes / 1024 / 1024);
     } else {
-      // Mode standard : utiliser la taille requise actuelle
-      const minRequired = requiredSizeBytes + (4 * 1024 * 1024);
+      // Mode standard : utiliser la taille requise actuelle avec marge de 512 MiB
+      const safetyMargin = 512 * 1024 * 1024; // 512 MiB
+      const minRequired = requiredSizeBytes + safetyMargin;
+      
       if (deviceSizeBytes < minRequired) {
         reasons.push(`❌ Disk ${disk} is too small (${Math.floor(deviceSizeBytes / 1024 / 1024)} MiB < ${Math.floor(minRequired / 1024 / 1024)} MiB required)`);
         canProceed = false;
       }
       
-      endBytes = Math.min(requiredSizeBytes, deviceSizeBytes - (2 * 1024 * 1024));
+      endBytes = Math.min(requiredSizeBytes, deviceSizeBytes - safetyMargin);
       endMiB = Math.ceil(endBytes / 1024 / 1024);
     }
 

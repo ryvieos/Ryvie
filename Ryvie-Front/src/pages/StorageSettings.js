@@ -50,6 +50,17 @@ const StorageSettings = () => {
   // États pour la gestion intelligente
   const [smartSuggestion, setSmartSuggestion] = useState(null); // Suggestion d'action intelligente
   const [smartOptimization, setSmartOptimization] = useState(null); // Données d'optimisation des prechecks
+
+  // Helper: strip emojis from strings for consistent UI DA
+  const stripEmojis = (str) => {
+    if (!str) return '';
+    try {
+      // Remove common emoji ranges and misc symbols
+      return str.replace(/[\u{1F300}-\u{1FAFF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '');
+    } catch {
+      return str;
+    }
+  };
   
   // Restaurer l'état depuis localStorage au montage
   useEffect(() => {
@@ -691,8 +702,8 @@ const StorageSettings = () => {
                 <div className="alert-warning" style={{ marginTop: '1rem' }}>
                   <FontAwesomeIcon icon={faExclamationTriangle} />
                   <div>
-                    <strong>💡 Suggestion intelligente :</strong>
-                    <p style={{ margin: '0.5rem 0 0 0' }}>{smartSuggestion.message}</p>
+                    <strong>Suggestion intelligente :</strong>
+                    <p style={{ margin: '0.5rem 0 0 0' }}>{stripEmojis(smartSuggestion.message)}</p>
                     <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
                       Action recommandée : Retirez <strong>{smartSuggestion.smallestMember.device}</strong> du RAID, 
                       puis ajoutez un disque plus grand pour maximiser votre capacité de stockage.
@@ -938,11 +949,11 @@ const StorageSettings = () => {
       {showConfirmModal && smartOptimization && (
         <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>🚀 Optimisation Intelligente du RAID</h2>
+            <h2>Optimisation intelligente du RAID</h2>
             
             <div className="modal-section" style={{ background: '#e3f2fd', padding: '1rem', borderRadius: '6px', marginBottom: '1rem' }}>
-              <h3 style={{ color: '#1976d2', margin: '0 0 0.5rem 0' }}>💡 Opportunité d'optimisation détectée !</h3>
-              <p style={{ margin: '0', fontSize: '0.95rem' }}>{smartOptimization.message}</p>
+              <h3 style={{ color: '#1976d2', margin: '0 0 0.5rem 0' }}>Opportunité d'optimisation détectée</h3>
+              <p style={{ margin: '0', fontSize: '0.95rem' }}>{stripEmojis(smartOptimization.message)}</p>
             </div>
             
             <div className="modal-section">
@@ -970,7 +981,7 @@ const StorageSettings = () => {
                 </div>
                 
                 <div style={{ padding: '1rem', background: '#f3e5f5', borderRadius: '6px', borderLeft: '4px solid #9c27b0', textAlign: 'center' }}>
-                  <strong style={{ fontSize: '1.1rem' }}>🎉 Capacité finale du RAID</strong>
+                  <strong style={{ fontSize: '1.1rem' }}>Capacité finale du RAID</strong>
                   <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#9c27b0', marginTop: '0.5rem' }}>
                     {Math.floor(smartOptimization.finalRaidCapacity / 1024 / 1024 / 1024)}G
                   </div>
@@ -999,7 +1010,7 @@ const StorageSettings = () => {
                 Annuler
               </button>
               <button className="btn-primary" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }} onClick={executeSmartOptimization}>
-                🚀 Optimiser le RAID
+                Optimiser le RAID
               </button>
             </div>
           </div>
