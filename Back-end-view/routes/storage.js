@@ -1294,10 +1294,25 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
       const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
       status.mdstat = mdstatResult.stdout;
       
-      // Parser la progression de resync
-      const progressMatch = mdstatResult.stdout.match(/\[(=+>?\.+)\]\s+(\d+\.\d+)%/);
+      // Parser la progression de resync/recovery
+      const progressMatch = mdstatResult.stdout.match(/(?:recovery|resync)\s*=\s*(\d+\.\d+)%/);
       if (progressMatch) {
-        status.syncProgress = parseFloat(progressMatch[2]);
+        status.syncProgress = parseFloat(progressMatch[1]);
+        status.syncing = true;
+        
+        // Parser l'ETA
+        const finishMatch = mdstatResult.stdout.match(/finish\s*=\s*([\d.]+min)/);
+        if (finishMatch) {
+          status.syncETA = finishMatch[1];
+        }
+        
+        // Parser la vitesse
+        const speedMatch = mdstatResult.stdout.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
+        if (speedMatch) {
+          status.syncSpeed = speedMatch[1];
+        }
+      } else {
+        status.syncing = false;
       }
     } catch (error) {
       // Erreur lecture mdstat
@@ -1313,6 +1328,171 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
       success: false,
       error: 'Failed to fetch mdraid status',
       details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/storage/mdraid-stop-resync
+ * Arrête la resynchronisation en cours sur un array RAID
+ * Body: { array: string }
+ */
+router.post('/storage/mdraid-stop-resync', authenticateToken, async (req, res) => {
+  const { array } = req.body;
+
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      type,
+      message
+    };
+    logs.push(logEntry);
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    
+    if (io) {
+      io.emit('mdraid-log', logEntry);
+    }
+  };
+
+  try {
+    // Validation
+    if (!array || !array.startsWith('/dev/md')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid array device path'
+      });
+    }
+
+    log(`🛑 Arrêt de la resynchronisation sur ${array}`, 'info');
+
+    // Vérifier si une resynchronisation est en cours
+    const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+    if (!mdstatResult.stdout.includes('recovery') && !mdstatResult.stdout.includes('resync')) {
+      log('⚠️ Aucune resynchronisation en cours', 'warning');
+      return res.json({
+        success: false,
+        error: 'No resynchronization in progress',
+        logs
+      });
+    }
+
+    // Arrêter la resynchronisation en écrivant "idle" dans sync_action
+    const arrayName = array.replace('/dev/', '');
+    const syncActionPath = `/sys/block/${arrayName}/md/sync_action`;
+    
+    try {
+      // Utiliser tee avec sudo pour écrire dans le fichier système
+      await executeCommand('bash', ['-c', `echo idle | sudo -n tee ${syncActionPath} > /dev/null`]);
+      
+      // Attendre un peu pour que le changement prenne effet
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Vérifier que l'arrêt a bien fonctionné
+      const checkResult = await executeCommand('cat', [syncActionPath]);
+      const currentState = checkResult.stdout.trim();
+      
+      if (currentState === 'idle') {
+        log('✅ Resynchronisation arrêtée avec succès', 'success');
+        
+        // Émettre un événement pour mettre à jour le frontend
+        if (io) {
+          io.emit('mdraid-resync-progress', { 
+            percent: 0, 
+            eta: null, 
+            speed: null, 
+            stopped: true 
+          });
+        }
+
+        res.json({
+          success: true,
+          message: 'Resynchronization stopped successfully',
+          logs
+        });
+      } else {
+        // Le système a repris la resynchronisation automatiquement
+        // C'est une recovery (ajout de disque), il faut retirer le disque
+        log(`⚠️ La resynchronisation a repris automatiquement (état: ${currentState})`, 'warning');
+        log('🔧 Arrêt définitif: retrait du disque en cours d\'ajout...', 'info');
+        
+        // Trouver le disque en cours d'ajout (celui qui est en spare ou en reconstruction)
+        const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+        const lines = detailResult.stdout.split('\n');
+        let diskToRemove = null;
+        
+        for (const line of lines) {
+          // Chercher les lignes avec "spare" ou "rebuilding"
+          if (line.includes('spare') || line.includes('rebuilding')) {
+            const match = line.match(/(\/dev\/\S+)/);
+            if (match) {
+              diskToRemove = match[1];
+              break;
+            }
+          }
+        }
+        
+        if (diskToRemove) {
+          log(`🎯 Disque identifié: ${diskToRemove}`, 'info');
+          log(`⏸️ Retrait de ${diskToRemove} du RAID...`, 'info');
+          
+          try {
+            // Retirer le disque du RAID
+            await executeCommand('sudo', ['-n', 'mdadm', array, '--fail', diskToRemove]);
+            await executeCommand('sudo', ['-n', 'mdadm', array, '--remove', diskToRemove]);
+            
+            log(`✅ Disque ${diskToRemove} retiré avec succès`, 'success');
+            log(`💡 La resynchronisation est maintenant arrêtée`, 'success');
+            log(`ℹ️ Vous pouvez ré-ajouter le disque plus tard si nécessaire`, 'info');
+            
+            // Émettre un événement pour mettre à jour le frontend
+            if (io) {
+              io.emit('mdraid-resync-progress', { 
+                percent: 0, 
+                eta: null, 
+                speed: null, 
+                stopped: true 
+              });
+            }
+            
+            res.json({
+              success: true,
+              message: 'Resynchronization stopped by removing the disk being added',
+              diskRemoved: diskToRemove,
+              logs
+            });
+          } catch (removeError) {
+            log(`❌ Erreur lors du retrait: ${removeError.message}`, 'error');
+            res.json({
+              success: false,
+              error: `Failed to remove disk: ${removeError.message}`,
+              logs
+            });
+          }
+        } else {
+          log('❌ Impossible d\'identifier le disque en cours d\'ajout', 'error');
+          res.json({
+            success: false,
+            error: 'Could not identify the disk being added',
+            logs
+          });
+        }
+      }
+    } catch (error) {
+      log(`❌ Erreur lors de l'arrêt: ${error.message}`, 'error');
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        logs
+      });
+    }
+  } catch (error) {
+    console.error('Error stopping resync:', error);
+    log(`❌ Erreur: ${error.message}`, 'error');
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      logs
     });
   }
 });

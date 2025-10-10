@@ -408,7 +408,14 @@ const Settings = () => {
         setStorageLoading(false);
       }
     };
+    
+    // Appel initial
     fetchStorage();
+    
+    // Polling régulier toutes les 5 secondes pour détecter les changements de resync
+    const intervalId = setInterval(fetchStorage, 5000);
+    
+    return () => clearInterval(intervalId);
   }, [accessMode]);
 
   // Helpers pour extraire des infos depuis lsblk JSON

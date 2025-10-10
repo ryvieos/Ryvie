@@ -11,7 +11,8 @@ import {
   faPlay,
   faCopy,
   faArrowLeft,
-  faCheck
+  faCheck,
+  faStop
 } from '@fortawesome/free-solid-svg-icons';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
@@ -100,13 +101,20 @@ const StorageSettings = () => {
   const [validationWarnings, setValidationWarnings] = useState([]);
   const [canProceed, setCanProceed] = useState(false);
 
-  // Charger l'inventaire au montage
+  // Charger l'inventaire au montage et polling régulier
   useEffect(() => {
     const loadData = async () => {
       await checkRaidStatus(); // Charger d'abord le statut RAID
       await loadInventory(); // Puis l'inventaire
     };
     loadData();
+    
+    // Polling régulier pour détecter les changements (toutes les 5 secondes)
+    const intervalId = setInterval(() => {
+      checkRaidStatus();
+    }, 5000);
+    
+    return () => clearInterval(intervalId);
   }, []);
 
   // Connexion Socket.IO pour les logs en temps réel
@@ -257,6 +265,18 @@ const StorageSettings = () => {
             members: status.members || [], // Inclure les membres avec leurs tailles
             type: 'mdadm'
           });
+          
+          // Détecter si une resynchronisation est en cours
+          if (status.syncing && status.syncProgress !== undefined) {
+            setResyncProgress({
+              percent: status.syncProgress,
+              eta: status.syncETA || null,
+              speed: status.syncSpeed || null
+            });
+          } else if (!status.syncing && resyncProgress) {
+            // La resynchronisation est terminée
+            setResyncProgress(null);
+          }
           
           // Analyser pour suggestion intelligente
           analyzeSmartSuggestion(status.members);
@@ -614,6 +634,42 @@ const StorageSettings = () => {
     }
   };
 
+  // Arrêter la resynchronisation en cours
+  const handleStopResync = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir arrêter la resynchronisation en cours ?')) {
+      return;
+    }
+
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-stop-resync`, {
+        array: '/dev/md0'
+      });
+
+      if (response.data.success) {
+        setResyncProgress(null);
+        setExecutionStatus('success');
+        
+        // Ajouter les logs de l'arrêt
+        if (response.data.logs) {
+          response.data.logs.forEach(log => addLog(log.message, log.type));
+        }
+        
+        // Recharger le statut
+        setTimeout(() => {
+          checkRaidStatus();
+          loadInventory();
+        }, 1000);
+      } else {
+        alert('Erreur: ' + (response.data.error || 'Impossible d\'arrêter la resynchronisation'));
+      }
+    } catch (error) {
+      console.error('Error stopping resync:', error);
+      alert('Erreur lors de l\'arrêt de la resynchronisation: ' + (error.response?.data?.error || error.message));
+    }
+  };
 
   // Formater une taille en bytes en format lisible
   const formatBytes = (bytes) => {
@@ -834,21 +890,70 @@ const StorageSettings = () => {
                 );
               }
               return (
-                <button
-                  className="btn-create-raid"
-                  disabled={!canProceed || executionStatus === 'running'}
-                  onClick={openConfirmModal}
-                >
-                  {executionStatus === 'running' ? (
-                    <>
-                      <FontAwesomeIcon icon={faSpinner} spin /> Ajout en cours...
-                    </>
-                  ) : (
-                    <>
-                      <FontAwesomeIcon icon={faPlay} /> Ajouter au RAID
-                    </>
+                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                  <button
+                    className="btn-create-raid"
+                    disabled={!canProceed || executionStatus === 'running'}
+                    onClick={openConfirmModal}
+                    style={{
+                      transition: 'all 0.3s ease',
+                      transform: 'scale(1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!e.currentTarget.disabled) {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    {executionStatus === 'running' ? (
+                      <>
+                        <FontAwesomeIcon icon={faSpinner} spin /> Ajout en cours...
+                      </>
+                    ) : (
+                      <>
+                        <FontAwesomeIcon icon={faPlay} /> Ajouter au RAID
+                      </>
+                    )}
+                  </button>
+                  
+                  {resyncProgress && (
+                    <button
+                      className="btn-stop-resync"
+                      onClick={handleStopResync}
+                      style={{
+                        background: '#f44336',
+                        color: 'white',
+                        border: 'none',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        transition: 'all 0.3s ease',
+                        transform: 'scale(1)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(244, 67, 54, 0.4)';
+                        e.currentTarget.style.background = '#d32f2f';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.background = '#f44336';
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faStop} /> Arrêter
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })()}
           </div>
