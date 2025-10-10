@@ -237,6 +237,7 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
     const reasons = [];
     const plan = [];
     let canProceed = true;
+    let smartOptimization = null;
 
     // 1. Vérifier que /data est monté sur /dev/md0 (btrfs)
     try {
@@ -261,11 +262,30 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
       canProceed = false;
     }
 
-    // 2. Obtenir la taille requise par membre
+    // 2. Obtenir la taille requise par membre et analyser les membres actuels
     let requiredSizeBytes = 0;
+    let currentMembers = [];
     try {
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      
+      // Extraire les membres actuels avec leurs tailles
+      const memberMatches = detailResult.stdout.matchAll(/\s+\d+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+(\/dev\/\S+)/g);
+      for (const match of memberMatches) {
+        const memberDevice = match[1];
+        try {
+          const lsblkResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', memberDevice]);
+          const memberSize = parseInt(lsblkResult.stdout.trim());
+          currentMembers.push({
+            device: memberDevice,
+            size: memberSize
+          });
+        } catch (e) {
+          // Ignorer si on ne peut pas obtenir la taille
+        }
+      }
+      
       requiredSizeBytes = await getUsedDevSize(array);
-      reasons.push(`✓ Required size per member: ${Math.floor(requiredSizeBytes / 1024 / 1024)} MiB`);
+      reasons.push(`✓ Current RAID size per member: ${Math.floor(requiredSizeBytes / 1024 / 1024)} MiB`);
     } catch (error) {
       reasons.push(`⚠ Could not determine required size: ${error.message}`);
     }
@@ -285,19 +305,60 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
       const lsblkResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', disk]);
       deviceSizeBytes = parseInt(lsblkResult.stdout.trim());
       
-      const minRequired = requiredSizeBytes + (4 * 1024 * 1024); // +4 MiB de marge
-      if (deviceSizeBytes < minRequired) {
-        reasons.push(`❌ Disk ${disk} is too small (${Math.floor(deviceSizeBytes / 1024 / 1024)} MiB < ${Math.floor(minRequired / 1024 / 1024)} MiB required)`);
-        canProceed = false;
-      } else {
-        reasons.push(`✓ Disk ${disk} size: ${Math.floor(deviceSizeBytes / 1024 / 1024)} MiB (sufficient)`);
-      }
+      reasons.push(`✓ New disk ${disk} size: ${Math.floor(deviceSizeBytes / 1024 / 1024)} MiB`);
     } catch (error) {
       reasons.push(`❌ Could not determine disk size: ${error.message}`);
       canProceed = false;
     }
 
-    // 5. Vérifier les superblocs existants
+    // 5. ANALYSE INTELLIGENTE : Détecter si on peut optimiser la capacité du RAID
+    if (currentMembers.length >= 2 && deviceSizeBytes > 0) {
+      // Trouver le plus petit membre actuel
+      const sortedMembers = [...currentMembers].sort((a, b) => a.size - b.size);
+      const smallestMember = sortedMembers[0];
+      const secondSmallestMember = sortedMembers[1];
+      
+      // Si le nouveau disque est significativement plus grand que le plus petit membre
+      if (deviceSizeBytes > smallestMember.size * 1.5) {
+        // Extraire le disque parent du deuxième membre
+        const secondMemberDiskMatch = secondSmallestMember.device.match(/^(\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+))/);
+        if (secondMemberDiskMatch) {
+          const secondMemberDisk = secondMemberDiskMatch[1];
+          
+          // Vérifier la taille totale du disque parent
+          try {
+            const diskSizeResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', secondMemberDisk]);
+            const secondDiskTotalSize = parseInt(diskSizeResult.stdout.trim());
+            
+            // Si le disque parent a assez d'espace pour agrandir la partition
+            const targetSize = Math.min(deviceSizeBytes, secondDiskTotalSize - (2 * 1024 * 1024 * 1024)); // -2GB de marge
+            
+            if (targetSize > secondSmallestMember.size * 1.2 && targetSize <= secondDiskTotalSize) {
+              // OPTIMISATION POSSIBLE !
+              smartOptimization = {
+                type: 'remove_smallest_and_expand',
+                smallestMember: smallestMember.device,
+                smallestSize: smallestMember.size,
+                memberToExpand: secondSmallestMember.device,
+                expandDisk: secondMemberDisk,
+                currentExpandSize: secondSmallestMember.size,
+                targetExpandSize: Math.min(deviceSizeBytes, targetSize),
+                newDisk: disk,
+                newDiskSize: deviceSizeBytes,
+                finalRaidCapacity: Math.min(deviceSizeBytes, targetSize),
+                message: `💡 Optimisation détectée : En retirant ${smallestMember.device} (${Math.floor(smallestMember.size / 1024 / 1024 / 1024)}G) et en agrandissant ${secondSmallestMember.device} à ${Math.floor(Math.min(deviceSizeBytes, targetSize) / 1024 / 1024 / 1024)}G, vous pourrez avoir un RAID de ${Math.floor(Math.min(deviceSizeBytes, targetSize) / 1024 / 1024 / 1024)}G au lieu de ${Math.floor(smallestMember.size / 1024 / 1024 / 1024)}G !`
+              };
+              
+              reasons.push(`💡 Smart optimization available: Remove ${smallestMember.device} and expand ${secondSmallestMember.device} for ${Math.floor(Math.min(deviceSizeBytes, targetSize) / 1024 / 1024)}G RAID capacity`);
+            }
+          } catch (e) {
+            // Pas grave si on ne peut pas détecter l'optimisation
+          }
+        }
+      }
+    }
+
+    // 6. Vérifier les superblocs existants
     try {
       const examineResult = await executeCommand('sudo', ['-n', 'mdadm', '--examine', disk]);
       if (examineResult.stdout.includes('Magic')) {
@@ -308,28 +369,52 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
       reasons.push(`✓ No existing mdadm superblock on ${disk}`);
     }
 
-    // 6. Calculer la taille de partition
-    // Utiliser la taille requise directement, avec une petite marge pour l'alignement
-    const endBytes = Math.min(requiredSizeBytes, deviceSizeBytes - (2 * 1024 * 1024));
-    const endMiB = Math.ceil(endBytes / 1024 / 1024); // Arrondir vers le HAUT
+    // 7. Calculer la taille de partition (simple ou optimisée)
+    let endBytes, endMiB;
+    
+    if (smartOptimization) {
+      // Utiliser la taille optimale pour maximiser la capacité
+      endBytes = Math.min(smartOptimization.targetExpandSize, deviceSizeBytes - (2 * 1024 * 1024));
+      endMiB = Math.ceil(endBytes / 1024 / 1024);
+    } else {
+      // Mode standard : utiliser la taille requise actuelle
+      const minRequired = requiredSizeBytes + (4 * 1024 * 1024);
+      if (deviceSizeBytes < minRequired) {
+        reasons.push(`❌ Disk ${disk} is too small (${Math.floor(deviceSizeBytes / 1024 / 1024)} MiB < ${Math.floor(minRequired / 1024 / 1024)} MiB required)`);
+        canProceed = false;
+      }
+      
+      endBytes = Math.min(requiredSizeBytes, deviceSizeBytes - (2 * 1024 * 1024));
+      endMiB = Math.ceil(endBytes / 1024 / 1024);
+    }
 
-    // 7. Déterminer le prochain PARTLABEL
+    // 8. Déterminer le prochain PARTLABEL
     const nextPartLabel = await getNextPartLabel(array);
     const newPartitionPath = getPartitionPath(disk, 1);
 
-    // 8. Construire le plan de commandes
-    plan.push(`wipefs -a ${disk}`);
-    plan.push(`parted -s ${disk} mklabel gpt`);
-    plan.push(`parted -s ${disk} mkpart primary 1MiB ${endMiB}MiB`);
-    plan.push(`parted -s ${disk} name 1 ${nextPartLabel}`);
-    plan.push(`parted -s ${disk} set 1 raid on`);
-    plan.push(`partprobe ${disk} && udevadm settle`);
-    plan.push(`wipefs -a ${newPartitionPath}`);
-    plan.push(`udevadm settle --timeout=10 && sleep 2`);
-    plan.push(`mdadm --zero-superblock ${newPartitionPath}`);
-    plan.push(`mdadm --add ${array} ${newPartitionPath}`);
-    plan.push(`mdadm --detail --scan > /etc/mdadm/mdadm.conf`);
-    plan.push(`update-initramfs -u`);
+    // 9. Construire le plan de commandes (simple ou optimisé)
+    if (smartOptimization) {
+      // Plan optimisé : ne pas construire ici, sera géré par l'endpoint dédié
+      plan.push(`[Optimization Plan - Will be executed by optimized workflow]`);
+      plan.push(`1. Fail and remove ${smartOptimization.smallestMember} from RAID`);
+      plan.push(`2. Resize ${smartOptimization.memberToExpand} to ${Math.floor(smartOptimization.targetExpandSize / 1024 / 1024)}MiB`);
+      plan.push(`3. Add ${disk} with ${endMiB}MiB partition`);
+      plan.push(`4. Grow RAID array to new size`);
+    } else {
+      // Plan standard
+      plan.push(`wipefs -a ${disk}`);
+      plan.push(`parted -s ${disk} mklabel gpt`);
+      plan.push(`parted -s ${disk} mkpart primary 1MiB ${endMiB}MiB`);
+      plan.push(`parted -s ${disk} name 1 ${nextPartLabel}`);
+      plan.push(`parted -s ${disk} set 1 raid on`);
+      plan.push(`partprobe ${disk} && udevadm settle`);
+      plan.push(`wipefs -a ${newPartitionPath}`);
+      plan.push(`udevadm settle --timeout=10 && sleep 2`);
+      plan.push(`mdadm --zero-superblock ${newPartitionPath}`);
+      plan.push(`mdadm --add ${array} ${newPartitionPath}`);
+      plan.push(`mdadm --detail --scan > /etc/mdadm/mdadm.conf`);
+      plan.push(`update-initramfs -u`);
+    }
 
     res.json({
       success: true,
@@ -339,7 +424,8 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
       requiredSizeBytes,
       deviceSizeBytes,
       nextPartLabel,
-      newPartitionPath
+      newPartitionPath,
+      smartOptimization // Nouvelle info pour le frontend
     });
   } catch (error) {
     console.error('Error during mdraid pre-checks:', error);
@@ -347,6 +433,280 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
       success: false,
       error: 'Failed to perform pre-checks',
       details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/storage/mdraid-optimize-and-add
+ * Optimise le RAID en retirant le plus petit membre, agrandissant un autre, et ajoutant un nouveau disque
+ * Body: { array: string, smartOptimization: object }
+ */
+router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, res) => {
+  const { array, smartOptimization } = req.body;
+
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      type,
+      message
+    };
+    logs.push(logEntry);
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    
+    if (io) {
+      io.emit('mdraid-log', logEntry);
+    }
+  };
+
+  try {
+    if (!smartOptimization || !smartOptimization.smallestMember || !smartOptimization.memberToExpand || !smartOptimization.newDisk) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid optimization data'
+      });
+    }
+
+    log('🚀 Starting SMART RAID optimization process', 'info');
+    log(`Strategy: Remove smallest, expand existing, add new disk`, 'info');
+    log(`Final RAID capacity: ${Math.floor(smartOptimization.finalRaidCapacity / 1024 / 1024 / 1024)}G`, 'info');
+
+    // ÉTAPE 1: Retirer le plus petit membre
+    log('=== Step 1: Removing smallest member from RAID ===', 'step');
+    
+    try {
+      log(`Marking ${smartOptimization.smallestMember} as failed...`, 'info');
+      await executeCommand('sudo', ['-n', 'mdadm', '--fail', array, smartOptimization.smallestMember]);
+      log(`✓ Marked as failed`, 'success');
+    } catch (e) {
+      log(`Note: Could not mark as failed: ${e.message}`, 'warning');
+    }
+
+    try {
+      log(`Removing ${smartOptimization.smallestMember} from ${array}...`, 'info');
+      await executeCommand('sudo', ['-n', 'mdadm', '--remove', array, smartOptimization.smallestMember]);
+      log(`✓ Removed ${smartOptimization.smallestMember}`, 'success');
+      await executeCommand('sleep', ['2']);
+    } catch (error) {
+      log(`Error removing smallest member: ${error.message}`, 'error');
+      throw error;
+    }
+
+    // ÉTAPE 2: Agrandir le membre existant
+    log('=== Step 2: Expanding existing RAID member partition ===', 'step');
+    
+    const expandDisk = smartOptimization.expandDisk;
+    const expandPartition = smartOptimization.memberToExpand;
+    const targetSizeMiB = Math.floor(smartOptimization.targetExpandSize / 1024 / 1024);
+    
+    try {
+      log(`Current partition size: ${Math.floor(smartOptimization.currentExpandSize / 1024 / 1024)}MiB`, 'info');
+      log(`Target partition size: ${targetSizeMiB}MiB`, 'info');
+      
+      // Démonter /data temporairement
+      log(`Unmounting /data...`, 'info');
+      await executeCommand('sudo', ['-n', 'umount', '/data']);
+      log(`✓ Unmounted /data`, 'success');
+      
+      // Utiliser parted pour redimensionner la partition
+      log(`Resizing partition ${expandPartition}...`, 'info');
+      await executeCommand('sudo', ['-n', 'parted', expandDisk, 'resizepart', '1', `${targetSizeMiB}MiB`]);
+      log(`✓ Partition resized`, 'success');
+      
+      // Informer le kernel du changement
+      await executeCommand('sudo', ['-n', 'partprobe', expandDisk]);
+      await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
+      await executeCommand('sleep', ['2']);
+      
+      // Faire croître le RAID
+      log(`Growing RAID array to use new partition size...`, 'info');
+      await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, '--size', 'max']);
+      log(`✓ RAID array grown`, 'success');
+      
+      // Remonter /data
+      log(`Remounting /data...`, 'info');
+      await executeCommand('sudo', ['-n', 'mount', '/data']);
+      log(`✓ Remounted /data`, 'success');
+      
+      // Faire croître le filesystem btrfs
+      log(`Resizing btrfs filesystem...`, 'info');
+      await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+      log(`✓ Filesystem resized`, 'success');
+      
+    } catch (error) {
+      log(`Error during expansion: ${error.message}`, 'error');
+      // Tenter de remonter /data en cas d'erreur
+      try {
+        await executeCommand('sudo', ['-n', 'mount', '/data']);
+        log(`✓ Remounted /data after error`, 'info');
+      } catch (e) {}
+      throw error;
+    }
+
+    // ÉTAPE 3: Ajouter le nouveau disque
+    log('=== Step 3: Adding new disk to RAID ===', 'step');
+    
+    const newDisk = smartOptimization.newDisk;
+    const newPartitionPath = getPartitionPath(newDisk, 1);
+    const nextPartLabel = await getNextPartLabel(array);
+    
+    try {
+      log(`Wiping ${newDisk}...`, 'info');
+      await executeCommand('sudo', ['-n', 'wipefs', '-a', newDisk]);
+      log(`✓ Wiped disk`, 'success');
+      
+      log(`Creating GPT partition table...`, 'info');
+      await executeCommand('sudo', ['-n', 'parted', '-s', newDisk, 'mklabel', 'gpt']);
+      log(`✓ Created GPT table`, 'success');
+      
+      log(`Creating partition (1MiB to ${targetSizeMiB}MiB)...`, 'info');
+      await executeCommand('sudo', ['-n', 'parted', '-s', newDisk, 'mkpart', 'primary', '1MiB', `${targetSizeMiB}MiB`]);
+      log(`✓ Created partition`, 'success');
+      
+      log(`Setting partition label to ${nextPartLabel}...`, 'info');
+      await executeCommand('sudo', ['-n', 'parted', '-s', newDisk, 'name', '1', nextPartLabel]);
+      await executeCommand('sudo', ['-n', 'parted', '-s', newDisk, 'set', '1', 'raid', 'on']);
+      log(`✓ Set partition metadata`, 'success');
+      
+      await executeCommand('sudo', ['-n', 'partprobe', newDisk]);
+      await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
+      await executeCommand('sleep', ['2']);
+      
+      log(`Wiping partition signatures...`, 'info');
+      await executeCommand('sudo', ['-n', 'wipefs', '-a', newPartitionPath]);
+      await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
+      await executeCommand('sleep', ['2']);
+      log(`✓ Cleaned partition`, 'success');
+      
+      log(`Adding ${newPartitionPath} to ${array}...`, 'info');
+      await executeCommand('sudo', ['-n', 'mdadm', '--add', array, newPartitionPath]);
+      log(`✓ Added to RAID array`, 'success');
+      
+      await executeCommand('sleep', ['3']);
+      
+    } catch (error) {
+      log(`Error adding new disk: ${error.message}`, 'error');
+      throw error;
+    }
+
+    // ÉTAPE 4: Mise à jour configuration
+    log('=== Step 4: Updating configuration ===', 'step');
+    
+    try {
+      const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const fs = require('fs');
+      const tmpFile = '/tmp/mdadm.conf.new';
+      fs.writeFileSync(tmpFile, scanResult.stdout);
+      await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
+      fs.unlinkSync(tmpFile);
+      log(`✓ Updated /etc/mdadm/mdadm.conf`, 'success');
+      
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log(`✓ Updated initramfs`, 'success');
+    } catch (error) {
+      log(`Warning: Config update: ${error.message}`, 'warning');
+    }
+
+    // ÉTAPE 5: Surveillance resync
+    log('=== Step 5: Monitoring resync ===', 'step');
+    
+    try {
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      log('📊 Initial mdstat:', 'info');
+      log(mdstatResult.stdout.trim(), 'info');
+      
+      if (mdstatResult.stdout.includes('recovery') || mdstatResult.stdout.includes('resync')) {
+        log('🔄 Resynchronization started...', 'info');
+        
+        let lastProgress = -1;
+        let resyncComplete = false;
+        const maxWaitMinutes = 120;
+        const startTime = Date.now();
+        
+        while (!resyncComplete) {
+          await executeCommand('sleep', ['2']);
+          
+          const elapsedMinutes = (Date.now() - startTime) / 1000 / 60;
+          if (elapsedMinutes > maxWaitMinutes) {
+            log(`⚠ Resync monitoring timeout`, 'warning');
+            break;
+          }
+          
+          const currentMdstat = await executeCommand('cat', ['/proc/mdstat']);
+          const mdstatOutput = currentMdstat.stdout;
+          
+          const progressMatch = mdstatOutput.match(/recovery\s*=\s*(\d+\.\d+)%/);
+          if (progressMatch) {
+            const progress = parseFloat(progressMatch[1]);
+            
+            if (Math.abs(progress - lastProgress) >= 0.5 || lastProgress === -1) {
+              const finishMatch = mdstatOutput.match(/finish\s*=\s*([\d.]+min)/);
+              const speedMatch = mdstatOutput.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
+              
+              let progressMsg = `🔄 Resync: ${progress.toFixed(1)}%`;
+              if (finishMatch) progressMsg += ` | ETA: ${finishMatch[1]}`;
+              if (speedMatch) progressMsg += ` | Speed: ${speedMatch[1]}`;
+              
+              log(progressMsg, 'info');
+              
+              if (io) {
+                io.emit('mdraid-resync-progress', {
+                  percent: progress,
+                  eta: finishMatch ? finishMatch[1] : null,
+                  speed: speedMatch ? speedMatch[1] : null
+                });
+              }
+              
+              lastProgress = progress;
+            }
+          } else if (mdstatOutput.includes('[UU]') || (!mdstatOutput.includes('recovery') && !mdstatOutput.includes('resync'))) {
+            log('✅ Resynchronization completed!', 'success');
+            if (io) {
+              io.emit('mdraid-resync-progress', { percent: 100, completed: true });
+            }
+            resyncComplete = true;
+          }
+        }
+      }
+    } catch (error) {
+      log(`Could not monitor resync: ${error.message}`, 'warning');
+    }
+
+    // ÉTAPE 6: État final
+    log('=== Step 6: Final status ===', 'step');
+    
+    try {
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      log(`📊 Final RAID status:`, 'info');
+      log(detailResult.stdout.trim(), 'info');
+      
+      const dfResult = await executeCommand('df', ['-h', '/data']);
+      log(`📊 Filesystem capacity:`, 'info');
+      log(dfResult.stdout.trim(), 'info');
+    } catch (error) {
+      log(`Could not get final status: ${error.message}`, 'warning');
+    }
+
+    log('✅ SMART RAID optimization completed successfully!', 'success');
+    log(`🎉 Your RAID capacity has been maximized to ${Math.floor(smartOptimization.finalRaidCapacity / 1024 / 1024 / 1024)}G`, 'success');
+
+    res.json({
+      success: true,
+      logs,
+      message: 'RAID optimization completed successfully',
+      finalCapacity: smartOptimization.finalRaidCapacity
+    });
+  } catch (error) {
+    console.error('Error during RAID optimization:', error);
+    
+    log(`Fatal error: ${error.message}`, 'error');
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to optimize RAID',
+      details: error.message,
+      logs: logs
     });
   }
 });
@@ -893,16 +1253,28 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
       if (totalMatch) status.totalDevices = parseInt(totalMatch[1]);
       if (stateMatch) status.state = stateMatch[1].trim();
       
-      // Extraire les membres
+      // Extraire les membres avec leurs tailles
       const memberMatches = detailResult.stdout.matchAll(/\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\w+)\s+(\w+)\s+(\/dev\/\S+)/g);
       for (const match of memberMatches) {
+        const device = match[7];
+        
+        // Obtenir la taille du device
+        let size = null;
+        try {
+          const lsblkResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', device]);
+          size = parseInt(lsblkResult.stdout.trim());
+        } catch (e) {
+          // Ignorer l'erreur
+        }
+        
         status.members.push({
           number: match[1],
           major: match[2],
           minor: match[3],
           raidDevice: match[4],
           state: match[5],
-          device: match[7]
+          device: device,
+          size: size
         });
       }
     } catch (error) {
@@ -934,6 +1306,205 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
       success: false,
       error: 'Failed to fetch mdraid status',
       details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/storage/mdraid-remove-disk
+ * Retire un disque du RAID mdadm /dev/md0
+ * Body: { array: string, partition: string }
+ */
+router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) => {
+  const { array, partition } = req.body;
+
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      type,
+      message
+    };
+    logs.push(logEntry);
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    
+    if (io) {
+      io.emit('mdraid-log', logEntry);
+    }
+  };
+
+  try {
+    // Validation des entrées
+    if (!array || !isValidDevicePath(array.replace('/dev/md', '/dev/sda'))) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid array device path'
+      });
+    }
+
+    if (!partition || !isValidDevicePath(partition)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid partition device path'
+      });
+    }
+
+    log('🚀 Starting mdadm RAID disk removal process', 'info');
+    log(`Array: ${array}`, 'info');
+    log(`Partition to remove: ${partition}`, 'info');
+
+    // Vérifier que le RAID existe
+    log('=== Step 1: Verifying RAID array ===', 'step');
+    
+    try {
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      
+      if (!detailResult.stdout.includes(partition)) {
+        log(`❌ Partition ${partition} is not a member of ${array}`, 'error');
+        return res.status(400).json({
+          success: false,
+          error: `Partition ${partition} is not part of the array`,
+          logs
+        });
+      }
+      
+      log(`✓ Verified: ${partition} is part of ${array}`, 'success');
+      
+      // Vérifier le nombre de membres actifs
+      const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+      const activeDevices = activeMatch ? parseInt(activeMatch[1]) : 0;
+      
+      if (activeDevices <= 1) {
+        log(`❌ Cannot remove the last active device from the array`, 'error');
+        return res.status(400).json({
+          success: false,
+          error: 'Cannot remove the last device from RAID1 array',
+          logs
+        });
+      }
+      
+      log(`✓ Array has ${activeDevices} active devices, safe to remove one`, 'success');
+    } catch (error) {
+      log(`❌ Error checking array: ${error.message}`, 'error');
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to verify RAID array',
+        logs
+      });
+    }
+
+    // Marquer le disque comme défaillant
+    log('=== Step 2: Marking device as failed ===', 'step');
+    
+    try {
+      log(`Marking ${partition} as failed...`, 'info');
+      const failResult = await executeCommand('sudo', ['-n', 'mdadm', '--fail', array, partition]);
+      log(`✓ Marked ${partition} as failed`, 'success');
+      if (failResult.stdout) log(failResult.stdout.trim(), 'info');
+    } catch (error) {
+      log(`Error marking device as failed: ${error.message}`, 'warning');
+      log('Continuing with removal...', 'info');
+    }
+
+    // Retirer le disque du RAID
+    log('=== Step 3: Removing device from array ===', 'step');
+    
+    try {
+      log(`Removing ${partition} from ${array}...`, 'info');
+      const removeResult = await executeCommand('sudo', ['-n', 'mdadm', '--remove', array, partition]);
+      log(`✓ Removed ${partition} from ${array}`, 'success');
+      if (removeResult.stdout) log(removeResult.stdout.trim(), 'info');
+      
+      // Attendre que le changement soit pris en compte
+      await executeCommand('sleep', ['2']);
+      
+      // Vérifier que le disque a bien été retiré
+      const verifyResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      if (verifyResult.stdout.includes(partition)) {
+        log(`⚠ Warning: ${partition} may still appear in array details`, 'warning');
+      } else {
+        log(`✓ Verified: ${partition} successfully removed from array`, 'success');
+      }
+    } catch (error) {
+      log(`Error removing device: ${error.message}`, 'error');
+      throw error;
+    }
+
+    // Nettoyer le superbloc du disque retiré
+    log('=== Step 4: Cleaning up removed device ===', 'step');
+    
+    try {
+      log(`Zeroing superblock on ${partition}...`, 'info');
+      await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partition]);
+      log(`✓ Zeroed superblock on ${partition}`, 'success');
+    } catch (error) {
+      log(`Warning: Could not zero superblock: ${error.message}`, 'warning');
+    }
+
+    try {
+      log(`Wiping signatures from ${partition}...`, 'info');
+      await executeCommand('sudo', ['-n', 'wipefs', '-a', partition]);
+      log(`✓ Wiped signatures from ${partition}`, 'success');
+    } catch (error) {
+      log(`Warning: Could not wipe signatures: ${error.message}`, 'warning');
+    }
+
+    // Mettre à jour la configuration
+    log('=== Step 5: Updating mdadm configuration ===', 'step');
+    
+    try {
+      log(`Updating /etc/mdadm/mdadm.conf...`, 'info');
+      const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const fs = require('fs');
+      const tmpFile = '/tmp/mdadm.conf.new';
+      fs.writeFileSync(tmpFile, scanResult.stdout);
+      await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
+      fs.unlinkSync(tmpFile);
+      log(`✓ Updated /etc/mdadm/mdadm.conf`, 'success');
+    } catch (error) {
+      log(`Error updating mdadm.conf: ${error.message}`, 'error');
+      throw error;
+    }
+
+    try {
+      log(`Updating initramfs...`, 'info');
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log(`✓ Updated initramfs`, 'success');
+    } catch (error) {
+      log(`Error updating initramfs: ${error.message}`, 'error');
+      throw error;
+    }
+
+    // Afficher l'état final
+    log('=== Step 6: Final status ===', 'step');
+    
+    try {
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      log(`📊 mdadm --detail ${array}:`, 'info');
+      log(detailResult.stdout.trim(), 'info');
+    } catch (error) {
+      log(`Could not get mdadm details: ${error.message}`, 'warning');
+    }
+
+    log('✅ RAID disk removal completed successfully!', 'success');
+    log(`💡 The partition ${partition} is now available for other uses`, 'info');
+
+    res.json({
+      success: true,
+      logs,
+      message: 'Disk removed from RAID successfully',
+      removedPartition: partition
+    });
+  } catch (error) {
+    console.error('Error removing disk from mdraid:', error);
+    
+    log(`Fatal error: ${error.message}`, 'error');
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove disk from RAID',
+      details: error.message,
+      logs: logs
     });
   }
 });
