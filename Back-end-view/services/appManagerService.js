@@ -252,7 +252,7 @@ async function startApp(appId) {
       if (isTemporaryContainer(containerName)) {
         return false;
       }
-      return containerName.startsWith(`app-${appId}-`);
+      return containerName === `app-${appId}` || containerName.startsWith(`app-${appId}-`);
     });
 
     console.log(`[appManager] ${appContainers.length} container(s) trouvé(s) pour ${appId}`);
@@ -312,7 +312,7 @@ async function stopApp(appId) {
       if (isTemporaryContainer(containerName)) {
         return false;
       }
-      return containerName.startsWith(`app-${appId}-`);
+      return containerName === `app-${appId}` || containerName.startsWith(`app-${appId}-`);
     });
 
     console.log(`[appManager] ${appContainers.length} container(s) trouvé(s) pour ${appId}`);
