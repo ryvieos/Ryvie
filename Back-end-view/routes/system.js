@@ -164,7 +164,7 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
     try {
       // Lister tous les dossiers dans /data
       const { stdout } = await execPromise('ls -1 /data', { timeout: 5000 });
-      const dataDirs = stdout.trim().split('\n').filter(d => d && d !== 'apps' && d !== 'docker');
+      const dataDirs = stdout.trim().split('\n').filter(d => d && d !== 'apps' && d !== 'docker' && d !== 'snapshot');
       
       console.log(`[Storage Detail] Calcul "Autres" pour les dossiers:`, dataDirs);
       

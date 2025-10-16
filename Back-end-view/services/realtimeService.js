@@ -1,14 +1,40 @@
-const { Server } = require('socket.io');
-
 // Set up Socket.IO connections and Docker event bridging
 // Params:
 // - io: Socket.IO server instance
 // - docker: dockerode instance
 // - getLocalIP: function returning local IP string
 // - getAppStatus: async function returning list of apps with statuses
+const POLLING_INTERVAL_MS = 60000;
+
 function setupRealtime(io, docker, getLocalIP, getAppStatus) {
   // Active containers cache
   let activeContainers = [];
+  let statusPollingInterval = null;
+
+  const broadcastAppStatus = () => getAppStatus()
+    .then(apps => {
+      io.emit('apps-status-update', apps);
+      return apps;
+    })
+    .catch(err => {
+      console.error('[realtime] Erreur lors de la mise à jour des statuts d\'applications:', err);
+      throw err;
+    });
+
+  const ensureStatusPolling = () => {
+    if (!statusPollingInterval) {
+      statusPollingInterval = setInterval(() => {
+        broadcastAppStatus().catch(() => {});
+      }, POLLING_INTERVAL_MS);
+    }
+  };
+
+  const stopStatusPolling = () => {
+    if (statusPollingInterval) {
+      clearInterval(statusPollingInterval);
+      statusPollingInterval = null;
+    }
+  };
 
   // Initialize current containers list
   const initializeActiveContainers = () => new Promise((resolve, reject) => {
@@ -26,12 +52,19 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
     socket.emit('status', { serverStatus: true });
     socket.emit('containers', { activeContainers });
 
+    broadcastAppStatus().catch(() => {});
+    ensureStatusPolling();
+
     socket.on('discover', () => {
       io.emit('server-detected', { message: 'Ryvie server found!', ip: getLocalIP() });
     });
 
     socket.on('disconnect', () => {
       console.log('Client disconnected');
+      const activeConnections = io.engine?.clientsCount ?? io.sockets?.sockets?.size ?? 0;
+      if (activeConnections === 0) {
+        stopStatusPolling();
+      }
     });
   });
 
@@ -47,37 +80,22 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
         const event = JSON.parse(data.toString());
         const containerName = event.Actor?.Attributes?.name;
         
-        // Gérer les événements de containers
         if (event.Type === 'container') {
           // Événements start/stop
           if (event.Action === 'start' || event.Action === 'stop') {
             if (containerName) {
               if (event.Action === 'start') {
-                if (!activeContainers.includes(containerName)) activeContainers.push(containerName);
+                if (!activeContainers.includes(containerName)) {
+                  activeContainers.push(containerName);
+                }
               } else if (event.Action === 'stop') {
                 activeContainers = activeContainers.filter(name => name !== containerName);
               }
               io.emit('containers', { activeContainers });
               // Broadcast updated apps status
-              getAppStatus().then(apps => {
+              broadcastAppStatus().then(() => {
                 console.log(`[realtime] Mise à jour statuts après ${event.Action} de ${containerName}`);
-                io.emit('apps-status-update', apps);
-              }).catch(err => {
-                console.error('Erreur lors de la mise à jour des statuts d\'applications:', err);
-              });
-            }
-          }
-          
-          // Événements de santé (health_status)
-          if (event.Action === 'health_status: healthy' || event.Action === 'health_status: unhealthy') {
-            if (containerName) {
-              console.log(`[realtime] Health status changé pour ${containerName}: ${event.Action}`);
-              // Mettre à jour les statuts des apps
-              getAppStatus().then(apps => {
-                io.emit('apps-status-update', apps);
-              }).catch(err => {
-                console.error('Erreur lors de la mise à jour des statuts d\'applications:', err);
-              });
+              }).catch(() => {});
             }
           }
         }
@@ -87,20 +105,10 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
     });
   });
 
-  // Polling périodique pour s'assurer que les statuts sont à jour
-  // Utile si des événements Docker sont manqués
-  const statusPollingInterval = setInterval(() => {
-    getAppStatus().then(apps => {
-      io.emit('apps-status-update', apps);
-    }).catch(err => {
-      console.error('[realtime] Erreur lors du polling des statuts:', err);
-    });
-  }, 10000); // Toutes les 10 secondes
-
   // Public API for server startup coordination
-  return { 
+  return {
     initializeActiveContainers: () => initializeActiveContainers().then(() => activeContainers),
-    stopPolling: () => clearInterval(statusPollingInterval)
+    stopPolling: () => stopStatusPolling()
   };
 }
 

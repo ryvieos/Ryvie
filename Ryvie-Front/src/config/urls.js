@@ -96,7 +96,15 @@ const BASE_URLS = generateBaseUrls();
  * @param {string} accessMode - Mode d'accès ('public' ou 'private')
  * @returns {string} - L'URL appropriée selon le mode d'accès
  */
+const isHttpsContext = () => {
+  if (typeof window === 'undefined') return false;
+  return window.location?.protocol === 'https:';
+};
+
 const getUrl = (urlConfig, accessMode) => {
+  if (isHttpsContext()) {
+    return urlConfig.PUBLIC;
+  }
   return accessMode === 'public' ? urlConfig.PUBLIC : urlConfig.PRIVATE;
 };
 
@@ -163,12 +171,14 @@ const getNetbirdInfo = () => {
 const getAccessMode = () => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    // Si on est sur localhost ou une IP locale, utiliser le mode privé
+    const protocol = window.location.protocol;
+    if (protocol === 'https:') {
+      return 'public';
+    }
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.includes('local')) {
       return 'private';
     }
   }
-  // Par défaut, mode public
   return 'public';
 };
 

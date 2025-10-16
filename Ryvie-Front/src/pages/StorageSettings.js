@@ -11,7 +11,8 @@ import {
   faPlay,
   faCopy,
   faArrowLeft,
-  faCheck
+  faCheck,
+  faStop
 } from '@fortawesome/free-solid-svg-icons';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
@@ -47,6 +48,21 @@ const StorageSettings = () => {
   // États pour la progression du resync
   const [resyncProgress, setResyncProgress] = useState(null); // { percent, eta, speed }
   
+  // États pour la gestion intelligente
+  const [smartSuggestion, setSmartSuggestion] = useState(null); // Suggestion d'action intelligente
+  const [smartOptimization, setSmartOptimization] = useState(null); // Données d'optimisation des prechecks
+
+  // Helper: strip emojis from strings for consistent UI DA
+  const stripEmojis = (str) => {
+    if (!str) return '';
+    try {
+      // Remove common emoji ranges and misc symbols
+      return str.replace(/[\u{1F300}-\u{1FAFF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '');
+    } catch {
+      return str;
+    }
+  };
+  
   // Restaurer l'état depuis localStorage au montage
   useEffect(() => {
     try {
@@ -55,8 +71,8 @@ const StorageSettings = () => {
         const state = JSON.parse(savedState);
         const age = Date.now() - (state.timestamp || 0);
         
-        // Restaurer seulement si < 5 minutes (pour éviter les données obsolètes)
-        if (age < 5 * 60 * 1000) {
+        // Restaurer seulement si < 2 minutes (réduit pour éviter les données obsolètes)
+        if (age < 2 * 60 * 1000) {
           // Ajouter un log de restauration
           const ageSeconds = Math.floor(age / 1000);
           const restoredLogs = state.logs || [];
@@ -68,7 +84,11 @@ const StorageSettings = () => {
           
           setLogs(restoredLogs);
           if (state.executionStatus) setExecutionStatus(state.executionStatus);
-          if (state.resyncProgress) setResyncProgress(state.resyncProgress);
+          if (state.resyncProgress) {
+            setResyncProgress(state.resyncProgress);
+            // Vérifier immédiatement si le resync est vraiment en cours
+            setTimeout(() => checkRaidStatus(), 1000);
+          }
           console.log('[StorageSettings] État restauré depuis localStorage');
         } else {
           // Nettoyer les données obsolètes
@@ -85,13 +105,20 @@ const StorageSettings = () => {
   const [validationWarnings, setValidationWarnings] = useState([]);
   const [canProceed, setCanProceed] = useState(false);
 
-  // Charger l'inventaire au montage
+  // Charger l'inventaire au montage et polling régulier
   useEffect(() => {
     const loadData = async () => {
       await checkRaidStatus(); // Charger d'abord le statut RAID
       await loadInventory(); // Puis l'inventaire
     };
     loadData();
+    
+    // Polling régulier pour détecter les changements (toutes les 5 secondes)
+    const intervalId = setInterval(() => {
+      checkRaidStatus();
+    }, 5000);
+    
+    return () => clearInterval(intervalId);
   }, []);
 
   // Connexion Socket.IO pour les logs en temps réel
@@ -177,10 +204,11 @@ const StorageSettings = () => {
       } catch (error) {
         console.error('[StorageSettings] Erreur sauvegarde état:', error);
       }
-    } else if (executionStatus === 'success' || executionStatus === 'error') {
-      // Nettoyer après succès/erreur (avec délai pour permettre la lecture)
+    } else if (executionStatus === 'success' || executionStatus === 'error' || (!resyncProgress && executionStatus !== 'running')) {
+      // Nettoyer après succès/erreur ou si plus de resync en cours (avec délai pour permettre la lecture)
       setTimeout(() => {
         localStorage.removeItem('raidResyncState');
+        console.log('[StorageSettings] localStorage nettoyé');
       }, 10000); // 10 secondes
     }
   }, [logs, executionStatus, resyncProgress]);
@@ -239,18 +267,63 @@ const StorageSettings = () => {
             state: status.state,
             syncProgress: status.syncProgress,
             details: status.mdstat,
+            members: status.members || [], // Inclure les membres avec leurs tailles
             type: 'mdadm'
           });
+          
+          // Détecter si une resynchronisation est en cours
+          if (status.syncing === true && status.syncProgress !== undefined) {
+            setResyncProgress({
+              percent: status.syncProgress,
+              eta: status.syncETA || null,
+              speed: status.syncSpeed || null
+            });
+          } else if (status.syncing === false) {
+            // La resynchronisation est terminée ou n'a jamais été en cours
+            if (resyncProgress) {
+              console.log('[StorageSettings] Resync terminé, nettoyage de resyncProgress');
+            }
+            setResyncProgress(null);
+          }
+          
+          // Analyser pour suggestion intelligente
+          analyzeSmartSuggestion(status.members);
         } else {
           // Pas de mdadm détecté
           setRaidType(null);
           setRaidMemberPartitions([]);
           setRaidMemberDisksMap({});
           setRaidStatus(null);
+          setSmartSuggestion(null);
         }
       }
     } catch (error) {
       console.error('Error checking RAID status:', error);
+    }
+  };
+  
+  // Analyser les membres du RAID pour suggérer des actions intelligentes
+  const analyzeSmartSuggestion = (members) => {
+    if (!members || members.length < 2) {
+      setSmartSuggestion(null);
+      return;
+    }
+    
+    // Trouver le plus petit membre
+    const sortedMembers = [...members].sort((a, b) => (a.size || 0) - (b.size || 0));
+    const smallest = sortedMembers[0];
+    const largest = sortedMembers[sortedMembers.length - 1];
+    
+    if (smallest.size && largest.size && largest.size > smallest.size * 1.5) {
+      // Il y a un déséquilibre significatif (>50% de différence)
+      setSmartSuggestion({
+        type: 'replace_small',
+        smallestMember: smallest,
+        largestMember: largest,
+        message: `Le membre ${smallest.device} (${formatBytes(smallest.size)}) limite la capacité du RAID. Considérez le retirer pour utiliser uniquement les disques plus grands.`
+      });
+    } else {
+      setSmartSuggestion(null);
     }
   };
 
@@ -400,7 +473,14 @@ const StorageSettings = () => {
       });
       
       if (response.data.success) {
-        const { canProceed, reasons, plan } = response.data;
+        const { canProceed, reasons, plan, smartOptimization } = response.data;
+        
+        // Stocker les données d'optimisation intelligente
+        if (smartOptimization) {
+          setSmartOptimization(smartOptimization);
+        } else {
+          setSmartOptimization(null);
+        }
         
         // Réinitialiser les erreurs et warnings
         const errors = [];
@@ -460,6 +540,50 @@ const StorageSettings = () => {
     setShowConfirmModal(true);
   };
 
+  // Exécuter l'optimisation intelligente
+  const executeSmartOptimization = async () => {
+    try {
+      setShowConfirmModal(false);
+      setExecutionStatus('running');
+      setLogs([]);
+      setResyncProgress(null);
+      
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-optimize-and-add`, {
+        array: '/dev/md0',
+        smartOptimization: smartOptimization
+      }, {
+        timeout: 1800000 // 30 minutes
+      });
+      
+      if (response.data.success) {
+        setExecutionStatus('success');
+        setTimeout(() => {
+          checkRaidStatus();
+          loadInventory();
+        }, 2000);
+      } else {
+        setExecutionStatus('error');
+        const errorMsg = response.data.error;
+        const alreadyLogged = logs.some(log => log.message.includes(errorMsg));
+        if (!alreadyLogged) {
+          addLog(`Failed to optimize RAID: ${errorMsg}`, 'error');
+        }
+      }
+    } catch (error) {
+      console.error('Error optimizing RAID:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
+      setExecutionStatus('error');
+      
+      const alreadyLogged = logs.some(log => log.message.includes(errorMsg));
+      if (!alreadyLogged) {
+        addLog(`Failed to optimize RAID: ${errorMsg}`, 'error');
+      }
+    }
+  };
+  
   // Exécuter l'ajout du disque au RAID
   const executeRaidCreation = async () => {
     try {
@@ -518,6 +642,42 @@ const StorageSettings = () => {
     }
   };
 
+  // Arrêter la resynchronisation en cours
+  const handleStopResync = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir arrêter la resynchronisation en cours ?')) {
+      return;
+    }
+
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-stop-resync`, {
+        array: '/dev/md0'
+      });
+
+      if (response.data.success) {
+        setResyncProgress(null);
+        setExecutionStatus('success');
+        
+        // Ajouter les logs de l'arrêt
+        if (response.data.logs) {
+          response.data.logs.forEach(log => addLog(log.message, log.type));
+        }
+        
+        // Recharger le statut
+        setTimeout(() => {
+          checkRaidStatus();
+          loadInventory();
+        }, 1000);
+      } else {
+        alert('Erreur: ' + (response.data.error || 'Impossible d\'arrêter la resynchronisation'));
+      }
+    } catch (error) {
+      console.error('Error stopping resync:', error);
+      alert('Erreur lors de l\'arrêt de la resynchronisation: ' + (error.response?.data?.error || error.message));
+    }
+  };
 
   // Formater une taille en bytes en format lisible
   const formatBytes = (bytes) => {
@@ -586,19 +746,36 @@ const StorageSettings = () => {
 
           {/* Info sur l'état du RAID */}
           {raidStatus && raidStatus.type === 'mdadm' && (
-            <div className="raid-status-card">
-              <div className="raid-status-title">
-                <FontAwesomeIcon icon={faCheckCircle} /> RAID mdadm actif
+            <>
+              <div className="raid-status-card">
+                <div className="raid-status-title">
+                  <FontAwesomeIcon icon={faCheckCircle} /> RAID mdadm actif
+                </div>
+                <div className="raid-status-meta">
+                  <span className="raid-badge">Array: /dev/md0</span>
+                  <span className={`raid-badge raid-badge-state`}>État: {raidStatus.state}</span>
+                  <span className="raid-badge">Membres: {raidStatus.deviceCount}/{raidStatus.totalDevices}</span>
+                  {raidStatus.syncProgress !== null && (
+                    <span className="raid-badge">Resync: {raidStatus.syncProgress.toFixed(1)}%</span>
+                  )}
+                </div>
               </div>
-              <div className="raid-status-meta">
-                <span className="raid-badge">Array: /dev/md0</span>
-                <span className={`raid-badge raid-badge-state`}>État: {raidStatus.state}</span>
-                <span className="raid-badge">Membres: {raidStatus.deviceCount}/{raidStatus.totalDevices}</span>
-                {raidStatus.syncProgress !== null && (
-                  <span className="raid-badge">Resync: {raidStatus.syncProgress.toFixed(1)}%</span>
-                )}
-              </div>
-            </div>
+              
+              {/* Suggestion intelligente */}
+              {smartSuggestion && smartSuggestion.type === 'replace_small' && (
+                <div className="alert-warning" style={{ marginTop: '1rem' }}>
+                  <FontAwesomeIcon icon={faExclamationTriangle} />
+                  <div>
+                    <strong>Suggestion intelligente :</strong>
+                    <p style={{ margin: '0.5rem 0 0 0' }}>{stripEmojis(smartSuggestion.message)}</p>
+                    <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                      Action recommandée : Retirez <strong>{smartSuggestion.smallestMember.device}</strong> du RAID, 
+                      puis ajoutez un disque plus grand pour maximiser votre capacité de stockage.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* Sélection du disque à ajouter */}
@@ -721,21 +898,70 @@ const StorageSettings = () => {
                 );
               }
               return (
-                <button
-                  className="btn-create-raid"
-                  disabled={!canProceed || executionStatus === 'running'}
-                  onClick={openConfirmModal}
-                >
-                  {executionStatus === 'running' ? (
-                    <>
-                      <FontAwesomeIcon icon={faSpinner} spin /> Ajout en cours...
-                    </>
-                  ) : (
-                    <>
-                      <FontAwesomeIcon icon={faPlay} /> Ajouter au RAID
-                    </>
+                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                  <button
+                    className="btn-create-raid"
+                    disabled={!canProceed || executionStatus === 'running'}
+                    onClick={openConfirmModal}
+                    style={{
+                      transition: 'all 0.3s ease',
+                      transform: 'scale(1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!e.currentTarget.disabled) {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    {executionStatus === 'running' ? (
+                      <>
+                        <FontAwesomeIcon icon={faSpinner} spin /> Ajout en cours...
+                      </>
+                    ) : (
+                      <>
+                        <FontAwesomeIcon icon={faPlay} /> Ajouter au RAID
+                      </>
+                    )}
+                  </button>
+                  
+                  {resyncProgress && (
+                    <button
+                      className="btn-stop-resync"
+                      onClick={handleStopResync}
+                      style={{
+                        background: '#f44336',
+                        color: 'white',
+                        border: 'none',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        transition: 'all 0.3s ease',
+                        transform: 'scale(1)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(244, 67, 54, 0.4)';
+                        e.currentTarget.style.background = '#d32f2f';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.background = '#f44336';
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faStop} /> Arrêter
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })()}
           </div>
@@ -830,8 +1056,82 @@ const StorageSettings = () => {
         </>
       )}
 
-      {/* Modale de confirmation */}
-      {showConfirmModal && (
+      
+      
+      {/* Modale de confirmation pour ajout */}
+      {showConfirmModal && smartOptimization && (
+        <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Optimisation intelligente du RAID</h2>
+            
+            <div className="modal-section" style={{ background: '#e3f2fd', padding: '1rem', borderRadius: '6px', marginBottom: '1rem' }}>
+              <h3 style={{ color: '#1976d2', margin: '0 0 0.5rem 0' }}>Opportunité d'optimisation détectée</h3>
+              <p style={{ margin: '0', fontSize: '0.95rem' }}>{stripEmojis(smartOptimization.message)}</p>
+            </div>
+            
+            <div className="modal-section">
+              <h3>Plan d'optimisation</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ padding: '1rem', background: '#fff3e0', borderRadius: '6px', borderLeft: '4px solid #ff9800' }}>
+                  <strong>Étape 1 :</strong> Retirer {smartOptimization.smallestMember}
+                  <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.25rem' }}>
+                    Taille actuelle : {formatBytes(smartOptimization.smallestSize)}
+                  </div>
+                </div>
+                
+                <div style={{ padding: '1rem', background: '#e8f5e9', borderRadius: '6px', borderLeft: '4px solid #4caf50' }}>
+                  <strong>Étape 2 :</strong> Agrandir {smartOptimization.memberToExpand}
+                  <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.25rem' }}>
+                    {formatBytes(smartOptimization.currentExpandSize)} → {formatBytes(smartOptimization.targetExpandSize)}
+                  </div>
+                </div>
+                
+                <div style={{ padding: '1rem', background: '#e8f5e9', borderRadius: '6px', borderLeft: '4px solid #4caf50' }}>
+                  <strong>Étape 3 :</strong> Ajouter {smartOptimization.newDisk}
+                  <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.25rem' }}>
+                    Nouvelle partition : {formatBytes(smartOptimization.targetExpandSize)}
+                  </div>
+                </div>
+                
+                <div style={{ padding: '1rem', background: '#f3e5f5', borderRadius: '6px', borderLeft: '4px solid #9c27b0', textAlign: 'center' }}>
+                  <strong style={{ fontSize: '1.1rem' }}>Capacité finale du RAID</strong>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#9c27b0', marginTop: '0.5rem' }}>
+                    {Math.floor(smartOptimization.finalRaidCapacity / 1024 / 1024 / 1024)}G
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.25rem' }}>
+                    (au lieu de {Math.floor(smartOptimization.smallestSize / 1024 / 1024 / 1024)}G actuellement)
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-warning">
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              <div>
+                <strong>ATTENTION:</strong> Cette opération implique :
+                <ul style={{ margin: '0.5rem 0 0 1.5rem', paddingLeft: 0 }}>
+                  <li>Démontage temporaire de /data</li>
+                  <li>Redimensionnement de partition en direct</li>
+                  <li>Effacement du disque {smartOptimization.newDisk}</li>
+                </ul>
+                <strong>Assurez-vous d'avoir des sauvegardes avant de continuer.</strong>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowConfirmModal(false)}>
+                Annuler
+              </button>
+              <button className="btn-primary" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }} onClick={executeSmartOptimization}>
+                Optimiser le RAID
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modale standard pour ajout simple */}
+      {showConfirmModal && !smartOptimization && (
         <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>Confirm RAID Creation</h2>

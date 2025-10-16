@@ -4,14 +4,7 @@ const appManager = require('./appManagerService');
 
 const docker = new Docker();
 
-// Mapping for nicer display names if needed
-const containerMapping = {
-  rcloud: 'Cloud',
-  portainer: 'Portainer',
-  rtransfer: 'rTransfer',
-  rdrop: 'rDrop',
-  rpictures: 'rPictures',
-};
+
 
 function extractAppName(containerName) {
   if (containerName.startsWith('app-')) {
