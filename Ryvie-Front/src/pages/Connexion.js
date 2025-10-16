@@ -163,7 +163,8 @@ const Userlogin = () => {
         withCredentials: false,
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': undefined
         }
       });
 
