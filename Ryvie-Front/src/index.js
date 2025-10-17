@@ -9,6 +9,7 @@ import Settings from './pages/Settings';
 import StorageSettings from './pages/StorageSettings';
 import Welcome from './pages/Welcome';
 import Userlogin from './pages/Connexion';
+import ServerRestarting from './pages/ServerRestarting';
 import { initializeSession, isSessionActive } from './utils/sessionManager';
 import { isElectron } from './utils/platformUtils';
 import { handleAuthError } from './services/authService';
@@ -84,6 +85,7 @@ const App = () => {
           <ProtectedRoute>
             <Userlogin />
           </ProtectedRoute>} />
+        <Route path="/server-restarting" element={<ServerRestarting />} />
       </Routes>
     </Router>
   );

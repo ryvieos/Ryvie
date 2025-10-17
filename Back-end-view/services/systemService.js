@@ -1,6 +1,9 @@
 const os = require('os');
 const si = require('systeminformation');
 const osutils = require('os-utils');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 async function getServerInfo() {
   const totalRam = os.totalmem();
@@ -10,6 +13,36 @@ async function getServerInfo() {
   const diskLayout = await si.diskLayout();
   const fsSizes = await si.fsSize();
 
+  // Trouver la partition racine (/) et /data
+  const rootPartition = fsSizes.find(f => f.mount === '/');
+  const dataPartition = fsSizes.find(f => f.mount === '/data');
+  
+  let totalSize = 0;
+  let totalUsed = 0;
+  let totalFree = 0;
+
+  if (rootPartition) {
+    // Total = taille partition système (/) + taille partition /data
+    totalSize = rootPartition.size / 1e9;
+    if (dataPartition) {
+      totalSize += dataPartition.size / 1e9;
+    }
+    
+    // Utilisé = taille partition système + espace utilisé dans /data
+    let systemPartitionSize = rootPartition.size / 1e9;
+    totalUsed = systemPartitionSize;
+    
+    // Ajouter l'espace utilisé dans /data (utiliser dataPartition.used qui est cohérent)
+    if (dataPartition) {
+      const dataUsedGB = dataPartition.used / 1e9;
+      totalUsed += dataUsedGB;
+      console.log(`[systemService] Système: ${systemPartitionSize.toFixed(1)} GB, /data utilisé: ${dataUsedGB.toFixed(1)} GB, Total: ${totalUsed.toFixed(1)} GB`);
+    }
+    
+    totalFree = totalSize - totalUsed;
+  }
+
+  // Informations détaillées sur tous les disques
   const disks = diskLayout.map(d => {
     const totalBytes = d.size;
     const parts = fsSizes.filter(f => f.fs && f.fs.startsWith(d.device));
@@ -25,11 +58,6 @@ async function getServerInfo() {
       mounted,
     };
   });
-
-  const mountedDisks = disks.filter(d => d.mounted);
-  const totalSize = mountedDisks.reduce((sum, d) => sum + parseFloat(d.size), 0);
-  const totalUsed = mountedDisks.reduce((sum, d) => sum + parseFloat(d.used), 0);
-  const totalFree = mountedDisks.reduce((sum, d) => sum + parseFloat(d.free), 0);
 
   const cpuUsagePercentage = await new Promise(resolve => {
     osutils.cpuUsage(u => resolve((u * 100).toFixed(1)));
@@ -47,4 +75,29 @@ async function getServerInfo() {
   };
 }
 
-module.exports = { getServerInfo };
+async function restartServer() {
+  const { exec } = require('child_process');
+  const util = require('util');
+  const execPromise = util.promisify(exec);
+  
+  try {
+    console.log('[systemService] Redémarrage du système demandé');
+    
+    // Redémarrer le système complet
+    // Utiliser sudo reboot pour redémarrer la machine
+    setTimeout(async () => {
+      try {
+        await execPromise('sudo reboot');
+      } catch (error) {
+        console.error('[systemService] Erreur lors du reboot:', error);
+      }
+    }, 1000);
+    
+    return { success: true, message: 'Le serveur va redémarrer dans quelques secondes...' };
+  } catch (error) {
+    console.error('[systemService] Erreur lors du redémarrage:', error);
+    throw error;
+  }
+}
+
+module.exports = { getServerInfo, restartServer };

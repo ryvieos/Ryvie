@@ -1,0 +1,384 @@
+#!/usr/bin/env node
+
+/**
+ * Ryvie Apps Manifest Generator
+ * Scanne les applications dans /data/apps/ et génère automatiquement les manifests dans /data/config/manifests/
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+console.log('🚀 Ryvie Apps Manifest Generator');
+console.log('=================================\n');
+
+// Configuration
+const APPS_SOURCE_DIR = '/data/apps';
+const MANIFESTS_DIR = '/data/config/manifests';
+const GENERIC_ICON_PATH = path.join(__dirname, 'Ryvie-Front/src/icons/app-generic.svg');
+
+/**
+ * Scanne automatiquement tous les dossiers dans /data/apps/
+ */
+function scanAppsDirectories() {
+  const apps = [];
+  
+  try {
+    const entries = fs.readdirSync(APPS_SOURCE_DIR, { withFileTypes: true });
+    
+    entries.forEach(entry => {
+      // Traiter tous les dossiers
+      if (entry.isDirectory()) {
+        const appDir = path.join(APPS_SOURCE_DIR, entry.name);
+        
+        // Si le dossier commence par "Ryvie-", enlever le préfixe
+        let appId, appName;
+        if (entry.name.startsWith('Ryvie-')) {
+          appId = entry.name.replace('Ryvie-', '').toLowerCase();
+          appName = entry.name.replace('Ryvie-', '');
+        } else {
+          appId = entry.name.toLowerCase();
+          appName = entry.name;
+        }
+        
+        // Chercher le docker-compose.yml
+        const dockerComposePath = findDockerCompose(appDir);
+        
+        if (dockerComposePath) {
+          console.log(`✅ App détectée: ${entry.name} -> ${appId}`);
+          
+          apps.push({
+            dirName: entry.name,
+            id: appId,
+            name: appName,
+            description: `Application ${appName}`,
+            category: 'Productivity',
+            developer: 'Ryvie Project',
+            dockerComposePath: dockerComposePath,
+            appDir: appDir,
+            launchType: detectLaunchType(appId, dockerComposePath)
+          });
+        } else {
+          console.log(`⚠️  Aucun docker-compose trouvé pour ${entry.name}`);
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors du scan des apps:', error);
+  }
+  
+  return apps;
+}
+
+/**
+ * Cherche le docker-compose.yml récursivement dans un dossier d'app
+ */
+function findDockerCompose(appDir) {
+  const foundPath = searchDockerComposeRecursive(appDir, appDir, 0, 5);
+  return foundPath;
+}
+
+/**
+ * Recherche récursive du docker-compose.yml
+ */
+function searchDockerComposeRecursive(baseDir, currentDir, depth, maxDepth) {
+  if (depth >= maxDepth) return null;
+  
+  try {
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    
+    // D'abord chercher docker-compose.yml dans le dossier actuel
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name === 'docker-compose.yml') {
+        const fullPath = path.join(currentDir, entry.name);
+        const relativePath = path.relative(baseDir, fullPath);
+        console.log(`   ✅ docker-compose.yml trouvé: ${relativePath}`);
+        return relativePath;
+      }
+    }
+    
+    // Puis chercher dans les sous-dossiers
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+        const found = searchDockerComposeRecursive(baseDir, path.join(currentDir, entry.name), depth + 1, maxDepth);
+        if (found) return found;
+      }
+    }
+  } catch (error) {
+    // Ignorer les erreurs de permission
+  }
+  
+  return null;
+}
+
+/**
+ * Détecte le type de lancement (docker-compose standard pour toutes les apps)
+ */
+function detectLaunchType(appId, dockerComposePath) {
+  return 'docker-compose';
+}
+
+/**
+ * Trouve l'icône d'une app (recherche récursive)
+ */
+function findAppIcon(appDir, metadata) {
+  // Si un chemin d'icône est spécifié dans les métadonnées
+  if (metadata.iconPath) {
+    const iconPath = path.join(appDir, metadata.iconPath);
+    if (fs.existsSync(iconPath)) {
+      return iconPath;
+    }
+  }
+
+  const possibleIcons = ['icon.svg', 'icon.png', 'icon.jpg', 'icon.jpeg'];
+  
+  // 1. Chercher à la racine
+  for (const iconName of possibleIcons) {
+    const iconPath = path.join(appDir, iconName);
+    if (fs.existsSync(iconPath)) {
+      console.log(`   ✅ Icône trouvée: ${iconName}`);
+      return iconPath;
+    }
+  }
+
+  // 2. Chercher dans les sous-dossiers courants (docker/, tdrive/, snapdrop-master/, etc.)
+  const commonSubdirs = [
+    'docker',
+    'tdrive',
+    'snapdrop-master/snapdrop-master',
+    path.dirname(metadata.dockerComposePath || '')
+  ];
+  
+  for (const subdir of commonSubdirs) {
+    if (!subdir) continue;
+    const subdirPath = path.join(appDir, subdir);
+    if (fs.existsSync(subdirPath)) {
+      for (const iconName of possibleIcons) {
+        const iconPath = path.join(subdirPath, iconName);
+        if (fs.existsSync(iconPath)) {
+          console.log(`   ✅ Icône trouvée: ${subdir}/${iconName}`);
+          return iconPath;
+        }
+      }
+    }
+  }
+
+  // 3. Recherche récursive (limitée à 3 niveaux de profondeur)
+  const foundIcon = searchIconRecursive(appDir, possibleIcons, 0, 3);
+  if (foundIcon) {
+    console.log(`   ✅ Icône trouvée: ${path.relative(appDir, foundIcon)}`);
+    return foundIcon;
+  }
+
+  // Utiliser l'icône générique
+  console.log(`   ⚠️  Aucune icône trouvée, utilisation de l'icône générique`);
+  return GENERIC_ICON_PATH;
+}
+
+/**
+ * Recherche récursive d'icône
+ */
+function searchIconRecursive(dir, iconNames, currentDepth, maxDepth) {
+  if (currentDepth >= maxDepth) return null;
+  
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    
+    // D'abord chercher les icônes dans le dossier actuel
+    for (const entry of entries) {
+      if (entry.isFile() && iconNames.includes(entry.name)) {
+        return path.join(dir, entry.name);
+      }
+    }
+    
+    // Puis chercher dans les sous-dossiers
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+        const found = searchIconRecursive(path.join(dir, entry.name), iconNames, currentDepth + 1, maxDepth);
+        if (found) return found;
+      }
+    }
+  } catch (error) {
+    // Ignorer les erreurs de permission
+  }
+  
+  return null;
+}
+
+/**
+ * Analyse un docker-compose.yml pour extraire les ports
+ */
+function extractPortsFromCompose(composePath) {
+  try {
+    const composeContent = fs.readFileSync(composePath, 'utf8');
+    const ports = {};
+    
+    // Regex simple pour extraire les ports (format "host:container")
+    const portRegex = /- ["']?(\d+):(\d+)["']?/g;
+    let match;
+    
+    while ((match = portRegex.exec(composeContent)) !== null) {
+      const hostPort = match[1];
+      const containerPort = match[2];
+      ports[hostPort] = parseInt(containerPort);
+    }
+    
+    return ports;
+  } catch (error) {
+    console.log(`   ⚠️  Impossible de lire ${composePath}: ${error.message}`);
+    return {};
+  }
+}
+
+/**
+ * Génère le manifest pour une app
+ */
+function generateManifest(appData) {
+  console.log(`\n📦 Génération du manifest pour ${appData.name}...`);
+  
+  const appDir = appData.appDir;
+  const metadata = appData;
+  
+  // Trouver l'icône
+  const iconPath = findAppIcon(appDir, metadata);
+  const iconExt = path.extname(iconPath);
+  
+  // Chemin du docker-compose
+  const composePath = path.join(appDir, metadata.dockerComposePath);
+  
+  // Extraire les ports si pas définis
+  let ports = metadata.ports || {};
+  if (Object.keys(ports).length === 0 && fs.existsSync(composePath)) {
+    ports = extractPortsFromCompose(composePath);
+  }
+  
+  // Créer le manifest
+  const manifest = {
+    id: metadata.id,
+    name: metadata.name,
+    version: '1.0.0',
+    description: metadata.description,
+    icon: `icon${iconExt}`,
+    category: metadata.category,
+    developer: metadata.developer,
+    ports: ports,
+    mainPort: metadata.mainPort || Object.values(ports)[0] || null,
+    launchType: metadata.launchType,
+    dockerComposePath: metadata.dockerComposePath,
+    sourceDir: appDir,
+    autostart: false,
+    installed: true,
+    installedAt: new Date().toISOString()
+  };
+  
+  // Créer le dossier de destination dans /data/config/manifests/
+  const destDir = path.join(MANIFESTS_DIR, metadata.id);
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+  
+  // Écrire le manifest
+  const manifestPath = path.join(destDir, 'manifest.json');
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  console.log(`   ✅ Manifest créé: ${manifestPath}`);
+  
+  // Supprimer toutes les anciennes icônes (différentes extensions possibles)
+  const oldIconExtensions = ['.svg', '.png', '.jpg', '.jpeg'];
+  oldIconExtensions.forEach(ext => {
+    const oldIconPath = path.join(destDir, `icon${ext}`);
+    if (fs.existsSync(oldIconPath)) {
+      fs.unlinkSync(oldIconPath);
+      console.log(`   🗑️  Ancienne icône supprimée: icon${ext}`);
+    }
+  });
+  
+  // Copier la nouvelle icône
+  const destIconPath = path.join(destDir, `icon${iconExt}`);
+  fs.copyFileSync(iconPath, destIconPath);
+  console.log(`   ✅ Icône copiée: ${destIconPath}`);
+  
+  return manifest;
+}
+
+/**
+ * Crée une icône générique si elle n'existe pas
+ */
+function createGenericIcon() {
+  const genericIconDir = path.dirname(GENERIC_ICON_PATH);
+  if (!fs.existsSync(genericIconDir)) {
+    fs.mkdirSync(genericIconDir, { recursive: true });
+  }
+  
+  if (!fs.existsSync(GENERIC_ICON_PATH)) {
+    // SVG simple pour l'icône générique
+    const genericSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#4A90E2" rx="15"/>
+  <text x="50" y="65" font-family="Arial" font-size="50" fill="white" text-anchor="middle">R</text>
+</svg>`;
+    fs.writeFileSync(GENERIC_ICON_PATH, genericSvg);
+    console.log(`✅ Icône générique créée: ${GENERIC_ICON_PATH}`);
+  }
+}
+
+/**
+ * Fonction principale
+ */
+function main() {
+  console.log(`📂 Scan du répertoire: ${APPS_SOURCE_DIR}`);
+  console.log(`📁 Destination: ${MANIFESTS_DIR}\n`);
+  
+  // Créer l'icône générique
+  createGenericIcon();
+  
+  // Créer le dossier de destination
+  if (!fs.existsSync(MANIFESTS_DIR)) {
+    fs.mkdirSync(MANIFESTS_DIR, { recursive: true });
+    console.log(`✅ Dossier créé: ${MANIFESTS_DIR}\n`);
+  }
+  
+  // Scanner automatiquement les apps
+  console.log('🔍 Scan automatique de tous les dossiers dans /data/apps/...\n');
+  const scannedApps = scanAppsDirectories();
+  
+  if (scannedApps.length === 0) {
+    console.log('❌ Aucune app trouvée dans /data/apps/');
+    console.log('💡 Assurez-vous que vos apps sont dans des dossiers avec un docker-compose.yml');
+    return;
+  }
+  
+  console.log(`\n✅ ${scannedApps.length} app(s) détectée(s)\n`);
+  
+  // Générer les manifests
+  const generatedManifests = [];
+  
+  for (const appData of scannedApps) {
+    try {
+      const manifest = generateManifest(appData);
+      generatedManifests.push(manifest);
+    } catch (error) {
+      console.error(`❌ Erreur lors de la génération du manifest pour ${appData.name}:`, error.message);
+    }
+  }
+  
+  console.log('\n' + '='.repeat(50));
+  console.log(`✅ ${generatedManifests.length} manifests générés avec succès`);
+  console.log('='.repeat(50));
+  
+  console.log('\n📋 Résumé des apps:');
+  generatedManifests.forEach(manifest => {
+    console.log(`   • ${manifest.name} (${manifest.id}) - Port: ${manifest.mainPort || 'N/A'}`);
+  });
+  
+  console.log('\n🎉 Génération terminée !');
+  console.log(`\n💡 Prochaines étapes:`);
+  console.log(`   1. Vérifiez les manifests dans ${MANIFESTS_DIR}`);
+  console.log(`   2. Redémarrez le backend Ryvie`);
+  console.log(`   3. Les apps apparaîtront automatiquement dans l'interface\n`);
+}
+
+// Exécution
+if (require.main === module) {
+  main();
+}
+
+module.exports = { generateManifest, findAppIcon };

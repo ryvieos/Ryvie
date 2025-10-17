@@ -1,3 +1,47 @@
+.raid-status-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: saturate(150%) blur(6px);
+  -webkit-backdrop-filter: saturate(150%) blur(6px);
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 10px 24px rgba(12, 16, 24, 0.05);
+}
+
+.raid-status-title {
+  font-weight: 800;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.raid-status-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.raid-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #0b1220;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.raid-badge-state {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #1d4ed8;
+}
 /* StorageSettings.css - Style adapté de Home.css */
 
 .storage-settings-container {
@@ -5,7 +49,7 @@
   width: 100%;
   margin: 0;
   padding: 2rem;
-  background: linear-gradient(135deg, #f5f5f5 0%, #e0e9ff 100%);
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
   position: relative;
   box-sizing: border-box;
 }
@@ -13,6 +57,9 @@
 /* Header */
 .storage-header {
   margin-bottom: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 .back-button {
@@ -33,15 +80,16 @@
 }
 
 .storage-header h1 {
-  font-size: 2rem;
-  margin: 0 0 0.5rem 0;
-  font-weight: 600;
-  color: #1a1a1a;
+  font-size: 2.1rem;
+  margin: 0 0 0.25rem 0;
+  font-weight: 700;
+  color: #0b1220;
+  letter-spacing: -0.02em;
 }
 
 .storage-header .subtitle {
-  font-size: 1rem;
-  color: #666;
+  font-size: 0.98rem;
+  color: #5b6472;
   margin: 0;
 }
 
@@ -58,27 +106,30 @@
 
 /* Data Source Card */
 .data-source-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: saturate(150%) blur(10px);
+  -webkit-backdrop-filter: saturate(150%) blur(10px);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
   margin-bottom: 2rem;
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  border: 2px solid #4caf50;
+  gap: 1.25rem;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.18);
 }
 
 .storage-source-icon {
-  width: 60px;
-  height: 60px;
-  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
-  border-radius: 12px;
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 1.8rem;
+  font-size: 1.6rem;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
 }
 
 .source-info {
@@ -92,11 +143,11 @@
 }
 
 .source-device {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  font-family: 'Courier New', monospace;
-  margin-bottom: 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0b1220;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  margin-bottom: 0.15rem;
 }
 
 .source-meta {
@@ -105,15 +156,16 @@
 }
 
 .source-badge {
-  background: #e8f5e9;
-  color: #4caf50;
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  display: flex;
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  border: 1px solid rgba(59, 130, 246, 0.2);
 }
 
 .raid-status-info {
@@ -151,8 +203,8 @@
 }
 
 .alert-warning {
-  border-left: 4px solid #ff9800;
-  color: #e65100;
+  border-left: 4px solid #93a2b8;
+  color: #475569;
 }
 
 .alert-error svg,
@@ -189,35 +241,38 @@
 .disks-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
+  gap: 1.1rem;
 }
 
 .disk-card-simple {
-  background: #fff;
-  border: 2px solid #e0e0e0;
-  border-radius: 12px;
-  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: saturate(150%) blur(6px);
+  -webkit-backdrop-filter: saturate(150%) blur(6px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  padding: 1.25rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
   position: relative;
+  box-shadow: 0 10px 24px rgba(10, 14, 23, 0.05);
 }
 
 .disk-card-simple:hover:not(.disabled) {
-  border-color: #667eea;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
-  transform: translateY(-2px);
+  border-color: #3b82f6;
+  box-shadow: 0 16px 30px rgba(59, 130, 246, 0.18);
+  transform: translateY(-3px);
 }
 
 .disk-card-simple.selected {
-  border-color: #667eea;
-  background: #f5f7ff;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+  border-color: #3b82f6;
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.06) 0%, rgba(59, 130, 246, 0.0) 100%);
+  box-shadow: 0 18px 34px rgba(59, 130, 246, 0.22);
 }
 
 .disk-card-simple.disabled {
-  opacity: 0.5;
+  opacity: 0.75;
   cursor: not-allowed;
-  background: #fafafa;
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.12) 0%, rgba(148, 163, 184, 0.06) 100%);
 }
 
 .disk-check {
@@ -229,16 +284,17 @@
 }
 
 .storage-disk-icon {
-  width: 50px;
-  height: 50px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 10px;
+  width: 46px;
+  height: 46px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
+  font-size: 1.35rem;
+  margin-bottom: 0.85rem;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.3);
 }
 
 .disk-card-simple.disabled .storage-disk-icon {
@@ -246,17 +302,17 @@
 }
 
 .disk-name {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  font-family: 'Courier New', monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0b1220;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   margin-bottom: 0.25rem;
 }
 
 .disk-size {
-  font-size: 0.95rem;
-  color: #666;
-  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  color: #627082;
+  margin-bottom: 0.65rem;
 }
 
 .disk-status {
@@ -269,31 +325,36 @@
 .storage-badge-raid-active {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  gap: 0.4rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .storage-badge-system {
-  background: #ffebee;
-  color: #c62828;
+  background: rgba(244, 63, 94, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(244, 63, 94, 0.18);
 }
 
 .storage-badge-mounted {
-  background: #fff3e0;
-  color: #e65100;
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.18);
 }
 
 .storage-badge-available {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: rgba(16, 185, 129, 0.1);
+  color: #0f766e;
+  border: 1px solid rgba(16, 185, 129, 0.18);
 }
 
 .storage-badge-raid-active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: #fff;
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.25);
 }
 
 .disk-label-input {
@@ -388,26 +449,26 @@
 .btn-create-raid,
 .btn-raid-active {
   border: none;
-  padding: 1rem 3rem;
-  border-radius: 12px;
-  font-size: 1.1rem;
-  font-weight: 600;
+  padding: 0.9rem 2.2rem;
+  border-radius: 14px;
+  font-size: 1.05rem;
+  font-weight: 800;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
   display: inline-flex;
   align-items: center;
-  gap: 0.75rem;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  gap: 0.65rem;
+  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.28);
 }
 
 .btn-create-raid {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: #fff;
 }
 
 .btn-create-raid:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  transform: translateY(-3px);
+  box-shadow: 0 18px 38px rgba(99, 102, 241, 0.35);
 }
 
 .btn-create-raid:disabled {
@@ -417,7 +478,7 @@
 }
 
 .btn-raid-active {
-  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #fff;
   cursor: not-allowed;
 }
@@ -429,10 +490,13 @@
 
 /* Logs Section */
 .logs-section {
-  background: #fff;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: saturate(160%) blur(6px);
+  -webkit-backdrop-filter: saturate(160%) blur(6px);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.07);
+  border: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .logs-header {
@@ -506,14 +570,15 @@
 }
 
 .logs-container {
-  background: #1e1e1e;
-  border-radius: 8px;
+  background: #0f172a;
+  border-radius: 10px;
   padding: 1rem;
-  max-height: 400px;
+  max-height: 420px;
   overflow-y: auto;
-  font-family: 'Courier New', monospace;
-  font-size: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.86rem;
   line-height: 1.6;
+  border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 .logs-container::-webkit-scrollbar {

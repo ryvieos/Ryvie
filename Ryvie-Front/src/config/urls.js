@@ -8,6 +8,7 @@ import netbirdDataRaw from './netbird-data.json';
 
 // Mapping des services vers les ports locaux
 const LOCAL_PORTS = {
+  FRONTEND: 3000,
   SERVER: 3002,
   APPSTORE: 5173,
   RDRIVE: 3010,
@@ -28,6 +29,12 @@ const generateBaseUrls = () => {
   const domains = netbirdData.domains;
   
   return {
+    // URLs du frontend
+    FRONTEND: {
+      PUBLIC: `https://${domains.app}`,
+      PRIVATE: `http://ryvie.local:${LOCAL_PORTS.FRONTEND}`
+    },
+
     // URLs du serveur principal
     SERVER: {
       PUBLIC: `https://${domains.status}`,
@@ -89,7 +96,15 @@ const BASE_URLS = generateBaseUrls();
  * @param {string} accessMode - Mode d'accès ('public' ou 'private')
  * @returns {string} - L'URL appropriée selon le mode d'accès
  */
+const isHttpsContext = () => {
+  if (typeof window === 'undefined') return false;
+  return window.location?.protocol === 'https:';
+};
+
 const getUrl = (urlConfig, accessMode) => {
+  if (isHttpsContext()) {
+    return urlConfig.PUBLIC;
+  }
   return accessMode === 'public' ? urlConfig.PUBLIC : urlConfig.PRIVATE;
 };
 
@@ -156,12 +171,14 @@ const getNetbirdInfo = () => {
 const getAccessMode = () => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    // Si on est sur localhost ou une IP locale, utiliser le mode privé
+    const protocol = window.location.protocol;
+    if (protocol === 'https:') {
+      return 'public';
+    }
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.includes('local')) {
       return 'private';
     }
   }
-  // Par défaut, mode public
   return 'public';
 };
 
@@ -189,18 +206,13 @@ const getAutoUrl = (type, name) => {
 };
 
 // Exporter les fonctions et constantes (ES modules)
-export {
-  BASE_URLS,
-  netbirdData,
-  getUrl,
-  getServerUrl,
-  getAppUrl,
-  getRdriveBackendUrl,
-  getNetbirdDomain,
-  getNetbirdInfo,
-  getAccessMode,
-  getAutoUrl
-};
+/**
+ * @param {string} mode - 'public' ou 'private'
+ * @returns {string} - L'URL du frontend
+ */
+function getFrontendUrl(mode = 'public') {
+  return mode === 'public' ? BASE_URLS.FRONTEND.PUBLIC : BASE_URLS.FRONTEND.PRIVATE;
+}
 
 // Export par défaut pour la compatibilité
 export default {
@@ -213,5 +225,6 @@ export default {
   getNetbirdDomain,
   getNetbirdInfo,
   getAccessMode,
-  getAutoUrl
+  getAutoUrl,
+  getFrontendUrl
 };

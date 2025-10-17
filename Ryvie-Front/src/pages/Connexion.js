@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/connexion.css';
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import { isElectron, WindowManager } from '../utils/platformUtils';
-const { getServerUrl } = require('../config/urls');
+import urlsConfig from '../config/urls';
+const { getServerUrl } = urlsConfig;
 import { startSession, getCurrentUser, getCurrentUserRole, getSessionInfo } from '../utils/sessionManager';
 
 const Userlogin = () => {
@@ -162,7 +163,8 @@ const Userlogin = () => {
         withCredentials: false,
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': undefined
         }
       });
 
@@ -257,14 +259,31 @@ const Userlogin = () => {
         await window.electronAPI.invoke('create-user-window-with-mode', userId, accessMode, userRole, token);
         setMessage(`Fenêtre ouverte pour ${userName} en mode ${accessMode} avec le rôle ${userRole}`);
         setMessageType('success');
-      } else {
-        // Mode Web - Rediriger vers la page d'accueil
-        console.log(`[Connexion] Mode web - redirection vers l'accueil pour ${userName}`);
         
-        // Rediriger vers la page de bienvenue
-        navigate('/welcome');
-        setMessage(`Connexion réussie pour ${userName}`);
-        setMessageType('success');
+        // Fermer l'overlay si on est dans un iframe
+        if (window.parent !== window) {
+          setTimeout(() => {
+            window.parent.postMessage({ type: 'CLOSE_OVERLAY' }, '*');
+          }, 500);
+        }
+      } else {
+        // Mode Web - Vérifier si on est dans un iframe (overlay)
+        if (window.parent !== window) {
+          // On est dans un overlay, fermer l'overlay et rediriger le parent
+          console.log(`[Connexion] Mode web dans overlay - fermeture de l'overlay`);
+          setMessage(`Connexion réussie pour ${userName}`);
+          setMessageType('success');
+          
+          setTimeout(() => {
+            window.parent.postMessage({ type: 'CLOSE_OVERLAY_AND_NAVIGATE', path: '/welcome' }, '*');
+          }, 500);
+        } else {
+          // Navigation normale
+          console.log(`[Connexion] Mode web - redirection vers l'accueil pour ${userName}`);
+          navigate('/welcome');
+          setMessage(`Connexion réussie pour ${userName}`);
+          setMessageType('success');
+        }
       }
     } catch (error) {
       console.error('Erreur lors de l\'ouverture de la fenêtre:', error);
@@ -272,39 +291,6 @@ const Userlogin = () => {
       setMessageType('error');
     }
   };
-
-  if (loading || detectingMode) {
-    return (
-      <div className="container">
-        <div className="loading-container">
-          <div className="spinner"></div>
-          <p className="loading-text">
-            {detectingMode ? 'Détection du mode d\'accès...' : 'Chargement des utilisateurs...'}
-          </p>
-          {!isElectron() && detectingMode && (
-            <p className="loading-subtext">Test de connectivité au serveur local...</p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container">
-        <div className="error-container">
-          <div className="error-icon">⚠️</div>
-          <p className="error-text">{error}</p>
-          <button 
-            className="retry-button"
-            onClick={() => window.location.reload()}
-          >
-            Réessayer
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="container">
@@ -320,23 +306,50 @@ const Userlogin = () => {
           )}
         </div>
         
-        <div className="user-buttons-container">
-          {users.map(user => (
-            <button
-              key={user.id}
-              onClick={() => selectUser(user.id, user.name)}
-              className={`user-button ${isCurrentSessionUser(user) ? 'primary-user-button' : ''}`}
-            >
-              <div className="user-avatar">
-                {user.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="user-name">
-                {user.name}
-                <span className="user-role">{user.role || ''}</span>
-              </div>
-            </button>
-          ))}
-        </div>
+        {(loading || detectingMode) ? (
+          <div className="user-buttons-container loading-state">
+            <div className="inline-loading">
+              <div className="spinner"></div>
+              <p className="loading-text">
+                {detectingMode ? 'Détection du mode d\'accès...' : 'Chargement des utilisateurs...'}
+              </p>
+              {!isElectron() && detectingMode && (
+                <p className="loading-subtext">Test de connectivité au serveur local...</p>
+              )}
+            </div>
+          </div>
+        ) : error ? (
+          <div className="user-buttons-container error-state">
+            <div className="inline-error">
+              <div className="error-icon">⚠️</div>
+              <p className="error-text">{error}</p>
+              <button 
+                className="retry-button"
+                onClick={() => window.location.reload()}
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="user-buttons-container">
+            {users.map(user => (
+              <button
+                key={user.id}
+                onClick={() => selectUser(user.id, user.name)}
+                className={`user-button ${isCurrentSessionUser(user) ? 'primary-user-button' : ''}`}
+              >
+                <div className="user-avatar">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="user-name">
+                  {user.name}
+                  <span className="user-role">{user.role || ''}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
         
         {message && (
           <div className={`message-container ${messageType === 'error' ? 'error-message' : ''} ${messageType === 'success' ? 'success-message' : ''}`}>
@@ -345,7 +358,15 @@ const Userlogin = () => {
         )}
         
         <button 
-          onClick={() => navigate('/home')} 
+          onClick={() => {
+            // Si on est dans un iframe (overlay), envoyer un message pour fermer l'overlay
+            if (window.parent !== window) {
+              window.parent.postMessage({ type: 'CLOSE_OVERLAY' }, '*');
+            } else {
+              // Sinon, navigation normale
+              navigate('/home');
+            }
+          }} 
           className="return-button"
         >
           Retour à l'accueil

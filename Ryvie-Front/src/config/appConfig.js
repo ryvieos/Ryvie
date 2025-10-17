@@ -1,6 +1,10 @@
 /**
- * Configuration dynamique des applications basée sur les icônes disponibles
+ * Configuration dynamique des applications basée sur les manifests + icônes locales
  */
+
+import axios from '../utils/setupAxios';
+import urlsConfig from './urls';
+const { getServerUrl } = urlsConfig;
 
 // Import explicite des icônes critiques de la taskbar (évite les soucis de bundling cross-plateformes)
 import taskSettings from '../icons/task-settings.svg';
@@ -153,5 +157,152 @@ const generateDefaultZones = () => {
   return zones;
 };
 
+/**
+ * Charge les apps depuis l'API avec manifests
+ */
+const fetchAppsFromManifests = async (accessMode) => {
+  try {
+    const serverUrl = getServerUrl(accessMode);
+    console.log('[appConfig] Chargement des apps depuis manifests:', serverUrl);
+    
+    const response = await axios.get(`${serverUrl}/api/apps/manifests`);
+    const apps = response.data;
+    
+    console.log('[appConfig] Apps chargées depuis manifests:', apps.length);
+    return apps;
+  } catch (error) {
+    console.error('[appConfig] Erreur lors du chargement des manifests:', error.message);
+    return [];
+  }
+};
+
+/**
+ * Génère la config des apps depuis les manifests
+ */
+const generateAppConfigFromManifests = async (accessMode) => {
+  const config = {};
+  
+  try {
+    const apps = await fetchAppsFromManifests(accessMode);
+    const serverUrl = getServerUrl(accessMode);
+    
+    apps.forEach(app => {
+      const iconId = `app-${app.id}`;
+      
+      // Ajouter un timestamp pour éviter le cache du navigateur
+      const iconUrl = `${serverUrl}/api/apps/${app.id}/icon?t=${Date.now()}`;
+      
+      config[iconId] = {
+        id: app.id,
+        name: app.name,
+        description: app.description,
+        category: app.category,
+        icon: iconUrl, // URL de l'icône servie par le backend avec cache-busting
+        urlKey: app.id.toUpperCase(),
+        showStatus: true, // Afficher le badge de statut
+        isTaskbarApp: false,
+        containerName: app.id,
+        mainPort: app.mainPort,
+        ports: app.ports
+      };
+    });
+    
+    console.log('[appConfig] Config générée depuis manifests:', Object.keys(config).length, 'apps');
+  } catch (error) {
+    console.error('[appConfig] Erreur lors de la génération de la config:', error);
+  }
+  
+  // Ajouter les icônes de la taskbar (toujours locales)
+  const taskIcons = Object.keys(images).filter(icon => icon.startsWith('task-'));
+  taskIcons.forEach(iconFile => {
+    const appName = extractAppName(iconFile);
+    
+    config[iconFile] = {
+      name: appName.charAt(0).toUpperCase() + appName.slice(1),
+      urlKey: '',
+      showStatus: false,
+      isTaskbarApp: true,
+    };
+    
+    // Définir les routes pour les icônes de tâches
+    switch(appName.toLowerCase()) {
+      case 'user':
+        config[iconFile].route = '/user';
+        break;
+      case 'transfer':
+        config[iconFile].route = '/userlogin';
+        break;
+      case 'settings':
+        config[iconFile].route = '/settings';
+        break;
+      case 'appstore':
+        config[iconFile].urlKey = 'APPSTORE';
+        config[iconFile].route = null;
+        break;
+    }
+  });
+  
+  return config;
+};
+
+/**
+ * Génère les zones par défaut depuis les manifests
+ */
+const generateDefaultZonesFromManifests = async (accessMode) => {
+  const zones = {
+    left: [],
+    right: [],
+    bottom1: [],
+    bottom2: [],
+    bottom3: [],
+    bottom4: [],
+    bottom5: [],
+    bottom6: [],
+    bottom7: [],
+    bottom8: [],
+    bottom9: [],
+    bottom10: [],
+  };
+  
+  try {
+    const apps = await fetchAppsFromManifests(accessMode);
+    
+    if (apps.length > 0) {
+      // AppStore en haut à gauche si disponible
+      const appStore = apps.find(app => app.id.toLowerCase().includes('appstore'));
+      if (appStore) zones.left = [`app-${appStore.id}`];
+      
+      // Portainer en haut à droite si disponible
+      const portainer = apps.find(app => app.id.toLowerCase().includes('portainer'));
+      if (portainer) zones.right = [`app-${portainer.id}`];
+      
+      // Distribuer les autres apps dans les zones du bas
+      const otherApps = apps.filter(app => 
+        !app.id.toLowerCase().includes('appstore') && 
+        !app.id.toLowerCase().includes('portainer')
+      );
+      
+      const bottomZones = ['bottom1', 'bottom2', 'bottom3', 'bottom4', 'bottom5'];
+      otherApps.forEach((app, index) => {
+        if (index < bottomZones.length) {
+          zones[bottomZones[index]] = [`app-${app.id}`];
+        }
+      });
+    }
+  } catch (error) {
+    console.error('[appConfig] Erreur lors de la génération des zones:', error);
+  }
+  
+  return zones;
+};
+
 // Exporter la configuration et les fonctions (ESM)
-export { generateAppConfig, generateDefaultZones, images, extractAppName };
+export { 
+  generateAppConfig, 
+  generateDefaultZones, 
+  generateAppConfigFromManifests,
+  generateDefaultZonesFromManifests,
+  fetchAppsFromManifests,
+  images, 
+  extractAppName 
+};

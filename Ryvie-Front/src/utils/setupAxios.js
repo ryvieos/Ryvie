@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { getServerUrl } from '../config/urls';
+import urlsConfig from '../config/urls';
+const { getServerUrl } = urlsConfig;
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from './detectAccessMode';
 import { getSessionInfo, setToken, endSession } from './sessionManager';
 

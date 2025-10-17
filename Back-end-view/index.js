@@ -54,9 +54,11 @@ const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
 const systemRouter = require('./routes/system');
 const storageRouter = require('./routes/storage');
+const userPreferencesRouter = require('./routes/userPreferences');
 const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
 const { getLocalIP } = require('./utils/network');
+const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
 
 const docker = new Docker();
 const app = express();
@@ -113,6 +115,18 @@ app.use('/', systemRouter);
 // Mount Storage routes (Step 0 skeleton)
 app.use('/api', storageRouter);
 
+// Initialiser Socket.IO dans le router storage pour les logs en temps réel
+if (storageRouter.setSocketIO) {
+  storageRouter.setSocketIO(io);
+}
+
+// Mount User Preferences routes
+app.use('/api', userPreferencesRouter);
+
+// Mount Settings routes
+const settingsRouter = require('./routes/settings');
+app.use('/api', settingsRouter);
+
 // Realtime (Socket.IO + Docker events) handled by services/realtimeService.js
 let realtime;
 
@@ -120,13 +134,58 @@ let realtime;
  
 // Inline realtime code removed; replaced by realtimeService
 
+// Charger les paramètres au démarrage
+const fs = require('fs');
+const SETTINGS_FILE = '/data/config/server-settings.json';
+try {
+  if (fs.existsSync(SETTINGS_FILE)) {
+    const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    if (settings.tokenExpirationMinutes) {
+      process.env.JWT_EXPIRES_MINUTES = settings.tokenExpirationMinutes.toString();
+      console.log(`✅ Durée d'expiration du token chargée: ${settings.tokenExpirationMinutes} minutes`);
+    }
+  }
+} catch (error) {
+  console.warn('⚠️  Impossible de charger les paramètres serveur, utilisation des valeurs par défaut');
+}
+
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
+    // Générer les manifests au démarrage
+    console.log('🔄 Génération des manifests...');
+    try {
+      const { execSync } = require('child_process');
+      const path = require('path');
+      const manifestScript = path.join(__dirname, '..', 'generate-manifests.js');
+      execSync(`node ${manifestScript}`, { stdio: 'inherit' });
+      console.log('✅ Manifests générés avec succès');
+    } catch (manifestError) {
+      console.error('⚠️  Erreur lors de la génération des manifests:', manifestError.message);
+      console.log('Le serveur continuera sans les manifests mis à jour');
+    }
+
     // Initialize realtime service
     realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
     await realtime.initializeActiveContainers();
 
+    // Générer les manifests des applications au démarrage
+    console.log('🔧 Génération des manifests des applications...');
+    try {
+      const { execSync } = require('child_process');
+      const manifestScript = require('path').join(__dirname, '..', 'generate-manifests.js');
+      execSync(`node ${manifestScript}`, { stdio: 'inherit' });
+      console.log('✅ Manifests générés avec succès');
+    } catch (manifestError) {
+      console.error('⚠️  Erreur lors de la génération des manifests:', manifestError.message);
+    }
+
+    // Synchroniser les fonds d'écran au démarrage
+    syncBackgrounds();
+    
+    // Surveiller les changements dans le dossier public/images/backgrounds
+    watchBackgrounds();
+    
     const PORT = process.env.PORT || 3002;
     httpServer.listen(PORT, () => {
       console.log(`HTTP Server running on http://${getLocalIP()}:${PORT}`);

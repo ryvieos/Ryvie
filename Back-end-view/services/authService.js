@@ -1,9 +1,30 @@
 const jwt = require('jsonwebtoken');
 const { ensureConnected } = require('../redisClient');
+const fs = require('fs');
+const path = require('path');
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_MINUTES = Math.max(1, parseInt(process.env.JWT_EXPIRES_MINUTES || '15', 10) || 15);
-const JWT_EXPIRES_SECONDS = JWT_EXPIRES_MINUTES * 60;
+const SETTINGS_FILE = '/data/config/server-settings.json';
+
+// Fonction pour obtenir la durée d'expiration actuelle
+function getTokenExpirationMinutes() {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+      if (settings.tokenExpirationMinutes) {
+        return Math.max(1, parseInt(settings.tokenExpirationMinutes, 10));
+      }
+    }
+  } catch (error) {
+    console.warn('[authService] Erreur lecture settings, utilisation valeur par défaut');
+  }
+  // Fallback sur la variable d'environnement ou 15 minutes par défaut
+  return Math.max(1, parseInt(process.env.JWT_EXPIRES_MINUTES || '15', 10) || 15);
+}
+
+function getTokenExpirationSeconds() {
+  return getTokenExpirationMinutes() * 60;
+}
 
 async function checkBruteForce(uid, ip) {
   try {
@@ -45,21 +66,23 @@ async function clearFailedAttempts(uid, ip) {
 }
 
 function signToken(user) {
-  return jwt.sign(user, JWT_SECRET, { expiresIn: `${JWT_EXPIRES_MINUTES}m` });
+  const expirationMinutes = getTokenExpirationMinutes();
+  return jwt.sign(user, JWT_SECRET, { expiresIn: `${expirationMinutes}m` });
 }
 
 async function allowlistToken(token, user) {
   try {
     const redis = await ensureConnected();
     const key = `access:token:${token}`;
-    await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: JWT_EXPIRES_SECONDS });
+    const expirationSeconds = getTokenExpirationSeconds();
+    await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: expirationSeconds });
   } catch (e) {
     console.warn('[login] Impossible d\'enregistrer le token dans Redis:', e?.message || e);
   }
 }
 
 module.exports = {
-  JWT_EXPIRES_SECONDS,
+  getTokenExpirationSeconds,
   checkBruteForce,
   recordFailedAttempt,
   clearFailedAttempts,
