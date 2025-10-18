@@ -205,6 +205,7 @@ const Settings = () => {
   // État pour les mises à jour
   const [updates, setUpdates] = useState(null);
   const [updatesLoading, setUpdatesLoading] = useState(false);
+  const [updateInProgress, setUpdateInProgress] = useState(null); // 'ryvie' ou nom de l'app
 
   useEffect(() => {
     // Restaurer la session depuis les paramètres URL si preserve_session=true
@@ -236,6 +237,14 @@ const Settings = () => {
       
       // Nettoyer les paramètres URL
       window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      // Si pas de paramètres URL, restaurer le token depuis le sessionManager
+      const sessionInfo = getSessionInfo();
+      if (sessionInfo && sessionInfo.token) {
+        console.log('[Settings] Restauration du token depuis sessionManager');
+        // Réinjecter le token dans les headers axios
+        axios.defaults.headers.common['Authorization'] = `Bearer ${sessionInfo.token}`;
+      }
     }
     
     // Récupérer le rôle de l'utilisateur
@@ -363,10 +372,27 @@ const Settings = () => {
     if (!accessMode) return;
     
     // Vérifier les mises à jour automatiquement au chargement
-    fetchUpdates();
+    const loadUpdates = async () => {
+      setUpdatesLoading(true);
+      
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        console.log('[Settings] Vérification des mises à jour depuis:', serverUrl);
+        const response = await axios.get(`${serverUrl}/api/settings/updates`);
+        console.log('[Settings] Mises à jour:', response.data);
+        setUpdates(response.data);
+      } catch (error) {
+        console.error('[Settings] Erreur lors de la vérification des mises à jour:', error);
+        setUpdates(null);
+      } finally {
+        setUpdatesLoading(false);
+      }
+    };
+    
+    loadUpdates();
   }, [accessMode]);
 
-  // Récupération des informations serveur (HTTP polling)
+  // Récupération des informations serveur (HTTP polling) - optimisé à 10s
   useEffect(() => {
     if (!accessMode) return; // attendre l'init
     const baseUrl = getServerUrl(accessMode);
@@ -389,7 +415,7 @@ const Settings = () => {
     // Appel initial
     fetchServerInfo();
     
-    // Configuration de l'intervalle pour les mises à jour régulières (toutes les 5s au lieu de 2s)
+    // Configuration de l'intervalle pour les mises à jour régulières (toutes les 10s pour réduire la charge)
     const intervalId = setInterval(fetchServerInfo, 5000);
     
     // Nettoyage lors du démontage du composant
@@ -398,11 +424,14 @@ const Settings = () => {
     };
   }, [accessMode]); // Réexécute l'effet si le mode d'accès change
 
-  // Récupération live de la configuration stockage (lecture seule)
+  // Récupération live de la configuration stockage (lecture seule) - optimisé à 15s
   useEffect(() => {
     const fetchStorage = async () => {
       if (!accessMode) return;
-      setStorageLoading(true);
+      // Ne pas afficher le loader si on a déjà des données (refresh en arrière-plan)
+      if (!storageInventory) {
+        setStorageLoading(true);
+      }
       setStorageError(null);
       try {
         const baseUrl = getServerUrl(accessMode);
@@ -423,8 +452,9 @@ const Settings = () => {
     // Appel initial
     fetchStorage();
     
-    // Polling régulier toutes les 5 secondes pour détecter les changements de resync
-    const intervalId = setInterval(fetchStorage, 5000);
+    // Polling régulier toutes les 15 secondes (réduit de 5s pour limiter les requêtes)
+    // Le resync RAID est un processus long, 15s est suffisant pour le monitoring
+    const intervalId = setInterval(fetchStorage, 15000);
     
     return () => clearInterval(intervalId);
   }, [accessMode]);
@@ -859,6 +889,98 @@ const Settings = () => {
       setUpdates(null);
     } finally {
       setUpdatesLoading(false);
+    }
+  };
+
+  // Fonction pour mettre à jour Ryvie
+  const handleUpdateRyvie = async () => {
+    const confirmed = await showConfirm(
+      '🔄 Mettre à jour Ryvie',
+      'Êtes-vous sûr de vouloir mettre à jour Ryvie ? Le serveur va redémarrer automatiquement après la mise à jour.'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+
+    setUpdateInProgress('ryvie');
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      console.log('[Settings] Démarrage de la mise à jour de Ryvie...');
+      const response = await axios.post(`${serverUrl}/api/settings/update-ryvie`);
+      
+      if (response.data.success) {
+        await showConfirm(
+          '✅ Mise à jour réussie',
+          'Ryvie a été mis à jour avec succès ! Le serveur va redémarrer dans quelques secondes.',
+          true // Mode info (un seul bouton OK)
+        );
+        // Attendre un peu puis recharger la page
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000);
+      } else {
+        await showConfirm(
+          '❌ Erreur de mise à jour',
+          `Erreur: ${response.data.message}`,
+          true
+        );
+        setUpdateInProgress(null);
+      }
+    } catch (error) {
+      console.error('[Settings] Erreur lors de la mise à jour de Ryvie:', error);
+      await showConfirm(
+        '❌ Erreur de mise à jour',
+        `Erreur lors de la mise à jour: ${error.response?.data?.message || error.message}`,
+        true
+      );
+      setUpdateInProgress(null);
+    }
+  };
+
+  // Fonction pour mettre à jour une application
+  const handleUpdateApp = async (appName) => {
+    const confirmed = await showConfirm(
+      `🔄 Mettre à jour ${appName}`,
+      `Êtes-vous sûr de vouloir mettre à jour ${appName} ? L'application va redémarrer automatiquement après la mise à jour.`
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+
+    setUpdateInProgress(appName);
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      console.log(`[Settings] Démarrage de la mise à jour de ${appName}...`);
+      const response = await axios.post(`${serverUrl}/api/settings/update-app`, { appName });
+      
+      if (response.data.success) {
+        await showConfirm(
+          '✅ Mise à jour réussie',
+          `${appName} a été mis à jour avec succès !`,
+          true
+        );
+        // Re-vérifier les mises à jour
+        await fetchUpdates();
+      } else {
+        await showConfirm(
+          '❌ Erreur de mise à jour',
+          `Erreur: ${response.data.message}`,
+          true
+        );
+      }
+    } catch (error) {
+      console.error(`[Settings] Erreur lors de la mise à jour de ${appName}:`, error);
+      await showConfirm(
+        '❌ Erreur de mise à jour',
+        `Erreur lors de la mise à jour: ${error.response?.data?.message || error.message}`,
+        true
+      );
+    } finally {
+      setUpdateInProgress(null);
     }
   };
 
@@ -2082,6 +2204,57 @@ const Settings = () => {
                       </div>
                     </div>
                   </div>
+                  
+                  {/* Bouton Mettre à jour pour Ryvie */}
+                  {updates.ryvie.updateAvailable && isAdmin && (
+                    <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                      <button
+                        onClick={handleUpdateRyvie}
+                        disabled={updateInProgress === 'ryvie'}
+                        style={{
+                          padding: '12px 24px',
+                          background: updateInProgress === 'ryvie' 
+                            ? '#94a3b8' 
+                            : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '10px',
+                          fontSize: '15px',
+                          fontWeight: '700',
+                          cursor: updateInProgress === 'ryvie' ? 'not-allowed' : 'pointer',
+                          boxShadow: updateInProgress === 'ryvie' 
+                            ? 'none' 
+                            : '0 4px 12px rgba(245, 158, 11, 0.3)',
+                          transition: 'all 0.3s ease',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                      >
+                        {updateInProgress === 'ryvie' ? (
+                          <>
+                            <div style={{
+                              width: '16px',
+                              height: '16px',
+                              border: '2px solid #ffffff',
+                              borderTopColor: 'transparent',
+                              borderRadius: '50%',
+                              animation: 'spin 0.8s linear infinite'
+                            }}></div>
+                            Mise à jour en cours...
+                          </>
+                        ) : (
+                          <>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                              <polyline points="21 12 21 6 15 6"/>
+                            </svg>
+                            Mettre à jour Ryvie
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Applications Updates */}
@@ -2207,24 +2380,74 @@ const Settings = () => {
                                 </span>
                               </div>
                             </div>
-                            <div style={{ 
-                              padding: '8px 16px',
-                              borderRadius: '10px',
-                              background: app.updateAvailable 
-                                ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' 
-                                : 'linear-gradient(135deg, #34d399 0%, #10b981 100%)',
-                              color: '#fff',
-                              fontSize: '13px',
-                              fontWeight: '800',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.6px',
-                              whiteSpace: 'nowrap',
-                              boxShadow: app.updateAvailable 
-                                ? '0 4px 12px rgba(251, 191, 36, 0.3)' 
-                                : '0 4px 12px rgba(52, 211, 153, 0.3)',
-                              marginLeft: '16px'
-                            }}>
-                              {app.updateAvailable ? '⚠️ MAJ' : '✓ OK'}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                              <div style={{ 
+                                padding: '8px 16px',
+                                borderRadius: '10px',
+                                background: app.updateAvailable 
+                                  ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' 
+                                  : 'linear-gradient(135deg, #34d399 0%, #10b981 100%)',
+                                color: '#fff',
+                                fontSize: '13px',
+                                fontWeight: '800',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.6px',
+                                whiteSpace: 'nowrap',
+                                boxShadow: app.updateAvailable 
+                                  ? '0 4px 12px rgba(251, 191, 36, 0.3)' 
+                                  : '0 4px 12px rgba(52, 211, 153, 0.3)'
+                              }}>
+                                {app.updateAvailable ? '⚠️ MAJ' : '✓ OK'}
+                              </div>
+                              
+                              {/* Bouton Mettre à jour pour l'app */}
+                              {app.updateAvailable && isAdmin && (
+                                <button
+                                  onClick={() => handleUpdateApp(app.name)}
+                                  disabled={updateInProgress === app.name}
+                                  style={{
+                                    padding: '8px 16px',
+                                    background: updateInProgress === app.name 
+                                      ? '#94a3b8' 
+                                      : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    fontWeight: '700',
+                                    cursor: updateInProgress === app.name ? 'not-allowed' : 'pointer',
+                                    boxShadow: updateInProgress === app.name 
+                                      ? 'none' 
+                                      : '0 3px 10px rgba(245, 158, 11, 0.3)',
+                                    transition: 'all 0.3s ease',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {updateInProgress === app.name ? (
+                                    <>
+                                      <div style={{
+                                        width: '12px',
+                                        height: '12px',
+                                        border: '2px solid #ffffff',
+                                        borderTopColor: 'transparent',
+                                        borderRadius: '50%',
+                                        animation: 'spin 0.8s linear infinite'
+                                      }}></div>
+                                      MAJ...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                                      </svg>
+                                      Mettre à jour
+                                    </>
+                                  )}
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>

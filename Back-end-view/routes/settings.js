@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const { checkAllUpdates } = require('../services/updateCheckService');
+const { updateRyvie, updateApp } = require('../services/updateService');
 
 const SETTINGS_FILE = '/data/config/server-settings.json';
 
@@ -91,6 +92,94 @@ router.get('/settings/updates', verifyToken, async (req, res) => {
     console.error('[settings] Erreur lors de la vérification des mises à jour:', error);
     res.status(500).json({ 
       error: 'Erreur lors de la vérification des mises à jour',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/settings/update-ryvie - Mettre à jour Ryvie
+router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req, res) => {
+  try {
+    console.log('[settings] Démarrage de la mise à jour de Ryvie...');
+    const result = await updateRyvie();
+    
+    if (result.success && result.needsRestart) {
+      // Envoyer la réponse immédiatement
+      res.json({
+        success: true,
+        message: 'Code mis à jour. Redémarrage en cours...'
+      });
+      
+      // Redémarrer PM2 après un court délai (pour que la réponse soit envoyée)
+      setTimeout(async () => {
+        const { execSync } = require('child_process');
+        console.log('[settings] Redémarrage PM2...');
+        
+        try {
+          execSync('/usr/local/bin/pm2 reload all --force', { stdio: 'inherit' });
+          console.log('[settings] PM2 reload lancé');
+          
+          // Attendre 5 secondes puis vérifier
+          setTimeout(() => {
+            try {
+              const pm2Output = execSync('/usr/local/bin/pm2 list', { encoding: 'utf8' });
+              const hasOnlineProcesses = pm2Output.includes('online');
+              
+              if (hasOnlineProcesses) {
+                console.log('[settings] ✅ Vérification PM2: tous les services sont en ligne');
+              } else {
+                console.error('[settings] ❌ Vérification PM2: aucun service en ligne');
+              }
+            } catch (checkError) {
+              console.error('[settings] ❌ Erreur lors de la vérification PM2:', checkError.message);
+            }
+          }, 5000);
+          
+        } catch (error) {
+          console.error('[settings] ❌ Erreur lors du redémarrage PM2:', error.message);
+        }
+      }, 1000);
+      
+    } else if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('[settings] Erreur lors de la mise à jour de Ryvie:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Erreur lors de la mise à jour',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/settings/update-app - Mettre à jour une application
+router.post('/settings/update-app', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { appName } = req.body;
+    
+    if (!appName) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Nom de l\'application requis' 
+      });
+    }
+    
+    console.log(`[settings] Démarrage de la mise à jour de ${appName}...`);
+    const result = await updateApp(appName);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error(`[settings] Erreur lors de la mise à jour de l'app:`, error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Erreur lors de la mise à jour',
       details: error.message 
     });
   }

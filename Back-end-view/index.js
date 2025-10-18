@@ -85,13 +85,18 @@ app.use(express.json({ limit: '10mb' }));
 // General API rate limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limit each IP to 500 requests per windowMs (increased for normal usage)
+  max: 1000, // Limit each IP to 1000 requests per windowMs (increased for polling + normal usage)
   message: {
     error: 'Trop de requêtes. Réessayez plus tard.',
     retryAfter: 15 * 60
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // Skip rate limiting for certain endpoints if needed
+  skip: (req) => {
+    // Optionally skip rate limiting for health checks
+    return req.path === '/status' || req.path === '/api/status';
+  }
 });
 
 app.use('/api/', apiLimiter);
