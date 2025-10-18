@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const { verifyToken, isAdmin } = require('../middleware/auth');
+const { checkAllUpdates } = require('../services/updateCheckService');
 
 const SETTINGS_FILE = '/data/config/server-settings.json';
 
@@ -77,6 +78,21 @@ router.patch('/settings/token-expiration', verifyToken, (req, res) => {
   } catch (error) {
     console.error('[settings] Erreur PATCH token-expiration:', error);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// GET /api/settings/updates - Vérifier les mises à jour disponibles
+router.get('/settings/updates', verifyToken, async (req, res) => {
+  try {
+    console.log('[settings] Vérification des mises à jour...');
+    const updates = await checkAllUpdates();
+    res.json(updates);
+  } catch (error) {
+    console.error('[settings] Erreur lors de la vérification des mises à jour:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la vérification des mises à jour',
+      details: error.message 
+    });
   }
 });
 
