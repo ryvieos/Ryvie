@@ -15,9 +15,47 @@ function registerPendingSnapshot(snapshotPath) {
 }
 
 /**
+ * Nettoie tous les snapshots orphelins au démarrage
+ */
+function cleanAllSnapshots() {
+  const SNAPSHOT_DIR = '/data/snapshot';
+  
+  try {
+    if (!fs.existsSync(SNAPSHOT_DIR)) {
+      return;
+    }
+    
+    const snapshots = fs.readdirSync(SNAPSHOT_DIR).filter(name => {
+      const fullPath = path.join(SNAPSHOT_DIR, name);
+      return fs.statSync(fullPath).isDirectory();
+    });
+    
+    if (snapshots.length > 0) {
+      console.log(`[SnapshotCleanup] 🧹 Nettoyage de ${snapshots.length} snapshot(s) orphelin(s)...`);
+      
+      for (const snapshot of snapshots) {
+        const snapshotPath = path.join(SNAPSHOT_DIR, snapshot);
+        try {
+          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
+          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+          console.log(`[SnapshotCleanup] ✅ Snapshot supprimé: ${snapshot}`);
+        } catch (delError) {
+          console.error(`[SnapshotCleanup] ❌ Erreur lors de la suppression de ${snapshot}:`, delError.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[SnapshotCleanup] Erreur lors du nettoyage des snapshots:', error.message);
+  }
+}
+
+/**
  * Vérifie et nettoie les snapshots en attente au démarrage
  */
 function checkPendingSnapshots() {
+  // D'abord, nettoyer tous les snapshots orphelins
+  cleanAllSnapshots();
+  
   if (!fs.existsSync(SNAPSHOT_PENDING_FILE)) {
     return;
   }

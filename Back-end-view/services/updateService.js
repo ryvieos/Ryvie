@@ -55,6 +55,16 @@ async function updateRyvie() {
         const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
         console.log(rollbackOutput);
         console.log('[Update] ✅ Rollback terminé');
+        
+        // Supprimer le snapshot après rollback réussi
+        try {
+          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
+          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+          console.log('[Update] 🧹 Snapshot supprimé après rollback');
+        } catch (delError) {
+          console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
+        }
+        
         return {
           success: false,
           message: `Erreur: ${error.message}. Rollback effectué avec succès.`
@@ -221,6 +231,16 @@ async function updateApp(appName) {
         const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
         console.log(rollbackOutput);
         console.log('[Update] ✅ Rollback terminé');
+        
+        // Supprimer le snapshot après rollback réussi
+        try {
+          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
+          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+          console.log('[Update] 🧹 Snapshot supprimé après rollback');
+        } catch (delError) {
+          console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
+        }
+        
         return {
           success: false,
           message: `Erreur: ${error.message}. Rollback effectué avec succès.`
