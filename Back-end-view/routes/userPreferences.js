@@ -74,9 +74,63 @@ function getUserPreferencesPath(username) {
 }
 
 /**
+ * Génère les zones par défaut depuis les manifests disponibles
+ */
+async function generateDefaultZonesFromManifests() {
+  const zones = {
+    left: [],
+    right: [],
+    bottom1: [],
+    bottom2: [],
+    bottom3: [],
+    bottom4: [],
+    bottom5: [],
+    bottom6: [],
+    bottom7: [],
+    bottom8: [],
+    bottom9: [],
+    bottom10: [],
+  };
+  
+  try {
+    const { listInstalledApps } = require('../services/appManagerService');
+    const apps = await listInstalledApps();
+    
+    if (apps.length > 0) {
+      console.log(`[userPreferences] Génération des zones par défaut avec ${apps.length} apps`);
+      
+      // AppStore en haut à gauche si disponible
+      const appStore = apps.find(app => app.id.toLowerCase().includes('appstore'));
+      if (appStore) zones.left = [`app-${appStore.id}`];
+      
+      // Portainer en haut à droite si disponible
+      const portainer = apps.find(app => app.id.toLowerCase().includes('portainer'));
+      if (portainer) zones.right = [`app-${portainer.id}`];
+      
+      // Distribuer les autres apps dans les zones du bas
+      const otherApps = apps.filter(app => 
+        !app.id.toLowerCase().includes('appstore') && 
+        !app.id.toLowerCase().includes('portainer')
+      );
+      
+      const bottomZones = ['bottom1', 'bottom2', 'bottom3', 'bottom4', 'bottom5', 'bottom6', 'bottom7', 'bottom8', 'bottom9', 'bottom10'];
+      otherApps.forEach((app, index) => {
+        if (index < bottomZones.length) {
+          zones[bottomZones[index]] = [`app-${app.id}`];
+        }
+      });
+    }
+  } catch (error) {
+    console.error('[userPreferences] Erreur lors de la génération des zones:', error);
+  }
+  
+  return zones;
+}
+
+/**
  * Charge les préférences d'un utilisateur
  */
-function loadUserPreferences(username) {
+async function loadUserPreferences(username) {
   const filePath = getUserPreferencesPath(username);
   
   if (fs.existsSync(filePath)) {
@@ -108,21 +162,38 @@ function saveUserPreferences(username, preferences) {
 }
 
 // GET /api/user/preferences - Récupérer les préférences de l'utilisateur
-router.get('/user/preferences', verifyToken, (req, res) => {
+router.get('/user/preferences', verifyToken, async (req, res) => {
   try {
     const username = req.user.uid || req.user.username; // uid est le nom d'utilisateur dans le JWT
     console.log('[userPreferences] GET pour utilisateur:', username);
-    const preferences = loadUserPreferences(username);
+    let preferences = await loadUserPreferences(username);
     
     if (preferences) {
+      // Vérifier si les zones sont vides et les initialiser si nécessaire
+      const hasEmptyZones = !preferences.zones || Object.keys(preferences.zones).length === 0 || 
+                           Object.values(preferences.zones).every(zone => !zone || zone.length === 0);
+      
+      if (hasEmptyZones) {
+        console.log('[userPreferences] Zones vides détectées, initialisation avec les apps disponibles');
+        const defaultZones = await generateDefaultZonesFromManifests();
+        preferences.zones = defaultZones;
+        saveUserPreferences(username, preferences);
+        console.log('[userPreferences] Zones initialisées et sauvegardées');
+      }
+      
       res.json(preferences);
     } else {
-      // Retourner des préférences par défaut
-      res.json({
-        zones: {},
+      // Créer des préférences par défaut avec les apps disponibles
+      console.log('[userPreferences] Création des préférences par défaut');
+      const defaultZones = await generateDefaultZonesFromManifests();
+      const defaultPreferences = {
+        zones: defaultZones,
         theme: 'default',
         language: 'fr'
-      });
+      };
+      saveUserPreferences(username, defaultPreferences);
+      console.log('[userPreferences] Préférences par défaut créées et sauvegardées');
+      res.json(defaultPreferences);
     }
   } catch (error) {
     console.error('[userPreferences] Erreur GET:', error);
