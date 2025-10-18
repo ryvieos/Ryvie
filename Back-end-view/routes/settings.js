@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const { checkAllUpdates } = require('../services/updateCheckService');
+const { updateRyvie, updateApp } = require('../services/updateService');
 
 const SETTINGS_FILE = '/data/config/server-settings.json';
 
@@ -91,6 +92,57 @@ router.get('/settings/updates', verifyToken, async (req, res) => {
     console.error('[settings] Erreur lors de la vérification des mises à jour:', error);
     res.status(500).json({ 
       error: 'Erreur lors de la vérification des mises à jour',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/settings/update-ryvie - Mettre à jour Ryvie
+router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req, res) => {
+  try {
+    console.log('[settings] Démarrage de la mise à jour de Ryvie...');
+    const result = await updateRyvie();
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('[settings] Erreur lors de la mise à jour de Ryvie:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Erreur lors de la mise à jour',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/settings/update-app - Mettre à jour une application
+router.post('/settings/update-app', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { appName } = req.body;
+    
+    if (!appName) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Nom de l\'application requis' 
+      });
+    }
+    
+    console.log(`[settings] Démarrage de la mise à jour de ${appName}...`);
+    const result = await updateApp(appName);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error(`[settings] Erreur lors de la mise à jour de l'app:`, error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Erreur lors de la mise à jour',
       details: error.message 
     });
   }
