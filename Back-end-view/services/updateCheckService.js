@@ -9,7 +9,7 @@ const RYVIE_DIR = '/opt/Ryvie';
 const APPS_DIR = '/data/apps';
 
 /**
- * Récupère le dernier tag d'un repo GitHub
+ * Récupère le dernier tag (tous branches) d'un repo GitHub
  */
 async function getLatestGitHubTag(owner, repo) {
   try {
@@ -34,6 +34,56 @@ async function getLatestGitHubTag(owner, repo) {
       return null;
     }
     console.error(`[updateCheck] Erreur lors de la récupération du tag pour ${owner}/${repo}:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Récupère la branche Git courante d'un répertoire local
+ */
+function getCurrentBranch(dir) {
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: dir,
+      encoding: 'utf8'
+    }).trim();
+    return branch;
+  } catch (e) {
+    console.log(`[updateCheck] Impossible de déterminer la branche pour ${dir}`);
+    return 'main';
+  }
+}
+
+/**
+ * Récupère la dernière release GitHub pour une branche donnée via target_commitish.
+ * Fallback: si aucune release sur la branche, retourne la dernière release publique.
+ */
+async function getLatestGitHubReleaseForBranch(owner, repo, branch) {
+  try {
+    const headers = {};
+    if (GITHUB_TOKEN) headers['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
+    headers['Accept'] = 'application/vnd.github+json';
+
+    // Récupérer les releases (paginer jusqu'à 100 suffisant pour la plupart des cas)
+    const resp = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`,
+      { headers, timeout: 10000 }
+    );
+
+    const releases = Array.isArray(resp.data) ? resp.data : [];
+    // Filtrer par branche cible (target_commitish peut être 'main', 'master' ou autre)
+    const branchReleases = releases.filter(r => (r?.target_commitish || '').toLowerCase() === (branch || '').toLowerCase());
+    const latestOnBranch = branchReleases.find(r => !r.prerelease); // privilégier non-prerelease
+    const latest = latestOnBranch || releases.find(r => !r.prerelease) || releases[0];
+
+    if (!latest) return null;
+    return latest.tag_name || latest.name || null;
+  } catch (error) {
+    if (error.response?.status === 404) {
+      console.log(`[updateCheck] Releases introuvables pour ${owner}/${repo}`);
+      return null;
+    }
+    console.error(`[updateCheck] Erreur releases ${owner}/${repo}:`, error.message);
     return null;
   }
 }
@@ -86,13 +136,17 @@ function compareVersions(current, latest) {
  */
 async function checkRyvieUpdate() {
   const currentVersion = getCurrentRyvieVersion();
-  const latestVersion = await getLatestGitHubTag('maisonnavejul', 'Ryvie');
+  const currentBranch = getCurrentBranch(RYVIE_DIR);
+  // D'abord essayer les releases de la branche courante, sinon fallback aux tags
+  const fromRelease = await getLatestGitHubReleaseForBranch('maisonnavejul', 'Ryvie', currentBranch);
+  const latestVersion = fromRelease || await getLatestGitHubTag('maisonnavejul', 'Ryvie');
   
   const status = compareVersions(currentVersion, latestVersion);
   
   return {
     name: 'Ryvie',
     repo: 'maisonnavejul/Ryvie',
+    branch: currentBranch,
     currentVersion,
     latestVersion,
     updateAvailable: status === 'update-available',
@@ -185,7 +239,9 @@ async function checkAppsUpdates() {
     const repo = repoMatch[2];
     
     const currentVersion = getAppCurrentVersion(appPath);
-    const latestVersion = await getLatestGitHubTag(owner, repo);
+    const appBranch = getCurrentBranch(appPath);
+    const fromRelease = await getLatestGitHubReleaseForBranch(owner, repo, appBranch);
+    const latestVersion = fromRelease || await getLatestGitHubTag(owner, repo);
     
     if (!latestVersion) {
       console.log(`[updateCheck] Pas de release pour ${appFolder}, skip`);
@@ -197,6 +253,7 @@ async function checkAppsUpdates() {
     updates.push({
       name: manifest.name || appFolder,
       repo: `${owner}/${repo}`,
+      branch: appBranch,
       currentVersion,
       latestVersion,
       updateAvailable: status === 'update-available',

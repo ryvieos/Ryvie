@@ -2009,6 +2009,20 @@ const Settings = () => {
                         {updates.ryvie.updateAvailable ? '🔄' : '✅'}
                       </div>
                       Ryvie
+                      {updates?.ryvie?.branch && (
+                        <span style={{
+                          marginLeft: '8px',
+                          fontSize: '12px',
+                          color: '#94a3b8',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '9999px',
+                          background: 'rgba(148,163,184,0.12)',
+                          border: '1px solid rgba(148,163,184,0.25)'
+                        }}>
+                          branch: {updates.ryvie.branch}
+                        </span>
+                      )}
                     </h3>
                     <div style={{
                       padding: '8px 16px',
@@ -2137,8 +2151,23 @@ const Settings = () => {
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: '700', fontSize: '17px', color: '#111827', marginBottom: '10px' }}>
-                                {app.name}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                                <div style={{ fontWeight: '700', fontSize: '17px', color: '#111827' }}>
+                                  {app.name}
+                                </div>
+                                {app.branch && (
+                                  <span style={{
+                                    fontSize: '12px',
+                                    color: '#94a3b8',
+                                    fontWeight: 600,
+                                    padding: '2px 8px',
+                                    borderRadius: '9999px',
+                                    background: 'rgba(148,163,184,0.12)',
+                                    border: '1px solid rgba(148,163,184,0.25)'
+                                  }}>
+                                    branch: {app.branch}
+                                  </span>
+                                )}
                               </div>
                               <div style={{ 
                                 fontSize: '14px', 

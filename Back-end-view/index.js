@@ -59,6 +59,7 @@ const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
 const { getLocalIP } = require('./utils/network');
 const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
+const { syncNetbirdConfig } = require('./utils/syncNetbirdConfig');
 
 const docker = new Docker();
 const app = express();
@@ -172,6 +173,9 @@ async function startServer() {
     
     // Surveiller les changements dans le dossier public/images/backgrounds
     watchBackgrounds();
+    
+    // Synchroniser la configuration Netbird au démarrage
+    syncNetbirdConfig();
     
     const PORT = process.env.PORT || 3002;
     httpServer.listen(PORT, () => {
