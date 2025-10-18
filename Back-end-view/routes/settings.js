@@ -110,31 +110,22 @@ router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req, res) => 
         message: 'Code mis à jour. Redémarrage en cours...'
       });
       
+      const snapshotPath = result.snapshotPath;
+      
+      // Enregistrer le snapshot pour vérification au prochain démarrage
+      if (snapshotPath) {
+        const { registerPendingSnapshot } = require('../utils/snapshotCleanup');
+        registerPendingSnapshot(snapshotPath);
+      }
+      
       // Redémarrer PM2 après un court délai (pour que la réponse soit envoyée)
-      setTimeout(async () => {
+      setTimeout(() => {
         const { execSync } = require('child_process');
         console.log('[settings] Redémarrage PM2...');
         
         try {
           execSync('/usr/local/bin/pm2 reload all --force', { stdio: 'inherit' });
           console.log('[settings] PM2 reload lancé');
-          
-          // Attendre 5 secondes puis vérifier
-          setTimeout(() => {
-            try {
-              const pm2Output = execSync('/usr/local/bin/pm2 list', { encoding: 'utf8' });
-              const hasOnlineProcesses = pm2Output.includes('online');
-              
-              if (hasOnlineProcesses) {
-                console.log('[settings] ✅ Vérification PM2: tous les services sont en ligne');
-              } else {
-                console.error('[settings] ❌ Vérification PM2: aucun service en ligne');
-              }
-            } catch (checkError) {
-              console.error('[settings] ❌ Erreur lors de la vérification PM2:', checkError.message);
-            }
-          }, 5000);
-          
         } catch (error) {
           console.error('[settings] ❌ Erreur lors du redémarrage PM2:', error.message);
         }

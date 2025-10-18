@@ -158,6 +158,10 @@ try {
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
+    // Vérifier les snapshots en attente (après une mise à jour)
+    const { checkPendingSnapshots } = require('./utils/snapshotCleanup');
+    checkPendingSnapshots();
+    
     // Initialize realtime service
     realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
     await realtime.initializeActiveContainers();
