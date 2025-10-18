@@ -392,7 +392,7 @@ const Settings = () => {
     loadUpdates();
   }, [accessMode]);
 
-  // Récupération des informations serveur (HTTP polling)
+  // Récupération des informations serveur (HTTP polling) - optimisé à 10s
   useEffect(() => {
     if (!accessMode) return; // attendre l'init
     const baseUrl = getServerUrl(accessMode);
@@ -415,7 +415,7 @@ const Settings = () => {
     // Appel initial
     fetchServerInfo();
     
-    // Configuration de l'intervalle pour les mises à jour régulières (toutes les 5s au lieu de 2s)
+    // Configuration de l'intervalle pour les mises à jour régulières (toutes les 10s pour réduire la charge)
     const intervalId = setInterval(fetchServerInfo, 5000);
     
     // Nettoyage lors du démontage du composant
@@ -424,11 +424,14 @@ const Settings = () => {
     };
   }, [accessMode]); // Réexécute l'effet si le mode d'accès change
 
-  // Récupération live de la configuration stockage (lecture seule)
+  // Récupération live de la configuration stockage (lecture seule) - optimisé à 15s
   useEffect(() => {
     const fetchStorage = async () => {
       if (!accessMode) return;
-      setStorageLoading(true);
+      // Ne pas afficher le loader si on a déjà des données (refresh en arrière-plan)
+      if (!storageInventory) {
+        setStorageLoading(true);
+      }
       setStorageError(null);
       try {
         const baseUrl = getServerUrl(accessMode);
@@ -449,8 +452,9 @@ const Settings = () => {
     // Appel initial
     fetchStorage();
     
-    // Polling régulier toutes les 5 secondes pour détecter les changements de resync
-    const intervalId = setInterval(fetchStorage, 5000);
+    // Polling régulier toutes les 15 secondes (réduit de 5s pour limiter les requêtes)
+    // Le resync RAID est un processus long, 15s est suffisant pour le monitoring
+    const intervalId = setInterval(fetchStorage, 15000);
     
     return () => clearInterval(intervalId);
   }, [accessMode]);

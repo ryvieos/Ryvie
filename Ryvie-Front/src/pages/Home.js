@@ -19,6 +19,7 @@ import {
   generateDefaultZonesFromManifests,
   images 
 } from '../config/appConfig';
+ 
 
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
@@ -74,15 +75,9 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
   
   // Gérer les erreurs de chargement d'image
   const handleImageError = () => {
-    if (!imgError) {
-      console.log(`[Icon] Erreur de chargement pour ${id}, utilisation du fallback`);
-      setImgError(true);
-      // Fallback vers l'icône locale si disponible
-      const fallbackSrc = images[id];
-      if (fallbackSrc && fallbackSrc !== src) {
-        setImgSrc(fallbackSrc);
-      }
-    }
+    if (imgError) return;
+    console.log(`[Icon] Erreur de chargement pour ${id}, on masque l'image (pas de fallback local)`);
+    setImgError(true);
   };
 
   const ref = React.useRef(null);
@@ -292,25 +287,34 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
 
   return (
     <>
-      <div className="icon-container">
-        <div
-          ref={ref}
-          className="icon"
-          style={{
-            backgroundImage: `url(${src})`,
-            cursor: isClickable ? 'pointer' : 'not-allowed',
-            position: 'relative',
-          }}
-          onClick={handleIconClick}
-          onContextMenu={handleContextMenu}
-        >
-          {badgeStyle && <div className="status-badge" style={badgeStyle}></div>}
+      {/* Ne pas afficher l'icône si le chargement a échoué */}
+      {!imgError && (
+        <div className="icon-container">
+          <div
+            ref={ref}
+            className="icon"
+            style={{
+              cursor: isClickable ? 'pointer' : 'not-allowed',
+              position: 'relative',
+            }}
+            onClick={handleIconClick}
+            onContextMenu={handleContextMenu}
+          >
+            {/* Afficher uniquement l'image backend */}
+            <img
+              src={imgSrc}
+              alt={appConfig.name || id}
+              onError={handleImageError}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '20px' }}
+            />
+            {badgeStyle && <div className="status-badge" style={badgeStyle}></div>}
+          </div>
+          {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
         </div>
-        {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
-      </div>
+      )}
       
       {/* Menu contextuel - affiché uniquement pour cette icône via portal */}
-      {activeContextMenu && activeContextMenu.iconId === id && (
+      {!imgError && activeContextMenu && activeContextMenu.iconId === id && (
         <ContextMenuPortal x={activeContextMenu.x} y={activeContextMenu.y}>
           {appStatusData?.status === 'running' ? (
             <>
@@ -385,11 +389,20 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, apps
 };
 
 // Composant Taskbar
-const Taskbar = ({ handleClick, appsConfig }) => {
+const Taskbar = ({ handleClick, appsConfig, onLoaded }) => {
   // Filtrer les icônes de la barre des tâches à partir de la configuration
   const taskbarApps = Object.entries(appsConfig)
     .filter(([_, config]) => config.isTaskbarApp)
     .map(([iconId, config]) => ({ iconId, config }));
+
+  let total = 0;
+  let loaded = 0;
+  const handleImgLoad = () => {
+    loaded += 1;
+    if (loaded === total) {
+      try { onLoaded && onLoaded(); } catch {}
+    }
+  };
 
   return (
     <div className="taskbar">
@@ -397,12 +410,13 @@ const Taskbar = ({ handleClick, appsConfig }) => {
         const imgSrc = images[iconId];
         const label = config?.name || iconId;
         try { console.debug('[Taskbar] Render icon', { iconId, label, hasImage: !!imgSrc, route: config?.route, src: imgSrc }); } catch (_) {}
-
+        if (imgSrc) total += 1;
         const Img = () => (
           <img
             src={imgSrc}
             alt={label}
             title={label}
+            onLoad={handleImgLoad}
             onError={(e) => {
               try { console.warn('[Taskbar] Image failed to load', { iconId, src: imgSrc }); } catch (_) {}
               e.currentTarget.style.display = 'none';
@@ -511,6 +525,10 @@ const Home = () => {
   const [socketConnected, setSocketConnected] = useState(false);
   const [currentSocket, setCurrentSocket] = useState(null);
   const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
+  const [taskbarReady, setTaskbarReady] = useState(false); // Animations taskbar quand les icônes de la barre sont chargées
+  const [zonesReady, setZonesReady] = useState(false); // Animations zones quand les icônes des apps sont chargées
+  const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
+  const [disconnectedSince, setDisconnectedSince] = useState(null); // Timestamp de début de déconnexion
   
   // Écouteur de messages pour fermer l'overlay depuis l'iframe
   useEffect(() => {
@@ -975,6 +993,130 @@ const Home = () => {
     return () => setMounted(false);
   }, []);
 
+  // Surveiller les changements de serverStatus pour recharger la page si reconnexion après >2s de déconnexion
+  useEffect(() => {
+    if (!serverStatus) {
+      // Serveur déconnecté: enregistrer le timestamp si pas déjà fait
+      if (!disconnectedSince) {
+        console.log('[Home] Serveur déconnecté, début du compteur');
+        setDisconnectedSince(Date.now());
+      }
+    } else {
+      // Serveur connecté: vérifier si on était déconnecté pendant plus de 2s
+      if (disconnectedSince) {
+        const disconnectedDuration = Date.now() - disconnectedSince;
+        console.log(`[Home] Serveur reconnecté après ${disconnectedDuration}ms de déconnexion`);
+        
+        if (disconnectedDuration > 2000) {
+          console.log('[Home] Déconnexion > 2s détectée, rechargement de la page...');
+          window.location.reload();
+        } else {
+          // Réinitialiser le compteur si reconnexion rapide
+          setDisconnectedSince(null);
+        }
+      }
+    }
+  }, [serverStatus, disconnectedSince]);
+
+  // Charger et mettre en cache le fond d'écran sélectionné comme dataURL pour un affichage hors-ligne
+  useEffect(() => {
+    const loadAndCacheBackground = async () => {
+      try {
+        if (!accessMode || !backgroundImage) return;
+        const cacheKey = `bgCache_${backgroundImage}`;
+
+        // Construire l'URL source comme dans getBackgroundStyle
+        let srcUrl = null;
+        const serverUrl = getServerUrl(accessMode);
+
+        if (backgroundImage.startsWith('custom-')) {
+          const filename = backgroundImage.replace('custom-', '');
+          srcUrl = `${serverUrl}/api/backgrounds/${filename}`;
+        } else if (backgroundImage.startsWith('preset-')) {
+          const filename = backgroundImage.replace('preset-', '');
+          srcUrl = `${serverUrl}/api/backgrounds/presets/${filename}`;
+        } else {
+          // défaut
+          srcUrl = `${serverUrl}/api/backgrounds/presets/default.webp`;
+        }
+
+        // Tenter de télécharger et de convertir en dataURL
+        const resp = await axios.get(srcUrl, { responseType: 'blob', timeout: 8000 });
+        const blob = resp.data;
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          try {
+            const dataUrl = reader.result;
+            setBgDataUrl(dataUrl);
+            StorageManager.setItem(cacheKey, dataUrl);
+          } catch (_) {}
+        };
+        reader.readAsDataURL(blob);
+      } catch (e) {
+        // Si le backend est down, tenter d'utiliser le cache existant
+        try {
+          const cacheKey = `bgCache_${backgroundImage}`;
+          const cached = StorageManager.getItem(cacheKey);
+          if (cached) setBgDataUrl(cached);
+        } catch (_) {}
+      }
+    };
+
+    loadAndCacheBackground();
+  }, [backgroundImage, accessMode]);
+
+  // Taskbar prête quand toutes les images locales sont chargées
+  useEffect(() => {
+    setTaskbarReady(false);
+  }, [appsConfig]);
+
+  // Précharger les icônes des zones (uniquement URLs backend) sans timeout et ne marquer prêt que sur succès ET si serverStatus est connecté
+  useEffect(() => {
+    try {
+      // Ne pas déclencher l'animation si le serveur n'est pas connecté
+      if (!serverStatus) {
+        setZonesReady(false);
+        return;
+      }
+
+      const zoneUrls = new Set();
+      const addIconForId = (id) => {
+        if (!id) return;
+        const cfg = appsConfig[id];
+        if (cfg && cfg.icon) {
+          zoneUrls.add(cfg.icon);
+        }
+      };
+      Object.values(zones).forEach((arr) => (arr || []).forEach(addIconForId));
+
+      if (zoneUrls.size === 0) {
+        setZonesReady(true);
+        return;
+      }
+
+      setZonesReady(false);
+      const preload = (src) => new Promise((resolve, reject) => {
+        try {
+          const img = new Image();
+          img.onload = () => resolve(true);
+          img.onerror = () => reject(new Error('load failed'));
+          img.src = src;
+        } catch (e) {
+          reject(e);
+        }
+      });
+      Promise.all(Array.from(zoneUrls).map(preload))
+        .then(() => setZonesReady(true))
+        .catch(() => {
+          // ne pas déclencher zonesReady si une icône backend échoue
+        });
+    } catch (e) {
+      console.warn('[Home] Préchargement zones échoué:', e);
+      // Ne pas forcer zonesReady en cas d'erreur
+      setZonesReady(false);
+    }
+  }, [appsConfig, zones, iconImages, serverStatus]);
+
   // Fermer le menu contextuel si on clique ailleurs
   useEffect(() => {
     const handleClickOutside = () => setActiveContextMenu(null);
@@ -1281,11 +1423,31 @@ const Home = () => {
   const getBackgroundStyle = () => {
     if (!accessMode) {
       console.log('[Home] accessMode non défini, pas de fond personnalisé');
+      // Utiliser une dataURL si on en a une en cache
+      if (bgDataUrl) {
+        return {
+          backgroundImage: `url(${bgDataUrl})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center center',
+          backgroundRepeat: 'no-repeat',
+          backgroundAttachment: 'fixed'
+        };
+      }
       return {}; // Utilise le CSS par défaut
     }
     
     console.log('[Home] 🎨 Application du fond:', backgroundImage);
-    
+    // Priorité au cache dataURL pour l'affichage offline
+    if (bgDataUrl) {
+      return {
+        backgroundImage: `url(${bgDataUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
+      };
+    }
+
     if (backgroundImage?.startsWith('custom-')) {
       // Fond personnalisé uploadé - charger via l'API backend
       const filename = backgroundImage.replace('custom-', '');
@@ -1317,7 +1479,7 @@ const Home = () => {
       };
     }
     
-    // Fond par défaut - charger via API backend
+    // Fond par défaut - via API (le cache prendra le relais si disponible)
     if (!accessMode) return {};
     const serverUrl = getServerUrl(accessMode);
     console.log('[Home] 🎨 Fond par défaut via API');
@@ -1331,7 +1493,7 @@ const Home = () => {
   };
 
   return (
-    <div className={`home-container ${mounted ? 'slide-enter-active' : 'slide-enter'}`}>
+    <div className={`home-container ${mounted ? 'slide-enter-active' : 'slide-enter'} ${taskbarReady ? 'taskbar-ready' : ''} ${zonesReady ? 'zones-ready' : ''}`}>
       <DndProvider backend={HTML5Backend}>
         <div className="background" style={getBackgroundStyle()}>
           <div className={`server-status ${serverStatus ? 'connected' : 'disconnected'}`}>
@@ -1352,7 +1514,7 @@ const Home = () => {
             </div>
           )}
 
-          <Taskbar handleClick={handleClick} appsConfig={appsConfig} />
+          <Taskbar handleClick={handleClick} appsConfig={appsConfig} onLoaded={() => setTaskbarReady(true)} />
           {currentUserName && (
             <div className="user-chip" title="Utilisateur connecté">
               <div className="avatar">{String(currentUserName).charAt(0).toUpperCase()}</div>
