@@ -19,16 +19,11 @@ async function updateRyvie() {
       stdio: 'inherit'
     });
     
-    // PM2 reload all
-    console.log('[Update] Redémarrage PM2...');
-    execSync('pm2 reload all', {
-      stdio: 'inherit'
-    });
-    
-    console.log('[Update] ✅ Ryvie mis à jour avec succès');
+    console.log('[Update] ✅ Code mis à jour avec succès');
     return {
       success: true,
-      message: 'Ryvie mis à jour avec succès'
+      message: 'Code mis à jour. Redémarrage en cours...',
+      needsRestart: true
     };
   } catch (error) {
     console.error('[Update] ❌ Erreur lors de la mise à jour de Ryvie:', error.message);
@@ -87,6 +82,56 @@ async function updateApp(appName) {
       cwd: appPath,
       stdio: 'inherit'
     });
+    
+    // Attendre 5 secondes que le container démarre
+    console.log(`[Update] Attente du démarrage du container (5 secondes)...`);
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Vérifier le statut du container
+    console.log(`[Update] Vérification du statut du container ${appName}...`);
+    
+    try {
+      // Récupérer le statut du container
+      const statusOutput = execSync(`docker ps -a --filter "name=${appName}" --format "{{.Status}}"`, { 
+        encoding: 'utf8' 
+      }).trim();
+      
+      console.log(`[Update] Container ${appName} - Status: ${statusOutput}`);
+      
+      // Vérifier si le container est exited (erreur)
+      if (statusOutput.toLowerCase().includes('exited')) {
+        throw new Error(`Le container ${appName} s'est arrêté (exited) pendant la mise à jour`);
+      }
+      
+      // Vérifier le health status si disponible
+      try {
+        const healthOutput = execSync(
+          `docker inspect --format='{{.State.Health.Status}}' $(docker ps -aq --filter "name=${appName}")`, 
+          { encoding: 'utf8' }
+        ).trim();
+        
+        console.log(`[Update] Container ${appName} - Health: ${healthOutput}`);
+        
+        if (healthOutput === 'unhealthy') {
+          throw new Error(`Le container ${appName} est en état unhealthy`);
+        }
+        
+        if (healthOutput === 'healthy') {
+          console.log(`[Update] ✅ Container ${appName} est healthy`);
+        } else if (healthOutput === 'starting') {
+          console.log(`[Update] ⏳ Container ${appName} est en cours de démarrage`);
+        }
+      } catch (healthError) {
+        // Pas de healthcheck configuré, on vérifie juste que le container est Up
+        if (!statusOutput.toLowerCase().includes('up')) {
+          throw new Error(`Le container ${appName} n'est pas démarré`);
+        }
+        console.log(`[Update] ℹ️ Container ${appName} sans healthcheck, statut: Up`);
+      }
+      
+    } catch (checkError) {
+      throw new Error(`Vérification du container échouée: ${checkError.message}`);
+    }
     
     console.log(`[Update] ✅ ${appName} mis à jour avec succès`);
     return {

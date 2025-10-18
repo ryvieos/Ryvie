@@ -103,7 +103,44 @@ router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req, res) => 
     console.log('[settings] Démarrage de la mise à jour de Ryvie...');
     const result = await updateRyvie();
     
-    if (result.success) {
+    if (result.success && result.needsRestart) {
+      // Envoyer la réponse immédiatement
+      res.json({
+        success: true,
+        message: 'Code mis à jour. Redémarrage en cours...'
+      });
+      
+      // Redémarrer PM2 après un court délai (pour que la réponse soit envoyée)
+      setTimeout(async () => {
+        const { execSync } = require('child_process');
+        console.log('[settings] Redémarrage PM2...');
+        
+        try {
+          execSync('/usr/local/bin/pm2 reload all --force', { stdio: 'inherit' });
+          console.log('[settings] PM2 reload lancé');
+          
+          // Attendre 5 secondes puis vérifier
+          setTimeout(() => {
+            try {
+              const pm2Output = execSync('/usr/local/bin/pm2 list', { encoding: 'utf8' });
+              const hasOnlineProcesses = pm2Output.includes('online');
+              
+              if (hasOnlineProcesses) {
+                console.log('[settings] ✅ Vérification PM2: tous les services sont en ligne');
+              } else {
+                console.error('[settings] ❌ Vérification PM2: aucun service en ligne');
+              }
+            } catch (checkError) {
+              console.error('[settings] ❌ Erreur lors de la vérification PM2:', checkError.message);
+            }
+          }, 5000);
+          
+        } catch (error) {
+          console.error('[settings] ❌ Erreur lors du redémarrage PM2:', error.message);
+        }
+      }, 1000);
+      
+    } else if (result.success) {
       res.json(result);
     } else {
       res.status(500).json(result);
