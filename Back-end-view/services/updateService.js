@@ -17,7 +17,7 @@ async function updateRyvie() {
     // 1. Créer un snapshot avant la mise à jour
     console.log('[Update] 📸 Création du snapshot de sécurité...');
     try {
-      const snapshotOutput = execSync('/opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
+      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
       console.log(snapshotOutput);
       
       // Extraire le chemin du snapshot
@@ -52,7 +52,7 @@ async function updateRyvie() {
     if (snapshotPath) {
       console.error('[Update] 🔄 Rollback en cours...');
       try {
-        const rollbackOutput = execSync(`/opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
+        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
         console.log(rollbackOutput);
         console.log('[Update] ✅ Rollback terminé');
         return {
@@ -96,7 +96,7 @@ async function updateApp(appName) {
     // 1. Créer un snapshot avant la mise à jour
     console.log('[Update] 📸 Création du snapshot de sécurité...');
     try {
-      const snapshotOutput = execSync('/opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
+      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
       console.log(snapshotOutput);
       
       // Extraire le chemin du snapshot
@@ -218,7 +218,7 @@ async function updateApp(appName) {
     if (snapshotPath) {
       console.error('[Update] 🔄 Rollback en cours...');
       try {
-        const rollbackOutput = execSync(`/opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
+        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
         console.log(rollbackOutput);
         console.log('[Update] ✅ Rollback terminé');
         return {

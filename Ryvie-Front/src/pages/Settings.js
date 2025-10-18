@@ -908,7 +908,9 @@ const Settings = () => {
     try {
       const serverUrl = getServerUrl(accessMode);
       console.log('[Settings] Démarrage de la mise à jour de Ryvie...');
-      const response = await axios.post(`${serverUrl}/api/settings/update-ryvie`);
+      const response = await axios.post(`${serverUrl}/api/settings/update-ryvie`, {}, {
+        timeout: 120000 // 120 secondes pour la création du snapshot
+      });
       
       if (response.data.success) {
         await showConfirm(
@@ -955,7 +957,9 @@ const Settings = () => {
     try {
       const serverUrl = getServerUrl(accessMode);
       console.log(`[Settings] Démarrage de la mise à jour de ${appName}...`);
-      const response = await axios.post(`${serverUrl}/api/settings/update-app`, { appName });
+      const response = await axios.post(`${serverUrl}/api/settings/update-app`, { appName }, {
+        timeout: 120000 // 120 secondes pour snapshot + docker build
+      });
       
       if (response.data.success) {
         await showConfirm(
