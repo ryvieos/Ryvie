@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 const Docker = require('dockerode');
 const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
+const helmet = require('helmet')
 
 // Charger les variables d'environnement du fichier .env
 dotenv.config();
