@@ -12,8 +12,8 @@ import Userlogin from './pages/Connexion';
 import ServerRestarting from './pages/ServerRestarting';
 import { initializeSession, isSessionActive } from './utils/sessionManager';
 import { isElectron } from './utils/platformUtils';
-import { handleAuthError } from './services/authService';
-import faviconUrl from './icons/ryvielogo0.png';
+import { handleAuthError } from './servic
+import faviconUrl from './icons/ryvie
 
 // Composant de redirection conditionnelle (Web et Electron)
 const ProtectedRoute = ({ children }) => {
@@ -64,17 +64,17 @@ const App = () => {
         <Route path="/settings" element={
           <ProtectedRoute>
             <Settings />
-          </ProtectedRoute>
+          </ProtecteduRoute>
         } />
         <Route path="/settings/storage" element={
           <ProtectedRoute>
             <StorageSettings />
           </ProtectedRoute>
-        } />
+        } />u
         <Route path="/welcome" element={
           <ProtectedRoute>
             <Welcome />
-          </ProtectedRoute>
+          </ProtectedRoutuue>
         } />
         <Route path="/appstore" element={
           <ProtectedRoute>
