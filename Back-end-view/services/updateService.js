@@ -9,10 +9,29 @@ const APPS_DIR = '/data/apps';
  * Met à jour Ryvie (git pull + pm2 reload)
  */
 async function updateRyvie() {
+  let snapshotPath = null;
+  
   try {
     console.log('[Update] Début de la mise à jour de Ryvie...');
     
-    // Git pull
+    // 1. Créer un snapshot avant la mise à jour
+    console.log('[Update] 📸 Création du snapshot de sécurité...');
+    try {
+      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
+      console.log(snapshotOutput);
+      
+      // Extraire le chemin du snapshot
+      const match = snapshotOutput.match(/SNAPSHOT_PATH=(.+)/);
+      if (match) {
+        snapshotPath = match[1].trim();
+        console.log(`[Update] Snapshot créé: ${snapshotPath}`);
+      }
+    } catch (snapError) {
+      console.error('[Update] ⚠️ Impossible de créer le snapshot:', snapError.message);
+      console.log('[Update] Continuation sans snapshot...');
+    }
+    
+    // 2. Git pull
     console.log('[Update] Git pull dans /opt/Ryvie...');
     execSync('git pull', {
       cwd: RYVIE_DIR,
@@ -23,10 +42,42 @@ async function updateRyvie() {
     return {
       success: true,
       message: 'Code mis à jour. Redémarrage en cours...',
-      needsRestart: true
+      needsRestart: true,
+      snapshotPath
     };
   } catch (error) {
     console.error('[Update] ❌ Erreur lors de la mise à jour de Ryvie:', error.message);
+    
+    // Rollback si un snapshot existe
+    if (snapshotPath) {
+      console.error('[Update] 🔄 Rollback en cours...');
+      try {
+        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
+        console.log(rollbackOutput);
+        console.log('[Update] ✅ Rollback terminé');
+        
+        // Supprimer le snapshot après rollback réussi
+        try {
+          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
+          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+          console.log('[Update] 🧹 Snapshot supprimé après rollback');
+        } catch (delError) {
+          console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
+        }
+        
+        return {
+          success: false,
+          message: `Erreur: ${error.message}. Rollback effectué avec succès.`
+        };
+      } catch (rollbackError) {
+        console.error('[Update] ❌ Erreur lors du rollback:', rollbackError.message);
+        return {
+          success: false,
+          message: `Erreur: ${error.message}. Rollback échoué: ${rollbackError.message}`
+        };
+      }
+    }
+    
     return {
       success: false,
       message: `Erreur: ${error.message}`
@@ -38,6 +89,8 @@ async function updateRyvie() {
  * Met à jour une application (git pull + docker compose up -d --build)
  */
 async function updateApp(appName) {
+  let snapshotPath = null;
+  
   try {
     const appPath = path.join(APPS_DIR, appName);
     
@@ -50,7 +103,24 @@ async function updateApp(appName) {
     
     console.log(`[Update] Début de la mise à jour de ${appName}...`);
     
-    // Git pull
+    // 1. Créer un snapshot avant la mise à jour
+    console.log('[Update] 📸 Création du snapshot de sécurité...');
+    try {
+      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
+      console.log(snapshotOutput);
+      
+      // Extraire le chemin du snapshot
+      const match = snapshotOutput.match(/SNAPSHOT_PATH=(.+)/);
+      if (match) {
+        snapshotPath = match[1].trim();
+        console.log(`[Update] Snapshot créé: ${snapshotPath}`);
+      }
+    } catch (snapError) {
+      console.error('[Update] ⚠️ Impossible de créer le snapshot:', snapError.message);
+      console.log('[Update] Continuation sans snapshot...');
+    }
+    
+    // 2. Git pull
     console.log(`[Update] Git pull dans ${appPath}...`);
     execSync('git pull', {
       cwd: appPath,
@@ -134,12 +204,56 @@ async function updateApp(appName) {
     }
     
     console.log(`[Update] ✅ ${appName} mis à jour avec succès`);
+    
+    // 3. Supprimer le snapshot si tout s'est bien passé
+    if (snapshotPath) {
+      console.log('[Update] 🧹 Suppression du snapshot de sécurité...');
+      try {
+        execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
+        execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+        console.log('[Update] ✅ Snapshot supprimé');
+      } catch (delError) {
+        console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
+      }
+    }
+    
     return {
       success: true,
       message: `${appName} mis à jour avec succès`
     };
   } catch (error) {
     console.error(`[Update] ❌ Erreur lors de la mise à jour de ${appName}:`, error.message);
+    
+    // Rollback si un snapshot existe
+    if (snapshotPath) {
+      console.error('[Update] 🔄 Rollback en cours...');
+      try {
+        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
+        console.log(rollbackOutput);
+        console.log('[Update] ✅ Rollback terminé');
+        
+        // Supprimer le snapshot après rollback réussi
+        try {
+          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
+          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+          console.log('[Update] 🧹 Snapshot supprimé après rollback');
+        } catch (delError) {
+          console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
+        }
+        
+        return {
+          success: false,
+          message: `Erreur: ${error.message}. Rollback effectué avec succès.`
+        };
+      } catch (rollbackError) {
+        console.error('[Update] ❌ Erreur lors du rollback:', rollbackError.message);
+        return {
+          success: false,
+          message: `Erreur: ${error.message}. Rollback échoué: ${rollbackError.message}`
+        };
+      }
+    }
+    
     return {
       success: false,
       message: `Erreur: ${error.message}`
