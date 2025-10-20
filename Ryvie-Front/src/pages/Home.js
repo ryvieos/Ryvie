@@ -1094,7 +1094,8 @@ const Home = () => {
         return;
       }
 
-      setZonesReady(false);
+      // Ne pas réinitialiser zonesReady si déjà prêt (évite l'animation lors du déplacement)
+      // setZonesReady(false); // SUPPRIMÉ
       const preload = (src) => new Promise((resolve, reject) => {
         try {
           const img = new Image();
