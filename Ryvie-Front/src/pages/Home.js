@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import '../styles/Home.css';
 import '../styles/Transitions.css';
-import '../styles/GridiPhone.css';
 import axios from '../utils/setupAxios';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -309,7 +308,14 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
             />
             {badgeStyle && <div className="status-badge" style={badgeStyle}></div>}
           </div>
-          {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
+          {showName && (
+            <p
+              className="icon-name"
+              title={appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}
+            >
+              {appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}
+            </p>
+          )}
         </div>
       )}
       
@@ -538,13 +544,95 @@ const Home = () => {
   const launcherInitialLoadDone = React.useRef(false); // Flag pour savoir si le chargement initial est terminé
   const [widgets, setWidgets] = useState([]); // Liste des widgets ajoutés par l'utilisateur
   const widgetIdCounter = React.useRef(0); // Compteur pour générer des IDs uniques
+  // Ancres par défaut si l'utilisateur n'a rien en backend
+  const DEFAULT_ANCHORS = React.useMemo(() => ({
+    weather: 2,
+    'app-rtransfer': 22,
+    'app-rdrop': 25,
+    'app-rdrive': 23,
+    'app-rpictures': 24
+  }), []);
+  // Générer dynamiquement un layout/apps/ancres par défaut à partir des apps disponibles
+  const computeDefaults = React.useCallback((appIds = []) => {
+    // Positionner la météo fixe comme demandé
+    const layout = {
+      weather: { col: 2, row: 0, w: 3, h: 2 }
+    };
+    const anchors = { ...DEFAULT_ANCHORS };
+    // Placer les apps connues en ligne à partir de col=2, row=2
+    let col = 2;
+    const row = 2;
+    let anchor = 22; // suit le même schéma que les demandes précédentes
+    const ordered = [];
+    // Si aucune app fournie via zones, utiliser toutes les apps connues (triées par id)
+    const sourceIds = (appIds && appIds.length > 0)
+      ? appIds
+      : Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-')).sort();
+    sourceIds.forEach((id) => {
+      // Si appsConfig n'est pas encore chargé, ne pas filtrer; sinon ignorer les ids inconnus
+      if (appsConfig && Object.keys(appsConfig).length > 0 && !appsConfig[id]) return;
+      // Ne pas ajouter météo ni widgets
+      if (id === 'weather' || String(id).startsWith('widget-')) return;
+      layout[id] = { col, row, w: 1, h: 1 };
+      anchors[id] = anchor;
+      ordered.push(id);
+      col += 1;
+      anchor += 1;
+    });
+    return { layout, anchors, apps: ordered };
+  }, [appsConfig, DEFAULT_ANCHORS]);
+  const savedDefaultOnceRef = React.useRef(false);
   
   // Écouteur de messages pour fermer l'overlay depuis l'iframe
+  useEffect(() => {
+    // Si les données sont chargées et que les ancres utilisées sont les défauts (backend vide),
+    // persister une fois ces valeurs dans le backend pour créer le bloc launcher
+    if (!launcherLoadedFromBackend) return;
+    // Attendre que la config des apps soit chargée
+    if (!appsConfig || Object.keys(appsConfig).length === 0) return;
+    if (savedDefaultOnceRef.current) return;
+    if (!accessMode || !currentUserName) return;
+    const anchorsAreDefaults = launcherAnchors && Object.keys(launcherAnchors).length > 0 &&
+      Object.keys(DEFAULT_ANCHORS).every(k => launcherAnchors[k] === DEFAULT_ANCHORS[k]);
+    const layoutIsEmpty = !launcherLayout || Object.keys(launcherLayout).length === 0;
+    if (anchorsAreDefaults || layoutIsEmpty) {
+      savedDefaultOnceRef.current = true;
+      const serverUrl = getServerUrl(accessMode);
+      // Construire les defaults dynamiques si layout vide
+      const appsFromZones = Object.values(zones).flat().filter(id => id && appsConfig[id]);
+      const defaults = layoutIsEmpty ? computeDefaults(appsFromZones) : { layout: launcherLayout, anchors: launcherAnchors, apps: [] };
+      const baseLayout = defaults.layout || launcherLayout || {};
+      const appsList = defaults.apps.length > 0
+        ? defaults.apps
+        : Object.entries(baseLayout)
+            .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+            .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
+            .map(([id]) => id);
+      const payload = {
+        launcher: {
+          anchors: defaults.anchors || launcherAnchors || DEFAULT_ANCHORS,
+          layout: baseLayout || {},
+          widgets: widgets || [],
+          apps: appsList
+        }
+      };
+      axios.patch(`${serverUrl}/api/user/preferences/launcher`, payload)
+        .then(() => console.log('[Home] 💾 Defaults launcher persistés (ancres par défaut)'))
+        .catch(async (e) => {
+          console.warn('[Home] ⚠️ Fallback save launcher après defaults:', e?.message);
+          try {
+            await axios.patch(`${serverUrl}/api/user/preferences`, payload);
+          } catch (e2) {
+            console.error('[Home] ❌ Échec de persistance des defaults launcher:', e2?.message);
+          }
+        });
+    }
+  }, [launcherLoadedFromBackend, accessMode, currentUserName, launcherAnchors, launcherLayout, widgets, zones, appsConfig, DEFAULT_ANCHORS]);
+
   useEffect(() => {
     const handleMessage = (event) => {
       // Vérifier l'origine du message pour la sécurité (optionnel mais recommandé)
       // if (event.origin !== window.location.origin) return;
-      
       if (event.data && event.data.type === 'CLOSE_OVERLAY') {
         console.log('[Home] Réception du message CLOSE_OVERLAY');
         setClosingOverlay(true);
@@ -1325,8 +1413,15 @@ const Home = () => {
           try {
             const { layout, anchors, widgets: savedWidgets } = res.data.launcher || {};
             console.log('[Home] 🎮 Launcher chargé depuis le backend:', { layout, anchors, widgets: savedWidgets });
-            setLauncherLayout(layout || {});
-            setLauncherAnchors(anchors || {});
+            const zoneAppIds = Object.values(zones).flat().filter(id => id && appsConfig[id]);
+            const nextLayout = layout && Object.keys(layout).length > 0
+              ? layout
+              : computeDefaults(zoneAppIds).layout;
+            setLauncherLayout(nextLayout);
+            const nextAnchors = anchors && Object.keys(anchors).length > 0
+              ? anchors
+              : computeDefaults(zoneAppIds).anchors;
+            setLauncherAnchors(nextAnchors);
             
             // Charger les widgets sauvegardés
             if (savedWidgets && Array.isArray(savedWidgets)) {
@@ -1353,9 +1448,11 @@ const Home = () => {
           }
         } else {
           // Pas de launcher sauvegardé, initialiser vide
-          console.log('[Home] 🎮 Pas de launcher sauvegardé, initialisation vide');
-          setLauncherLayout({});
-          setLauncherAnchors({});
+          console.log('[Home] 🎮 Pas de launcher sauvegardé, initialisation avec layout/ancres par défaut (dynamiques)');
+          const appsFromZones = Object.values(zones).flat().filter(id => id && appsConfig[id]);
+          const defaults = computeDefaults(appsFromZones);
+          setLauncherLayout(defaults.layout);
+          setLauncherAnchors(defaults.anchors);
           setWidgets([]);
           setLauncherLoadedFromBackend(true); // Marquer comme chargé (vide = OK)
           setTimeout(() => {

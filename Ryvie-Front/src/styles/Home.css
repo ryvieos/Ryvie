@@ -284,7 +284,7 @@
 /* Barre des tâches sur le côté gauche */
 .taskbar {
   position: fixed;
-  top: 0;
+  top: -25px;
   left: 0;
   width: 80px; /* Largeur de la barre */
   height: 100%;
@@ -293,7 +293,7 @@
   flex-direction: column; /* Pour disposer les cercles verticalement */
   justify-content: center;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   z-index: 1000; /* Pour que la barre soit au-dessus du contenu */
   opacity: 0;
   transform: translateY(100%);
@@ -702,7 +702,7 @@
 /* User chip above logout button */
 .user-chip {
   position: fixed;
-  bottom: 120px; /* Above logout button */
+  bottom: 110px; /* rapproché du bouton et remonté */
   left: 20px;
   z-index: 1099; /* Just below logout button */
   display: inline-flex;
