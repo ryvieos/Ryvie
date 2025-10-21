@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import BaseWidget from './BaseWidget';
 import axios from '../../utils/setupAxios';
+import BaseWidget from './BaseWidget';
 import urlsConfig from '../../config/urls';
+import '../../styles/StorageWidget.css';
 
 const { getServerUrl } = urlsConfig;
 
@@ -87,7 +88,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
         <div className="widget-empty">Aucun disque détecté</div>
       ) : (
         <div className="storage-content">
-          {data.slice(0, 3).map((disk, index) => {
+          {data.slice(0, 2).map((disk, index) => {
             const usedPercent = Math.round((disk.used / disk.total) * 100);
             return (
               <div key={index} className="storage-item">
@@ -98,11 +99,11 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                   </span>
                 </div>
                 <div className="stat-bar-container">
-                  <div 
-                    className="stat-bar" 
-                    style={{ 
+                  <div
+                    className="stat-bar"
+                    style={{
                       width: `${usedPercent}%`,
-                      backgroundColor: getStorageColor(usedPercent)
+                      background: `linear-gradient(90deg, ${getStorageColor(usedPercent)}, ${getStorageColor(usedPercent)}dd)`
                     }}
                   />
                 </div>

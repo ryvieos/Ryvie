@@ -38,6 +38,27 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
       const newLayout = { ...prev };
       let hasChanges = false;
 
+      // Purger les positions des items supprimés pour libérer les cases
+      const validIds = new Set(items.map(i => i.id));
+      Object.keys(newLayout).forEach(id => {
+        if (!validIds.has(id)) {
+          delete newLayout[id];
+          hasChanges = true;
+        }
+      });
+      // Purger également les ancres obsolètes
+      setAnchors(prevAnchors => {
+        const next = { ...prevAnchors };
+        let mutated = false;
+        Object.keys(next).forEach(id => {
+          if (!validIds.has(id)) {
+            delete next[id];
+            mutated = true;
+          }
+        });
+        return mutated ? next : prevAnchors;
+      });
+
       // Vérifier si des items dépassent avec le nouveau nombre de colonnes OU si cols a changé
       const needsReorganization = colsChanged || Object.keys(newLayout).some(itemId => {
         const pos = newLayout[itemId];

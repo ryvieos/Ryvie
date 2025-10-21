@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import BaseWidget from './BaseWidget';
 import axios from '../../utils/setupAxios';
+import BaseWidget from './BaseWidget';
 import urlsConfig from '../../config/urls';
+import '../../styles/CpuRamWidget.css';
 
 const { getServerUrl } = urlsConfig;
 
@@ -92,39 +93,43 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
         <div className="cpu-ram-content">
           {/* CPU */}
           <div className="stat-item">
-            <div className="stat-label">CPU</div>
+            <div className="stat-header">
+              <div className="stat-label">CPU</div>
+              <div className="stat-value" style={{ color: getCpuColor(data.cpu) }}>
+                {data.cpu}%
+              </div>
+            </div>
             <div className="stat-bar-container">
-              <div 
-                className="stat-bar" 
-                style={{ 
+              <div
+                className="stat-bar"
+                style={{
                   width: `${data.cpu}%`,
-                  backgroundColor: getCpuColor(data.cpu)
+                  background: `linear-gradient(90deg, ${getCpuColor(data.cpu)}, ${getCpuColor(data.cpu)}dd)`
                 }}
               />
-            </div>
-            <div className="stat-value" style={{ color: getCpuColor(data.cpu) }}>
-              {data.cpu}%
             </div>
           </div>
 
           {/* RAM */}
           <div className="stat-item">
-            <div className="stat-label">RAM</div>
+            <div className="stat-header">
+              <div className="stat-label">RAM</div>
+              <div className="stat-value" style={{ color: getRamColor(data.ram) }}>
+                {data.ram}%
+              </div>
+            </div>
             <div className="stat-bar-container">
-              <div 
-                className="stat-bar" 
-                style={{ 
+              <div
+                className="stat-bar"
+                style={{
                   width: `${data.ram}%`,
-                  backgroundColor: getRamColor(data.ram)
+                  background: `linear-gradient(90deg, ${getRamColor(data.ram)}, ${getRamColor(data.ram)}dd)`
                 }}
               />
             </div>
-            <div className="stat-value" style={{ color: getRamColor(data.ram) }}>
-              {data.ram}%
-              {data.ramTotal > 0 && (
-                <span className="stat-total"> / {formatBytes(data.ramTotal)}</span>
-              )}
-            </div>
+            {data.ramTotal > 0 && (
+              <div className="stat-total">{formatBytes(data.ramTotal)} total</div>
+            )}
           </div>
         </div>
       )}

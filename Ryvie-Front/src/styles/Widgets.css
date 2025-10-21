@@ -1,19 +1,21 @@
 /* Styles pour les widgets */
 
 .base-widget {
-  width: 100%;
-  height: 100%;
+  width: 252px;
+  height: 252px;
+  max-width: 252px;
+  max-height: 252px;
   box-sizing: border-box; /* IMPORTANT: avoid padding causing overflow of 2x2 area */
-  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,255,255,0.92));
-  backdrop-filter: blur(18px);
-  border: 1px solid rgba(0,0,0,0.06);
-  border-radius: 18px;
-  padding: 14px 16px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08), 0 1px 0 rgba(255,255,255,0.4) inset;
+  background: #f8fafc;
+  backdrop-filter: blur(20px);
+  border: none;
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .base-widget:hover {
@@ -26,9 +28,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  margin-bottom: 8px;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .widget-title {
@@ -43,15 +45,14 @@
 
 .widget-icon {
   font-size: 16px;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: linear-gradient(135deg, #eaf0ff, #eef3ff);
-  color: #4a6cf7;
-  box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset;
+  background: linear-gradient(135deg, #4776E6, #8E54E9);
+  box-shadow: 0 2px 8px rgba(71, 118, 230, 0.3);
 }
 
 .widget-title-text {
@@ -98,6 +99,21 @@
   overflow: auto;
 }
 
+/* Badges (percent values, etc.) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.04);
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  min-width: 44px;
+}
+
 .widget-loading,
 .widget-empty {
   flex: 1;
@@ -108,94 +124,7 @@
   font-size: 13px;
 }
 
-/* Widget CPU/RAM */
-.cpu-ram-content {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  justify-content: center;
-  flex: 1;
-}
-
-.stat-item {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px 12px;
-  align-items: center;
-}
-
-.stat-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-
-.stat-bar-container {
-  grid-column: 1 / -1;
-  height: 10px;
-  background: linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.04));
-  border-radius: 999px;
-  overflow: hidden;
-  position: relative;
-}
-
-.stat-bar {
-  height: 100%;
-  border-radius: 999px;
-  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.25s ease;
-  box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset;
-}
-
-.stat-value {
-  font-size: 14px;
-  font-weight: 800;
-  color: #111827;
-}
-
-.stat-total {
-  font-size: 11px;
-  font-weight: 600;
-  color: #9ca3af;
-}
-
-/* Widget Stockage */
-.storage-content {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  justify-content: center;
-  flex: 1;
-}
-
-.storage-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.storage-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.storage-name {
-  font-size: 12px;
-  font-weight: 700;
-  color: #6b7280;
-}
-
-.storage-percent {
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.storage-details {
-  font-size: 11px;
-  color: #9ca3af;
-}
+/* Les styles spécifiques CPU/RAM et Storage sont maintenant dans leurs propres fichiers CSS */
 
 /* Animations */
 @keyframes widgetAppear {

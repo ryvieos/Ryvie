@@ -40,6 +40,7 @@ const GridLauncher = ({
   const { SLOT_SIZE: slotSize, GAP: gap, BASE_COLS: baseCols, BASE_ROWS: baseRows, MIN_COLS: minCols, HORIZONTAL_PADDING: horizontalPadding } = GRID_CONFIG;
   const [cols, setCols] = useState(baseCols);
   const [snappedPosition, setSnappedPosition] = useState(null);
+  const pendingManualSaveRef = useRef(false); // Track si on doit sauvegarder après un drag manuel
 
   // Calculer le nombre de colonnes qui rentrent dans la largeur de la fenêtre
   useEffect(() => {
@@ -96,6 +97,26 @@ const GridLauncher = ({
     return () => clearTimeout(timer);
   }, [layout, onLayoutChange]);
 
+  // Sauvegarder après un changement manuel (drag & drop)
+  useEffect(() => {
+    if (!pendingManualSaveRef.current || !onLayoutChange) return;
+    if (!layout || Object.keys(layout).length === 0) return;
+    
+    // Attendre un peu que le layout soit complètement à jour
+    const timer = setTimeout(() => {
+      const snapshot = { layout, anchors: getAnchors() };
+      try {
+        console.log('[GridLauncher] 💾 Sauvegarde après drag manuel:', snapshot);
+        onLayoutChange(snapshot, true); // true = changement manuel
+        pendingManualSaveRef.current = false; // Reset
+      } catch (e) {
+        console.error('[GridLauncher] ❌ Erreur sauvegarde:', e);
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [layout, onLayoutChange, getAnchors]);
+
   // Callback pendant le drag pour snap visuel
   const handleDragMove = (x, y, dragData) => {
     if (!gridRef.current) return;
@@ -149,12 +170,10 @@ const GridLauncher = ({
         }
       }
       
-      // Si succès, notifier le parent avec isManualChange=true
-      if (success && onLayoutChange) {
-        const snapshot = { layout, anchors: getAnchors() };
-        try {
-          onLayoutChange(snapshot, true); // true = changement manuel
-        } catch (e) { /* noop */ }
+      // Si succès, marquer qu'on doit sauvegarder (le useEffect s'en chargera)
+      if (success) {
+        console.log('[GridLauncher] ✅ Drag réussi, sauvegarde programmée');
+        pendingManualSaveRef.current = true;
       }
       
       if (!success) {
@@ -264,22 +283,25 @@ const GridLauncher = ({
             }}
             tabIndex={0}
           >
-            <div className="weather-city">{weather.location || 'Localisation...'}</div>
-            <div className="weather-temp">
-              {weather.temperature ? `${Math.round(weather.temperature)}°C` : '...'}
-            </div>
-            <div className="weather-details">
-              <div>
-                {weatherIcons['./humidity.png'] && (
-                  <img src={weatherIcons['./humidity.png']} alt="Humidity" />
-                )}
-                {weather.humidity ? `${weather.humidity}%` : '...'}
+            <div className="weather-overlay" />
+            <div className="weather-content">
+              <div className="weather-city">{weather.location || 'Localisation...'}</div>
+              <div className="weather-temp">
+                {weather.temperature ? `${Math.round(weather.temperature)}°C` : '...'}
               </div>
-              <div>
-                {weatherIcons['./wind.png'] && (
-                  <img src={weatherIcons['./wind.png']} alt="Wind" />
-                )}
-                {weather.wind ? `${Math.round(weather.wind)} km/h` : '...'}
+              <div className="weather-details">
+                <div className="weather-humidity">
+                  {weatherIcons['./humidity.png'] && (
+                    <img src={weatherIcons['./humidity.png']} alt="Humidité" />
+                  )}
+                  {weather.humidity ? `${weather.humidity}%` : '...'}
+                </div>
+                <div className="weather-wind">
+                  {weatherIcons['./wind.png'] && (
+                    <img src={weatherIcons['./wind.png']} alt="Vent" />
+                  )}
+                  {weather.wind ? `${Math.round(weather.wind)} km/h` : '...'}
+                </div>
               </div>
             </div>
           </div>

@@ -659,13 +659,8 @@ const Home = () => {
   const handleLauncherLayoutChange = React.useCallback((snapshot, isManualChange = false) => {
     try {
       // Ne sauvegarder que si:
-      // 1. Le serveur est connecté
-      // 2. Les données ont déjà été chargées depuis le backend
-      // 3. C'est un changement MANUEL (drag utilisateur) OU le chargement initial est terminé
-      if (!serverStatus) {
-        console.log('[Home] ⏸️  Sauvegarde launcher ignorée: serveur déconnecté');
-        return;
-      }
+      // 1. Les données ont déjà été chargées depuis le backend
+      // 2. C'est un changement MANUEL (drag utilisateur) OU le chargement initial est terminé
       if (!launcherLoadedFromBackend) {
         console.log('[Home] ⏸️  Sauvegarde launcher ignorée: données pas encore chargées depuis le backend');
         return;
@@ -679,8 +674,14 @@ const Home = () => {
       if (!accessMode || !currentUserName) return;
       const serverUrl = getServerUrl(accessMode);
       if (launcherSaveRef.current) clearTimeout(launcherSaveRef.current);
-      // Construire widgets/apps à partir des données actuelles
-      const appsList = Object.values(zones).flat().filter(id => id && appsConfig[id]);
+      // Construire la liste des apps selon l'ordre actuel de la grille (snapshot.layout)
+      // Tri par row puis col, en gardant uniquement les apps présentes dans appsConfig
+      const appsList = snapshot && snapshot.layout
+        ? Object.entries(snapshot.layout)
+            .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+            .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
+            .map(([id]) => id)
+        : Object.values(zones).flat().filter(id => id && appsConfig[id]);
       const payload = {
         launcher: {
           anchors: snapshot?.anchors || {},
@@ -705,7 +706,7 @@ const Home = () => {
         }
       }, 300);
     } catch (_) {}
-  }, [accessMode, currentUserName, zones, appsConfig, serverStatus, launcherLoadedFromBackend, widgets]);
+  }, [accessMode, currentUserName, zones, appsConfig, launcherLoadedFromBackend, widgets]);
   
   // Handler: ajouter un widget
   const handleAddWidget = React.useCallback((widgetType) => {
@@ -720,13 +721,18 @@ const Home = () => {
       
       // Sauvegarder immédiatement avec la nouvelle liste de widgets
       setTimeout(() => {
-        if (!accessMode || !currentUserName || !serverStatus || !launcherLoadedFromBackend) {
+        if (!accessMode || !currentUserName || !launcherLoadedFromBackend) {
           console.log('[Home] ⏸️  Sauvegarde widget ignorée: conditions non remplies');
           return;
         }
         
         const serverUrl = getServerUrl(accessMode);
-        const appsList = Object.values(zones).flat().filter(id => id && appsConfig[id]);
+        const appsList = launcherLayout && typeof launcherLayout === 'object'
+          ? Object.entries(launcherLayout)
+              .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+              .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
+              .map(([id]) => id)
+          : Object.values(zones).flat().filter(id => id && appsConfig[id]);
         const payload = {
           launcher: {
             anchors: launcherAnchors || {},
@@ -747,7 +753,7 @@ const Home = () => {
       
       return newWidgets;
     });
-  }, [accessMode, currentUserName, serverStatus, launcherLoadedFromBackend, launcherLayout, launcherAnchors, zones, appsConfig]);
+  }, [accessMode, currentUserName, launcherLoadedFromBackend, launcherLayout, launcherAnchors, zones, appsConfig]);
   
   // Handler: supprimer un widget
   const handleRemoveWidget = React.useCallback((widgetId) => {
@@ -757,13 +763,18 @@ const Home = () => {
       
       // Sauvegarder immédiatement avec la nouvelle liste de widgets
       setTimeout(() => {
-        if (!accessMode || !currentUserName || !serverStatus || !launcherLoadedFromBackend) {
+        if (!accessMode || !currentUserName || !launcherLoadedFromBackend) {
           console.log('[Home] ⏸️  Sauvegarde widget ignorée: conditions non remplies');
           return;
         }
         
         const serverUrl = getServerUrl(accessMode);
-        const appsList = Object.values(zones).flat().filter(id => id && appsConfig[id]);
+        const appsList = launcherLayout && typeof launcherLayout === 'object'
+          ? Object.entries(launcherLayout)
+              .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+              .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
+              .map(([id]) => id)
+          : Object.values(zones).flat().filter(id => id && appsConfig[id]);
         const payload = {
           launcher: {
             anchors: launcherAnchors || {},
@@ -1720,8 +1731,14 @@ const Home = () => {
             </div>
           )}
           <div className="content">
+            {launcherLoadedFromBackend && (
             <GridLauncher
-              apps={Object.values(zones).flat().filter(id => id && appsConfig[id])}
+              apps={(launcherLayout && typeof launcherLayout === 'object' && Object.keys(launcherLayout).length > 0)
+                ? Object.entries(launcherLayout)
+                    .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+                    .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
+                    .map(([id]) => id)
+                : Object.values(zones).flat().filter(id => id && appsConfig[id])}
               weather={weather}
               weatherImages={weatherImages}
               weatherIcons={weatherIcons}
@@ -1746,7 +1763,7 @@ const Home = () => {
               widgets={widgets}
               onAddWidget={handleAddWidget}
               onRemoveWidget={handleRemoveWidget}
-            />
+            />)}
           </div>
           {/* Bouton de déconnexion fixe en bas à gauche */}
           <button className="logout-fab" onClick={handleLogout} title="Déconnexion">
