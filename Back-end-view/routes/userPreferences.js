@@ -24,7 +24,6 @@ router.get('/geocode/search', async (req, res) => {
   try {
     const q = (req.query.q || '').toString().trim();
     if (!q || q.length < 2) return res.json({ results: [] });
-
     const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=fr&format=json`;
     const r = await axios.get(url, { timeout: 4000 });
     const items = (r.data?.results || []).map(it => ({
@@ -107,23 +106,83 @@ function saveUserPreferences(username, preferences) {
   }
 }
 
+/**
+ * Génère un layout et des anchors par défaut à partir des apps dans les zones
+ */
+function generateDefaultLauncher(zones) {
+  const layout = {
+    weather: { col: 2, row: 0, w: 3, h: 2 }
+  };
+  const anchors = {
+    weather: 2
+  };
+  
+  // Extraire toutes les apps des zones
+  const apps = [];
+  if (zones && typeof zones === 'object') {
+    Object.values(zones).forEach(zone => {
+      if (Array.isArray(zone)) {
+        zone.forEach(appId => {
+          if (appId && appId.startsWith('app-') && !apps.includes(appId)) {
+            apps.push(appId);
+          }
+        });
+      }
+    });
+  }
+  
+  // Placer les apps en ligne à partir de col=2, row=2
+  let col = 2;
+  const row = 2;
+  let anchor = 22;
+  
+  apps.forEach(appId => {
+    layout[appId] = { col, row, w: 1, h: 1 };
+    anchors[appId] = anchor;
+    col += 1;
+    anchor += 1;
+  });
+  
+  return {
+    anchors,
+    layout,
+    widgets: [],
+    apps
+  };
+}
+
 // GET /api/user/preferences - Récupérer les préférences de l'utilisateur
 router.get('/user/preferences', verifyToken, (req, res) => {
   try {
     const username = req.user.uid || req.user.username; // uid est le nom d'utilisateur dans le JWT
     console.log('[userPreferences] GET pour utilisateur:', username);
-    const preferences = loadUserPreferences(username);
+    let preferences = loadUserPreferences(username);
     
-    if (preferences) {
-      res.json(preferences);
-    } else {
-      // Retourner des préférences par défaut
-      res.json({
+    if (!preferences) {
+      // Créer des préférences par défaut si elles n'existent pas
+      preferences = {
         zones: {},
         theme: 'default',
-        language: 'fr'
-      });
+        language: 'fr',
+        launcher: {
+          anchors: {},
+          layout: {},
+          widgets: [],
+          apps: []
+        }
+      };
+      // Sauvegarder ces préférences par défaut
+      console.log('[userPreferences] Création du fichier de préférences par défaut pour:', username);
+      saveUserPreferences(username, preferences);
+    } else if (!preferences.launcher || Object.keys(preferences.launcher.layout || {}).length === 0) {
+      // Si le fichier existe mais n'a pas de section launcher OU si le layout est vide, générer les valeurs par défaut
+      const defaultLauncher = generateDefaultLauncher(preferences.zones);
+      preferences.launcher = defaultLauncher;
+      console.log('[userPreferences] Génération du launcher par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps');
+      saveUserPreferences(username, preferences);
     }
+    
+    res.json(preferences);
   } catch (error) {
     console.error('[userPreferences] Erreur GET:', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -174,6 +233,90 @@ router.patch('/user/preferences/zones', verifyToken, (req, res) => {
   } catch (error) {
     console.error('[userPreferences] Erreur PATCH zones:', error);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// PATCH /api/user/preferences/launcher - Mettre à jour la disposition du launcher (anchors/layout/widgets/apps)
+router.patch('/user/preferences/launcher', verifyToken, (req, res) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] PATCH launcher pour utilisateur:', username);
+
+    const launcher = req.body && req.body.launcher;
+    if (!launcher || typeof launcher !== 'object') {
+      return res.status(400).json({ error: 'launcher requis (object)' });
+    }
+
+    // Charger préférences existantes ou valeurs par défaut minimales
+    let preferences = loadUserPreferences(username) || {
+      zones: {},
+      theme: 'default',
+      language: 'fr'
+    };
+
+    // Normaliser les champs du launcher
+    const normalized = {
+      anchors: launcher.anchors && typeof launcher.anchors === 'object' ? launcher.anchors : {},
+      layout: launcher.layout && typeof launcher.layout === 'object' ? launcher.layout : {},
+      widgets: launcher.widgets && typeof launcher.widgets === 'object' ? launcher.widgets : {},
+      apps: Array.isArray(launcher.apps) ? launcher.apps : []
+    };
+
+    preferences.launcher = normalized;
+
+    if (saveUserPreferences(username, preferences)) {
+      console.log('[userPreferences] Launcher sauvegardé pour', username);
+      return res.json({ success: true, launcher: preferences.launcher });
+    } else {
+      return res.status(500).json({ error: 'Échec de la sauvegarde' });
+    }
+  } catch (error) {
+    console.error('[userPreferences] Erreur PATCH launcher:', error);
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// PATCH /api/user/preferences - Merge générique de préférences (incluant éventuellement launcher)
+router.patch('/user/preferences', verifyToken, (req, res) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] PATCH generic pour utilisateur:', username);
+
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ error: 'Corps JSON requis' });
+    }
+
+    let preferences = loadUserPreferences(username) || {
+      zones: {},
+      theme: 'default',
+      language: 'fr'
+    };
+
+    // Merge superficiel des clés fournies
+    const incoming = req.body || {};
+    if (incoming.launcher && typeof incoming.launcher === 'object') {
+      const l = incoming.launcher;
+      preferences.launcher = {
+        anchors: l.anchors && typeof l.anchors === 'object' ? l.anchors : (preferences.launcher?.anchors || {}),
+        layout: l.layout && typeof l.layout === 'object' ? l.layout : (preferences.launcher?.layout || {}),
+        widgets: l.widgets && typeof l.widgets === 'object' ? l.widgets : (preferences.launcher?.widgets || {}),
+        apps: Array.isArray(l.apps) ? l.apps : (preferences.launcher?.apps || [])
+      };
+    }
+
+    // Copier les autres clés simples si fournies
+    ['zones','theme','language','backgroundImage','darkMode','weatherCity'].forEach(k => {
+      if (k in incoming) preferences[k] = incoming[k];
+    });
+
+    if (saveUserPreferences(username, preferences)) {
+      return res.json({ success: true, preferences });
+    } else {
+      return res.status(500).json({ error: 'Échec de la sauvegarde' });
+    }
+  } catch (error) {
+    console.error('[userPreferences] Erreur PATCH generic:', error);
+    return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
