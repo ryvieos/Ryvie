@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import GRID_CONFIG from '../config/gridConfig';
+import { GRID_CONFIG } from '../config/appConfig';
 
 /**
  * Hook pour gérer le layout de la grille iOS
@@ -238,6 +238,24 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
     return true;
   }, [isPositionValid]);
 
+  // Échanger les positions de deux items (et leurs ancres)
+  const swapItems = useCallback((a, b) => {
+    setLayout(prev => {
+      const A = prev[a];
+      const B = prev[b];
+      if (!A || !B) return prev;
+      const next = { ...prev, [a]: { ...B }, [b]: { ...A } };
+      return next;
+    });
+    setAnchors(prev => {
+      const next = { ...prev };
+      const tmp = next[a];
+      next[a] = next[b];
+      next[b] = tmp;
+      return next;
+    });
+  }, []);
+
   // Convertir une position pixel en position grille
   const pixelToGrid = useCallback((x, y, slotSize, gap) => {
     const col = Math.round(x / (slotSize + gap));
@@ -248,6 +266,7 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
   return {
     layout,
     moveItem,
+    swapItems,
     isPositionValid,
     pixelToGrid,
     findFreePosition: (w, h) => findFreePosition(layout, w, h, cols),

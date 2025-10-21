@@ -659,7 +659,7 @@
 /* Bouton de déconnexion en bas à gauche */
 .logout-fab {
   position: fixed;
-  bottom: 20px;
+  bottom: 60px;
   left: 20px;
   z-index: 1100;
   display: inline-flex;
@@ -702,7 +702,7 @@
 /* User chip above logout button */
 .user-chip {
   position: fixed;
-  bottom: 70px; /* Above logout button */
+  bottom: 120px; /* Above logout button */
   left: 20px;
   z-index: 1099; /* Just below logout button */
   display: inline-flex;
@@ -726,7 +726,7 @@
 
 /* Adjust logout button position */
 .logout-fab {
-  bottom: 20px;
+  bottom: 60px;
   left: 20px;
 }
 

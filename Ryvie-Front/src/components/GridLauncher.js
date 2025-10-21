@@ -2,8 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import '../styles/GridLauncher.css';
 import useGridLayout from '../hooks/useGridLayout';
 import useDrag from '../hooks/useDrag';
-import GRID_CONFIG from '../config/gridConfig';
+import { GRID_CONFIG } from '../config/appConfig';
 import Icon from './Icon';
+import WidgetAddButton from './WidgetAddButton';
+import CpuRamWidget from './widgets/CpuRamWidget';
+import StorageWidget from './widgets/StorageWidget';
 import '../styles/GridLauncher.css';
 
 const GridLauncher = ({
@@ -26,7 +29,12 @@ const GridLauncher = ({
   moveIcon,
   onLayoutChange,
   initialLayout,
-  initialAnchors
+  initialAnchors,
+  zonesReady,
+  accessMode,
+  widgets = [],
+  onAddWidget,
+  onRemoveWidget
 }) => {
   const gridRef = useRef(null);
   const { SLOT_SIZE: slotSize, GAP: gap, BASE_COLS: baseCols, BASE_ROWS: baseRows, MIN_COLS: minCols, HORIZONTAL_PADDING: horizontalPadding } = GRID_CONFIG;
@@ -58,23 +66,35 @@ const GridLauncher = ({
 
   // Préparer les items pour le layout
   const items = [
-    { id: 'weather', type: 'weather', w: 2, h: 2 },
-    ...apps.map(appId => ({ id: appId, type: 'app', w: 1, h: 1 }))
+    { id: 'weather', type: 'weather', w: 3, h: 2 },
+    ...apps.map(appId => ({ id: appId, type: 'app', w: 1, h: 1 })),
+    ...widgets.map(widget => ({ id: widget.id, type: 'widget', widgetType: widget.type, w: 2, h: 2 }))
   ];
 
-  const { layout, moveItem, pixelToGrid, getAnchors } = useGridLayout(items, cols, initialLayout, initialAnchors);
+  const { layout, moveItem, swapItems, pixelToGrid, getAnchors } = useGridLayout(items, cols, initialLayout, initialAnchors);
 
-  // Notifier le parent quand le layout change (debounce)
-  const notifyRef = useRef(null);
+  // NE PLUS notifier automatiquement le parent à chaque changement de layout
+  // car cela déclenchait des sauvegardes backend lors des réorganisations automatiques (responsive).
+  // Seuls les drags manuels (handleDrop) déclenchent maintenant onLayoutChange avec isManualChange=true.
+  
+  // Notifier une seule fois au chargement initial (quand le layout est prêt)
+  const initialNotificationSent = useRef(false);
   useEffect(() => {
-    if (!onLayoutChange) return;
-    if (notifyRef.current) clearTimeout(notifyRef.current);
-    const snapshot = { layout, anchors: getAnchors() };
-    notifyRef.current = setTimeout(() => {
-      try { onLayoutChange(snapshot); } catch (e) { /* noop */ }
-    }, 200);
-    return () => notifyRef.current && clearTimeout(notifyRef.current);
-  }, [layout]);
+    if (!onLayoutChange || initialNotificationSent.current) return;
+    if (!layout || Object.keys(layout).length === 0) return;
+    
+    // Attendre que le layout soit stabilisé (après la première réorganisation)
+    const timer = setTimeout(() => {
+      const snapshot = { layout, anchors: getAnchors() };
+      try { 
+        onLayoutChange(snapshot, false); // false = pas un changement manuel
+        initialNotificationSent.current = true;
+        console.log('[GridLauncher] ✅ Notification initiale envoyée au parent');
+      } catch (e) { /* noop */ }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [layout, onLayoutChange]);
 
   // Callback pendant le drag pour snap visuel
   const handleDragMove = (x, y, dragData) => {
@@ -107,7 +127,35 @@ const GridLauncher = ({
     const item = items.find(i => i.id === dragData.itemId);
     
     if (item) {
-      const success = moveItem(dragData.itemId, col, row, item.w, item.h);
+      let success = moveItem(dragData.itemId, col, row, item.w, item.h);
+      
+      // Si impossible (collision) et que c'est une app 1x1, tenter un échange avec l'app ciblée
+      if (!success && item.type === 'app' && item.w === 1 && item.h === 1) {
+        // Chercher s'il y a une app à la position cible
+        let targetAppId = null;
+        for (const [id, pos] of Object.entries(layout)) {
+          if (id === dragData.itemId) continue;
+          const w = pos.w || 1; const h = pos.h || 1;
+          // intersection rectangles (col,row,1,1) vs (pos.col,pos.row,w,h)
+          const overlap = !(col + 1 <= pos.col || col >= pos.col + w || row + 1 <= pos.row || row >= pos.row + h);
+          if (overlap) {
+            // N'autoriser l'échange qu'avec une app 1x1
+            const isOneByOneApp = apps.includes(id) && w === 1 && h === 1;
+            if (isOneByOneApp) { targetAppId = id; break; }
+          }
+        }
+        if (targetAppId) {
+          try { swapItems(dragData.itemId, targetAppId); success = true; } catch (_) {}
+        }
+      }
+      
+      // Si succès, notifier le parent avec isManualChange=true
+      if (success && onLayoutChange) {
+        const snapshot = { layout, anchors: getAnchors() };
+        try {
+          onLayoutChange(snapshot, true); // true = changement manuel
+        } catch (e) { /* noop */ }
+      }
       
       if (!success) {
         // Animation shake si échec
@@ -127,11 +175,19 @@ const GridLauncher = ({
     const slots = [];
     // Toujours garder le même nombre de cases visibles au minimum (baseCols x baseRows)
     const baseTotalSlots = baseCols * baseRows;
-    // Besoin réel en fonction des items: météo 2x2 = 4 + chaque app 1x1
-    const itemsRequiredSlots = 4 + apps.length;
+    // Besoin réel en fonction des items: météo 3x2 = 6 + chaque app 1x1
+    const itemsRequiredSlots = 6 + apps.length;
     const totalSlots = Math.max(baseTotalSlots, itemsRequiredSlots);
     // Calculer le nombre de lignes en fonction du nombre de colonnes actuel
     const rows = Math.ceil(totalSlots / cols);
+
+    // Construire un set des cases occupées (pour afficher un slot visible uniquement sous les apps)
+    const occupied = new Set();
+    // Apps 1x1
+    apps.forEach((appId) => {
+      const pos = layout[appId];
+      if (pos) occupied.add(`${pos.row},${pos.col}`);
+    });
     
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
@@ -147,11 +203,12 @@ const GridLauncher = ({
             isHighlighted = true;
           }
         }
+        const isOccupied = occupied.has(`${row},${col}`);
         
         slots.push(
           <div 
             key={`slot-${row}-${col}`} 
-            className={`grid-slot ${isHighlighted ? 'highlight' : ''}`}
+            className={`grid-slot ${isHighlighted ? 'highlight' : ''} ${isOccupied ? 'occupied' : ''}`}
             style={{
               gridColumn: col + 1,
               gridRow: row + 1
@@ -165,7 +222,7 @@ const GridLauncher = ({
   };
 
   return (
-    <div className="grid-launcher">
+    <div className={`grid-launcher ${zonesReady ? 'zones-ready' : ''}`}>
       <div 
         ref={gridRef}
         className="grid-container"
@@ -185,13 +242,17 @@ const GridLauncher = ({
             id="tile-weather"
             className={`weather-widget ${isDragging && draggedItem?.itemId === 'weather' ? 'dragging' : ''}`}
             style={{
-              gridColumn: `${layout['weather'].col + 1} / span 2`,
+              gridColumn: `${layout['weather'].col + 1} / span 3`,
               gridRow: `${layout['weather'].row + 1} / span 2`,
               backgroundImage: weatherImages[`./${weather.icon}`] ? `url(${weatherImages[`./${weather.icon}`]})` : 'linear-gradient(135deg, rgba(100, 180, 255, 0.9), rgba(80, 150, 255, 0.9))',
               backgroundSize: 'cover',
-              backgroundPosition: 'center'
+              backgroundPosition: 'center',
+              // Visuel 3x1.5: hauteur = 1.5 * slotSize + 0.5 * gap, épinglé en haut de sa zone 3x2
+              height: `${slotSize * 1.5 + gap * 0.5}px`,
+              alignSelf: 'start',
+              animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${Math.max(0, (layout['weather'].col || 0)) * 180}ms forwards`
             }}
-            onPointerDown={(e) => handlers.onPointerDown(e, 'weather', { w: 2, h: 2 })}
+            onPointerDown={(e) => handlers.onPointerDown(e, 'weather', { w: 3, h: 2 })}
             onClick={(e) => {
               e.stopPropagation();
               if (hasDragged) {
@@ -228,6 +289,9 @@ const GridLauncher = ({
         {apps.map((appId, index) => {
           if (!layout[appId]) return null;
           
+          const colIndex = layout[appId].col || 0;
+          const animDelayMs = colIndex * 180;
+
           return (
             <div
               key={appId}
@@ -236,10 +300,27 @@ const GridLauncher = ({
               style={{
                 gridColumn: layout[appId].col + 1,
                 gridRow: layout[appId].row + 1,
-                animationDelay: `${index * 0.05}s`
+                animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards`,
+                cursor: 'pointer'
               }}
               onPointerDown={(e) => handlers.onPointerDown(e, appId, { w: 1, h: 1 })}
+              onClick={(e) => {
+                e.stopPropagation();
+                // Ne pas ouvrir si le menu contextuel est actif
+                if (activeContextMenu) return;
+                if (!hasDragged) {
+                  try { handleClick(appId); } catch (_) {}
+                }
+              }}
+              // onContextMenu supprimé - laissé au composant Icon enfant
               tabIndex={0}
+              role="button"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  try { handleClick(appId); } catch (_) {}
+                }
+              }}
             >
               <Icon
                 id={appId}
@@ -247,7 +328,7 @@ const GridLauncher = ({
                 zoneId="grid"
                 moveIcon={moveIcon || (() => {})}
                 handleClick={() => {
-                  if (!hasDragged) {
+                  if (!isDragging) {
                     handleClick(appId);
                   }
                 }}
@@ -258,7 +339,44 @@ const GridLauncher = ({
                 setActiveContextMenu={setActiveContextMenu}
                 isAdmin={isAdmin}
                 setAppStatus={setAppStatus}
+                accessMode={accessMode}
               />
+            </div>
+          );
+        })}
+
+        {/* Widgets */}
+        {widgets.map((widget) => {
+          if (!layout[widget.id]) return null;
+          
+          const colIndex = layout[widget.id].col || 0;
+          const animDelayMs = colIndex * 180;
+
+          // Rendu du widget selon son type
+          const renderWidget = () => {
+            switch (widget.type) {
+              case 'cpu-ram':
+                return <CpuRamWidget id={widget.id} onRemove={onRemoveWidget} accessMode={accessMode} />;
+              case 'storage':
+                return <StorageWidget id={widget.id} onRemove={onRemoveWidget} accessMode={accessMode} />;
+              default:
+                return null;
+            }
+          };
+
+          return (
+            <div
+              key={widget.id}
+              className={`grid-tile widget-tile ${isDragging && draggedItem?.itemId === widget.id ? 'dragging' : ''}`}
+              style={{
+                gridColumn: `${layout[widget.id].col + 1} / span 2`,
+                gridRow: `${layout[widget.id].row + 1} / span 2`,
+                animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards`,
+                cursor: 'grab'
+              }}
+              onPointerDown={(e) => handlers.onPointerDown(e, widget.id, { w: 2, h: 2 })}
+            >
+              {renderWidget()}
             </div>
           );
         })}
@@ -274,13 +392,18 @@ const GridLauncher = ({
               height: `${slotSize * (draggedItem.itemData.h || 1) + gap * ((draggedItem.itemData.h || 1) - 1)}px`,
               background: draggedItem.itemId === 'weather' 
                 ? 'linear-gradient(135deg, rgba(100, 180, 255, 0.5), rgba(80, 150, 255, 0.5))'
-                : 'rgba(255, 255, 255, 0.5)',
+                : draggedItem.itemId?.startsWith('widget-')
+                  ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.5), rgba(118, 75, 162, 0.5))'
+                  : 'rgba(255, 255, 255, 0.5)',
               borderRadius: 'var(--tile-radius)',
               backdropFilter: 'blur(10px)'
             }}
           />
         )}
       </div>
+
+      {/* Bouton d'ajout de widgets */}
+      {onAddWidget && <WidgetAddButton onAddWidget={onAddWidget} />}
     </div>
   );
 };

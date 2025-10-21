@@ -12,6 +12,12 @@ const useDrag = (onDragEnd, onDragMove) => {
   const hasDraggedRef = useRef(false);
 
   const handlePointerDown = useCallback((e, itemId, itemData) => {
+    // Ignorer si le clic vient du menu contextuel
+    if (e.target.closest('.context-menu')) {
+      console.log('[useDrag] ⏭️  Ignorer pointerDown: clic dans menu contextuel');
+      return;
+    }
+    
     e.preventDefault();
     e.stopPropagation();
 

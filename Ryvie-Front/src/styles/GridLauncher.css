@@ -33,21 +33,40 @@
   box-sizing: border-box;
 }
 
-/* Slots (cases grises) - TAILLE FIXE */
+/* Slots (fond transparent) - TAILLE FIXE */
 .grid-slot {
   width: 120px;
   height: 120px;
-  background: rgba(255, 255, 255, 0.15);
-  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
   border-radius: 16px;
-  backdrop-filter: blur(10px);
-  transition: all 0.2s ease;
-  pointer-events: none;
-  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.1);
+  border: 1px solid transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: none;
+  pointer-events: none; /* ne pas capturer le hover: évite l'effet verre sous les apps */
+}
+
+/* Widgets dans la grille */
+.widget-tile {
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+  width: 100% !important; /* Prendre toute la largeur du span */
+  height: 100% !important; /* Prendre toute la hauteur du span */
+  background: transparent;
+}
+
+.widget-tile:active {
+  cursor: grabbing;
+}
+
+.widget-tile.dragging {
+  opacity: 0.5;
 }
 
 .grid-slot:hover {
-  background: rgba(255, 255, 255, 0.13);
+  background: transparent;
 }
 
 /* Slot highlight pendant le drag */
@@ -56,6 +75,13 @@
   border-color: rgba(100, 180, 255, 0.7);
   box-shadow: 0 0 20px rgba(100, 180, 255, 0.5);
   transform: scale(1.02);
+}
+
+/* Slots visibles uniquement sous les apps/widgets */
+.grid-slot.occupied {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.08);
 }
 
 /* Slot en collision */
@@ -73,19 +99,15 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
+  padding-top: 12px;
   cursor: grab;
   transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), 
               opacity 0.35s ease;
   pointer-events: auto;
   touch-action: none;
   user-select: none;
-  
-  /* Animation d'arrivée */
-  opacity: 0;
-  transform: scale(0.95);
-  animation: tileAppear 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 /* Le composant Icon à l'intérieur */
@@ -95,35 +117,48 @@
 }
 
 .grid-tile .icon-name {
-  margin-top: 4px;
+  margin-top: 8px;
+  color: #ffffff !important;
+  font-size: 16px !important;
+  font-weight: 700;
+  text-align: center;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
-/* Stagger des animations */
-.grid-tile:nth-child(1) { animation-delay: 0.05s; }
-.grid-tile:nth-child(2) { animation-delay: 0.1s; }
-.grid-tile:nth-child(3) { animation-delay: 0.15s; }
-.grid-tile:nth-child(4) { animation-delay: 0.2s; }
-.grid-tile:nth-child(5) { animation-delay: 0.25s; }
-.grid-tile:nth-child(6) { animation-delay: 0.3s; }
-.grid-tile:nth-child(7) { animation-delay: 0.35s; }
-.grid-tile:nth-child(8) { animation-delay: 0.4s; }
-.grid-tile:nth-child(n+9) { animation-delay: 0.45s; }
-
-@keyframes tileAppear {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+/* Révélation en accordéon gauche→droite (10 colonnes) */
+@keyframes accordionReveal {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.grid-tile:hover {
-  transform: translateY(-4px) scale(1);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+/* Par défaut, invisible pour éviter le flash avant prêt */
+.grid-container .grid-slot {
+  opacity: 0;
 }
+
+/* Animer uniquement quand .zones-ready est présent sur GridLauncher */
+.grid-launcher.zones-ready .grid-container .grid-slot {
+  animation: accordionReveal 200ms ease forwards;
+}
+
+/* Et aux tiles (icônes) */
+.grid-tile {
+  opacity: 0;
+}
+
+
+/* Appliquer aussi aux widgets météo */
+.weather-widget { opacity: 0; }
+.grid-launcher.zones-ready .weather-widget {
+  animation: accordionReveal 200ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Désactiver l'effet verre au survol des tuiles */
+.grid-tile:hover { transform: none; box-shadow: none; }
 
 .grid-tile:active {
   cursor: grabbing;
@@ -135,26 +170,7 @@
   pointer-events: none;
 }
 
-/* Icône dans la tuile - TAILLE FIXE */
-.grid-tile .tile-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
-  object-fit: cover;
-}
-
-.grid-tile .tile-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #333;
-  text-align: center;
-  max-width: 90%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Composant Icon dans grid-tile - garder la taille fixe */
+/* Conteneur d'icône */
 .grid-tile .icon-container {
   width: 100%;
   height: 100%;
@@ -171,26 +187,26 @@
   min-height: 80px !important;
   max-width: 80px !important;
   max-height: 80px !important;
+  margin: 12px auto 0;
+  background-color: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0px 5px 5px rgba(0, 0, 0, 0.3);
+  background-size: cover;
+  background-position: center;
+  cursor: grab;
+  z-index: 1;
+}
+
+.grid-tile .icon:hover {
+  transform: scale(0.95);
+  transition: transform 0.3s;
 }
 
 .grid-tile .icon img {
-  width: 80px !important;
-  height: 80px !important;
+  width: 100% !important;
+  height: 100% !important;
   object-fit: cover;
   border-radius: 18px;
-}
-
-.grid-tile .icon-name {
-  font-size: 11px !important;
-  font-weight: 600;
-  color: white;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  text-align: center;
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-top: 4px;
 }
 
 /* Widget Météo 2×2 */
@@ -217,11 +233,6 @@
   color: white;
   overflow: hidden;
   gap: 6px;
-  
-  /* Animation d'arrivée */
-  opacity: 0;
-  transform: scale(0.95);
-  animation: tileAppear 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s forwards;
 }
 
 .weather-widget:hover {

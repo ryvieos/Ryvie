@@ -14,9 +14,8 @@ import { endSession, getCurrentUser, getCurrentUserRole, startSession, isSession
 import urlsConfig from '../config/urls';
 const { getServerUrl, getAppUrl } = urlsConfig;
 import { 
-  generateAppConfig, 
-  generateDefaultZones,   generateAppConfigFromManifests,
-  generateDefaultZonesFromManifests,
+  generateAppConfigFromManifests,
+  generateDefaultAppsList,
   images 
 } from '../config/appConfig';
 import GridLauncher from '../components/GridLauncher';
@@ -462,8 +461,8 @@ const Home = () => {
   const [appsConfig, setAppsConfig] = useState(() => {
     // Charger depuis le cache au démarrage
     const cached = StorageManager.getItem('appsConfig_cache');
-    return cached || generateAppConfig();
-  }); // Config par défaut
+    return cached || {}; // Sera chargé depuis les manifests
+  });
   const [iconImages, setIconImages] = useState(() => {
     // Charger depuis le cache au démarrage
     const cached = StorageManager.getItem('iconImages_cache');
@@ -477,7 +476,9 @@ const Home = () => {
   const [tempCity, setTempCity] = useState('');
   const [savingWeatherCity, setSavingWeatherCity] = useState(false);
   
-  // Commencer avec des zones vides, elles seront chargées depuis le serveur
+  // DEPRECATED: Les zones sont conservées uniquement pour la compatibilité avec l'ancien système
+  // Le nouveau système utilise GridLauncher avec layout sauvegardé sur le backend
+  // Les zones servent uniquement à passer la liste des apps à GridLauncher via Object.values(zones).flat()
   const [zones, setZones] = useState({
     left: [],
     right: [],
@@ -533,6 +534,10 @@ const Home = () => {
   const launcherSaveRef = React.useRef(null); // debounce save
   const [launcherLayout, setLauncherLayout] = useState(null); // Layout chargé depuis le backend
   const [launcherAnchors, setLauncherAnchors] = useState(null); // Ancres chargées depuis le backend
+  const [launcherLoadedFromBackend, setLauncherLoadedFromBackend] = useState(false); // Indique si les données ont été chargées
+  const launcherInitialLoadDone = React.useRef(false); // Flag pour savoir si le chargement initial est terminé
+  const [widgets, setWidgets] = useState([]); // Liste des widgets ajoutés par l'utilisateur
+  const widgetIdCounter = React.useRef(0); // Compteur pour générer des IDs uniques
   
   // Écouteur de messages pour fermer l'overlay depuis l'iframe
   useEffect(() => {
@@ -651,8 +656,26 @@ const Home = () => {
   }, [accessMode]);
 
   // Handler: sauvegarder layout/anchors du launcher pour l'utilisateur
-  const handleLauncherLayoutChange = React.useCallback((snapshot) => {
+  const handleLauncherLayoutChange = React.useCallback((snapshot, isManualChange = false) => {
     try {
+      // Ne sauvegarder que si:
+      // 1. Le serveur est connecté
+      // 2. Les données ont déjà été chargées depuis le backend
+      // 3. C'est un changement MANUEL (drag utilisateur) OU le chargement initial est terminé
+      if (!serverStatus) {
+        console.log('[Home] ⏸️  Sauvegarde launcher ignorée: serveur déconnecté');
+        return;
+      }
+      if (!launcherLoadedFromBackend) {
+        console.log('[Home] ⏸️  Sauvegarde launcher ignorée: données pas encore chargées depuis le backend');
+        return;
+      }
+      
+      // Si ce n'est pas un changement manuel et que le chargement initial n'est pas terminé, ignorer
+      if (!isManualChange && !launcherInitialLoadDone.current) {
+        console.log('[Home] ⏸️  Sauvegarde launcher ignorée: chargement initial en cours');
+        return;
+      }
       if (!accessMode || !currentUserName) return;
       const serverUrl = getServerUrl(accessMode);
       if (launcherSaveRef.current) clearTimeout(launcherSaveRef.current);
@@ -662,7 +685,7 @@ const Home = () => {
         launcher: {
           anchors: snapshot?.anchors || {},
           layout: snapshot?.layout || {},
-          widgets: { weather: (snapshot?.layout && snapshot.layout['weather']) || null },
+          widgets: widgets, // Sauvegarder la liste des widgets
           apps: appsList
         }
       };
@@ -682,7 +705,86 @@ const Home = () => {
         }
       }, 300);
     } catch (_) {}
-  }, [accessMode, currentUserName, zones, appsConfig]);
+  }, [accessMode, currentUserName, zones, appsConfig, serverStatus, launcherLoadedFromBackend, widgets]);
+  
+  // Handler: ajouter un widget
+  const handleAddWidget = React.useCallback((widgetType) => {
+    console.log('[Home] Ajout d\'un widget:', widgetType);
+    const newWidget = {
+      id: `widget-${widgetType}-${widgetIdCounter.current++}`,
+      type: widgetType
+    };
+    
+    setWidgets(prev => {
+      const newWidgets = [...prev, newWidget];
+      
+      // Sauvegarder immédiatement avec la nouvelle liste de widgets
+      setTimeout(() => {
+        if (!accessMode || !currentUserName || !serverStatus || !launcherLoadedFromBackend) {
+          console.log('[Home] ⏸️  Sauvegarde widget ignorée: conditions non remplies');
+          return;
+        }
+        
+        const serverUrl = getServerUrl(accessMode);
+        const appsList = Object.values(zones).flat().filter(id => id && appsConfig[id]);
+        const payload = {
+          launcher: {
+            anchors: launcherAnchors || {},
+            layout: launcherLayout || {},
+            widgets: newWidgets, // Utiliser la nouvelle liste
+            apps: appsList
+          }
+        };
+        
+        axios.patch(`${serverUrl}/api/user/preferences/launcher`, payload)
+          .then(() => {
+            console.log('[Home] ✅ Widget ajouté et sauvegardé sur le backend');
+          })
+          .catch((e) => {
+            console.error('[Home] ❌ Erreur sauvegarde après ajout widget:', e);
+          });
+      }, 500); // Délai plus long pour laisser le layout se stabiliser
+      
+      return newWidgets;
+    });
+  }, [accessMode, currentUserName, serverStatus, launcherLoadedFromBackend, launcherLayout, launcherAnchors, zones, appsConfig]);
+  
+  // Handler: supprimer un widget
+  const handleRemoveWidget = React.useCallback((widgetId) => {
+    console.log('[Home] Suppression du widget:', widgetId);
+    setWidgets(prev => {
+      const newWidgets = prev.filter(w => w.id !== widgetId);
+      
+      // Sauvegarder immédiatement avec la nouvelle liste de widgets
+      setTimeout(() => {
+        if (!accessMode || !currentUserName || !serverStatus || !launcherLoadedFromBackend) {
+          console.log('[Home] ⏸️  Sauvegarde widget ignorée: conditions non remplies');
+          return;
+        }
+        
+        const serverUrl = getServerUrl(accessMode);
+        const appsList = Object.values(zones).flat().filter(id => id && appsConfig[id]);
+        const payload = {
+          launcher: {
+            anchors: launcherAnchors || {},
+            layout: launcherLayout || {},
+            widgets: newWidgets, // Utiliser la nouvelle liste
+            apps: appsList
+          }
+        };
+        
+        axios.patch(`${serverUrl}/api/user/preferences/launcher`, payload)
+          .then(() => {
+            console.log('[Home] ✅ Widget supprimé et sauvegardé sur le backend');
+          })
+          .catch((e) => {
+            console.error('[Home] ❌ Erreur sauvegarde après suppression widget:', e);
+          });
+      }, 100);
+      
+      return newWidgets;
+    });
+  }, [accessMode, currentUserName, serverStatus, launcherLoadedFromBackend, launcherLayout, launcherAnchors, zones, appsConfig]);
   
   // Mettre à jour les statuts quand appsConfig change
   useEffect(() => {
@@ -1038,6 +1140,8 @@ const Home = () => {
       if (!disconnectedSince) {
         console.log('[Home] Serveur déconnecté, début du compteur');
         setDisconnectedSince(Date.now());
+        // Réinitialiser le flag de chargement pour éviter de sauvegarder des données obsolètes
+        setLauncherLoadedFromBackend(false);
       }
     } else {
       // Serveur connecté: vérifier si on était déconnecté pendant plus de 2s
@@ -1158,10 +1262,19 @@ const Home = () => {
 
   // Fermer le menu contextuel si on clique ailleurs
   useEffect(() => {
-    const handleClickOutside = () => setActiveContextMenu(null);
+    const handleClickOutside = (e) => {
+      // Ne pas fermer si on clique sur le menu contextuel lui-même
+      if (e.target.closest('.context-menu')) {
+        console.log('[Home] 🖱️ Clic dans le menu contextuel, ne pas fermer');
+        return;
+      }
+      console.log('[Home] 🖱️ Clic en dehors du menu, fermeture');
+      setActiveContextMenu(null);
+    };
     if (activeContextMenu) {
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
+      // Utiliser mousedown au lieu de click pour capturer l'événement avant le onClick du bouton
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [activeContextMenu]);
 
@@ -1199,20 +1312,44 @@ const Home = () => {
         // Charger layout/anchors de la grille depuis le backend (source de vérité)
         if (res.data?.launcher) {
           try {
-            const { layout, anchors } = res.data.launcher || {};
-            console.log('[Home] 🎮 Launcher chargé depuis le backend:', { layout, anchors });
+            const { layout, anchors, widgets: savedWidgets } = res.data.launcher || {};
+            console.log('[Home] 🎮 Launcher chargé depuis le backend:', { layout, anchors, widgets: savedWidgets });
             setLauncherLayout(layout || {});
             setLauncherAnchors(anchors || {});
+            
+            // Charger les widgets sauvegardés
+            if (savedWidgets && Array.isArray(savedWidgets)) {
+              console.log('[Home] 📊 Widgets chargés:', savedWidgets);
+              setWidgets(savedWidgets);
+              widgetIdCounter.current = savedWidgets.length; // Initialiser le compteur
+            }
+            
+            setLauncherLoadedFromBackend(true); // Marquer comme chargé
+            // Marquer le chargement initial comme terminé après un délai pour laisser la grille se positionner
+            setTimeout(() => {
+              launcherInitialLoadDone.current = true;
+              console.log('[Home] ✅ Chargement initial launcher terminé, sauvegarde auto activée');
+            }, 1000);
           } catch (e) {
             console.error('[Home] Erreur chargement launcher:', e);
             setLauncherLayout({});
             setLauncherAnchors({});
+            setWidgets([]);
+            setLauncherLoadedFromBackend(true); // Marquer comme chargé même si vide
+            setTimeout(() => {
+              launcherInitialLoadDone.current = true;
+            }, 1000);
           }
         } else {
           // Pas de launcher sauvegardé, initialiser vide
           console.log('[Home] 🎮 Pas de launcher sauvegardé, initialisation vide');
           setLauncherLayout({});
           setLauncherAnchors({});
+          setWidgets([]);
+          setLauncherLoadedFromBackend(true); // Marquer comme chargé (vide = OK)
+          setTimeout(() => {
+            launcherInitialLoadDone.current = true;
+          }, 1000);
         }
         
         if (res.data?.zones && Object.keys(res.data.zones).length > 0) {
@@ -1225,7 +1362,8 @@ const Home = () => {
           
           if (allZonesEmpty) {
             console.log('[Home] ⚠️ Zones vides détectées, génération depuis manifests');
-            const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+            const appsList = await generateDefaultAppsList(accessMode);
+            const defaultZones = { ...zones, bottom1: appsList.slice(0, 1), bottom2: appsList.slice(1, 2), bottom3: appsList.slice(2, 3), bottom4: appsList.slice(3, 4), bottom5: appsList.slice(4, 5) };
             setZones(defaultZones);
             // Sauvegarder les zones par défaut sur le serveur
             await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: defaultZones });
@@ -1307,7 +1445,8 @@ const Home = () => {
           }
         } else {
           console.log('[Home] ⚠️ Pas de zones sur le serveur, génération depuis manifests');
-          const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+          const appsList = await generateDefaultAppsList(accessMode);
+          const defaultZones = { ...zones, bottom1: appsList.slice(0, 1), bottom2: appsList.slice(1, 2), bottom3: appsList.slice(2, 3), bottom4: appsList.slice(3, 4), bottom5: appsList.slice(4, 5) };
           setZones(defaultZones);
           // Sauvegarder les zones par défaut sur le serveur
           await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: defaultZones });
@@ -1321,7 +1460,8 @@ const Home = () => {
           setZones(savedZones);
         } else {
           console.log('[Home] 🆕 Génération des zones par défaut depuis manifests');
-          const defaultZones = await generateDefaultZonesFromManifests(accessMode);
+          const appsList = await generateDefaultAppsList(accessMode);
+          const defaultZones = { ...zones, bottom1: appsList.slice(0, 1), bottom2: appsList.slice(1, 2), bottom3: appsList.slice(2, 3), bottom4: appsList.slice(3, 4), bottom5: appsList.slice(4, 5) };
           setZones(defaultZones);
         }
       }
@@ -1601,6 +1741,11 @@ const Home = () => {
               onLayoutChange={handleLauncherLayoutChange}
               initialLayout={launcherLayout}
               initialAnchors={launcherAnchors}
+              zonesReady={zonesReady}
+              accessMode={accessMode}
+              widgets={widgets}
+              onAddWidget={handleAddWidget}
+              onRemoveWidget={handleRemoveWidget}
             />
           </div>
           {/* Bouton de déconnexion fixe en bas à gauche */}
