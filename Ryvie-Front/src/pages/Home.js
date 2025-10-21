@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import '../styles/Home.css';
 import '../styles/Transitions.css';
+import '../styles/GridiPhone.css';
 import axios from '../utils/setupAxios';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -14,11 +15,11 @@ import urlsConfig from '../config/urls';
 const { getServerUrl, getAppUrl } = urlsConfig;
 import { 
   generateAppConfig, 
-  generateDefaultZones, 
-  generateAppConfigFromManifests,
+  generateDefaultZones,   generateAppConfigFromManifests,
   generateDefaultZonesFromManifests,
   images 
 } from '../config/appConfig';
+import GridLauncher from '../components/GridLauncher';
  
 
 // Fonction pour importer toutes les images du dossier weather_icons
@@ -529,6 +530,9 @@ const Home = () => {
   const [zonesReady, setZonesReady] = useState(false); // Animations zones quand les icônes des apps sont chargées
   const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
   const [disconnectedSince, setDisconnectedSince] = useState(null); // Timestamp de début de déconnexion
+  const launcherSaveRef = React.useRef(null); // debounce save
+  const [launcherLayout, setLauncherLayout] = useState(null); // Layout chargé depuis le backend
+  const [launcherAnchors, setLauncherAnchors] = useState(null); // Ancres chargées depuis le backend
   
   // Écouteur de messages pour fermer l'overlay depuis l'iframe
   useEffect(() => {
@@ -645,6 +649,40 @@ const Home = () => {
     
     loadConfigFromManifests();
   }, [accessMode]);
+
+  // Handler: sauvegarder layout/anchors du launcher pour l'utilisateur
+  const handleLauncherLayoutChange = React.useCallback((snapshot) => {
+    try {
+      if (!accessMode || !currentUserName) return;
+      const serverUrl = getServerUrl(accessMode);
+      if (launcherSaveRef.current) clearTimeout(launcherSaveRef.current);
+      // Construire widgets/apps à partir des données actuelles
+      const appsList = Object.values(zones).flat().filter(id => id && appsConfig[id]);
+      const payload = {
+        launcher: {
+          anchors: snapshot?.anchors || {},
+          layout: snapshot?.layout || {},
+          widgets: { weather: (snapshot?.layout && snapshot.layout['weather']) || null },
+          apps: appsList
+        }
+      };
+      launcherSaveRef.current = setTimeout(async () => {
+        try {
+          // Tentative endpoint dédié
+          await axios.patch(`${serverUrl}/api/user/preferences/launcher`, payload);
+          console.log('[Home] ✅ Launcher sauvegardé sur le backend');
+        } catch (e) {
+          // Fallback: endpoint générique si /launcher n'existe pas
+          try {
+            await axios.patch(`${serverUrl}/api/user/preferences`, payload);
+            console.log('[Home] ✅ Launcher sauvegardé sur le backend (fallback)');
+          } catch (e2) {
+            console.error('[Home] ❌ Sauvegarde launcher échouée:', e2?.message || e?.message);
+          }
+        }
+      }, 300);
+    } catch (_) {}
+  }, [accessMode, currentUserName, zones, appsConfig]);
   
   // Mettre à jour les statuts quand appsConfig change
   useEffect(() => {
@@ -1158,6 +1196,25 @@ const Home = () => {
           setBackgroundImage(res.data.backgroundImage);
         }
         
+        // Charger layout/anchors de la grille depuis le backend (source de vérité)
+        if (res.data?.launcher) {
+          try {
+            const { layout, anchors } = res.data.launcher || {};
+            console.log('[Home] 🎮 Launcher chargé depuis le backend:', { layout, anchors });
+            setLauncherLayout(layout || {});
+            setLauncherAnchors(anchors || {});
+          } catch (e) {
+            console.error('[Home] Erreur chargement launcher:', e);
+            setLauncherLayout({});
+            setLauncherAnchors({});
+          }
+        } else {
+          // Pas de launcher sauvegardé, initialiser vide
+          console.log('[Home] 🎮 Pas de launcher sauvegardé, initialisation vide');
+          setLauncherLayout({});
+          setLauncherAnchors({});
+        }
+        
         if (res.data?.zones && Object.keys(res.data.zones).length > 0) {
           console.log('[Home] ✅ Zones chargées depuis le serveur:', res.data.zones);
           
@@ -1523,86 +1580,28 @@ const Home = () => {
             </div>
           )}
           <div className="content">
-            <h1 className="title">Bienvenue dans votre Cloud</h1>
-            <div className="main-content">
-              <div className="top-zones">
-                <Zone
-                  zoneId="left"
-                  iconId={zones['left']}
-                  moveIcon={moveIcon}
-                  handleClick={handleClick}
-                  showName={true}
-                  appStatus={appStatus}
-                  appsConfig={appsConfig}
-                  iconImages={iconImages}
-                  activeContextMenu={activeContextMenu}
-                  setActiveContextMenu={setActiveContextMenu}
-                  isAdmin={isAdmin}
-                  setAppStatus={setAppStatus}
-                />
-              </div>
-              <div 
-                className="widget" 
-                style={{ backgroundImage: weatherImages[`./${weather.icon}`] ? `url(${weatherImages[`./${weather.icon}`]})` : 'none', cursor: 'pointer' }}
-                onClick={() => {
-                  setTempCity((weatherCity || weather.location || '').toString());
-                  setClosingWeatherModal(false);
-                  setShowWeatherModal(true);
-                }}
-                title="Cliquez pour changer de ville"
-              >
-                <div className="weather-info">
-                  <p className="weather-city">{weather.location ? weather.location : 'Localisation non disponible'}</p>
-                  <p className="weather-temperature">
-                    {weather.temperature ? `${Math.round(weather.temperature)}°C` : '...'}
-                  </p>
-                  <div className="weather-humidity">
-                    <img src={weatherIcons['./humidity.png']} alt="Humidity Icon" className="weather-icon" />
-                    {weather.humidity ? `${weather.humidity}%` : '...'}
-                  </div>
-                  <div className="weather-wind">
-                    <img src={weatherIcons['./wind.png']} alt="Wind Icon" className="weather-icon" />
-                    {weather.wind ? `${Math.round(weather.wind)} km/h` : '...'}
-                  </div>
-                </div>
-              </div>
-              <div className="top-zones">
-                <Zone
-                  zoneId="right"
-                  iconId={zones['right']}
-                  moveIcon={moveIcon}
-                  handleClick={handleClick}
-                  showName={true}
-                  appStatus={appStatus}
-                  appsConfig={appsConfig}
-                  iconImages={iconImages}
-                  activeContextMenu={activeContextMenu}
-                  setActiveContextMenu={setActiveContextMenu}
-                  isAdmin={isAdmin}
-                  setAppStatus={setAppStatus}
-                  className="zone-right"
-                />
-              </div>
-            </div>
-            <div className="bottom-zones">
-              {Array.from({ length: 10 }, (_, i) => (
-                <Zone
-                  key={`bottom${i + 1}`}
-                  zoneId={`bottom${i + 1}`}
-                  iconId={zones[`bottom${i + 1}`]}
-                  moveIcon={moveIcon}
-                  handleClick={handleClick}
-                  showName={true}
-                  appStatus={appStatus}
-                  appsConfig={appsConfig}
-                  iconImages={iconImages}
-                  activeContextMenu={activeContextMenu}
-                  setActiveContextMenu={setActiveContextMenu}
-                  isAdmin={isAdmin}
-                  setAppStatus={setAppStatus}
-                />
-              ))}
-            </div>
+            <GridLauncher
+              apps={Object.values(zones).flat().filter(id => id && appsConfig[id])}
+              weather={weather}
+              weatherImages={weatherImages}
+              weatherIcons={weatherIcons}
+              weatherCity={weatherCity}
+              iconImages={iconImages}
+              appsConfig={appsConfig}
+              appStatus={appStatus}
+              handleClick={handleClick}
+              setShowWeatherModal={setShowWeatherModal}
+              setTempCity={setTempCity}
+              setClosingWeatherModal={setClosingWeatherModal}
+              activeContextMenu={activeContextMenu}
+              setActiveContextMenu={setActiveContextMenu}
+              isAdmin={isAdmin}
+              setAppStatus={setAppStatus}
+              moveIcon={moveIcon}
+              onLayoutChange={handleLauncherLayoutChange}
+              initialLayout={launcherLayout}
+              initialAnchors={launcherAnchors}
+            />
           </div>
           {/* Bouton de déconnexion fixe en bas à gauche */}
           <button className="logout-fab" onClick={handleLogout} title="Déconnexion">

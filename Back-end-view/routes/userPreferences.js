@@ -24,7 +24,6 @@ router.get('/geocode/search', async (req, res) => {
   try {
     const q = (req.query.q || '').toString().trim();
     if (!q || q.length < 2) return res.json({ results: [] });
-
     const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=fr&format=json`;
     const r = await axios.get(url, { timeout: 4000 });
     const items = (r.data?.results || []).map(it => ({
@@ -174,6 +173,90 @@ router.patch('/user/preferences/zones', verifyToken, (req, res) => {
   } catch (error) {
     console.error('[userPreferences] Erreur PATCH zones:', error);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// PATCH /api/user/preferences/launcher - Mettre à jour la disposition du launcher (anchors/layout/widgets/apps)
+router.patch('/user/preferences/launcher', verifyToken, (req, res) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] PATCH launcher pour utilisateur:', username);
+
+    const launcher = req.body && req.body.launcher;
+    if (!launcher || typeof launcher !== 'object') {
+      return res.status(400).json({ error: 'launcher requis (object)' });
+    }
+
+    // Charger préférences existantes ou valeurs par défaut minimales
+    let preferences = loadUserPreferences(username) || {
+      zones: {},
+      theme: 'default',
+      language: 'fr'
+    };
+
+    // Normaliser les champs du launcher
+    const normalized = {
+      anchors: launcher.anchors && typeof launcher.anchors === 'object' ? launcher.anchors : {},
+      layout: launcher.layout && typeof launcher.layout === 'object' ? launcher.layout : {},
+      widgets: launcher.widgets && typeof launcher.widgets === 'object' ? launcher.widgets : {},
+      apps: Array.isArray(launcher.apps) ? launcher.apps : []
+    };
+
+    preferences.launcher = normalized;
+
+    if (saveUserPreferences(username, preferences)) {
+      console.log('[userPreferences] Launcher sauvegardé pour', username);
+      return res.json({ success: true, launcher: preferences.launcher });
+    } else {
+      return res.status(500).json({ error: 'Échec de la sauvegarde' });
+    }
+  } catch (error) {
+    console.error('[userPreferences] Erreur PATCH launcher:', error);
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// PATCH /api/user/preferences - Merge générique de préférences (incluant éventuellement launcher)
+router.patch('/user/preferences', verifyToken, (req, res) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] PATCH generic pour utilisateur:', username);
+
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ error: 'Corps JSON requis' });
+    }
+
+    let preferences = loadUserPreferences(username) || {
+      zones: {},
+      theme: 'default',
+      language: 'fr'
+    };
+
+    // Merge superficiel des clés fournies
+    const incoming = req.body || {};
+    if (incoming.launcher && typeof incoming.launcher === 'object') {
+      const l = incoming.launcher;
+      preferences.launcher = {
+        anchors: l.anchors && typeof l.anchors === 'object' ? l.anchors : (preferences.launcher?.anchors || {}),
+        layout: l.layout && typeof l.layout === 'object' ? l.layout : (preferences.launcher?.layout || {}),
+        widgets: l.widgets && typeof l.widgets === 'object' ? l.widgets : (preferences.launcher?.widgets || {}),
+        apps: Array.isArray(l.apps) ? l.apps : (preferences.launcher?.apps || [])
+      };
+    }
+
+    // Copier les autres clés simples si fournies
+    ['zones','theme','language','backgroundImage','darkMode','weatherCity'].forEach(k => {
+      if (k in incoming) preferences[k] = incoming[k];
+    });
+
+    if (saveUserPreferences(username, preferences)) {
+      return res.json({ success: true, preferences });
+    } else {
+      return res.status(500).json({ error: 'Échec de la sauvegarde' });
+    }
+  } catch (error) {
+    console.error('[userPreferences] Erreur PATCH generic:', error);
+    return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
