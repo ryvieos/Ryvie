@@ -3,6 +3,8 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const { verifyToken, isAdmin } = require('../middleware/auth');
+const { checkAllUpdates } = require('../services/updateCheckService');
+const { updateRyvie, updateApp } = require('../services/updateService');
 
 const SETTINGS_FILE = '/data/config/server-settings.json';
 
@@ -77,6 +79,100 @@ router.patch('/settings/token-expiration', verifyToken, (req, res) => {
   } catch (error) {
     console.error('[settings] Erreur PATCH token-expiration:', error);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// GET /api/settings/updates - Vérifier les mises à jour disponibles
+router.get('/settings/updates', verifyToken, async (req, res) => {
+  try {
+    console.log('[settings] Vérification des mises à jour...');
+    const updates = await checkAllUpdates();
+    res.json(updates);
+  } catch (error) {
+    console.error('[settings] Erreur lors de la vérification des mises à jour:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la vérification des mises à jour',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/settings/update-ryvie - Mettre à jour Ryvie
+router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req, res) => {
+  try {
+    console.log('[settings] Démarrage de la mise à jour de Ryvie...');
+    const result = await updateRyvie();
+    
+    if (result.success && result.needsRestart) {
+      // Envoyer la réponse immédiatement
+      res.json({
+        success: true,
+        message: 'Code mis à jour. Redémarrage en cours...'
+      });
+      
+      const snapshotPath = result.snapshotPath;
+      
+      // Enregistrer le snapshot pour vérification au prochain démarrage
+      if (snapshotPath) {
+        const { registerPendingSnapshot } = require('../utils/snapshotCleanup');
+        registerPendingSnapshot(snapshotPath);
+      }
+      
+      // Redémarrer PM2 après un court délai (pour que la réponse soit envoyée)
+      setTimeout(() => {
+        const { execSync } = require('child_process');
+        console.log('[settings] Redémarrage PM2...');
+        
+        try {
+          execSync('/usr/local/bin/pm2 reload all --force', { stdio: 'inherit' });
+          console.log('[settings] PM2 reload lancé');
+        } catch (error) {
+          console.error('[settings] ❌ Erreur lors du redémarrage PM2:', error.message);
+        }
+      }, 1000);
+      
+    } else if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('[settings] Erreur lors de la mise à jour de Ryvie:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Erreur lors de la mise à jour',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/settings/update-app - Mettre à jour une application
+router.post('/settings/update-app', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { appName } = req.body;
+    
+    if (!appName) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Nom de l\'application requis' 
+      });
+    }
+    
+    console.log(`[settings] Démarrage de la mise à jour de ${appName}...`);
+    const result = await updateApp(appName);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error(`[settings] Erreur lors de la mise à jour de l'app:`, error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Erreur lors de la mise à jour',
+      details: error.message 
+    });
   }
 });
 

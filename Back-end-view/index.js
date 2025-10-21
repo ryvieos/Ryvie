@@ -59,6 +59,7 @@ const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
 const { getLocalIP } = require('./utils/network');
 const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
+const { syncNetbirdConfig } = require('./utils/syncNetbirdConfig');
 
 const docker = new Docker();
 const app = express();
@@ -84,13 +85,18 @@ app.use(express.json({ limit: '10mb' }));
 // General API rate limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limit each IP to 500 requests per windowMs (increased for normal usage)
+  max: 1000, // Limit each IP to 1000 requests per windowMs (increased for polling + normal usage)
   message: {
     error: 'Trop de requêtes. Réessayez plus tard.',
     retryAfter: 15 * 60
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // Skip rate limiting for certain endpoints if needed
+  skip: (req) => {
+    // Optionally skip rate limiting for health checks
+    return req.path === '/status' || req.path === '/api/status';
+  }
 });
 
 app.use('/api/', apiLimiter);
@@ -152,19 +158,10 @@ try {
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
-    // Générer les manifests au démarrage
-    console.log('🔄 Génération des manifests...');
-    try {
-      const { execSync } = require('child_process');
-      const path = require('path');
-      const manifestScript = path.join(__dirname, '..', 'generate-manifests.js');
-      execSync(`node ${manifestScript}`, { stdio: 'inherit' });
-      console.log('✅ Manifests générés avec succès');
-    } catch (manifestError) {
-      console.error('⚠️  Erreur lors de la génération des manifests:', manifestError.message);
-      console.log('Le serveur continuera sans les manifests mis à jour');
-    }
-
+    // Vérifier les snapshots en attente (après une mise à jour)
+    const { checkPendingSnapshots } = require('./utils/snapshotCleanup');
+    checkPendingSnapshots();
+    
     // Initialize realtime service
     realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
     await realtime.initializeActiveContainers();
@@ -185,6 +182,9 @@ async function startServer() {
     
     // Surveiller les changements dans le dossier public/images/backgrounds
     watchBackgrounds();
+    
+    // Synchroniser la configuration Netbird au démarrage
+    syncNetbirdConfig();
     
     const PORT = process.env.PORT || 3002;
     httpServer.listen(PORT, () => {
