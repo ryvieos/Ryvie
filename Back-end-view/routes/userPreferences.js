@@ -106,23 +106,83 @@ function saveUserPreferences(username, preferences) {
   }
 }
 
+/**
+ * Génère un layout et des anchors par défaut à partir des apps dans les zones
+ */
+function generateDefaultLauncher(zones) {
+  const layout = {
+    weather: { col: 2, row: 0, w: 3, h: 2 }
+  };
+  const anchors = {
+    weather: 2
+  };
+  
+  // Extraire toutes les apps des zones
+  const apps = [];
+  if (zones && typeof zones === 'object') {
+    Object.values(zones).forEach(zone => {
+      if (Array.isArray(zone)) {
+        zone.forEach(appId => {
+          if (appId && appId.startsWith('app-') && !apps.includes(appId)) {
+            apps.push(appId);
+          }
+        });
+      }
+    });
+  }
+  
+  // Placer les apps en ligne à partir de col=2, row=2
+  let col = 2;
+  const row = 2;
+  let anchor = 22;
+  
+  apps.forEach(appId => {
+    layout[appId] = { col, row, w: 1, h: 1 };
+    anchors[appId] = anchor;
+    col += 1;
+    anchor += 1;
+  });
+  
+  return {
+    anchors,
+    layout,
+    widgets: [],
+    apps
+  };
+}
+
 // GET /api/user/preferences - Récupérer les préférences de l'utilisateur
 router.get('/user/preferences', verifyToken, (req, res) => {
   try {
     const username = req.user.uid || req.user.username; // uid est le nom d'utilisateur dans le JWT
     console.log('[userPreferences] GET pour utilisateur:', username);
-    const preferences = loadUserPreferences(username);
+    let preferences = loadUserPreferences(username);
     
-    if (preferences) {
-      res.json(preferences);
-    } else {
-      // Retourner des préférences par défaut
-      res.json({
+    if (!preferences) {
+      // Créer des préférences par défaut si elles n'existent pas
+      preferences = {
         zones: {},
         theme: 'default',
-        language: 'fr'
-      });
+        language: 'fr',
+        launcher: {
+          anchors: {},
+          layout: {},
+          widgets: [],
+          apps: []
+        }
+      };
+      // Sauvegarder ces préférences par défaut
+      console.log('[userPreferences] Création du fichier de préférences par défaut pour:', username);
+      saveUserPreferences(username, preferences);
+    } else if (!preferences.launcher || Object.keys(preferences.launcher.layout || {}).length === 0) {
+      // Si le fichier existe mais n'a pas de section launcher OU si le layout est vide, générer les valeurs par défaut
+      const defaultLauncher = generateDefaultLauncher(preferences.zones);
+      preferences.launcher = defaultLauncher;
+      console.log('[userPreferences] Génération du launcher par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps');
+      saveUserPreferences(username, preferences);
     }
+    
+    res.json(preferences);
   } catch (error) {
     console.error('[userPreferences] Erreur GET:', error);
     res.status(500).json({ error: 'Erreur serveur' });

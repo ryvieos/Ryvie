@@ -97,7 +97,24 @@ const GridLauncher = ({
     return () => clearTimeout(timer);
   }, [layout, onLayoutChange]);
 
-  // Sauvegarder après un changement manuel (drag & drop)
+  // Détecter l'ajout/suppression de widgets et marquer comme changement manuel
+  const prevWidgetsCountRef = useRef(null);
+  useEffect(() => {
+    // Initialiser au premier rendu
+    if (prevWidgetsCountRef.current === null) {
+      prevWidgetsCountRef.current = widgets.length;
+      return;
+    }
+    
+    // Un widget a été ajouté ou supprimé
+    if (prevWidgetsCountRef.current !== widgets.length && initialNotificationSent.current && layout && Object.keys(layout).length > 0) {
+      console.log('[GridLauncher] ✅ Changement de widgets détecté, marquage pour sauvegarde');
+      pendingManualSaveRef.current = true;
+      prevWidgetsCountRef.current = widgets.length;
+    }
+  }, [widgets.length, layout]);
+
+  // Sauvegarder après un changement manuel (drag & drop OU ajout/suppression widget)
   useEffect(() => {
     if (!pendingManualSaveRef.current || !onLayoutChange) return;
     if (!layout || Object.keys(layout).length === 0) return;
@@ -247,7 +264,8 @@ const GridLauncher = ({
         className="grid-container"
         style={{
           gridTemplateColumns: `repeat(${cols}, ${slotSize}px)`,
-          gap: `${gap}px`
+          gap: `${gap}px`,
+          gridAutoRows: `${slotSize}px`
         }}
         onPointerMove={handlers.onPointerMove}
         onPointerUp={handlers.onPointerUp}
@@ -263,11 +281,6 @@ const GridLauncher = ({
             style={{
               gridColumn: `${layout['weather'].col + 1} / span 3`,
               gridRow: `${layout['weather'].row + 1} / span 2`,
-              backgroundImage: weatherImages[`./${weather.icon}`] ? `url(${weatherImages[`./${weather.icon}`]})` : 'linear-gradient(135deg, rgba(100, 180, 255, 0.9), rgba(80, 150, 255, 0.9))',
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              // Visuel 3x1.5: hauteur = 1.5 * slotSize + 0.5 * gap, épinglé en haut de sa zone 3x2
-              height: `${slotSize * 1.5 + gap * 0.5}px`,
               alignSelf: 'start',
               animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${Math.max(0, (layout['weather'].col || 0)) * 180}ms forwards`
             }}
@@ -283,24 +296,33 @@ const GridLauncher = ({
             }}
             tabIndex={0}
           >
-            <div className="weather-overlay" />
-            <div className="weather-content">
-              <div className="weather-city">{weather.location || 'Localisation...'}</div>
-              <div className="weather-temp">
-                {weather.temperature ? `${Math.round(weather.temperature)}°C` : '...'}
-              </div>
-              <div className="weather-details">
-                <div className="weather-humidity">
-                  {weatherIcons['./humidity.png'] && (
-                    <img src={weatherIcons['./humidity.png']} alt="Humidité" />
-                  )}
-                  {weather.humidity ? `${weather.humidity}%` : '...'}
+            <div
+              className="weather-card"
+              style={{
+                backgroundImage: weatherImages[`./${weather.icon}`] ? `url(${weatherImages[`./${weather.icon}`]})` : 'linear-gradient(135deg, rgba(100, 180, 255, 0.9), rgba(80, 150, 255, 0.9))',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center'
+              }}
+            >
+              <div className="weather-overlay" />
+              <div className="weather-content">
+                <div className="weather-city">{weather.location || 'Localisation...'}</div>
+                <div className="weather-temp">
+                  {weather.temperature ? `${Math.round(weather.temperature)}°C` : '...'}
                 </div>
-                <div className="weather-wind">
-                  {weatherIcons['./wind.png'] && (
-                    <img src={weatherIcons['./wind.png']} alt="Vent" />
-                  )}
-                  {weather.wind ? `${Math.round(weather.wind)} km/h` : '...'}
+                <div className="weather-details">
+                  <div className="weather-humidity">
+                    {weatherIcons['./humidity.png'] && (
+                      <img src={weatherIcons['./humidity.png']} alt="Humidité" />
+                    )}
+                    {weather.humidity ? `${weather.humidity}%` : '...'}
+                  </div>
+                  <div className="weather-wind">
+                    {weatherIcons['./wind.png'] && (
+                      <img src={weatherIcons['./wind.png']} alt="Vent" />
+                    )}
+                    {weather.wind ? `${Math.round(weather.wind)} km/h` : '...'}
+                  </div>
                 </div>
               </div>
             </div>

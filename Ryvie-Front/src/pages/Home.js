@@ -804,86 +804,14 @@ const Home = () => {
       type: widgetType
     };
     
-    setWidgets(prev => {
-      const newWidgets = [...prev, newWidget];
-      
-      // Sauvegarder immédiatement avec la nouvelle liste de widgets
-      setTimeout(() => {
-        if (!accessMode || !currentUserName || !launcherLoadedFromBackend) {
-          console.log('[Home] ⏸️  Sauvegarde widget ignorée: conditions non remplies');
-          return;
-        }
-        
-        const serverUrl = getServerUrl(accessMode);
-        const appsList = launcherLayout && typeof launcherLayout === 'object'
-          ? Object.entries(launcherLayout)
-              .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
-              .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
-              .map(([id]) => id)
-          : Object.values(zones).flat().filter(id => id && appsConfig[id]);
-        const payload = {
-          launcher: {
-            anchors: launcherAnchors || {},
-            layout: launcherLayout || {},
-            widgets: newWidgets, // Utiliser la nouvelle liste
-            apps: appsList
-          }
-        };
-        
-        axios.patch(`${serverUrl}/api/user/preferences/launcher`, payload)
-          .then(() => {
-            console.log('[Home] ✅ Widget ajouté et sauvegardé sur le backend');
-          })
-          .catch((e) => {
-            console.error('[Home] ❌ Erreur sauvegarde après ajout widget:', e);
-          });
-      }, 500); // Délai plus long pour laisser le layout se stabiliser
-      
-      return newWidgets;
-    });
-  }, [accessMode, currentUserName, launcherLoadedFromBackend, launcherLayout, launcherAnchors, zones, appsConfig]);
+    setWidgets(prev => [...prev, newWidget]);
+  }, []);
   
   // Handler: supprimer un widget
   const handleRemoveWidget = React.useCallback((widgetId) => {
     console.log('[Home] Suppression du widget:', widgetId);
-    setWidgets(prev => {
-      const newWidgets = prev.filter(w => w.id !== widgetId);
-      
-      // Sauvegarder immédiatement avec la nouvelle liste de widgets
-      setTimeout(() => {
-        if (!accessMode || !currentUserName || !launcherLoadedFromBackend) {
-          console.log('[Home] ⏸️  Sauvegarde widget ignorée: conditions non remplies');
-          return;
-        }
-        
-        const serverUrl = getServerUrl(accessMode);
-        const appsList = launcherLayout && typeof launcherLayout === 'object'
-          ? Object.entries(launcherLayout)
-              .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
-              .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
-              .map(([id]) => id)
-          : Object.values(zones).flat().filter(id => id && appsConfig[id]);
-        const payload = {
-          launcher: {
-            anchors: launcherAnchors || {},
-            layout: launcherLayout || {},
-            widgets: newWidgets, // Utiliser la nouvelle liste
-            apps: appsList
-          }
-        };
-        
-        axios.patch(`${serverUrl}/api/user/preferences/launcher`, payload)
-          .then(() => {
-            console.log('[Home] ✅ Widget supprimé et sauvegardé sur le backend');
-          })
-          .catch((e) => {
-            console.error('[Home] ❌ Erreur sauvegarde après suppression widget:', e);
-          });
-      }, 100);
-      
-      return newWidgets;
-    });
-  }, [accessMode, currentUserName, serverStatus, launcherLoadedFromBackend, launcherLayout, launcherAnchors, zones, appsConfig]);
+    setWidgets(prev => prev.filter(w => w.id !== widgetId));
+  }, []);
   
   // Mettre à jour les statuts quand appsConfig change
   useEffect(() => {

@@ -155,6 +155,18 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
           if (pos) {
             newLayout[item.id] = pos;
             hasChanges = true;
+            
+            // Créer une ancre pour le nouvel item basée sur sa position
+            setAnchors(prevAnchors => {
+              if (prevAnchors[item.id] == null) {
+                const newAnchors = { ...prevAnchors };
+                const anchorIndex = pos.row * BASE_COLS + pos.col;
+                newAnchors[item.id] = anchorIndex;
+                console.log(`[useGridLayout] Ancre créée pour ${item.id}: ${anchorIndex} (pos: ${pos.col},${pos.row})`);
+                return newAnchors;
+              }
+              return prevAnchors;
+            });
           }
         }
       });
