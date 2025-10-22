@@ -67,23 +67,36 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
       });
 
       if (needsReorganization) {
-        console.log('[useGridLayout] Réorganisation nécessaire, cols:', cols);
+        console.log('[useGridLayout] 🔄 Réorganisation intelligente, cols:', cols);
 
-        // Utiliser les ancres de l'état
-
-        // Créer des ancres manquantes (ordre items)
+        // Utiliser les ancres existantes sans les modifier (pour préserver la position d'origine)
+        // Créer des ancres UNIQUEMENT pour les nouveaux items
+        const newAnchors = {};
         let nextAnchor = Object.values(anchors).length > 0 ? Math.max(...Object.values(anchors)) + 1 : 0;
+        
         items.forEach(it => {
           if (anchors[it.id] == null) {
-            anchors[it.id] = nextAnchor;
-            nextAnchor += (it.w || 1) * (it.h || 1) === 4 ? 4 : 1; // réserver plus pour météo
+            // Nouvel item sans ancre
+            newAnchors[it.id] = nextAnchor;
+            nextAnchor += (it.w || 1) * (it.h || 1) === 4 ? 4 : 1;
           }
         });
+        
+        // Sauvegarder les nouvelles ancres si il y en a
+        if (Object.keys(newAnchors).length > 0) {
+          setAnchors(prev => ({ ...prev, ...newAnchors }));
+        }
 
-        // Ordonner par anchor croissant
-        const ordered = [...items].sort((a, b) => (anchors[a.id] || 0) - (anchors[b.id] || 0));
+        // Trier par ancre pour préserver l'ordre relatif (utiliser les ancres existantes)
+        const ordered = [...items].sort((a, b) => {
+          const anchorA = anchors[a.id] ?? newAnchors[a.id] ?? 0;
+          const anchorB = anchors[b.id] ?? newAnchors[b.id] ?? 0;
+          return anchorA - anchorB;
+        });
 
-        // Grille d'occupation
+        console.log('[useGridLayout] 📋 Ordre de placement:', ordered.map(it => `${it.id}(${it.w}×${it.h})`).join(', '));
+
+        // Grille d'occupation pour éviter les collisions
         const occupied = new Set();
         const mark = (c, r, w, h) => {
           for (let rr = r; rr < r + h; rr++) {
@@ -102,41 +115,55 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
           return true;
         };
 
+        // Trouver la prochaine position libre en scannant de gauche à droite, ligne par ligne
+        const findNextFreePosition = (w, h, startRow = 0) => {
+          for (let r = startRow; r < 100; r++) {
+            for (let c = 0; c <= cols - w; c++) {
+              if (canPlace(c, r, w, h)) {
+                return { col: c, row: r };
+              }
+            }
+          }
+          return { col: 0, row: startRow }; // fallback
+        };
+
         const tempLayout = {};
+        let currentRow = 0;
+
         ordered.forEach(it => {
           const w = it.w || 1;
           const h = it.h || 1;
-          const anchor = anchors[it.id] || 0;
-          // Calculer la position cible basée sur BASE_COLS (grille de référence)
+          const anchor = anchors[it.id] ?? newAnchors[it.id] ?? 0;
+          
+          // Calculer la position d'origine basée sur l'ancre (grille de référence BASE_COLS)
           let targetRow = Math.floor(anchor / BASE_COLS);
           let targetCol = anchor % BASE_COLS;
-
-          // si déborde la ligne, forcer retour ligne
-          if (targetCol + w > cols) {
-            targetCol = 0;
-            targetRow += 1;
+          
+          // Si on a le nombre de colonnes maximum (ou proche), essayer de placer exactement à la position d'origine
+          let pos;
+          if (cols >= BASE_COLS && targetCol + w <= cols && canPlace(targetCol, targetRow, w, h)) {
+            // Position d'origine disponible !
+            pos = { col: targetCol, row: targetRow };
+            console.log(`[useGridLayout] 🎯 ${it.id} replacé à sa position d'origine (${targetCol}, ${targetRow})`);
+          } else {
+            // Sinon, chercher la meilleure position disponible
+            // Pour une réorganisation fluide, chercher à partir de la ligne courante
+            const searchStartRow = cols < BASE_COLS ? Math.max(0, Math.floor(targetRow * 0.7)) : 0;
+            pos = findNextFreePosition(w, h, searchStartRow);
           }
-
-          // si collision, trouver prochaine case libre (scan)
-          let placed = false;
-          let r = targetRow;
-          let c = targetCol;
-          for (let guard = 0; guard < 10000 && !placed; guard++) {
-            if (canPlace(c, r, w, h)) {
-              tempLayout[it.id] = { col: c, row: r, w, h };
-              mark(c, r, w, h);
-              placed = true;
-              break;
+          
+          tempLayout[it.id] = { col: pos.col, row: pos.row, w, h };
+          mark(pos.col, pos.row, w, h);
+          
+          // Mettre à jour la ligne courante pour optimiser le placement suivant
+          if (pos.row >= currentRow) {
+            // Si on a placé un item sur une nouvelle ligne, on avance
+            if (pos.col + w >= cols - 1) {
+              currentRow = pos.row + h;
             }
-            // avancer
-            c += 1;
-            if (c + w > cols) { c = 0; r += 1; }
           }
-          if (!placed) {
-            // fallback
-            tempLayout[it.id] = { col: 0, row: r, w, h };
-            mark(0, r, w, h);
-          }
+          
+          console.log(`[useGridLayout] ✅ ${it.id} placé à (${pos.col}, ${pos.row})`);
         });
 
         // Remplacer entièrement le layout par le nouveau placement
@@ -144,8 +171,9 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
         Object.assign(newLayout, tempLayout);
         hasChanges = true;
 
-        // Mettre à jour l'état des ancres
-        setAnchors(anchors);
+        // NE PAS mettre à jour les ancres ici - elles restent fixes pour permettre
+        // de revenir à la position d'origine quand on agrandit la fenêtre
+        console.log('[useGridLayout] ✅ Réorganisation terminée, ancres préservées');
       }
 
       // Ajouter les nouveaux items
