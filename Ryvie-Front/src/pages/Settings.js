@@ -363,6 +363,13 @@ const Settings = () => {
         const prefsResponse = await axios.get(`${serverUrl}/api/user/preferences`);
         if (prefsResponse.data?.backgroundImage) {
           setBackgroundImage(prefsResponse.data.backgroundImage);
+          // Mettre en cache pour affichage instantan e dans Home
+          try {
+            const currentUser = getCurrentUser();
+            if (currentUser) {
+              localStorage.setItem(`ryvie_bg_${currentUser}`, prefsResponse.data.backgroundImage);
+            }
+          } catch {}
         }
         
         // Charger le mode sombre et autoTheme
@@ -654,6 +661,15 @@ const Settings = () => {
       const serverUrl = getServerUrl(accessMode);
       // OPTIMISTE: appliquer immédiatement le fond dans l'UI
       setBackgroundImage(newBackground);
+      // Mettre à jour le cache localStorage scopé par utilisateur
+      try {
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+          localStorage.setItem(`ryvie_bg_${currentUser}`, newBackground);
+        }
+        // Notifier immédiatement les autres pages montées (Home) dans la même SPA
+        try { window.dispatchEvent(new CustomEvent('ryvie:background-changed', { detail: newBackground })); } catch {}
+      } catch {}
       // Sauvegarder en arrière-plan
       axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: newBackground })
         .catch(err => console.warn('[Settings] Erreur patch background (async):', err?.message || err));
@@ -941,6 +957,15 @@ const Settings = () => {
           console.log(`[Settings] Passage au fond: ${targetBg}`);
           await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: targetBg });
           setBackgroundImage(targetBg);
+          // Mettre à jour le cache localStorage scopé par utilisateur
+          try {
+            const currentUser = getCurrentUser();
+            if (currentUser) {
+              localStorage.setItem(`ryvie_bg_${currentUser}`, targetBg);
+            }
+            // Notifier immédiatement les autres pages montées (Home) dans la même SPA
+            try { window.dispatchEvent(new CustomEvent('ryvie:background-changed', { detail: targetBg })); } catch {}
+          } catch {}
         }
       } catch (error) {
         console.error('[Settings] Erreur sauvegarde mode sombre:', error);

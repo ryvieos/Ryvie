@@ -474,7 +474,17 @@ const Home = () => {
     const cached = StorageManager.getItem('iconImages_cache');
     return cached || images;
   }); // Images locales
-  const [backgroundImage, setBackgroundImage] = useState('default'); // Fond d'écran utilisateur
+  const [backgroundImage, setBackgroundImage] = useState(() => {
+    // Charger le fond depuis le cache localStorage par utilisateur
+    try {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const cached = localStorage.getItem(`ryvie_bg_${currentUser}`);
+        if (cached && typeof cached === 'string') return cached;
+      }
+    } catch {}
+    return 'default';
+  }); // Fond d'écran utilisateur
   const [weatherCity, setWeatherCity] = useState(null); // Ville configurée par l'utilisateur
   const [weatherCityLoaded, setWeatherCityLoaded] = useState(false); // Indique si les préférences sont chargées
   const [showWeatherModal, setShowWeatherModal] = useState(false);
@@ -1205,12 +1215,52 @@ const Home = () => {
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState === 'visible') {
+        // Rafraîchir météo
         setWeatherRefreshTick(t => t + 1);
+        // Synchroniser le fond depuis le cache per-user
+        try {
+          const currentUser = getCurrentUser();
+          if (currentUser) {
+            const cachedBg = localStorage.getItem(`ryvie_bg_${currentUser}`);
+            if (cachedBg && cachedBg !== backgroundImage) {
+              setBackgroundImage(cachedBg);
+            }
+          }
+        } catch {}
       }
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
+
+  // Écouter les changements de cache (autre onglet/page) et appliquer instantanément
+  useEffect(() => {
+    const handler = (e) => {
+      try {
+        const currentUser = getCurrentUser();
+        if (!currentUser) return;
+        if (e.key === `ryvie_bg_${currentUser}` && e.newValue && e.newValue !== backgroundImage) {
+          setBackgroundImage(e.newValue);
+        }
+      } catch {}
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, [backgroundImage]);
+
+  // Écouter l'évènement custom intra-onglet pour mise à jour immédiate (Settings -> Home)
+  useEffect(() => {
+    const onBgChanged = (e) => {
+      try {
+        const next = e && e.detail;
+        if (typeof next === 'string' && next && next !== backgroundImage) {
+          setBackgroundImage(next);
+        }
+      } catch {}
+    };
+    window.addEventListener('ryvie:background-changed', onBgChanged);
+    return () => window.removeEventListener('ryvie:background-changed', onBgChanged);
+  }, [backgroundImage]);
 
   // Supprimer ce useEffect dupliqué car géré dans le premier useEffect
 
@@ -1393,6 +1443,13 @@ const Home = () => {
         if (res.data?.backgroundImage) {
           console.log('[Home] 🎨 Fond d\'écran chargé:', res.data.backgroundImage);
           setBackgroundImage(res.data.backgroundImage);
+          // Mettre à jour le cache localStorage pour synchroniser avec Settings
+          try {
+            const currentUser = getCurrentUser();
+            if (currentUser) {
+              localStorage.setItem(`ryvie_bg_${currentUser}`, res.data.backgroundImage);
+            }
+          } catch {}
         }
         
         // Charger layout/anchors de la grille depuis le backend (source de vérité)
