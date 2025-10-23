@@ -54,19 +54,21 @@ const Settings = () => {
     notificationsEnabled: true,
     darkMode: (() => {
       try {
-        if (typeof document !== 'undefined' && document.body.classList.contains('dark-mode')) return true;
-        const cached = localStorage.getItem('ryvie_dark_mode');
-        if (cached === 'true' || cached === 'false') return cached === 'true';
-        if (typeof window !== 'undefined' && window.matchMedia) {
-          return window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+          const cached = localStorage.getItem(`ryvie_dark_mode_${currentUser}`);
+          if (cached === 'true' || cached === 'false') return cached === 'true';
         }
       } catch {}
       return false;
     })(),
     autoTheme: (() => {
       try {
-        const v = localStorage.getItem('ryvie_auto_theme');
-        if (v === 'false') return false;
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+          const cached = localStorage.getItem(`ryvie_auto_theme_${currentUser}`);
+          if (cached === 'false') return false;
+        }
       } catch {}
       return true;
     })(),
@@ -317,7 +319,13 @@ const Settings = () => {
       document.body.classList.remove('dark-mode');
       console.log('[Settings] Mode sombre désactivé');
     }
-    try { localStorage.setItem('ryvie_dark_mode', String(!!settings.darkMode)); } catch {}
+    // Sauvegarder dans localStorage scopé par utilisateur pour cache
+    try {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        localStorage.setItem(`ryvie_dark_mode_${currentUser}`, String(!!settings.darkMode));
+      }
+    } catch {}
   }, [settings.darkMode]);
 
   // S'assurer que accessMode est cohérent et persistant au montage
@@ -357,7 +365,7 @@ const Settings = () => {
           setBackgroundImage(prefsResponse.data.backgroundImage);
         }
         
-        // Charger le mode sombre
+        // Charger le mode sombre et autoTheme
         if (prefsResponse.data?.darkMode !== undefined) {
           console.log('[Settings] Mode sombre chargé:', prefsResponse.data.darkMode);
           setSettings(prev => ({
@@ -365,6 +373,14 @@ const Settings = () => {
             darkMode: prefsResponse.data.darkMode
           }));
         }
+        
+        // Charger autoTheme (par défaut true si non défini)
+        const autoTheme = prefsResponse.data?.autoTheme !== undefined ? prefsResponse.data.autoTheme : true;
+        console.log('[Settings] AutoTheme chargé:', autoTheme);
+        setSettings(prev => ({
+          ...prev,
+          autoTheme: autoTheme
+        }));
         
         // Charger liste des fonds personnalisés
         const backgroundsResponse = await axios.get(`${serverUrl}/api/user/preferences/backgrounds/list`);
@@ -866,8 +882,15 @@ const Settings = () => {
       try {
         const serverUrl = getServerUrl(accessMode);
         await axios.patch(`${serverUrl}/api/user/preferences/dark-mode`, { darkMode: value });
-        console.log('[Settings] Mode sombre sauvegardé:', value);
-        try { localStorage.setItem('ryvie_dark_mode', String(!!value)); } catch {}
+        console.log('[Settings] Mode sombre sauvegardé pour utilisateur:', value);
+        
+        // Mettre à jour le cache localStorage scopé par utilisateur
+        try {
+          const currentUser = getCurrentUser();
+          if (currentUser) {
+            localStorage.setItem(`ryvie_dark_mode_${currentUser}`, String(!!value));
+          }
+        } catch {}
         
         // RÈGLE STRICTE: Ne JAMAIS changer un fond personnalisé
         if (isBackgroundCustom(backgroundImage)) {
@@ -901,7 +924,18 @@ const Settings = () => {
         ...prev,
         autoTheme: value
       }));
-      try { localStorage.setItem('ryvie_auto_theme', String(!!value)); } catch {}
+      // Sauvegarder autoTheme dans les préférences utilisateur backend
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        await axios.patch(`${serverUrl}/api/user/preferences`, { autoTheme: value });
+        console.log('[Settings] AutoTheme sauvegardé pour utilisateur:', value);
+        
+        // Mettre à jour le cache localStorage scopé par utilisateur
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+          localStorage.setItem(`ryvie_auto_theme_${currentUser}`, String(!!value));
+        }
+      } catch (e) { console.warn('[Settings] Erreur sauvegarde autoTheme:', e?.message || e); }
       // Si on active Auto, appliquer immédiatement la préférence système
       try {
         if (value) {
@@ -909,7 +943,6 @@ const Settings = () => {
           const serverUrl = getServerUrl(accessMode);
           await axios.patch(`${serverUrl}/api/user/preferences/dark-mode`, { darkMode: preferDark });
           setSettings(prev => ({ ...prev, darkMode: preferDark }));
-          try { localStorage.setItem('ryvie_dark_mode', String(!!preferDark)); } catch {}
         }
       } catch (e) { console.warn('[Settings] Synchro darkMode avec système échouée:', e?.message || e); }
     } else {

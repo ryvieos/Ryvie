@@ -305,7 +305,7 @@ router.patch('/user/preferences', verifyToken, (req, res) => {
     }
 
     // Copier les autres clés simples si fournies
-    ['zones','theme','language','backgroundImage','darkMode','weatherCity'].forEach(k => {
+    ['zones','theme','language','backgroundImage','darkMode','weatherCity','autoTheme'].forEach(k => {
       if (k in incoming) preferences[k] = incoming[k];
     });
 

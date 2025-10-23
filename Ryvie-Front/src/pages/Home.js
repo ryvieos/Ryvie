@@ -532,6 +532,21 @@ const Home = () => {
   const [mounted, setMounted] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [currentSocket, setCurrentSocket] = useState(null);
+  
+  // Appliquer le darkMode depuis localStorage au montage (avant le chargement backend)
+  React.useLayoutEffect(() => {
+    try {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const cached = localStorage.getItem(`ryvie_dark_mode_${currentUser}`);
+        if (cached === 'true') {
+          document.body.classList.add('dark-mode');
+        } else if (cached === 'false') {
+          document.body.classList.remove('dark-mode');
+        }
+      }
+    } catch {}
+  }, []);
   const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
   const [taskbarReady, setTaskbarReady] = useState(false); // Animations taskbar quand les icônes de la barre sont chargées
   const [zonesReady, setZonesReady] = useState(false); // Animations zones quand les icônes des apps sont chargées
