@@ -132,22 +132,65 @@ function compareVersions(current, latest) {
 }
 
 /**
- * Vérifie les mises à jour pour Ryvie
+ * Récupère le dernier tag local accessible depuis HEAD dans un repo
+ */
+function getLocalLatestTag(dir) {
+  try {
+    const tag = execSync('git describe --tags --abbrev=0', { cwd: dir, encoding: 'utf8' }).trim();
+    return tag || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Récupère le dernier tag distant (origin) en triant par version
+ */
+function getRemoteLatestTag(dir) {
+  try {
+    const out = execSync('git ls-remote --tags --refs origin', { cwd: dir, encoding: 'utf8' });
+    const tags = out
+      .split('\n')
+      .map(l => (l.split('\t')[1] || '').replace('refs/tags/', '').trim())
+      .filter(Boolean);
+    if (tags.length === 0) return null;
+    // Trier avec compareVersions
+    const sorted = tags.sort((a, b) => {
+      const res = compareVersions(a, b);
+      if (res === null) return 0; // si invalide, ne change pas l'ordre
+      // compareVersions renvoie 'update-available' si b > a (latest > current)
+      if (res === 'update-available') return -1; // b > a => a avant b
+      if (res === 'ahead') return 1; // b < a => a après b
+      return 0; // égalité
+    });
+    return sorted[sorted.length - 1] || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Vérifie les mises à jour pour Ryvie (basé sur tags Git locaux/distants)
  */
 async function checkRyvieUpdate() {
-  const currentVersion = getCurrentRyvieVersion();
   const currentBranch = getCurrentBranch(RYVIE_DIR);
-  // D'abord essayer les releases de la branche courante, sinon fallback aux tags
-  const fromRelease = await getLatestGitHubReleaseForBranch('maisonnavejul', 'Ryvie', currentBranch);
-  const latestVersion = fromRelease || await getLatestGitHubTag('maisonnavejul', 'Ryvie');
-  
-  const status = compareVersions(currentVersion, latestVersion);
+  const localTag = getLocalLatestTag(RYVIE_DIR);
+  const remoteTag = getRemoteLatestTag(RYVIE_DIR);
+
+  // Fallback GitHub API si pas de remote tag récupéré (ex: pas de remote, erreurs réseau)
+  let latestVersion = remoteTag;
+  if (!latestVersion) {
+    const fromRelease = await getLatestGitHubReleaseForBranch('maisonnavejul', 'Ryvie', currentBranch);
+    latestVersion = fromRelease || await getLatestGitHubTag('maisonnavejul', 'Ryvie');
+  }
+
+  const status = compareVersions(localTag, latestVersion);
   
   return {
     name: 'Ryvie',
     repo: 'maisonnavejul/Ryvie',
     branch: currentBranch,
-    currentVersion,
+    currentVersion: localTag,
     latestVersion,
     updateAvailable: status === 'update-available',
     status
