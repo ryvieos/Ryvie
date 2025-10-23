@@ -15,6 +15,33 @@ const PRESETS_DIR = '/opt/Ryvie/Ryvie-Front/public/images/backgrounds'; // Fonds
 if (!fs.existsSync(PREFERENCES_DIR)) {
   fs.mkdirSync(PREFERENCES_DIR, { recursive: true });
 }
+
+/**
+ * Récupère la liste des ids d'apps installées (depuis /data/config/manifests)
+ * Retourne un tableau d'ids formatés 'app-<id>'
+ */
+async function getInstalledAppIds() {
+  const fs = require('fs');
+  const path = require('path');
+  const manifestsDir = '/data/config/manifests';
+  const apps = [];
+  try {
+    if (!fs.existsSync(manifestsDir)) return apps;
+    const appFolders = fs.readdirSync(manifestsDir).filter(f => {
+      const stat = fs.statSync(path.join(manifestsDir, f));
+      return stat.isDirectory();
+    });
+    for (const folder of appFolders) {
+      const manifestPath = path.join(manifestsDir, folder, 'manifest.json');
+      if (!fs.existsSync(manifestPath)) continue;
+      try {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        if (manifest.id) apps.push(`app-${manifest.id}`);
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return apps;
+}
 if (!fs.existsSync(BACKGROUNDS_DIR)) {
   fs.mkdirSync(BACKGROUNDS_DIR, { recursive: true });
 }
@@ -212,6 +239,61 @@ router.get('/user/preferences', verifyToken, async (req, res) => {
       preferences.launcher = defaultLauncher;
       console.log('[userPreferences] Génération du launcher par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps');
       saveUserPreferences(username, preferences);
+    }
+
+    // Réconciliation: ajouter les nouvelles apps détectées qui manquent dans le launcher
+    try {
+      const installed = await getInstalledAppIds();
+      preferences.launcher = preferences.launcher || { anchors: {}, layout: {}, widgets: [], apps: [] };
+      const existingApps = Array.isArray(preferences.launcher.apps) ? preferences.launcher.apps : [];
+      const missing = installed.filter(id => !existingApps.includes(id));
+      if (missing.length > 0) {
+        const layout = preferences.launcher.layout || {};
+        const anchors = preferences.launcher.anchors || {};
+        // Trouver le max col et max anchor existants pour démarrer à la suite
+        let col = 2;
+        let anchor = 22;
+        // si des apps existent déjà, prendre la plus grande colonne sur la row 2 et l'anchor max
+        for (const [id, pos] of Object.entries(layout)) {
+          if (!pos) continue;
+          if (typeof pos.col === 'number') col = Math.max(col, pos.col + 1);
+        }
+        for (const a of Object.values(anchors)) {
+          if (typeof a === 'number') anchor = Math.max(anchor, a + 1);
+        }
+        const row = 2;
+        missing.forEach((appId) => {
+          if (!layout[appId]) layout[appId] = { col, row, w: 1, h: 1 };
+          if (typeof anchors[appId] !== 'number') anchors[appId] = anchor;
+          col += 1;
+          anchor += 1;
+        });
+        preferences.launcher.layout = layout;
+        preferences.launcher.anchors = anchors;
+        preferences.launcher.apps = [...existingApps, ...missing];
+        console.log(`[userPreferences] Réconciliation: ${missing.length} app(s) ajoutée(s):`, missing);
+        saveUserPreferences(username, preferences);
+      }
+
+      // Nettoyage: retirer les apps obsolètes (non installées)
+      const obsolete = existingApps.filter(id => !installed.includes(id));
+      if (obsolete.length > 0) {
+        const layout = preferences.launcher.layout || {};
+        const anchors = preferences.launcher.anchors || {};
+        obsolete.forEach((appId) => {
+          try { delete layout[appId]; } catch (_) {}
+          try { delete anchors[appId]; } catch (_) {}
+        });
+        // Filtrer la liste des apps
+        const cleanedApps = existingApps.filter(id => !obsolete.includes(id));
+        preferences.launcher.layout = layout;
+        preferences.launcher.anchors = anchors;
+        preferences.launcher.apps = cleanedApps;
+        console.log(`[userPreferences] Nettoyage: ${obsolete.length} app(s) supprimée(s) des préférences:`, obsolete);
+        saveUserPreferences(username, preferences);
+      }
+    } catch (e) {
+      console.warn('[userPreferences] Réconciliation des apps échouée:', e?.message);
     }
     
     res.json(preferences);

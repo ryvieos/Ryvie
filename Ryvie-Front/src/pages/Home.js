@@ -1619,12 +1619,17 @@ const Home = () => {
           )}
           <div className="content">
             <GridLauncher
-              apps={(launcherLayout && typeof launcherLayout === 'object' && Object.keys(launcherLayout).length > 0)
-                ? Object.entries(launcherLayout)
-                    .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
-                    .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
-                    .map(([id]) => id)
-                : Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-'))}
+              apps={(function() {
+                const hasLayout = launcherLayout && typeof launcherLayout === 'object' && Object.keys(launcherLayout).length > 0;
+                const allAppIds = Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-'));
+                if (!hasLayout) return allAppIds;
+                const orderedFromLayout = Object.entries(launcherLayout)
+                  .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+                  .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
+                  .map(([id]) => id);
+                const missing = allAppIds.filter(id => !orderedFromLayout.includes(id));
+                return [...orderedFromLayout, ...missing];
+              })()}
               weather={weather}
               weatherImages={weatherImages}
               weatherIcons={weatherIcons}

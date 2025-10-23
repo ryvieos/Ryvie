@@ -427,6 +427,32 @@ function main() {
   
   console.log(`\n✅ ${scannedApps.length} app(s) détectée(s)\n`);
   
+  // Nettoyer les manifests orphelins (apps supprimées de /data/apps/)
+  try {
+    const existingManifests = fs.readdirSync(MANIFESTS_DIR, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name);
+    
+    const scannedIds = scannedApps.map(app => app.id);
+    const orphans = existingManifests.filter(id => !scannedIds.includes(id));
+    
+    if (orphans.length > 0) {
+      console.log(`🗑️  Nettoyage de ${orphans.length} manifest(s) orphelin(s):`);
+      orphans.forEach(id => {
+        const orphanPath = path.join(MANIFESTS_DIR, id);
+        try {
+          fs.rmSync(orphanPath, { recursive: true, force: true });
+          console.log(`   ✅ Supprimé: ${id}`);
+        } catch (e) {
+          console.warn(`   ⚠️  Impossible de supprimer ${id}:`, e.message);
+        }
+      });
+      console.log('');
+    }
+  } catch (e) {
+    console.warn('⚠️  Erreur lors du nettoyage des manifests orphelins:', e.message);
+  }
+  
   // Générer les manifests
   const generatedManifests = [];
   
