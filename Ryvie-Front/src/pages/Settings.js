@@ -13,7 +13,6 @@ import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getS
 import StorageSettings from './StorageSettings';
 
 const Settings = () => {
-  const AUTO_SWITCH_WALLPAPER_WITH_THEME = false; // désactive le changement auto du fond lors des bascules sombre/clair
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(() => {

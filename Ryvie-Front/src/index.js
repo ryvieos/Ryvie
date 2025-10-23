@@ -23,12 +23,6 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const App = () => {
-  const [homeSettingsCache, setHomeSettingsCache] = React.useState({
-    home: null,
-    settings: null,
-    currentPath: null
-  });
-
   useEffect(() => {
     // Initialiser la session au démarrage
     initializeSession();

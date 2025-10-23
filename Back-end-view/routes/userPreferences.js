@@ -107,9 +107,9 @@ function saveUserPreferences(username, preferences) {
 }
 
 /**
- * Génère un layout et des anchors par défaut à partir des apps dans les zones
+ * Génère un layout et des anchors par défaut à partir des apps installées
  */
-function generateDefaultLauncher(zones) {
+async function generateDefaultLauncher() {
   const layout = {
     weather: { col: 2, row: 0, w: 3, h: 2 }
   };
@@ -117,42 +117,74 @@ function generateDefaultLauncher(zones) {
     weather: 2
   };
   
-  // Extraire toutes les apps des zones
-  const apps = [];
-  if (zones && typeof zones === 'object') {
-    Object.values(zones).forEach(zone => {
-      if (Array.isArray(zone)) {
-        zone.forEach(appId => {
-          if (appId && appId.startsWith('app-') && !apps.includes(appId)) {
-            apps.push(appId);
+  try {
+    // Charger les apps depuis les manifests
+    const fs = require('fs');
+    const path = require('path');
+    const manifestsDir = '/data/config/manifests';
+    
+    const apps = [];
+    if (fs.existsSync(manifestsDir)) {
+      const appFolders = fs.readdirSync(manifestsDir).filter(f => {
+        const stat = fs.statSync(path.join(manifestsDir, f));
+        return stat.isDirectory();
+      });
+      
+      console.log('[generateDefaultLauncher] Dossiers trouvés:', appFolders);
+      
+      for (const folder of appFolders) {
+        const manifestPath = path.join(manifestsDir, folder, 'manifest.json');
+        if (fs.existsSync(manifestPath)) {
+          try {
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            console.log('[generateDefaultLauncher] Manifest lu:', folder, '-> id:', manifest.id);
+            if (manifest.id) {
+              apps.push(`app-${manifest.id}`);
+            }
+          } catch (e) {
+            console.warn(`[generateDefaultLauncher] Erreur lecture manifest ${folder}:`, e.message);
           }
-        });
+        } else {
+          console.warn(`[generateDefaultLauncher] Manifest non trouvé: ${manifestPath}`);
+        }
       }
+    } else {
+      console.warn('[generateDefaultLauncher] Répertoire manifests non trouvé:', manifestsDir);
+    }
+    
+    // Placer les apps en ligne à partir de col=2, row=2
+    let col = 2;
+    const row = 2;
+    let anchor = 22;
+    
+    apps.forEach(appId => {
+      layout[appId] = { col, row, w: 1, h: 1 };
+      anchors[appId] = anchor;
+      col += 1;
+      anchor += 1;
     });
+    
+    console.log('[generateDefaultLauncher] Généré avec', apps.length, 'apps:', apps);
+    
+    return {
+      anchors,
+      layout,
+      widgets: [],
+      apps
+    };
+  } catch (error) {
+    console.error('[generateDefaultLauncher] Erreur:', error);
+    return {
+      anchors,
+      layout,
+      widgets: [],
+      apps: []
+    };
   }
-  
-  // Placer les apps en ligne à partir de col=2, row=2
-  let col = 2;
-  const row = 2;
-  let anchor = 22;
-  
-  apps.forEach(appId => {
-    layout[appId] = { col, row, w: 1, h: 1 };
-    anchors[appId] = anchor;
-    col += 1;
-    anchor += 1;
-  });
-  
-  return {
-    anchors,
-    layout,
-    widgets: [],
-    apps
-  };
 }
 
 // GET /api/user/preferences - Récupérer les préférences de l'utilisateur
-router.get('/user/preferences', verifyToken, (req, res) => {
+router.get('/user/preferences', verifyToken, async (req, res) => {
   try {
     const username = req.user.uid || req.user.username; // uid est le nom d'utilisateur dans le JWT
     console.log('[userPreferences] GET pour utilisateur:', username);
@@ -174,9 +206,9 @@ router.get('/user/preferences', verifyToken, (req, res) => {
       // Sauvegarder ces préférences par défaut
       console.log('[userPreferences] Création du fichier de préférences par défaut pour:', username);
       saveUserPreferences(username, preferences);
-    } else if (!preferences.launcher || Object.keys(preferences.launcher.layout || {}).length === 0) {
-      // Si le fichier existe mais n'a pas de section launcher OU si le layout est vide, générer les valeurs par défaut
-      const defaultLauncher = generateDefaultLauncher(preferences.zones);
+    } else if (!preferences.launcher || !preferences.launcher.apps || preferences.launcher.apps.length === 0) {
+      // Si le fichier existe mais n'a pas de section launcher OU si apps est vide, générer les valeurs par défaut
+      const defaultLauncher = await generateDefaultLauncher();
       preferences.launcher = defaultLauncher;
       console.log('[userPreferences] Génération du launcher par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps');
       saveUserPreferences(username, preferences);

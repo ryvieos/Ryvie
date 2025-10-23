@@ -231,7 +231,7 @@
 
 /* Par défaut, invisible pour éviter le flash avant prêt */
 .grid-container .grid-slot {
-  opacity: 0;
+  opacity: 1;
 }
 
 /* Animer uniquement quand .zones-ready est présent sur GridLauncher */

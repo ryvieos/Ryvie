@@ -34,9 +34,6 @@ export const CachedRoutes = ({ homeComponent, settingsComponent }) => {
           {settingsComponent}
         </div>
       )}
-      
-      {/* Afficher le composant actuel si ce n'est ni Home ni Settings */}
-      {!isHome && !isSettings && null}
     </>
   );
 };

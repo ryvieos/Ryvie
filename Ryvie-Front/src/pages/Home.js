@@ -48,8 +48,8 @@ const ContextMenuPortal = ({ children, x, y, onClose }) => {
   );
   return ReactDOM.createPortal(menu, document.body);
 };
-// Composant Icon
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus }) => {
+// Composant Icon (legacy - non utilisé, conservé pour compatibilité)
+const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus }) => {
   const appConfig = appsConfig[id] || {};
   const [imgSrc, setImgSrc] = React.useState(src);
   const [imgError, setImgError] = React.useState(false);
@@ -342,16 +342,13 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
   );
 };
 
-// Composant Zone
-const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, appsConfig, iconImages, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus }) => {
+// Composant Zone (legacy - non utilisé, conservé pour compatibilité)
+const Zone = ({ zoneId, iconId, handleClick, showName, appStatus, appsConfig, iconImages, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus }) => {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: ItemTypes.ICON,
     canDrop: () => true,
     drop: (item) => {
-      if (item.id !== iconId[0] || item.zoneId !== zoneId) {
-        moveIcon(item.id, item.zoneId, zoneId);
-        item.zoneId = zoneId;
-      }
+      // Legacy - ne fait plus rien
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
@@ -378,7 +375,6 @@ const Zone = ({ zoneId, iconId, moveIcon, handleClick, showName, appStatus, apps
             id={iconId[0]}
             src={getIconSrc(iconId[0])}
             zoneId={zoneId}
-            moveIcon={moveIcon}
             handleClick={handleClick}
             showName={showName}
             appStatusData={appStatus[iconId[0]]}
@@ -491,24 +487,6 @@ const Home = () => {
   const [closingWeatherModal, setClosingWeatherModal] = useState(false);
   const [tempCity, setTempCity] = useState('');
   const [savingWeatherCity, setSavingWeatherCity] = useState(false);
-  
-  // DEPRECATED: Les zones sont conservées uniquement pour la compatibilité avec l'ancien système
-  // Le nouveau système utilise GridLauncher avec layout sauvegardé sur le backend
-  // Les zones servent uniquement à passer la liste des apps à GridLauncher via Object.values(zones).flat()
-  const [zones, setZones] = useState({
-    left: [],
-    right: [],
-    bottom1: [],
-    bottom2: [],
-    bottom3: [],
-    bottom4: [],
-    bottom5: [],
-    bottom6: [],
-    bottom7: [],
-    bottom8: [],
-    bottom9: [],
-    bottom10: []
-  });
 
   const [weather, setWeather] = useState(() => {
     // Charger depuis le cache au démarrage
@@ -558,7 +536,6 @@ const Home = () => {
   }, []);
   const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
   const [taskbarReady, setTaskbarReady] = useState(false); // Animations taskbar quand les icônes de la barre sont chargées
-  const [zonesReady, setZonesReady] = useState(false); // Animations zones quand les icônes des apps sont chargées
   const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
   const [bgUrl, setBgUrl] = useState(null);         // URL calculée courante
   const [prevBgUrl, setPrevBgUrl] = useState(null); // URL précédente pour crossfade
@@ -640,10 +617,8 @@ const Home = () => {
     const row = 2;
     let anchor = 22; // suit le même schéma que les demandes précédentes
     const ordered = [];
-    // Si aucune app fournie via zones, utiliser toutes les apps connues (triées par id)
-    const sourceIds = (appIds && appIds.length > 0)
-      ? appIds
-      : Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-')).sort();
+    // Utiliser toutes les apps connues (triées par id)
+    const sourceIds = Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-')).sort();
     sourceIds.forEach((id) => {
       // Si appsConfig n'est pas encore chargé, ne pas filtrer; sinon ignorer les ids inconnus
       if (appsConfig && Object.keys(appsConfig).length > 0 && !appsConfig[id]) return;
@@ -675,8 +650,7 @@ const Home = () => {
       savedDefaultOnceRef.current = true;
       const serverUrl = getServerUrl(accessMode);
       // Construire les defaults dynamiques si layout vide
-      const appsFromZones = Object.values(zones).flat().filter(id => id && appsConfig[id]);
-      const defaults = layoutIsEmpty ? computeDefaults(appsFromZones) : { layout: launcherLayout, anchors: launcherAnchors, apps: [] };
+      const defaults = { layout: launcherLayout || {}, anchors: launcherAnchors || {}, apps: [] };
       const baseLayout = defaults.layout || launcherLayout || {};
       const appsList = defaults.apps.length > 0
         ? defaults.apps
@@ -703,7 +677,7 @@ const Home = () => {
           }
         });
     }
-  }, [launcherLoadedFromBackend, accessMode, currentUserName, launcherAnchors, launcherLayout, widgets, zones, appsConfig, DEFAULT_ANCHORS]);
+  }, [launcherLoadedFromBackend, accessMode, currentUserName, launcherAnchors, launcherLayout, widgets, appsConfig]);
 
   useEffect(() => {
     const handleMessage = (event) => {
@@ -807,7 +781,7 @@ const Home = () => {
           StorageManager.setItem('iconImages_cache', newIconImages);
           console.log('[Home] Icônes mises à jour:', Object.keys(newIconImages).length);
           
-          // Les zones seront chargées par le useEffect dédié (depuis le serveur)
+          // Apps chargées depuis les manifests
         } else {
           console.log('[Home] Aucune app trouvée dans les manifests, utilisation de la config par défaut');
         }
@@ -845,7 +819,7 @@ const Home = () => {
             .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
             .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
             .map(([id]) => id)
-        : Object.values(zones).flat().filter(id => id && appsConfig[id]);
+        : Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-'));
       const payload = {
         launcher: {
           anchors: snapshot?.anchors || {},
@@ -870,7 +844,7 @@ const Home = () => {
         }
       }, 300);
     } catch (_) {}
-  }, [accessMode, currentUserName, zones, appsConfig, launcherLoadedFromBackend, widgets]);
+  }, [accessMode, currentUserName, appsConfig, launcherLoadedFromBackend, widgets]);
   
   // Handler: ajouter un widget
   const handleAddWidget = React.useCallback((widgetType) => {
@@ -1262,8 +1236,6 @@ const Home = () => {
     return () => window.removeEventListener('ryvie:background-changed', onBgChanged);
   }, [backgroundImage]);
 
-  // Supprimer ce useEffect dupliqué car géré dans le premier useEffect
-
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
@@ -1348,54 +1320,6 @@ const Home = () => {
     setTaskbarReady(false);
   }, [appsConfig]);
 
-  // Précharger les icônes des zones (uniquement URLs backend) sans timeout et ne marquer prêt que sur succès ET si serverStatus est connecté
-  useEffect(() => {
-    try {
-      // Ne pas déclencher l'animation si le serveur n'est pas connecté
-      if (!serverStatus) {
-        setZonesReady(false);
-        return;
-      }
-
-      const zoneUrls = new Set();
-      const addIconForId = (id) => {
-        if (!id) return;
-        const cfg = appsConfig[id];
-        if (cfg && cfg.icon) {
-          zoneUrls.add(cfg.icon);
-        }
-      };
-      Object.values(zones).forEach((arr) => (arr || []).forEach(addIconForId));
-
-      if (zoneUrls.size === 0) {
-        setZonesReady(true);
-        return;
-      }
-
-      // Ne pas réinitialiser zonesReady si déjà prêt (évite l'animation lors du déplacement)
-      // setZonesReady(false); // SUPPRIMÉ
-      const preload = (src) => new Promise((resolve, reject) => {
-        try {
-          const img = new Image();
-          img.onload = () => resolve(true);
-          img.onerror = () => reject(new Error('load failed'));
-          img.src = src;
-        } catch (e) {
-          reject(e);
-        }
-      });
-      Promise.all(Array.from(zoneUrls).map(preload))
-        .then(() => setZonesReady(true))
-        .catch(() => {
-          // ne pas déclencher zonesReady si une icône backend échoue
-        });
-    } catch (e) {
-      console.warn('[Home] Préchargement zones échoué:', e);
-      // Ne pas forcer zonesReady en cas d'erreur
-      setZonesReady(false);
-    }
-  }, [appsConfig, zones, iconImages, serverStatus]);
-
   // Fermer le menu contextuel si on clique ailleurs
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -1415,11 +1339,11 @@ const Home = () => {
   }, [activeContextMenu]);
 
 
-  // Charger les zones depuis le serveur dès que possible
+  // Charger les préférences utilisateur depuis le serveur
   useEffect(() => {
-    console.log('[Home] useEffect chargement zones - accessMode:', accessMode, 'currentUserName:', currentUserName);
+    console.log('[Home] useEffect chargement préférences - accessMode:', accessMode, 'currentUserName:', currentUserName);
     
-    const loadZones = async () => {
+    const loadPreferences = async () => {
       if (!accessMode || !currentUserName) {
         console.log('[Home] ⏳ En attente de accessMode et currentUserName...');
         return;
@@ -1427,7 +1351,7 @@ const Home = () => {
       
       try {
         const serverUrl = getServerUrl(accessMode);
-        console.log('[Home] 🔄 Chargement zones depuis le serveur pour', currentUserName);
+        console.log('[Home] 🔄 Chargement préférences depuis le serveur pour', currentUserName);
         const res = await axios.get(`${serverUrl}/api/user/preferences`);
         
         // Charger la ville météo configurée
@@ -1457,15 +1381,9 @@ const Home = () => {
           try {
             const { layout, anchors, widgets: savedWidgets } = res.data.launcher || {};
             console.log('[Home] 🎮 Launcher chargé depuis le backend:', { layout, anchors, widgets: savedWidgets });
-            const zoneAppIds = Object.values(zones).flat().filter(id => id && appsConfig[id]);
-            const nextLayout = layout && Object.keys(layout).length > 0
-              ? layout
-              : computeDefaults(zoneAppIds).layout;
-            setLauncherLayout(nextLayout);
-            const nextAnchors = anchors && Object.keys(anchors).length > 0
-              ? anchors
-              : computeDefaults(zoneAppIds).anchors;
-            setLauncherAnchors(nextAnchors);
+            
+            setLauncherLayout(layout || {});
+            setLauncherAnchors(anchors || {});
             
             // Charger les widgets sauvegardés
             if (savedWidgets && Array.isArray(savedWidgets)) {
@@ -1492,188 +1410,25 @@ const Home = () => {
           }
         } else {
           // Pas de launcher sauvegardé, initialiser vide
-          console.log('[Home] 🎮 Pas de launcher sauvegardé, initialisation avec layout/ancres par défaut (dynamiques)');
-          const appsFromZones = Object.values(zones).flat().filter(id => id && appsConfig[id]);
-          const defaults = computeDefaults(appsFromZones);
-          setLauncherLayout(defaults.layout);
-          setLauncherAnchors(defaults.anchors);
+          console.log('[Home] 🎮 Pas de launcher sauvegardé, initialisation vide');
+          setLauncherLayout({});
+          setLauncherAnchors({});
           setWidgets([]);
           setLauncherLoadedFromBackend(true); // Marquer comme chargé (vide = OK)
           setTimeout(() => {
             launcherInitialLoadDone.current = true;
           }, 1000);
         }
-        
-        if (res.data?.zones && Object.keys(res.data.zones).length > 0) {
-          console.log('[Home] ✅ Zones chargées depuis le serveur:', res.data.zones);
-          
-          // Vérifier si les zones sont vraiment vides (tous les tableaux vides)
-          const allZonesEmpty = Object.values(res.data.zones).every(
-            zone => Array.isArray(zone) && zone.length === 0
-          );
-          
-          if (allZonesEmpty) {
-            console.log('[Home] ⚠️ Zones vides détectées, génération depuis manifests');
-            const appsList = await generateDefaultAppsList(accessMode);
-            const defaultZones = { ...zones, bottom1: appsList.slice(0, 1), bottom2: appsList.slice(1, 2), bottom3: appsList.slice(2, 3), bottom4: appsList.slice(3, 4), bottom5: appsList.slice(4, 5) };
-            setZones(defaultZones);
-            // Sauvegarder les zones par défaut sur le serveur
-            await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: defaultZones });
-            StorageManager.setItem(`iconZones_${currentUserName}`, defaultZones);
-          } else {
-            // Réconciliation: utiliser les apps réelles depuis l'API
-            // Récupérer la liste des apps installées
-            const appsResponse = await axios.get(`${serverUrl}/api/apps`);
-            const installedApps = appsResponse.data || [];
-            const validAppIds = new Set(installedApps.map(app => `app-${app.id}`));
-            
-            console.log('[Home] 📋 Apps installées détectées:', Array.from(validAppIds));
-            
-            const cleanedZones = {};
-            let hasChanges = false;
-            
-            Object.keys(res.data.zones).forEach(zoneName => {
-              const originalIds = res.data.zones[zoneName] || [];
-              const filteredIds = originalIds.filter(id => {
-                // Garder les IDs qui ne sont pas des apps (ex: icônes taskbar)
-                if (!id.startsWith('app-')) {
-                  return true;
-                }
-                
-                // Pour les apps, vérifier qu'elles existent
-                const isValid = validAppIds.has(id);
-                if (!isValid) {
-                  console.log(`[Home] 🧹 Retrait de l'app inexistante: ${id} de ${zoneName}`);
-                  hasChanges = true;
-                }
-                return isValid;
-              });
-              cleanedZones[zoneName] = filteredIds;
-            });
-            
-            // Détecter les nouvelles apps (présentes dans l'API mais pas dans les zones)
-            const allZonedApps = new Set();
-            Object.values(cleanedZones).forEach(zone => {
-              zone.forEach(id => {
-                if (id.startsWith('app-')) allZonedApps.add(id);
-              });
-            });
-            
-            const newApps = Array.from(validAppIds).filter(id => !allZonedApps.has(id));
-            if (newApps.length > 0) {
-              console.log('[Home] ➕ Nouvelles apps détectées:', newApps);
-              // Placer les nouvelles apps dans les premières zones bottom disponibles
-              let bottomIndex = 1;
-              newApps.forEach(appId => {
-                while (bottomIndex <= 10 && cleanedZones[`bottom${bottomIndex}`].length > 0) {
-                  bottomIndex++;
-                }
-                if (bottomIndex <= 10) {
-                  cleanedZones[`bottom${bottomIndex}`].push(appId);
-                  console.log(`[Home] ➕ Ajout de ${appId} dans bottom${bottomIndex}`);
-                  hasChanges = true;
-                  bottomIndex++;
-                }
-              });
-            }
-            
-            console.log('[Home] 🔄 Application des zones réconciliées:', cleanedZones);
-            setZones(cleanedZones);
-            
-            // Si des apps ont été retirées ou ajoutées, sauvegarder les zones
-            if (hasChanges) {
-              console.log('[Home] 💾 Sauvegarde des zones réconciliées sur le serveur');
-              await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: cleanedZones });
-            }
-            
-            // Sauvegarder en cache local
-            StorageManager.setItem(`iconZones_${currentUserName}`, cleanedZones);
-          }
-          
-          // Charger le fond d'écran utilisateur
-          if (res.data?.backgroundImage) {
-            console.log('[Home] 🎨 Fond d\'écran chargé:', res.data.backgroundImage);
-            setBackgroundImage(res.data.backgroundImage);
-          }
-        } else {
-          console.log('[Home] ⚠️ Pas de zones sur le serveur, génération depuis manifests');
-          const appsList = await generateDefaultAppsList(accessMode);
-          const defaultZones = { ...zones, bottom1: appsList.slice(0, 1), bottom2: appsList.slice(1, 2), bottom3: appsList.slice(2, 3), bottom4: appsList.slice(3, 4), bottom5: appsList.slice(4, 5) };
-          setZones(defaultZones);
-          // Sauvegarder les zones par défaut sur le serveur
-          await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: defaultZones });
-        }
       } catch (error) {
-        console.error('[Home] ❌ Erreur chargement zones:', error.message);
-        // Fallback sur localStorage uniquement en cas d'erreur
-        const savedZones = StorageManager.getItem(`iconZones_${currentUserName}`);
-        if (savedZones) {
-          console.log('[Home] 💾 Fallback: zones chargées depuis localStorage');
-          setZones(savedZones);
-        } else {
-          console.log('[Home] 🆕 Génération des zones par défaut depuis manifests');
-          const appsList = await generateDefaultAppsList(accessMode);
-          const defaultZones = { ...zones, bottom1: appsList.slice(0, 1), bottom2: appsList.slice(1, 2), bottom3: appsList.slice(2, 3), bottom4: appsList.slice(3, 4), bottom5: appsList.slice(4, 5) };
-          setZones(defaultZones);
-        }
+        console.error('[Home] ❌ Erreur chargement préférences:', error.message);
       }
     };
     
     if (accessMode && currentUserName) {
-      loadZones();
+      loadPreferences();
     }
   }, [accessMode, currentUserName]);
 
-  // Sauvegarder les zones sur le serveur
-  const saveZonesToServer = React.useCallback(async (newZones) => {
-    if (!accessMode || !currentUserName) {
-      console.log('[Home] Sauvegarde ignorée (pas de mode ou utilisateur)');
-      return;
-    }
-    
-    try {
-      const serverUrl = getServerUrl(accessMode);
-      console.log('[Home] Sauvegarde zones pour', currentUserName, 'vers', serverUrl);
-      await axios.patch(`${serverUrl}/api/user/preferences/zones`, { zones: newZones });
-      console.log('[Home] Zones sauvegardées sur le serveur');
-    } catch (error) {
-      console.error('[Home] Erreur sauvegarde zones:', error);
-      // Sauvegarder au moins localement
-      if (currentUserName) {
-        StorageManager.setItem(`iconZones_${currentUserName}`, newZones);
-      }
-    }
-  }, [accessMode, currentUserName]);
-
-  const moveIcon = (id, fromZoneId, toZoneId) => {
-    setZones((prevZones) => {
-      // Assurer que les zones existent
-      const fromIcons = (prevZones[fromZoneId] || []).filter((iconId) => iconId !== id);
-      let toIcons = prevZones[toZoneId] || [];
-
-      if (toIcons.length === 0) {
-        toIcons = [id];
-      } else {
-        const [existingIconId] = toIcons;
-        toIcons = [id];
-        fromIcons.push(existingIconId);
-      }
-
-      const newZones = {
-        ...prevZones,
-        [fromZoneId]: fromIcons,
-        [toZoneId]: toIcons,
-      };
-      
-      // Sauvegarder les zones localement (avec nom d'utilisateur) et sur le serveur
-      if (currentUserName) {
-        StorageManager.setItem(`iconZones_${currentUserName}`, newZones);
-      }
-      saveZonesToServer(newZones);
-      
-      return newZones;
-    });
-  };
 
 
   const openAppWindow = (url, useOverlay = true, appName = '') => {
@@ -1821,7 +1576,7 @@ const Home = () => {
   }, [backgroundImage, bgDataUrl, accessMode]);
 
   return (
-    <div className={`home-container ${mounted ? 'slide-enter-active' : 'slide-enter'} ${taskbarReady ? 'taskbar-ready' : ''} ${zonesReady ? 'zones-ready' : ''}`}>
+    <div className={`home-container ${mounted ? 'slide-enter-active' : 'slide-enter'} ${taskbarReady ? 'taskbar-ready' : ''}`}>
       <DndProvider backend={HTML5Backend}>
         <div className="background">
           {/* Calques de fond pour crossfade */}
@@ -1869,7 +1624,7 @@ const Home = () => {
                     .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
                     .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
                     .map(([id]) => id)
-                : Object.values(zones).flat().filter(id => id && appsConfig[id])}
+                : Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-'))}
               weather={weather}
               weatherImages={weatherImages}
               weatherIcons={weatherIcons}
@@ -1885,11 +1640,9 @@ const Home = () => {
               setActiveContextMenu={setActiveContextMenu}
               isAdmin={isAdmin}
               setAppStatus={setAppStatus}
-              moveIcon={moveIcon}
               onLayoutChange={handleLauncherLayoutChange}
               initialLayout={launcherLayout}
               initialAnchors={launcherAnchors}
-              zonesReady={zonesReady}
               accessMode={accessMode}
               widgets={widgets}
               onAddWidget={handleAddWidget}
