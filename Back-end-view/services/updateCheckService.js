@@ -132,22 +132,95 @@ function compareVersions(current, latest) {
 }
 
 /**
- * Vérifie les mises à jour pour Ryvie
+ * Récupère le dernier tag local (par version) atteint par HEAD dans un repo
+ * Utilise --merged HEAD pour ne prendre que les tags accessibles depuis la branche courante
+ */
+function getLocalLatestTag(dir) {
+  try {
+    // git tag --merged HEAD --list 'v*' pour ne récupérer que les tags v* merged
+    const out = execSync("git tag --merged HEAD --list 'v*'", { cwd: dir, encoding: 'utf8' });
+    const tags = out.split('\n').map(t => t.trim()).filter(Boolean);
+    if (tags.length === 0) return null;
+    
+    // Filtrer uniquement les tags SemVer valides (v0.0.1 ou 0.0.1, avec pré-release optionnel)
+    const versionTags = tags.filter(t => /^v?\d+(\.\d+){1,3}(-[0-9A-Za-z.+-]+)?$/.test(t));
+    if (versionTags.length === 0) return null;
+    
+    // Trier par version
+    const sorted = versionTags.sort((a, b) => {
+      const res = compareVersions(a, b);
+      if (res === null) return 0;
+      if (res === 'update-available') return -1; // b > a
+      if (res === 'ahead') return 1; // b < a
+      return 0;
+    });
+    return sorted[sorted.length - 1] || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Récupère le dernier tag distant (origin) en triant par version
+ */
+function getRemoteLatestTag(dir) {
+  try {
+    const out = execSync('git ls-remote --tags --refs origin', { cwd: dir, encoding: 'utf8' });
+    const tags = out
+      .split('\n')
+      .map(l => (l.split('\t')[1] || '').replace('refs/tags/', '').trim())
+      .filter(Boolean);
+    if (tags.length === 0) return null;
+    
+    // Filtrer uniquement les tags SemVer valides (avec pré-release optionnel)
+    const versionTags = tags.filter(t => /^v?\d+(\.\d+){1,3}(-[0-9A-Za-z.+-]+)?$/.test(t));
+    if (versionTags.length === 0) return null;
+    
+    // Trier avec compareVersions
+    const sorted = versionTags.sort((a, b) => {
+      const res = compareVersions(a, b);
+      if (res === null) return 0; // si invalide, ne change pas l'ordre
+      // compareVersions renvoie 'update-available' si b > a (latest > current)
+      if (res === 'update-available') return -1; // b > a => a avant b
+      if (res === 'ahead') return 1; // b < a => a après b
+      return 0;
+    });
+    return sorted[sorted.length - 1] || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Vérifie les mises à jour pour Ryvie (basé sur tags Git locaux/distants)
  */
 async function checkRyvieUpdate() {
-  const currentVersion = getCurrentRyvieVersion();
   const currentBranch = getCurrentBranch(RYVIE_DIR);
-  // D'abord essayer les releases de la branche courante, sinon fallback aux tags
-  const fromRelease = await getLatestGitHubReleaseForBranch('maisonnavejul', 'Ryvie', currentBranch);
-  const latestVersion = fromRelease || await getLatestGitHubTag('maisonnavejul', 'Ryvie');
   
-  const status = compareVersions(currentVersion, latestVersion);
+  // Fetch tags pour s'assurer d'avoir les derniers tags distants
+  try {
+    execSync('git fetch --tags origin', { cwd: RYVIE_DIR, stdio: 'pipe' });
+  } catch (e) {
+    console.log('[updateCheck] Impossible de fetch les tags pour Ryvie:', e.message);
+  }
+  
+  const localTag = getLocalLatestTag(RYVIE_DIR);
+  const remoteTag = getRemoteLatestTag(RYVIE_DIR);
+
+  // Fallback GitHub API si pas de remote tag récupéré (ex: pas de remote, erreurs réseau)
+  let latestVersion = remoteTag;
+  if (!latestVersion) {
+    const fromRelease = await getLatestGitHubReleaseForBranch('maisonnavejul', 'Ryvie', currentBranch);
+    latestVersion = fromRelease || await getLatestGitHubTag('maisonnavejul', 'Ryvie');
+  }
+
+  const status = compareVersions(localTag, latestVersion);
   
   return {
     name: 'Ryvie',
     repo: 'maisonnavejul/Ryvie',
     branch: currentBranch,
-    currentVersion,
+    currentVersion: localTag,
     latestVersion,
     updateAvailable: status === 'update-available',
     status
@@ -237,6 +310,13 @@ async function checkAppsUpdates() {
     
     const owner = repoMatch[1];
     const repo = repoMatch[2];
+    
+    // Fetch tags pour avoir les derniers tags
+    try {
+      execSync('git fetch --tags origin', { cwd: appPath, stdio: 'pipe' });
+    } catch (e) {
+      console.log(`[updateCheck] Impossible de fetch les tags pour ${appFolder}:`, e.message);
+    }
     
     const currentVersion = getAppCurrentVersion(appPath);
     const appBranch = getCurrentBranch(appPath);

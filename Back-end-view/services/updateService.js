@@ -31,7 +31,13 @@ async function updateRyvie() {
       console.log('[Update] Continuation sans snapshot...');
     }
     
-    // 2. Git pull
+    // 2. Fetch tags puis git pull
+    console.log('[Update] Récupération des tags distants...');
+    execSync('git fetch --tags origin', {
+      cwd: RYVIE_DIR,
+      stdio: 'inherit'
+    });
+    
     console.log('[Update] Git pull dans /opt/Ryvie...');
     execSync('git pull', {
       cwd: RYVIE_DIR,
@@ -120,7 +126,13 @@ async function updateApp(appName) {
       console.log('[Update] Continuation sans snapshot...');
     }
     
-    // 2. Git pull
+    // 2. Fetch tags puis git pull
+    console.log(`[Update] Récupération des tags distants pour ${appName}...`);
+    execSync('git fetch --tags origin', {
+      cwd: appPath,
+      stdio: 'inherit'
+    });
+    
     console.log(`[Update] Git pull dans ${appPath}...`);
     execSync('git pull', {
       cwd: appPath,
