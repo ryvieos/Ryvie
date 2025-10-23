@@ -536,6 +536,9 @@ const Home = () => {
   const [taskbarReady, setTaskbarReady] = useState(false); // Animations taskbar quand les icônes de la barre sont chargées
   const [zonesReady, setZonesReady] = useState(false); // Animations zones quand les icônes des apps sont chargées
   const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
+  const [bgUrl, setBgUrl] = useState(null);         // URL calculée courante
+  const [prevBgUrl, setPrevBgUrl] = useState(null); // URL précédente pour crossfade
+  const [bgFadeKey, setBgFadeKey] = useState(0);    // clé pour relancer l'animation
   const [disconnectedSince, setDisconnectedSince] = useState(null); // Timestamp de début de déconnexion
   const launcherSaveRef = React.useRef(null); // debounce save
   const [launcherLayout, setLauncherLayout] = useState(null); // Layout chargé depuis le backend
@@ -1653,33 +1656,21 @@ const Home = () => {
     }
   };
 
-  // Fonction pour obtenir le style de fond d'écran
-  const getBackgroundStyle = () => {
+  // Construit l'URL de fond d'écran à partir de l'état courant
+  const buildBackgroundUrl = () => {
     if (!accessMode) {
       console.log('[Home] accessMode non défini, pas de fond personnalisé');
       // Utiliser une dataURL si on en a une en cache
       if (bgDataUrl) {
-        return {
-          backgroundImage: `url(${bgDataUrl})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center center',
-          backgroundRepeat: 'no-repeat',
-          backgroundAttachment: 'fixed'
-        };
+        return `url(${bgDataUrl})`;
       }
-      return {}; // Utilise le CSS par défaut
+      return null; // Utilise le CSS par défaut
     }
     
     console.log('[Home] 🎨 Application du fond:', backgroundImage);
     // Priorité au cache dataURL pour l'affichage offline
     if (bgDataUrl) {
-      return {
-        backgroundImage: `url(${bgDataUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed'
-      };
+      return `url(${bgDataUrl})`;
     }
 
     if (backgroundImage?.startsWith('custom-')) {
@@ -1688,13 +1679,7 @@ const Home = () => {
       const serverUrl = getServerUrl(accessMode);
       const bgUrl = `${serverUrl}/api/backgrounds/${filename}`;
       console.log('[Home] 🎨 Fond personnalisé:', bgUrl);
-      return {
-        backgroundImage: `url(${bgUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed'
-      };
+      return `url(${bgUrl})`;
     }
     
     // Si c'est un fond prédéfini (preset-filename.ext) - charger via API backend
@@ -1703,33 +1688,42 @@ const Home = () => {
       const filename = backgroundImage.replace('preset-', '');
       const serverUrl = getServerUrl(accessMode);
       console.log('[Home] 🎨 Fond prédéfini via API:', filename);
-      
-      return {
-        backgroundImage: `url(${serverUrl}/api/backgrounds/presets/${filename})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed'
-      };
+      return `url(${serverUrl}/api/backgrounds/presets/${filename})`;
     }
     
     // Fond par défaut - via API (le cache prendra le relais si disponible)
     if (!accessMode) return {};
     const serverUrl = getServerUrl(accessMode);
     console.log('[Home] 🎨 Fond par défaut via API');
-    return {
-      backgroundImage: `url(${serverUrl}/api/backgrounds/presets/default.webp)`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center center',
-      backgroundRepeat: 'no-repeat',
-      backgroundAttachment: 'fixed'
-    };
+    return `url(${serverUrl}/api/backgrounds/presets/default.webp)`;
   };
+
+  // Mettre à jour les URLs de fond et déclencher un crossfade quand la source change
+  useEffect(() => {
+    const newUrl = buildBackgroundUrl();
+    setPrevBgUrl((prev) => (prev === newUrl ? null : bgUrl));
+    setBgUrl(newUrl);
+    setBgFadeKey((k) => k + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backgroundImage, bgDataUrl, accessMode]);
 
   return (
     <div className={`home-container ${mounted ? 'slide-enter-active' : 'slide-enter'} ${taskbarReady ? 'taskbar-ready' : ''} ${zonesReady ? 'zones-ready' : ''}`}>
       <DndProvider backend={HTML5Backend}>
-        <div className="background" style={getBackgroundStyle()}>
+        <div className="background">
+          {/* Calques de fond pour crossfade */}
+          {prevBgUrl && (
+            <div
+              key={`prev-${bgFadeKey}`}
+              className="bg-layer"
+              style={{ backgroundImage: prevBgUrl, opacity: 1 }}
+            />
+          )}
+          <div
+            key={`curr-${bgFadeKey}`}
+            className={`bg-layer visible`}
+            style={{ backgroundImage: bgUrl || undefined }}
+          />
           <div className={`server-status ${serverStatus ? 'connected' : 'disconnected'}`}>
             <span className="status-text">
               {serverStatus ? 'Connecté' : 'Déconnecté'}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import '../styles/Settings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
@@ -12,6 +12,7 @@ import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getS
 import StorageSettings from './StorageSettings';
 
 const Settings = () => {
+  const AUTO_SWITCH_WALLPAPER_WITH_THEME = false; // désactive le changement auto du fond lors des bascules sombre/clair
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(() => {
@@ -51,7 +52,17 @@ const Settings = () => {
     encryptionEnabled: true,
     twoFactorAuth: false,
     notificationsEnabled: true,
-    darkMode: false,
+    darkMode: (() => {
+      try {
+        if (typeof document !== 'undefined' && document.body.classList.contains('dark-mode')) return true;
+        const cached = localStorage.getItem('ryvie_dark_mode');
+        if (cached === 'true' || cached === 'false') return cached === 'true';
+        if (typeof window !== 'undefined' && window.matchMedia) {
+          return window.matchMedia('(prefers-color-scheme: dark)').matches;
+        }
+      } catch {}
+      return false;
+    })(),
     compressionLevel: 'medium',
     bandwidthLimit: 'unlimited',
     autoDelete: false,
@@ -195,6 +206,7 @@ const Settings = () => {
   const [publicAddresses, setPublicAddresses] = useState(null);
   const [copiedAddress, setCopiedAddress] = useState(null);
   const [showPublicAddresses, setShowPublicAddresses] = useState(false);
+  const [prefsLoaded, setPrefsLoaded] = useState(false); // préférences utilisateur chargées
   // Rôle de l'utilisateur pour contrôler l'accès aux boutons
   const [userRole, setUserRole] = useState('User');
   const isAdmin = String(userRole || '').toLowerCase() === 'admin';
@@ -289,8 +301,8 @@ const Settings = () => {
     fetchData();
   }, []);
 
-  // Appliquer le mode sombre
-  useEffect(() => {
+  // Appliquer le mode sombre le plus tôt possible pour éviter le flash
+  useLayoutEffect(() => {
     if (settings.darkMode) {
       document.body.classList.add('dark-mode');
       console.log('[Settings] Mode sombre appliqué');
@@ -298,6 +310,7 @@ const Settings = () => {
       document.body.classList.remove('dark-mode');
       console.log('[Settings] Mode sombre désactivé');
     }
+    try { localStorage.setItem('ryvie_dark_mode', String(!!settings.darkMode)); } catch {}
   }, [settings.darkMode]);
 
   // S'assurer que accessMode est cohérent et persistant au montage
@@ -361,11 +374,44 @@ const Settings = () => {
         }
       } catch (error) {
         console.log('[Settings] Impossible de charger les préférences utilisateur');
+      } finally {
+        setPrefsLoaded(true);
       }
     };
     
     loadUserPreferences();
   }, [accessMode]);
+
+  // Synchroniser automatiquement le mode sombre avec le thème système
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    if (!prefsLoaded) return; // attendre les préférences pour éviter des changements indésirables
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const applySystemTheme = () => {
+      try {
+        const preferDark = !!media.matches;
+        if (preferDark !== !!settings.darkMode) {
+          // Utilise le handler existant pour mettre à jour l'état et persister côté backend
+          handleSettingChange('darkMode', preferDark);
+        }
+      } catch {}
+    };
+
+    // Appliquer au chargement (ex: si l'utilisateur est en mode sombre système)
+    applySystemTheme();
+
+    // Écouter les changements de thème système
+    if (media.addEventListener) {
+      media.addEventListener('change', applySystemTheme);
+      return () => media.removeEventListener('change', applySystemTheme);
+    } else if (media.addListener) {
+      // Compatibilité anciens navigateurs
+      media.addListener(applySystemTheme);
+      return () => media.removeListener(applySystemTheme);
+    }
+  // Dépendances minimales: accessMode pour éviter d'appeler l'API avant init, et le flag darkMode courant
+  }, [accessMode, settings.darkMode, prefsLoaded]);
 
   // Vérification automatique des mises à jour au chargement
   useEffect(() => {
@@ -550,9 +596,11 @@ const Settings = () => {
     
     try {
       const serverUrl = getServerUrl(accessMode);
-      await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: newBackground });
-      
+      // OPTIMISTE: appliquer immédiatement le fond dans l'UI
       setBackgroundImage(newBackground);
+      // Sauvegarder en arrière-plan
+      axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: newBackground })
+        .catch(err => console.warn('[Settings] Erreur patch background (async):', err?.message || err));
       showToast('Fond d\'écran modifié', 'success');
     } catch (error) {
       console.error('[Settings] Erreur changement fond d\'écran:', error);
@@ -806,18 +854,34 @@ const Settings = () => {
         const serverUrl = getServerUrl(accessMode);
         await axios.patch(`${serverUrl}/api/user/preferences/dark-mode`, { darkMode: value });
         console.log('[Settings] Mode sombre sauvegardé:', value);
+        try { localStorage.setItem('ryvie_dark_mode', String(!!value)); } catch {}
         
-        // Changer automatiquement le fond d'écran
-        if (value && (backgroundImage === 'preset-default.webp' || backgroundImage === 'default')) {
-          // Activer mode sombre + fond default → changer pour night
-          await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-night.png' });
-          setBackgroundImage('preset-night.png');
-          console.log('[Settings] Fond d\'écran changé pour night');
-        } else if (!value && backgroundImage === 'preset-night.png') {
-          // Désactiver mode sombre + fond night → revenir à default
-          await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-default.webp' });
-          setBackgroundImage('preset-default.webp');
-          console.log('[Settings] Fond d\'écran changé pour default');
+        const isCustom = (() => {
+          try {
+            const list = Array.isArray(customBackgrounds) ? customBackgrounds : [];
+            const name = typeof backgroundImage === 'string' ? backgroundImage : '';
+            if (!name) return false;
+            if (list.includes(name)) return true;
+            if (list.some(b => (typeof b === 'string' ? b : b?.filename) === name)) return true;
+            if (name.startsWith('custom-') || name.startsWith('user-')) return true;
+            // Considérer comme custom tout arrière-plan qui n'est pas un preset explicite
+            if (!name.startsWith('preset-') && name !== 'default' && name !== 'preset-default.webp') return true;
+            return false;
+          } catch { return false; }
+        })();
+
+        if (AUTO_SWITCH_WALLPAPER_WITH_THEME && prefsLoaded) {
+          if (value) {
+            if (!isCustom && (backgroundImage === 'preset-default.webp' || backgroundImage === 'default' || backgroundImage?.startsWith('preset-'))) {
+              await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-night.png' });
+              setBackgroundImage('preset-night.png');
+            }
+          } else {
+            if (!isCustom && (backgroundImage === 'preset-night.png' || backgroundImage?.startsWith('preset-'))) {
+              await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-default.webp' });
+              setBackgroundImage('preset-default.webp');
+            }
+          }
         }
       } catch (error) {
         console.error('[Settings] Erreur sauvegarde mode sombre:', error);
@@ -2063,9 +2127,11 @@ const Settings = () => {
       <section className="settings-section">
         <h2>🔄 Mises à Jour</h2>
         <div className="settings-card" style={{ 
-          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.06)',
+          background: settings.darkMode 
+            ? 'linear-gradient(135deg, #1f2937 0%, #111827 100%)' 
+            : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          border: settings.darkMode ? '1px solid #374151' : '1px solid #e2e8f0',
+          boxShadow: settings.darkMode ? '0 4px 16px rgba(0, 0, 0, 0.5)' : '0 4px 16px rgba(0, 0, 0, 0.06)',
           overflow: 'hidden'
         }}>
           <div style={{ padding: '28px' }}>
@@ -2101,10 +2167,16 @@ const Settings = () => {
                   marginBottom: '24px', 
                   padding: '24px', 
                   background: updates.ryvie.updateAvailable 
-                    ? 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)' 
-                    : 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                    ? (settings.darkMode 
+                        ? 'linear-gradient(135deg, rgba(120,53,15,0.35) 0%, rgba(146,64,14,0.35) 100%)' 
+                        : 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)')
+                    : (settings.darkMode 
+                        ? 'linear-gradient(135deg, rgba(6,78,59,0.35) 0%, rgba(5,150,105,0.35) 100%)' 
+                        : 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)'),
                   borderRadius: '16px',
-                  border: `1px solid ${updates.ryvie.updateAvailable ? '#f59e0b' : '#22c55e'}`,
+                  border: settings.darkMode 
+                    ? `1px solid ${updates.ryvie.updateAvailable ? 'rgba(245, 158, 11, 0.6)' : 'rgba(34, 197, 94, 0.6)'}`
+                    : `1px solid ${updates.ryvie.updateAvailable ? '#f59e0b' : '#22c55e'}`,
                   boxShadow: 'none'
                 }}>
                   
@@ -2117,7 +2189,7 @@ const Settings = () => {
                       alignItems: 'center', 
                       gap: '12px',
                       fontWeight: '700',
-                      color: '#111827'
+                      color: settings.darkMode ? '#f8fafc' : '#111827'
                     }}>
                       <div style={{
                         width: '40px',
@@ -2166,7 +2238,7 @@ const Settings = () => {
                       {updates.ryvie.updateAvailable ? '⚠️ MAJ Disponible' : '✓ À jour'}
                     </div>
                   </div>
-                  <div style={{ fontSize: '15px', color: '#374151', lineHeight: '1.6' }}>
+                  <div style={{ fontSize: '15px', color: settings.darkMode ? '#d1d5db' : '#374151', lineHeight: '1.6' }}>
                     <div style={{ 
                       display: 'grid', 
                       gridTemplateColumns: '1fr auto 1fr', 
@@ -2175,14 +2247,14 @@ const Settings = () => {
                     }}>
                       <div style={{ 
                         padding: '16px', 
-                        background: 'rgba(255, 255, 255, 0.8)', 
+                        background: settings.darkMode ? 'rgba(17, 24, 39, 0.6)' : 'rgba(255, 255, 255, 0.8)', 
                         borderRadius: '12px',
                         backdropFilter: 'blur(10px)',
-                        border: '1px solid rgba(255, 255, 255, 0.5)',
+                        border: settings.darkMode ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.5)',
                         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
                       }}>
                         <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Version actuelle</div>
-                        <div style={{ fontSize: '20px', fontWeight: '800', color: '#111827', letterSpacing: '-0.5px' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '800', color: settings.darkMode ? '#f8fafc' : '#111827', letterSpacing: '-0.5px' }}>
                           {updates.ryvie.currentVersion || 'N/A'}
                         </div>
                       </div>
@@ -2195,14 +2267,14 @@ const Settings = () => {
                       </div>
                       <div style={{ 
                         padding: '16px', 
-                        background: 'rgba(255, 255, 255, 0.8)', 
+                        background: settings.darkMode ? 'rgba(17, 24, 39, 0.6)' : 'rgba(255, 255, 255, 0.8)', 
                         borderRadius: '12px',
                         backdropFilter: 'blur(10px)',
-                        border: '1px solid rgba(255, 255, 255, 0.5)',
+                        border: settings.darkMode ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.5)',
                         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
                       }}>
                         <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dernière version</div>
-                        <div style={{ fontSize: '20px', fontWeight: '800', color: '#111827', letterSpacing: '-0.5px' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '800', color: settings.darkMode ? '#f8fafc' : '#111827', letterSpacing: '-0.5px' }}>
                           {updates.ryvie.latestVersion || 'N/A'}
                         </div>
                       </div>

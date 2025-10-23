@@ -382,14 +382,6 @@
     --slot-bg: rgba(0, 0, 0, 0.06);
     --slot-border: rgba(0, 0, 0, 0.1);
   }
-  
-  .grid-tile {
-    background: rgba(40, 40, 40, 0.95);
-  }
-  
-  .grid-tile .tile-label {
-    color: #fff;
-  }
 }
 
 /* Focus pour accessibilité */
