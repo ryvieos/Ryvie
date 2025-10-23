@@ -41,46 +41,18 @@ const privateUrl = (host, port) => {
 const generateBaseUrls = () => {
   const domains = netbirdData.domains;
   
-  // Préparer le bloc APPS avec les apps connues
-  const apps = {
-    APPSTORE: {
-      PUBLIC: `https://${domains.app}`,
-      PRIVATE: `http://ryvie.local:${LOCAL_PORTS.APPSTORE}`
-    },
-    RDRIVE: {
-      PUBLIC: `https://${domains.rdrive}`,
-      PRIVATE: privateUrl('ryvie.local', resolvePort('rdrive', LOCAL_PORTS.RDRIVE))
-    },
-    PORTAINER: {
-      PUBLIC: 'https://portainer.test.ryvie.fr', // Pas dans netbird_data
-      PRIVATE: `http://ryvie.local:${LOCAL_PORTS.PORTAINER}`
-    },
-    RTRANSFER: {
-      PUBLIC: `https://${domains.rtransfer}`,
-      PRIVATE: privateUrl('ryvie.local', resolvePort('rtransfer', LOCAL_PORTS.RTRANSFER))
-    },
-    RDROP: {
-      PUBLIC: `https://${domains.rdrop}`,
-      PRIVATE: privateUrl('ryvie.local', resolvePort('rdrop', LOCAL_PORTS.RDROP))
-    },
-    RPICTURES: {
-      PUBLIC: `https://${domains.rpictures}`,
-      PRIVATE: privateUrl('ryvie.local', resolvePort('rpictures', LOCAL_PORTS.RPICTURES))
-    }
-  };
+  // APPS entièrement dynamiques depuis app-ports.json
+  const apps = {};
 
-  // Étendre avec toute nouvelle app détectée (id = clé de app-ports.json)
+  // Générer les entrées dynamiques à partir des ports connus (provenant du backend)
   Object.keys(appPorts).forEach((id) => {
     const upper = id.toUpperCase();
-    if (!apps[upper]) {
-      const port = resolvePort(id, null);
-      if (port) {
-        apps[upper] = {
-          PUBLIC: domains[id] ? `https://${domains[id]}` : '',
-          PRIVATE: privateUrl('ryvie.local', port)
-        };
-      }
-    }
+    const port = resolvePort(id, null);
+    if (!port) return; // ignorer si pas de port défini
+    apps[upper] = {
+      PUBLIC: domains[id] ? `https://${domains[id]}` : '',
+      PRIVATE: privateUrl('ryvie.local', port)
+    };
   });
 
   return {
