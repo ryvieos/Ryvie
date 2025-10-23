@@ -281,6 +281,23 @@
   z-index: -1; /* Ajouté pour placer l'overlay derrière le contenu */
 }
 
+/* Calques d'arrière-plan pour le crossfade de fond d'écran */
+.bg-layer {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  background-attachment: fixed;
+  opacity: 0;
+  transition: opacity 400ms ease;
+  pointer-events: none;
+  z-index: -2; /* derrière le contenu et l'overlay */
+}
+.bg-layer.visible {
+  opacity: 1;
+}
+
 /* Barre des tâches sur le côté gauche */
 .taskbar {
   position: fixed;
