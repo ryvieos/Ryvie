@@ -7,7 +7,8 @@ import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy } from '@
 import { isElectron } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getFrontendUrl } = urlsConfig;
-import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, connectRyvieSocket } from '../utils/detectAccessMode';
+import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../utils/detectAccessMode';
+import { useSocket } from '../contexts/SocketContext';
 import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
 
@@ -202,8 +203,7 @@ const Settings = () => {
   const [systemDisksInfo, setSystemDisksInfo] = useState(null);
   const [showDisksInfo, setShowDisksInfo] = useState(false);
 
-  const [socketConnected, setSocketConnected] = useState(false);
-  const [serverConnectionStatus, setServerConnectionStatus] = useState(false);
+  const { socket, isConnected: socketConnected, serverStatus: serverConnectionStatus } = useSocket();
   // Overlay Assistant Stockage
   const [showStorageOverlay, setShowStorageOverlay] = useState(false);
   // Stockage (lecture seule) - état live
@@ -394,6 +394,33 @@ const Settings = () => {
           setPresetBackgrounds(presetsResponse.data.backgrounds);
           // Sauvegarder dans le cache localStorage pour chargement instantané
           localStorage.setItem('presetBackgrounds', JSON.stringify(presetsResponse.data.backgrounds));
+        }
+        
+        // PRÉCHARGEMENT pour Home.js: charger appsConfig et launcher en cache
+        console.log('[Settings] 🚀 Préchargement des données pour Home...');
+        try {
+          // 1. Charger les manifests pour appsConfig (comme dans Home.js)
+          const manifestsResponse = await axios.get(`${serverUrl}/api/manifests`);
+          if (manifestsResponse.data?.manifests) {
+            const { generateAppConfigFromManifests } = await import('../config/appConfig');
+            const config = generateAppConfigFromManifests(manifestsResponse.data.manifests);
+            // Mettre en cache pour Home.js
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('appsConfig_cache', JSON.stringify(config));
+              console.log('[Settings] ✅ appsConfig mis en cache');
+            }
+          }
+          
+          // 2. Précharger les préférences launcher (layout, anchors, widgets)
+          if (prefsResponse.data?.launcher) {
+            const currentUser = getCurrentUser();
+            if (currentUser && typeof localStorage !== 'undefined') {
+              localStorage.setItem(`launcher_${currentUser}`, JSON.stringify(prefsResponse.data.launcher));
+              console.log('[Settings] ✅ Launcher mis en cache pour', currentUser);
+            }
+          }
+        } catch (e) {
+          console.warn('[Settings] Préchargement partiel:', e?.message);
         }
       } catch (error) {
         console.log('[Settings] Impossible de charger les préférences utilisateur');
@@ -1290,21 +1317,9 @@ const Settings = () => {
     if (!accessMode) return;
     fetchApplications();
     
-    // Connexion centralisée via le helper
-    const socket = connectRyvieSocket({
-      mode: accessMode,
-      onConnect: () => {
-        console.log('[Settings] Socket connecté');
-        setSocketConnected(true);
-      },
-      onDisconnect: () => {
-        console.log('[Settings] Socket déconnecté');
-        setSocketConnected(false);
-      },
-      onError: (err) => {
-        console.log('[Settings] Erreur socket:', err?.message || err);
-      },
-      onAppsStatusUpdate: (updatedApps) => {
+    // Écouter les événements du socket partagé
+    if (socket) {
+      const handleAppsStatusUpdate = (updatedApps) => {
         console.log('[Settings] Mise à jour des apps reçue:', updatedApps);
         setApplications(prevApps => {
           return updatedApps.map(updatedApp => {
@@ -1316,15 +1331,15 @@ const Settings = () => {
             };
           });
         });
-      },
-    });
-
-    return () => {
-      if (socket && typeof socket.disconnect === 'function') {
-        socket.disconnect();
-      }
-    };
-  }, [accessMode]);
+      };
+      
+      socket.on('appsStatusUpdate', handleAppsStatusUpdate);
+      
+      return () => {
+        socket.off('appsStatusUpdate', handleAppsStatusUpdate);
+      };
+    }
+  }, [accessMode, socket]);
 
   if (loading) {
     return (

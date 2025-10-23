@@ -5,7 +5,7 @@ import '../styles/Transitions.css';
 import axios from '../utils/setupAxios';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { connectRyvieSocket } from '../utils/detectAccessMode';
+import { useSocket } from '../contexts/SocketContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../utils/detectAccessMode';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
@@ -507,11 +507,11 @@ const Home = () => {
       location: 'Loading...',
       temperature: null,
       description: '',
-      icon: 'default.png',
+      icon: 'sunny.png',
     };
   });
 
-  const [serverStatus, setServerStatus] = useState(false);
+  // serverStatus vient maintenant du contexte socket
   const [appStatus, setAppStatus] = useState(() => {
     // Charger depuis le cache au démarrage
     const cached = StorageManager.getItem('appStatus_cache');
@@ -530,8 +530,7 @@ const Home = () => {
   const [overlayTitle, setOverlayTitle] = useState('App Store');
 
   const [mounted, setMounted] = useState(false);
-  const [socketConnected, setSocketConnected] = useState(false);
-  const [currentSocket, setCurrentSocket] = useState(null);
+  const { socket, isConnected: socketConnected, serverStatus, setServerStatus } = useSocket();
   
   // Appliquer le darkMode depuis localStorage au montage (avant le chargement backend)
   React.useLayoutEffect(() => {
@@ -556,11 +555,60 @@ const Home = () => {
   const [bgFadeKey, setBgFadeKey] = useState(0);    // clé pour relancer l'animation
   const [disconnectedSince, setDisconnectedSince] = useState(null); // Timestamp de début de déconnexion
   const launcherSaveRef = React.useRef(null); // debounce save
-  const [launcherLayout, setLauncherLayout] = useState(null); // Layout chargé depuis le backend
-  const [launcherAnchors, setLauncherAnchors] = useState(null); // Ancres chargées depuis le backend
-  const [launcherLoadedFromBackend, setLauncherLoadedFromBackend] = useState(false); // Indique si les données ont été chargées
+  const [launcherLayout, setLauncherLayout] = useState(() => {
+    // Charger depuis le cache localStorage au montage
+    try {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const cached = localStorage.getItem(`launcher_${currentUser}`);
+        if (cached) {
+          const launcher = JSON.parse(cached);
+          return launcher.layout || null;
+        }
+      }
+    } catch {}
+    return null;
+  }); // Layout chargé depuis le backend
+  const [launcherAnchors, setLauncherAnchors] = useState(() => {
+    // Charger depuis le cache localStorage au montage
+    try {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const cached = localStorage.getItem(`launcher_${currentUser}`);
+        if (cached) {
+          const launcher = JSON.parse(cached);
+          return launcher.anchors || null;
+        }
+      }
+    } catch {}
+    return null;
+  }); // Ancres chargées depuis le backend
+  const [launcherLoadedFromBackend, setLauncherLoadedFromBackend] = useState(() => {
+    // Si on a un cache, considérer comme "chargé" pour affichage immédiat
+    try {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const cached = localStorage.getItem(`launcher_${currentUser}`);
+        return !!cached;
+      }
+    } catch {}
+    return false;
+  }); // Indique si les données ont été chargées
   const launcherInitialLoadDone = React.useRef(false); // Flag pour savoir si le chargement initial est terminé
-  const [widgets, setWidgets] = useState([]); // Liste des widgets ajoutés par l'utilisateur
+  const [widgets, setWidgets] = useState(() => {
+    // Charger depuis le cache localStorage au montage
+    try {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const cached = localStorage.getItem(`launcher_${currentUser}`);
+        if (cached) {
+          const launcher = JSON.parse(cached);
+          return launcher.widgets || [];
+        }
+      }
+    } catch {}
+    return [];
+  }); // Liste des widgets ajoutés par l'utilisateur
   const widgetIdCounter = React.useRef(0); // Compteur pour générer des IDs uniques
   // Ancres par défaut si l'utilisateur n'a rien en backend
   const DEFAULT_ANCHORS = React.useMemo(() => ({
@@ -941,32 +989,9 @@ const Home = () => {
     // Récupérer les applications au chargement
     fetchApplications();
     
-    const socket = connectRyvieSocket({
-      mode: accessMode,
-      onConnect: (s) => {
-        console.log(`[Home] Socket.io connecté en mode ${accessMode}`);
-        setCurrentSocket(s);
-        setSocketConnected(true);
-        setServerStatus(true);
-      },
-      onDisconnect: () => {
-        console.log('[Home] Socket.io déconnecté');
-        setSocketConnected(false);
-        setServerStatus(false);
-      },
-      onError: (error) => {
-        console.log(`[Home] Erreur de connexion Socket.io en mode ${accessMode}:`, error?.message);
-        setSocketConnected(false);
-        setServerStatus(false);
-        if (!isElectron()) {
-          console.log('[Home] Mode web - arrêt des tentatives de connexion Socket.io');
-        }
-      },
-      onServerStatus: (data) => {
-        console.log('[Home] Statut serveur reçu:', data.status);
-        setServerStatus(data.status);
-      },
-      onAppsStatusUpdate: (updatedApps) => {
+    // Écouter les événements du socket partagé
+    if (socket) {
+      const handleAppsStatusUpdate = (updatedApps) => {
         console.log('[Home] Mise à jour des applications reçue:', updatedApps);
         setApplications(prevApps => {
           return updatedApps.map(updatedApp => {
@@ -1005,17 +1030,15 @@ const Home = () => {
         setAppStatus(newAppStatus);
         // Sauvegarder dans le cache
         StorageManager.setItem('appStatus_cache', newAppStatus);
-      },
-      timeoutMs: 10000,
-    });
-    
-    return () => {
-      try {
-        if (socket) socket.disconnect();
-        if (currentSocket && currentSocket !== socket) currentSocket.disconnect();
-      } catch {}
-    };
-  }, [accessMode]);
+      };
+      
+      socket.on('appsStatusUpdate', handleAppsStatusUpdate);
+      
+      return () => {
+        socket.off('appsStatusUpdate', handleAppsStatusUpdate);
+      };
+    }
+  }, [accessMode, socket, appsConfig]);
   
   useEffect(() => {
     // Attendre que les préférences soient chargées avant de récupérer la météo
@@ -1111,10 +1134,17 @@ const Home = () => {
         const data = weatherResponse.data;
         const weatherCode = data.current_weather.weathercode;
 
-        let icon = 'sunny.png';
-        if (weatherCode >= 1 && weatherCode <= 3) {
+        let icon = 'cloudy.png';
+        if (weatherCode === 0) {
+          icon = 'sunny.png';
+        } else if (
+          (weatherCode >= 1 && weatherCode <= 3) ||
+          [45, 48, 71, 73, 75, 85, 86].includes(weatherCode)
+        ) {
           icon = 'cloudy.png';
-        } else if ([61, 63, 65].includes(weatherCode)) {
+        } else if (
+          [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(weatherCode)
+        ) {
           icon = 'rainy.png';
         }
 
@@ -1169,7 +1199,18 @@ const Home = () => {
     fetchWeatherData();
     const intervalId = setInterval(fetchWeatherData, 300000);
     return () => clearInterval(intervalId);
-  }, [weatherCity, weatherCityLoaded]); // Recharger quand la ville change ou quand les préférences sont chargées
+  }, [weatherCity, weatherCityLoaded, weatherRefreshTick]);
+
+  const [weatherRefreshTick, setWeatherRefreshTick] = useState(0);
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        setWeatherRefreshTick(t => t + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   // Supprimer ce useEffect dupliqué car géré dans le premier useEffect
 
@@ -1765,7 +1806,6 @@ const Home = () => {
             </div>
           )}
           <div className="content">
-            {launcherLoadedFromBackend && (
             <GridLauncher
               apps={(launcherLayout && typeof launcherLayout === 'object' && Object.keys(launcherLayout).length > 0)
                 ? Object.entries(launcherLayout)
@@ -1797,7 +1837,7 @@ const Home = () => {
               widgets={widgets}
               onAddWidget={handleAddWidget}
               onRemoveWidget={handleRemoveWidget}
-            />)}
+            />
           </div>
           {/* Bouton de déconnexion fixe en bas à gauche */}
           <button className="logout-fab" onClick={handleLogout} title="Déconnexion">

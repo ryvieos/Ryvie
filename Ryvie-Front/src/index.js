@@ -14,6 +14,8 @@ import { initializeSession, isSessionActive } from './utils/sessionManager';
 import { isElectron } from './utils/platformUtils';
 import { handleAuthError } from './services/authService';
 import faviconUrl from './icons/ryvielogo0.png';
+import { SocketProvider } from './contexts/SocketContext';
+import { CachedRoutes } from './components/CachedRoutes';
 
 // Composant de redirection conditionnelle (Web et Electron)
 const ProtectedRoute = ({ children }) => {
@@ -21,6 +23,12 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const App = () => {
+  const [homeSettingsCache, setHomeSettingsCache] = React.useState({
+    home: null,
+    settings: null,
+    currentPath: null
+  });
+
   useEffect(() => {
     // Initialiser la session au démarrage
     initializeSession();
@@ -45,49 +53,57 @@ const App = () => {
   }, []);
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/" element={
-          isSessionActive() ? <Navigate to="/welcome" replace /> : <Navigate to="/login" replace />
-        } />
-        <Route path="/home" element={
-          <ProtectedRoute>
-            <Home />
-          </ProtectedRoute>
-        } />
-        <Route path="/user" element={
-          <ProtectedRoute>
-            <User />
-          </ProtectedRoute>
-        } />
-        <Route path="/settings" element={
-          <ProtectedRoute>
-            <Settings />
-          </ProtectedRoute>
-        } />
-        <Route path="/settings/storage" element={
-          <ProtectedRoute>
-            <StorageSettings />
-          </ProtectedRoute>
-        } />
-        <Route path="/welcome" element={
-          <ProtectedRoute>
-            <Welcome />
-          </ProtectedRoute>
-        } />
-        <Route path="/appstore" element={
-          <ProtectedRoute>
-            <AppStore />
-          </ProtectedRoute>
-        } />
-        <Route path="/userlogin" element={
-          <ProtectedRoute>
-            <Userlogin />
-          </ProtectedRoute>} />
-        <Route path="/server-restarting" element={<ServerRestarting />} />
-      </Routes>
-    </Router>
+    <SocketProvider>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={
+            isSessionActive() ? <Navigate to="/welcome" replace /> : <Navigate to="/login" replace />
+          } />
+          <Route path="/home" element={
+            <ProtectedRoute>
+              <CachedRoutes 
+                homeComponent={<Home />}
+                settingsComponent={<Settings />}
+              />
+            </ProtectedRoute>
+          } />
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <CachedRoutes 
+                homeComponent={<Home />}
+                settingsComponent={<Settings />}
+              />
+            </ProtectedRoute>
+          } />
+          <Route path="/user" element={
+            <ProtectedRoute>
+              <User />
+            </ProtectedRoute>
+          } />
+          <Route path="/settings/storage" element={
+            <ProtectedRoute>
+              <StorageSettings />
+            </ProtectedRoute>
+          } />
+          <Route path="/welcome" element={
+            <ProtectedRoute>
+              <Welcome />
+            </ProtectedRoute>
+          } />
+          <Route path="/appstore" element={
+            <ProtectedRoute>
+              <AppStore />
+            </ProtectedRoute>
+          } />
+          <Route path="/userlogin" element={
+            <ProtectedRoute>
+              <Userlogin />
+            </ProtectedRoute>} />
+          <Route path="/server-restarting" element={<ServerRestarting />} />
+        </Routes>
+      </Router>
+    </SocketProvider>
   );
 };
 
