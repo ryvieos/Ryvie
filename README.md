@@ -1,6 +1,6 @@
 # Ryvie
 
-Application (Front + Back) avec authentification LDAP, JWT et gestion des utilisateurs (UI Electron/Browser). v0.0.29
+Application (Front + Back) avec authentification LDAP, JWT et gestion des utilisateurs (UI Electron/Browser). v0.0.30
 
 ## Prérequis
 - Node.js 18+
