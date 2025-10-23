@@ -5,6 +5,8 @@
 
 // Import des données Netbird
 import netbirdDataRaw from './netbird-data.json';
+// Import des ports d'app générés par le backend (si une app n'est pas listée, fallback sur LOCAL_PORTS)
+import appPortsRaw from './app-ports.json';
 
 // Mapping des services vers les ports locaux
 const LOCAL_PORTS = {
@@ -23,11 +25,64 @@ const LOCAL_PORTS = {
 
 // Données Netbird (copie pour éviter les mutations)
 const netbirdData = { ...netbirdDataRaw };
+const appPorts = { ...appPortsRaw };
+
+const resolvePort = (appId, fallback) => {
+  const p = appPorts?.[appId];
+  return Number.isInteger(p) ? p : fallback;
+};
+
+const privateUrl = (host, port) => {
+  const scheme = port === 443 ? 'https' : 'http';
+  return `${scheme}://${host}:${port}`;
+};
 
 // Génération dynamique des URLs de base
 const generateBaseUrls = () => {
   const domains = netbirdData.domains;
   
+  // Préparer le bloc APPS avec les apps connues
+  const apps = {
+    APPSTORE: {
+      PUBLIC: `https://${domains.app}`,
+      PRIVATE: `http://ryvie.local:${LOCAL_PORTS.APPSTORE}`
+    },
+    RDRIVE: {
+      PUBLIC: `https://${domains.rdrive}`,
+      PRIVATE: privateUrl('ryvie.local', resolvePort('rdrive', LOCAL_PORTS.RDRIVE))
+    },
+    PORTAINER: {
+      PUBLIC: 'https://portainer.test.ryvie.fr', // Pas dans netbird_data
+      PRIVATE: `http://ryvie.local:${LOCAL_PORTS.PORTAINER}`
+    },
+    RTRANSFER: {
+      PUBLIC: `https://${domains.rtransfer}`,
+      PRIVATE: privateUrl('ryvie.local', resolvePort('rtransfer', LOCAL_PORTS.RTRANSFER))
+    },
+    RDROP: {
+      PUBLIC: `https://${domains.rdrop}`,
+      PRIVATE: privateUrl('ryvie.local', resolvePort('rdrop', LOCAL_PORTS.RDROP))
+    },
+    RPICTURES: {
+      PUBLIC: `https://${domains.rpictures}`,
+      PRIVATE: privateUrl('ryvie.local', resolvePort('rpictures', LOCAL_PORTS.RPICTURES))
+    }
+  };
+
+  // Étendre avec toute nouvelle app détectée (id = clé de app-ports.json)
+  Object.keys(appPorts).forEach((id) => {
+    const upper = id.toUpperCase();
+    if (!apps[upper]) {
+      const port = resolvePort(id, null);
+      if (port) {
+        apps[upper] = {
+          PUBLIC: domains[id] ? `https://${domains[id]}` : '',
+          PRIVATE: privateUrl('ryvie.local', port)
+        };
+      }
+    }
+  });
+
   return {
     // URLs du frontend
     FRONTEND: {
@@ -40,34 +95,9 @@ const generateBaseUrls = () => {
       PUBLIC: `https://${domains.status}`,
       PRIVATE: `http://ryvie.local:${LOCAL_PORTS.SERVER}`
     },
-    
-    // URLs des applications
-    APPS: {
-      APPSTORE: {
-        PUBLIC: `https://${domains.app}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.APPSTORE}`
-      },
-      RDRIVE: {
-        PUBLIC: `https://${domains.rdrive}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.RDRIVE}`
-      },
-      PORTAINER: {
-        PUBLIC: 'https://portainer.test.ryvie.fr', // Pas dans netbird_data
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.PORTAINER}`
-      },
-      RTRANSFER: {
-        PUBLIC: `https://${domains.rtransfer}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.RTRANSFER}`
-      },
-      RDROP: {
-        PUBLIC: `https://${domains.rdrop}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.RDROP}`
-      },
-      RPICTURES: {
-        PUBLIC: `https://${domains.rpictures}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.RPICTURES}`
-      }
-    },
+
+    // URLs des applications (connues + dynamiques)
+    APPS: apps,
 
     // URLs des services backend RDrive
     RDRIVE_BACKEND: {
