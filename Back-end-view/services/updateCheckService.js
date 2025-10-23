@@ -132,12 +132,27 @@ function compareVersions(current, latest) {
 }
 
 /**
- * Récupère le dernier tag local accessible depuis HEAD dans un repo
+ * Récupère le dernier tag local (par version) dans un repo
  */
 function getLocalLatestTag(dir) {
   try {
-    const tag = execSync('git describe --tags --abbrev=0', { cwd: dir, encoding: 'utf8' }).trim();
-    return tag || null;
+    const out = execSync('git tag', { cwd: dir, encoding: 'utf8' });
+    const tags = out.split('\n').map(t => t.trim()).filter(Boolean);
+    if (tags.length === 0) return null;
+    
+    // Filtrer uniquement les tags qui ressemblent à des versions (v0.0.1 ou 0.0.1)
+    const versionTags = tags.filter(t => /^v?\d+\.\d+\.\d+/.test(t));
+    if (versionTags.length === 0) return null;
+    
+    // Trier par version
+    const sorted = versionTags.sort((a, b) => {
+      const res = compareVersions(a, b);
+      if (res === null) return 0;
+      if (res === 'update-available') return -1; // b > a
+      if (res === 'ahead') return 1; // b < a
+      return 0;
+    });
+    return sorted[sorted.length - 1] || null;
   } catch (_) {
     return null;
   }
@@ -154,14 +169,19 @@ function getRemoteLatestTag(dir) {
       .map(l => (l.split('\t')[1] || '').replace('refs/tags/', '').trim())
       .filter(Boolean);
     if (tags.length === 0) return null;
+    
+    // Filtrer uniquement les tags qui ressemblent à des versions semver
+    const versionTags = tags.filter(t => /^\d+\.\d+\.\d+$/.test(t) || /^v\d+\.\d+\.\d+$/.test(t));
+    if (versionTags.length === 0) return null;
+    
     // Trier avec compareVersions
-    const sorted = tags.sort((a, b) => {
+    const sorted = versionTags.sort((a, b) => {
       const res = compareVersions(a, b);
       if (res === null) return 0; // si invalide, ne change pas l'ordre
       // compareVersions renvoie 'update-available' si b > a (latest > current)
       if (res === 'update-available') return -1; // b > a => a avant b
       if (res === 'ahead') return 1; // b < a => a après b
-      return 0; // égalité
+      return 0;
     });
     return sorted[sorted.length - 1] || null;
   } catch (_) {
@@ -174,6 +194,14 @@ function getRemoteLatestTag(dir) {
  */
 async function checkRyvieUpdate() {
   const currentBranch = getCurrentBranch(RYVIE_DIR);
+  
+  // Fetch tags pour s'assurer d'avoir les derniers tags distants
+  try {
+    execSync('git fetch --tags origin', { cwd: RYVIE_DIR, stdio: 'pipe' });
+  } catch (e) {
+    console.log('[updateCheck] Impossible de fetch les tags pour Ryvie:', e.message);
+  }
+  
   const localTag = getLocalLatestTag(RYVIE_DIR);
   const remoteTag = getRemoteLatestTag(RYVIE_DIR);
 
@@ -280,6 +308,13 @@ async function checkAppsUpdates() {
     
     const owner = repoMatch[1];
     const repo = repoMatch[2];
+    
+    // Fetch tags pour avoir les derniers tags
+    try {
+      execSync('git fetch --tags origin', { cwd: appPath, stdio: 'pipe' });
+    } catch (e) {
+      console.log(`[updateCheck] Impossible de fetch les tags pour ${appFolder}:`, e.message);
+    }
     
     const currentVersion = getAppCurrentVersion(appPath);
     const appBranch = getCurrentBranch(appPath);
