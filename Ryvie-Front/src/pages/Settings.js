@@ -63,6 +63,13 @@ const Settings = () => {
       } catch {}
       return false;
     })(),
+    autoTheme: (() => {
+      try {
+        const v = localStorage.getItem('ryvie_auto_theme');
+        if (v === 'false') return false;
+      } catch {}
+      return true;
+    })(),
     compressionLevel: 'medium',
     bandwidthLimit: 'unlimited',
     autoDelete: false,
@@ -385,7 +392,8 @@ const Settings = () => {
   // Synchroniser automatiquement le mode sombre avec le thème système
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
-    if (!prefsLoaded) return; // attendre les préférences pour éviter des changements indésirables
+    if (!prefsLoaded) return; 
+    if (!settings.autoTheme) return;
     const media = window.matchMedia('(prefers-color-scheme: dark)');
 
     const applySystemTheme = () => {
@@ -406,12 +414,10 @@ const Settings = () => {
       media.addEventListener('change', applySystemTheme);
       return () => media.removeEventListener('change', applySystemTheme);
     } else if (media.addListener) {
-      // Compatibilité anciens navigateurs
       media.addListener(applySystemTheme);
       return () => media.removeListener(applySystemTheme);
     }
-  // Dépendances minimales: accessMode pour éviter d'appeler l'API avant init, et le flag darkMode courant
-  }, [accessMode, settings.darkMode, prefsLoaded]);
+  }, [accessMode, settings.darkMode, settings.autoTheme, prefsLoaded]);
 
   // Vérification automatique des mises à jour au chargement
   useEffect(() => {
@@ -588,6 +594,13 @@ const Settings = () => {
       
       return newStats;
     });
+  };
+
+  // Fonction utilitaire: détecter si un fond est personnalisé (custom)
+  // RÈGLE SIMPLE: si commence par 'custom-' c'est un fond perso, sinon c'est un preset
+  const isBackgroundCustom = (bgValue) => {
+    if (!bgValue || typeof bgValue !== 'string') return false;
+    return bgValue.startsWith('custom-');
   };
 
   // Fonction pour changer le fond d'écran
@@ -856,36 +869,49 @@ const Settings = () => {
         console.log('[Settings] Mode sombre sauvegardé:', value);
         try { localStorage.setItem('ryvie_dark_mode', String(!!value)); } catch {}
         
-        const isCustom = (() => {
-          try {
-            const list = Array.isArray(customBackgrounds) ? customBackgrounds : [];
-            const name = typeof backgroundImage === 'string' ? backgroundImage : '';
-            if (!name) return false;
-            if (list.includes(name)) return true;
-            if (list.some(b => (typeof b === 'string' ? b : b?.filename) === name)) return true;
-            if (name.startsWith('custom-') || name.startsWith('user-')) return true;
-            // Considérer comme custom tout arrière-plan qui n'est pas un preset explicite
-            if (!name.startsWith('preset-') && name !== 'default' && name !== 'preset-default.webp') return true;
-            return false;
-          } catch { return false; }
-        })();
-
-        if (AUTO_SWITCH_WALLPAPER_WITH_THEME && prefsLoaded) {
-          if (value) {
-            if (!isCustom && (backgroundImage === 'preset-default.webp' || backgroundImage === 'default' || backgroundImage?.startsWith('preset-'))) {
-              await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-night.png' });
-              setBackgroundImage('preset-night.png');
-            }
-          } else {
-            if (!isCustom && (backgroundImage === 'preset-night.png' || backgroundImage?.startsWith('preset-'))) {
-              await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: 'preset-default.webp' });
-              setBackgroundImage('preset-default.webp');
-            }
-          }
+        // RÈGLE STRICTE: Ne JAMAIS changer un fond personnalisé
+        if (isBackgroundCustom(backgroundImage)) {
+          console.log('[Settings] ⚠️ Fond personnalisé détecté, pas de changement automatique');
+          return; // Sortir immédiatement sans toucher au fond
+        }
+        
+        // Si on arrive ici, c'est un preset -> on peut le changer
+        if (prefsLoaded) {
+          console.log('[Settings] 🎨 Changement automatique du fond preset selon le thème');
+          
+          // Trouver les presets night et default
+          const nightPreset = (presetBackgrounds || []).find(p => /night|nuit|dark/i.test(p?.name || p?.filename || ''));
+          const defaultPreset = (presetBackgrounds || []).find(p => /default/i.test(p?.name || p?.filename || ''));
+          
+          const nightKey = nightPreset?.filename ? `preset-${nightPreset.filename}` : 'preset-night.png';
+          const defaultKey = defaultPreset?.filename ? `preset-${defaultPreset.filename}` : 'preset-default.webp';
+          
+          const targetBg = value ? nightKey : defaultKey;
+          
+          console.log(`[Settings] Passage au fond: ${targetBg}`);
+          await axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: targetBg });
+          setBackgroundImage(targetBg);
         }
       } catch (error) {
         console.error('[Settings] Erreur sauvegarde mode sombre:', error);
       }
+    } else if (setting === 'autoTheme') {
+      // Basculer le suivi du thème système
+      setSettings(prev => ({
+        ...prev,
+        autoTheme: value
+      }));
+      try { localStorage.setItem('ryvie_auto_theme', String(!!value)); } catch {}
+      // Si on active Auto, appliquer immédiatement la préférence système
+      try {
+        if (value) {
+          const preferDark = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+          const serverUrl = getServerUrl(accessMode);
+          await axios.patch(`${serverUrl}/api/user/preferences/dark-mode`, { darkMode: preferDark });
+          setSettings(prev => ({ ...prev, darkMode: preferDark }));
+          try { localStorage.setItem('ryvie_dark_mode', String(!!preferDark)); } catch {}
+        }
+      } catch (e) { console.warn('[Settings] Synchro darkMode avec système échouée:', e?.message || e); }
     } else {
       setSettings(prev => ({
         ...prev,
@@ -1352,19 +1378,19 @@ const Settings = () => {
               {customBackgrounds.map((bg) => (
                 <div
                   key={bg.id}
-                  className={`background-option ${backgroundImage === bg.id ? 'active' : ''}`}
+                  className={`background-option ${backgroundImage === `custom-${bg.filename}` ? 'active' : ''}`}
                   style={{
                     height: '80px',
                     borderRadius: '8px',
                     cursor: 'pointer',
-                    border: backgroundImage === bg.id ? '3px solid #4a90e2' : '2px solid #ddd',
+                    border: backgroundImage === `custom-${bg.filename}` ? '3px solid #4a90e2' : '2px solid #ddd',
                     background: `url(${getServerUrl(accessMode)}/api/backgrounds/${bg.filename}) center/cover`,
                     position: 'relative',
                     transition: 'all 0.2s'
                   }}
-                  onClick={() => handleBackgroundChange(bg.id)}
+                  onClick={() => handleBackgroundChange(`custom-${bg.filename}`)}
                 >
-                  {backgroundImage === bg.id && (
+                  {backgroundImage === `custom-${bg.filename}` && (
                     <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#4a90e2', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
                   )}
                   {/* Bouton supprimer - uniquement sur les fonds personnalisés */}
@@ -2019,16 +2045,29 @@ const Settings = () => {
           <div className="settings-card">
             <h3>Préférences</h3>
             <div className="setting-item">
-              <label>Mode sombre</label>
+              <label>Thème automatique (suivre le système)</label>
               <label className="switch">
                 <input
                   type="checkbox"
-                  checked={settings.darkMode}
-                  onChange={(e) => handleSettingChange('darkMode', e.target.checked)}
+                  checked={!!settings.autoTheme}
+                  onChange={(e) => handleSettingChange('autoTheme', e.target.checked)}
                 />
                 <span className="slider"></span>
               </label>
             </div>
+            {!settings.autoTheme && (
+              <div className="setting-item">
+                <label>Mode sombre</label>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={settings.darkMode}
+                    onChange={(e) => handleSettingChange('darkMode', e.target.checked)}
+                  />
+                  <span className="slider"></span>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Performance */}
