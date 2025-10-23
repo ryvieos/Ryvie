@@ -132,16 +132,18 @@ function compareVersions(current, latest) {
 }
 
 /**
- * Récupère le dernier tag local (par version) dans un repo
+ * Récupère le dernier tag local (par version) atteint par HEAD dans un repo
+ * Utilise --merged HEAD pour ne prendre que les tags accessibles depuis la branche courante
  */
 function getLocalLatestTag(dir) {
   try {
-    const out = execSync('git tag', { cwd: dir, encoding: 'utf8' });
+    // git tag --merged HEAD --list 'v*' pour ne récupérer que les tags v* merged
+    const out = execSync("git tag --merged HEAD --list 'v*'", { cwd: dir, encoding: 'utf8' });
     const tags = out.split('\n').map(t => t.trim()).filter(Boolean);
     if (tags.length === 0) return null;
     
-    // Filtrer uniquement les tags qui ressemblent à des versions (v0.0.1 ou 0.0.1)
-    const versionTags = tags.filter(t => /^v?\d+\.\d+\.\d+/.test(t));
+    // Filtrer uniquement les tags SemVer valides (v0.0.1 ou 0.0.1, avec pré-release optionnel)
+    const versionTags = tags.filter(t => /^v?\d+(\.\d+){1,3}(-[0-9A-Za-z.+-]+)?$/.test(t));
     if (versionTags.length === 0) return null;
     
     // Trier par version
@@ -170,8 +172,8 @@ function getRemoteLatestTag(dir) {
       .filter(Boolean);
     if (tags.length === 0) return null;
     
-    // Filtrer uniquement les tags qui ressemblent à des versions semver
-    const versionTags = tags.filter(t => /^\d+\.\d+\.\d+$/.test(t) || /^v\d+\.\d+\.\d+$/.test(t));
+    // Filtrer uniquement les tags SemVer valides (avec pré-release optionnel)
+    const versionTags = tags.filter(t => /^v?\d+(\.\d+){1,3}(-[0-9A-Za-z.+-]+)?$/.test(t));
     if (versionTags.length === 0) return null;
     
     // Trier avec compareVersions
