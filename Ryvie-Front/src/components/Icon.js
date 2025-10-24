@@ -121,10 +121,14 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
   };
 
   const badgeStyle = getBadgeStyle();
+  
+  // Vérifier si l'app est cliquable (seulement si running ou pas de statut à afficher)
   const isClickable = !appConfig.showStatus || (appStatusData && appStatusData.status === 'running');
   
   const handleIconClick = () => {
+    // Ne rien faire si l'app n'est pas running (rouge ou orange)
     if (!isClickable) {
+      console.log('[Icon] App non disponible:', id, 'Status:', appStatusData?.status);
       return;
     }
     // Ne pas ouvrir si un menu contextuel est actif

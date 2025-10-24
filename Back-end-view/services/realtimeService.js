@@ -13,7 +13,9 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
 
   const broadcastAppStatus = () => getAppStatus()
     .then(apps => {
+      // Émettre les deux noms d'événement pour compatibilité
       io.emit('apps-status-update', apps);
+      io.emit('appsStatusUpdate', apps);
       return apps;
     })
     .catch(err => {
