@@ -119,6 +119,82 @@ function detectLaunchType(appId, dockerComposePath) {
 }
 
 /**
+ * Tente de lire le port depuis un fichier ryvie-app.yml (ou .yaml)
+ * Priorité: dossier du docker-compose -> racine de l'app
+ */
+function getRyvieAppPort(appDir, dockerComposeRelativePath) {
+  try {
+    const composeDir = dockerComposeRelativePath
+      ? path.dirname(path.join(appDir, dockerComposeRelativePath))
+      : appDir;
+    const candidates = [
+      path.join(composeDir, 'ryvie-app.yml'),
+      path.join(composeDir, 'ryvie-app.yaml'),
+      path.join(appDir, 'ryvie-app.yml'),
+      path.join(appDir, 'ryvie-app.yaml'),
+    ];
+
+    for (const file of candidates) {
+      if (fs.existsSync(file)) {
+        try {
+          const content = fs.readFileSync(file, 'utf8');
+          // Extraction simple du champ top-level `port:` (nombre ou string)
+          const match = content.match(/^\s*port\s*:\s*["']?(\d{1,5})["']?/mi);
+          if (match) {
+            const p = parseInt(match[1], 10);
+            if (!Number.isNaN(p)) return p;
+          }
+        } catch (_) {
+          // ignorer et essayer le prochain candidat
+        }
+      }
+    }
+  } catch (_) {
+    // silencieux pour ne pas polluer les logs
+  }
+  return null;
+}
+
+/**
+ * Extrait des métadonnées (id, name, port) depuis ryvie-app.yml si présent
+ */
+function getRyvieAppMeta(appDir, dockerComposeRelativePath) {
+  const meta = { id: null, name: null, port: null };
+  try {
+    const composeDir = dockerComposeRelativePath
+      ? path.dirname(path.join(appDir, dockerComposeRelativePath))
+      : appDir;
+    const candidates = [
+      path.join(composeDir, 'ryvie-app.yml'),
+      path.join(composeDir, 'ryvie-app.yaml'),
+      path.join(appDir, 'ryvie-app.yml'),
+      path.join(appDir, 'ryvie-app.yaml'),
+    ];
+
+    for (const file of candidates) {
+      if (fs.existsSync(file)) {
+        try {
+          const content = fs.readFileSync(file, 'utf8');
+          const idMatch = content.match(/^\s*id\s*:\s*["']?([A-Za-z0-9-_\.]+)["']?/mi);
+          if (idMatch) meta.id = idMatch[1].trim().toLowerCase();
+          const nameMatch = content.match(/^\s*name\s*:\s*["']?([^"'\n]+)["']?/mi);
+          if (nameMatch) meta.name = nameMatch[1].trim();
+          const portMatch = content.match(/^\s*port\s*:\s*["']?(\d{1,5})["']?/mi);
+          if (portMatch) meta.port = parseInt(portMatch[1], 10);
+          // Dès qu'on a lu un fichier, on peut retourner (le plus proche du compose est prioritaire)
+          return meta;
+        } catch (_) {
+          // passer au candidat suivant
+        }
+      }
+    }
+  } catch (_) {
+    // silencieux
+  }
+  return meta;
+}
+
+/**
  * Trouve l'icône d'une app (recherche récursive)
  */
 function findAppIcon(appDir, metadata) {
@@ -238,6 +314,9 @@ function generateManifest(appData) {
   
   const appDir = appData.appDir;
   const metadata = appData;
+  const ryvieMeta = getRyvieAppMeta(appDir, metadata.dockerComposePath);
+  const finalId = ryvieMeta.id || metadata.id;
+  const finalName = ryvieMeta.name || metadata.name;
   
   // Trouver l'icône
   const iconPath = findAppIcon(appDir, metadata);
@@ -254,8 +333,8 @@ function generateManifest(appData) {
   
   // Créer le manifest
   const manifest = {
-    id: metadata.id,
-    name: metadata.name,
+    id: finalId,
+    name: finalName,
     version: '1.0.0',
     description: metadata.description,
     icon: `icon${iconExt}`,
@@ -272,7 +351,7 @@ function generateManifest(appData) {
   };
   
   // Créer le dossier de destination dans /data/config/manifests/
-  const destDir = path.join(MANIFESTS_DIR, metadata.id);
+  const destDir = path.join(MANIFESTS_DIR, finalId);
   if (!fs.existsSync(destDir)) {
     fs.mkdirSync(destDir, { recursive: true });
   }
@@ -348,6 +427,32 @@ function main() {
   
   console.log(`\n✅ ${scannedApps.length} app(s) détectée(s)\n`);
   
+  // Nettoyer les manifests orphelins (apps supprimées de /data/apps/)
+  try {
+    const existingManifests = fs.readdirSync(MANIFESTS_DIR, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name);
+    
+    const scannedIds = scannedApps.map(app => app.id);
+    const orphans = existingManifests.filter(id => !scannedIds.includes(id));
+    
+    if (orphans.length > 0) {
+      console.log(`🗑️  Nettoyage de ${orphans.length} manifest(s) orphelin(s):`);
+      orphans.forEach(id => {
+        const orphanPath = path.join(MANIFESTS_DIR, id);
+        try {
+          fs.rmSync(orphanPath, { recursive: true, force: true });
+          console.log(`   ✅ Supprimé: ${id}`);
+        } catch (e) {
+          console.warn(`   ⚠️  Impossible de supprimer ${id}:`, e.message);
+        }
+      });
+      console.log('');
+    }
+  } catch (e) {
+    console.warn('⚠️  Erreur lors du nettoyage des manifests orphelins:', e.message);
+  }
+  
   // Générer les manifests
   const generatedManifests = [];
   
@@ -365,9 +470,26 @@ function main() {
   console.log('='.repeat(50));
   
   console.log('\n📋 Résumé des apps:');
+  const appPorts = {};
   generatedManifests.forEach(manifest => {
-    console.log(`   • ${manifest.name} (${manifest.id}) - Port: ${manifest.mainPort || 'N/A'}`);
+    const ryviePort = getRyvieAppPort(manifest.sourceDir, manifest.dockerComposePath);
+    const displayPort = ryviePort || manifest.mainPort || 'N/A';
+    console.log(`   • ${manifest.name} (${manifest.id}) - Port: ${displayPort}`);
+    if (ryviePort || manifest.mainPort) {
+      appPorts[manifest.id] = ryviePort || manifest.mainPort;
+    }
   });
+
+  // Écrire le mapping des ports pour le frontend
+  try {
+    const frontendPortsPath = path.join(__dirname, 'Ryvie-Front/src/config/app-ports.json');
+    const dir = path.dirname(frontendPortsPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(frontendPortsPath, JSON.stringify(appPorts, null, 2));
+    console.log(`\n📝 Ports des apps écrits pour le frontend: ${frontendPortsPath}`);
+  } catch (e) {
+    console.log(`\n⚠️  Impossible d'écrire app-ports.json pour le frontend: ${e.message}`);
+  }
   
   console.log('\n🎉 Génération terminée !');
   console.log(`\n💡 Prochaines étapes:`);
