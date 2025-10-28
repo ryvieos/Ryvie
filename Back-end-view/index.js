@@ -158,6 +158,26 @@ try {
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
+    // Vérifier et démarrer le reverse proxy Caddy si nécessaire
+    console.log('🔍 Vérification du reverse proxy Caddy...');
+    try {
+      const { ensureCaddyRunning } = require('./services/reverseProxyService');
+      const caddyResult = await ensureCaddyRunning();
+      if (caddyResult.success) {
+        if (caddyResult.alreadyRunning) {
+          console.log('✅ Caddy est déjà en cours d\'exécution');
+        } else if (caddyResult.started) {
+          console.log('✅ Caddy a été démarré avec succès');
+        }
+      } else {
+        console.error('❌ Erreur lors de la vérification/démarrage de Caddy:', caddyResult.error);
+        console.error('⚠️  Le reverse proxy n\'est pas disponible, l\'application peut ne pas être accessible via ryvie.local');
+      }
+    } catch (caddyError) {
+      console.error('❌ Erreur critique lors de la vérification de Caddy:', caddyError.message);
+      console.error('⚠️  Continuons le démarrage sans le reverse proxy...');
+    }
+    
     // Vérifier les snapshots en attente (après une mise à jour)
     const { checkPendingSnapshots } = require('./utils/snapshotCleanup');
     checkPendingSnapshots();
