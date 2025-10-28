@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { connectRyvieSocket } from '../utils/detectAccessMode';
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
+import { StorageManager } from '../utils/platformUtils';
 
 const SocketContext = createContext(null);
 
@@ -15,12 +16,48 @@ export const useSocket = () => {
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [serverStatus, setServerStatus] = useState(false);
+  const [serverStatus, setServerStatus] = useState(() => {
+    // Initialiser depuis le cache préchargé par Welcome.js
+    try {
+      const cached = StorageManager.getItem('server_status_cache');
+      if (cached && cached.connected !== undefined) {
+        // Vérifier que le cache n'est pas trop vieux (max 10 secondes)
+        const age = Date.now() - (cached.timestamp || 0);
+        if (age < 10000) {
+          console.log('[SocketContext] État serveur depuis cache:', cached.connected ? 'Connecté' : 'Déconnecté');
+          return cached.connected;
+        }
+      }
+    } catch {}
+    return false; // Par défaut: déconnecté
+  });
+  const [accessMode, setAccessMode] = useState(() => getCurrentAccessMode());
   const socketRef = useRef(null);
   const accessModeRef = useRef(null);
 
+  // Vérifier périodiquement si le mode d'accès est disponible
   useEffect(() => {
-    const accessMode = getCurrentAccessMode();
+    if (accessMode) return; // Déjà défini
+    
+    const checkAccessMode = () => {
+      const mode = getCurrentAccessMode();
+      if (mode) {
+        console.log('[SocketContext] Mode d\'accès détecté:', mode);
+        setAccessMode(mode);
+      }
+    };
+    
+    // Vérifier toutes les 100ms pendant 2 secondes max
+    const interval = setInterval(checkAccessMode, 100);
+    const timeout = setTimeout(() => clearInterval(interval), 2000);
+    
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [accessMode]);
+
+  useEffect(() => {
     
     // Ne pas reconnecter si on a déjà un socket pour ce mode
     if (socketRef.current && accessModeRef.current === accessMode) {
@@ -83,7 +120,7 @@ export const SocketProvider = ({ children }) => {
         socketRef.current = null;
       }
     };
-  }, []); // Vide pour ne se connecter qu'une fois
+  }, [accessMode]); // Se reconnecter si le mode change
 
   const value = {
     socket,

@@ -5,6 +5,10 @@ import '../styles/Welcome.css';
 import serverIcon from '../icons/lettre-r.png';
 import { setAccessMode as setGlobalAccessMode, getCurrentAccessMode } from '../utils/detectAccessMode';
 import { getCurrentUser, getCurrentUserRole, setCurrentUserName, initializeSession, isSessionActive, startSession } from '../utils/sessionManager';
+import { generateAppConfigFromManifests } from '../config/appConfig';
+import { StorageManager } from '../utils/platformUtils';
+import urlsConfig from '../config/urls';
+const { getServerUrl } = urlsConfig;
 
 const Welcome = () => {
   const navigate = useNavigate();
@@ -46,9 +50,12 @@ const Welcome = () => {
       // Nettoyer les paramètres URL
       window.history.replaceState({}, document.title, window.location.pathname);
       
-      // Rediriger vers /home si déjà connecté
+      // Rediriger vers /home si déjà connecté (avec préchargement)
       if (isSessionActive()) {
-        navigate('/home', { replace: true });
+        const mode = targetMode || getCurrentAccessMode() || 'private';
+        preloadHomeData(mode).then(() => {
+          navigate('/home', { replace: true });
+        });
       }
     }
   }, [navigate]);
@@ -176,10 +183,11 @@ const Welcome = () => {
     };
   }, []);
 
-  const handlePrivateAccess = () => {
+  const handlePrivateAccess = async () => {
     // Centralized access mode
     setGlobalAccessMode('private');
     
+
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
       // Récupérer le rôle de l'utilisateur via session manager
@@ -196,6 +204,10 @@ const Welcome = () => {
     }
     
     setUnlocked(true);
+    
+    // Précharger les données avant de naviguer
+    await preloadHomeData('private');
+    
     setTimeout(() => {
       if (isSessionActive()) {
         navigate('/home');
@@ -205,7 +217,84 @@ const Welcome = () => {
     }, 10);
   };
   
-  const handlePublicAccess = () => {
+  // Fonction de préchargement pour optimiser le premier chargement de Home
+  const preloadHomeData = async (accessMode) => {
+    try {
+      console.log('[Welcome] 🚀 Préchargement des données pour Home...');
+      const serverUrl = getServerUrl(accessMode);
+      const user = getCurrentUser();
+      
+      // 1. Précharger appsConfig et icônes
+      try {
+        const config = await generateAppConfigFromManifests(accessMode);
+        if (Object.keys(config).length > 0) {
+          StorageManager.setItem('appsConfig_cache', config);
+          console.log('[Welcome] ✅ appsConfig préchargé:', Object.keys(config).length, 'apps');
+          
+          // Extraire et sauvegarder les URLs des icônes
+          const iconImages = {};
+          Object.keys(config).forEach(iconId => {
+            if (config[iconId].icon) {
+              iconImages[iconId] = config[iconId].icon;
+            }
+          });
+          StorageManager.setItem('iconImages_cache', iconImages);
+          console.log('[Welcome] ✅ Icônes préchargées:', Object.keys(iconImages).length);
+        }
+      } catch (e) {
+        console.warn('[Welcome] ⚠️ Erreur préchargement appsConfig:', e.message);
+      }
+      
+      // 2. Vérifier la connectivité serveur (pour badge Connecté/Déconnecté)
+      try {
+        const statusResponse = await axios.get(`${serverUrl}/api/apps/manifests`, { timeout: 3000 });
+        if (statusResponse.status === 200) {
+          // Serveur accessible → sauvegarder l'état
+          StorageManager.setItem('server_status_cache', { 
+            connected: true, 
+            timestamp: Date.now() 
+          });
+          console.log('[Welcome] ✅ Serveur accessible (Connecté)');
+        }
+      } catch (e) {
+        // Serveur non accessible
+        StorageManager.setItem('server_status_cache', { 
+          connected: false, 
+          timestamp: Date.now() 
+        });
+        console.warn('[Welcome] ⚠️ Serveur non accessible (Déconnecté)');
+      }
+      
+      // 3. Précharger les préférences utilisateur (layout, anchors, widgets, etc.)
+      if (user) {
+        try {
+          const res = await axios.get(`${serverUrl}/api/user/preferences`);
+          
+          // Sauvegarder le launcher dans le cache
+          if (res.data?.launcher) {
+            localStorage.setItem(`launcher_${user}`, JSON.stringify(res.data.launcher));
+            console.log('[Welcome] ✅ Launcher préchargé');
+          }
+          
+          // Sauvegarder le fond d'écran
+          if (res.data?.backgroundImage) {
+            localStorage.setItem(`ryvie_bg_${user}`, res.data.backgroundImage);
+            console.log('[Welcome] ✅ Fond d\'écran préchargé');
+          }
+          
+          console.log('[Welcome] ✅ Préférences préchargées');
+        } catch (e) {
+          console.warn('[Welcome] ⚠️ Erreur préchargement préférences:', e.message);
+        }
+      }
+      
+      console.log('[Welcome] 🎉 Préchargement terminé');
+    } catch (error) {
+      console.error('[Welcome] ❌ Erreur lors du préchargement:', error);
+    }
+  };
+
+  const handlePublicAccess = async () => {
     // Centralized access mode
     setGlobalAccessMode('public');
     
@@ -226,6 +315,10 @@ const Welcome = () => {
     }
     
     setUnlocked(true);
+    
+    // Précharger les données avant de naviguer
+    await preloadHomeData('public');
+    
     setTimeout(() => {
       navigate('/home');
     }, 10);
