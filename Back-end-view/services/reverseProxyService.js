@@ -141,6 +141,14 @@ async function checkComposeFile() {
 }
 
 /**
+ * Extrait l'IP du Caddyfile actuel
+ */
+function extractIPFromCaddyfile(content) {
+  const match = content.match(/reverse_proxy\s+(\d+\.\d+\.\d+\.\d+):(\d+)/);
+  return match ? match[1] : null;
+}
+
+/**
  * Vérifie si le Caddyfile existe et a la bonne configuration
  */
 async function checkCaddyfile() {
@@ -156,6 +164,9 @@ async function checkCaddyfile() {
     
     const isValid = checks.every(check => check);
     
+    // Extraire l'IP actuelle
+    const currentIP = extractIPFromCaddyfile(content);
+    
     // Vérifier si la redirection HTTPS est présente (recommandé mais pas obligatoire)
     const hasHttpsRedirect = content.includes('https://ryvie.local') && content.includes('redir');
     if (!hasHttpsRedirect) {
@@ -166,7 +177,7 @@ async function checkCaddyfile() {
       console.warn('[reverseProxyService] ⚠️  Caddyfile existe mais configuration incomplète');
     }
     
-    return { exists: true, valid: isValid, content, hasHttpsRedirect };
+    return { exists: true, valid: isValid, content, currentIP, hasHttpsRedirect };
   } catch (error) {
     if (error.code === 'ENOENT') {
       console.warn('[reverseProxyService] ⚠️  Caddyfile non trouvé:', EXPECTED_CONFIG.caddyfile);
@@ -206,6 +217,30 @@ async function checkCaddyContainer() {
 }
 
 /**
+ * Arrête le container Caddy via docker-compose
+ */
+async function stopCaddy() {
+  try {
+    console.log('[reverseProxyService] 🛑 Arrêt de Caddy...');
+    
+    const { stdout, stderr } = await execPromise(
+      'docker compose down',
+      { cwd: REVERSE_PROXY_DIR }
+    );
+    
+    if (stderr && !stderr.includes('Stopping') && !stderr.includes('Removing')) {
+      console.warn('[reverseProxyService] Warnings:', stderr);
+    }
+    
+    console.log('[reverseProxyService] ✅ Caddy arrêté avec succès');
+    return { success: true, output: stdout };
+  } catch (error) {
+    console.error('[reverseProxyService] ❌ Erreur lors de l\'arrêt de Caddy:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Démarre le container Caddy via docker-compose
  */
 async function startCaddy() {
@@ -225,6 +260,54 @@ async function startCaddy() {
     return { success: true, output: stdout };
   } catch (error) {
     console.error('[reverseProxyService] ❌ Erreur lors du démarrage de Caddy:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Met à jour le Caddyfile avec la nouvelle IP
+ */
+async function updateCaddyfileIP() {
+  try {
+    const newIP = getLocalIP();
+    const caddyfileContent = generateCaddyfileContent();
+    
+    await fs.writeFile(EXPECTED_CONFIG.caddyfile, caddyfileContent);
+    console.log('[reverseProxyService] ✅ Caddyfile mis à jour avec IP:', newIP);
+    
+    return { success: true, newIP };
+  } catch (error) {
+    console.error('[reverseProxyService] ❌ Erreur lors de la mise à jour du Caddyfile:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Redémarre Caddy (down puis up)
+ */
+async function restartCaddy() {
+  try {
+    console.log('[reverseProxyService] 🔄 Redémarrage de Caddy...');
+    
+    // Arrêter Caddy
+    const stopResult = await stopCaddy();
+    if (!stopResult.success) {
+      return { success: false, error: 'Échec de l\'arrêt de Caddy', details: stopResult };
+    }
+    
+    // Attendre un peu
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Redémarrer Caddy
+    const startResult = await startCaddy();
+    if (!startResult.success) {
+      return { success: false, error: 'Échec du démarrage de Caddy', details: startResult };
+    }
+    
+    console.log('[reverseProxyService] ✅ Caddy redémarré avec succès');
+    return { success: true };
+  } catch (error) {
+    console.error('[reverseProxyService] ❌ Erreur lors du redémarrage de Caddy:', error.message);
     return { success: false, error: error.message };
   }
 }
@@ -276,7 +359,62 @@ async function ensureCaddyRunning() {
     
     console.log('[reverseProxyService] ✅ Fichiers de configuration OK');
     
-    // 2. Vérifier l'état du container
+    // 2. Vérifier si l'IP a changé
+    const currentHostIP = getLocalIP();
+    const caddyfileIP = caddyfileCheck.currentIP;
+    
+    if (caddyfileIP && caddyfileIP !== currentHostIP) {
+      console.log(`[reverseProxyService] 🔄 Changement d'IP détecté: ${caddyfileIP} → ${currentHostIP}`);
+      
+      // Mettre à jour le Caddyfile
+      const updateResult = await updateCaddyfileIP();
+      if (!updateResult.success) {
+        return {
+          success: false,
+          error: 'Échec de la mise à jour du Caddyfile',
+          details: updateResult
+        };
+      }
+      
+      // Vérifier si Caddy est en cours d'exécution
+      const containerStatus = await checkCaddyContainer();
+      if (containerStatus.running) {
+        console.log('[reverseProxyService] 🔄 Redémarrage de Caddy pour appliquer la nouvelle IP...');
+        const restartResult = await restartCaddy();
+        
+        if (!restartResult.success) {
+          return {
+            success: false,
+            error: 'Échec du redémarrage de Caddy',
+            details: restartResult
+          };
+        }
+        
+        // Attendre et vérifier que Caddy est bien redémarré
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const newStatus = await checkCaddyContainer();
+        
+        if (!newStatus.running) {
+          return {
+            success: false,
+            error: 'Caddy redémarré mais pas running',
+            container: newStatus
+          };
+        }
+        
+        console.log('[reverseProxyService] ✅ Caddy redémarré avec nouvelle IP:', currentHostIP);
+        return {
+          success: true,
+          ipChanged: true,
+          restarted: true,
+          oldIP: caddyfileIP,
+          newIP: currentHostIP,
+          container: newStatus
+        };
+      }
+    }
+    
+    // 3. Vérifier l'état du container
     const containerStatus = await checkCaddyContainer();
     
     if (containerStatus.running) {
@@ -284,11 +422,12 @@ async function ensureCaddyRunning() {
       return {
         success: true,
         alreadyRunning: true,
+        currentIP: currentHostIP,
         container: containerStatus
       };
     }
     
-    // 3. Démarrer Caddy si nécessaire
+    // 4. Démarrer Caddy si nécessaire
     if (!containerStatus.exists || !containerStatus.running) {
       console.log('[reverseProxyService] 🔄 Caddy n\'est pas démarré, lancement en cours...');
       const startResult = await startCaddy();
@@ -366,5 +505,8 @@ module.exports = {
   ensureCaddyRunning,
   getReverseProxyStatus,
   checkCaddyContainer,
-  startCaddy
+  startCaddy,
+  stopCaddy,
+  restartCaddy,
+  updateCaddyfileIP
 };
