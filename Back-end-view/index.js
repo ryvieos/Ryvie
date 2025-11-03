@@ -6,6 +6,7 @@ const Docker = require('dockerode');
 const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
+const crypto = require('crypto');
 
 // Charger les variables d'environnement du fichier .env
 dotenv.config();
@@ -142,8 +143,41 @@ let realtime;
 
 // Charger les paramètres au démarrage
 const fs = require('fs');
-const SETTINGS_FILE = '/data/config/server-settings.json';
+const { SETTINGS_FILE } = require('./config/paths');
 try {
+  // S'assurer que le dossier existe et créer un fichier avec id si absent
+  const path = require('path');
+  const dir = path.dirname(SETTINGS_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  if (fs.existsSync(SETTINGS_FILE)) {
+    const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    // Générer un id si manquant
+    if (!settings.id) {
+      settings.id = (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex'));
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    }
+    if (settings.tokenExpirationMinutes) {
+      process.env.JWT_EXPIRES_MINUTES = settings.tokenExpirationMinutes.toString();
+      console.log(`✅ Durée d'expiration du token chargée: ${settings.tokenExpirationMinutes} minutes`);
+    }
+  } else {
+    const defaults = {
+      id: (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex')),
+      tokenExpirationMinutes: 15
+    };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaults, null, 2));
+    process.env.JWT_EXPIRES_MINUTES = defaults.tokenExpirationMinutes.toString();
+    console.log(`✅ Fichier de paramètres créé avec id ${defaults.id} et durée ${defaults.tokenExpirationMinutes} minutes`);
+  }
+} catch (error) {
+  console.warn('⚠️  Impossible de charger/créer les paramètres serveur, utilisation des valeurs par défaut');
+}
+
+try {
+  // Deuxième passe lecture pour log (si premier bloc a déjà fait le nécessaire)
   if (fs.existsSync(SETTINGS_FILE)) {
     const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
     if (settings.tokenExpirationMinutes) {
@@ -151,9 +185,7 @@ try {
       console.log(`✅ Durée d'expiration du token chargée: ${settings.tokenExpirationMinutes} minutes`);
     }
   }
-} catch (error) {
-  console.warn('⚠️  Impossible de charger les paramètres serveur, utilisation des valeurs par défaut');
-}
+} catch (_) {}
 
 // Initialisation et démarrage des serveurs
 async function startServer() {

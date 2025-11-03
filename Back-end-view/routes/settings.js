@@ -5,15 +5,29 @@ const path = require('path');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const { checkAllUpdates } = require('../services/updateCheckService');
 const { updateRyvie, updateApp } = require('../services/updateService');
-
-const SETTINGS_FILE = '/data/config/server-settings.json';
+const { SETTINGS_FILE, NETBIRD_FILE } = require('../config/paths');
+const crypto = require('crypto');
 
 // Charger les paramètres
 function loadSettings() {
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
       const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
-      return JSON.parse(data);
+      const json = JSON.parse(data);
+      // S'assurer qu'un id existe
+      if (!json.id) {
+        json.id = (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex'));
+        saveSettings(json);
+      }
+      return json;
+    } else {
+      // Créer le dossier si nécessaire et le fichier avec valeurs par défaut + id
+      const defaults = {
+        id: (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex')),
+        tokenExpirationMinutes: 15
+      };
+      saveSettings(defaults);
+      return defaults;
     }
   } catch (error) {
     console.error('[settings] Erreur lors du chargement des paramètres:', error);
@@ -21,6 +35,7 @@ function loadSettings() {
   
   // Paramètres par défaut
   return {
+    id: (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex')),
     tokenExpirationMinutes: 15
   };
 }
@@ -171,6 +186,61 @@ router.post('/settings/update-app', verifyToken, isAdmin, async (req, res) => {
     res.status(500).json({ 
       success: false,
       error: 'Erreur lors de la mise à jour',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/settings/ryvie-domains - Récupérer les domaines publics Netbird (local uniquement, sans token)
+router.get('/settings/ryvie-domains', (req, res) => {
+  try {
+    // Vérifier que la requête vient du réseau local ou Netbird
+    const clientIP = req.ip || req.connection.remoteAddress;
+    
+    // Nettoyer l'IP si elle est au format IPv6-mapped IPv4
+    const cleanIP = clientIP.replace('::ffff:', '');
+    
+    const isLocal = cleanIP === '127.0.0.1' || 
+                    cleanIP === '::1' || 
+                    cleanIP.startsWith('127.') ||
+                    cleanIP.startsWith('192.168.') ||
+                    cleanIP.startsWith('10.') ||
+                    cleanIP.startsWith('172.') ||
+                    cleanIP === 'localhost';
+    
+    if (!isLocal) {
+      console.log(`[settings] Tentative d'accès non-local à ryvie-domains depuis ${clientIP} (nettoyé: ${cleanIP})`);
+      return res.status(403).json({ error: 'Accès refusé: cette API est uniquement accessible en local' });
+    }
+    
+    console.log(`[settings] Accès autorisé à ryvie-domains depuis ${clientIP} (nettoyé: ${cleanIP})`);
+    
+    // Charger settings pour récupérer l'id de l'instance
+    const settings = loadSettings();
+
+    // Lire le fichier netbird-data.json
+    if (!fs.existsSync(NETBIRD_FILE)) {
+      return res.status(404).json({ error: 'Fichier netbird-data.json non trouvé', ryvieId: settings?.id || null });
+    }
+    
+    const data = fs.readFileSync(NETBIRD_FILE, 'utf8');
+    const netbirdData = JSON.parse(data);
+    
+    // Retourner les domaines publics avec l'ID
+    if (netbirdData.domains) {
+      res.json({
+        success: true,
+        id: netbirdData.id || null,
+        ryvieId: settings?.id || null,
+        domains: netbirdData.domains
+      });
+    } else {
+      res.status(404).json({ error: 'Aucun domaine trouvé dans le fichier', ryvieId: settings?.id || null });
+    }
+  } catch (error) {
+    console.error('[settings] Erreur lors de la lecture des domaines Netbird:', error);
+    res.status(500).json({ 
+      error: 'Erreur serveur',
       details: error.message 
     });
   }
