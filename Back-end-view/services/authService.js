@@ -2,9 +2,9 @@ const jwt = require('jsonwebtoken');
 const { ensureConnected } = require('../redisClient');
 const fs = require('fs');
 const path = require('path');
+const { SETTINGS_FILE } = require('../config/paths');
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const SETTINGS_FILE = '/data/config/server-settings.json';
 
 // Fonction pour obtenir la durée d'expiration actuelle
 function getTokenExpirationMinutes() {

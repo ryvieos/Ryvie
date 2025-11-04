@@ -2,11 +2,10 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { APPS_DIR, RYVIE_DIR } = require('../config/paths');
 require('dotenv').config();
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const RYVIE_DIR = '/opt/Ryvie';
-const APPS_DIR = '/data/apps';
 
 /**
  * Récupère le dernier tag (tous branches) d'un repo GitHub

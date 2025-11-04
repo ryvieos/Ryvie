@@ -4,11 +4,10 @@ const fs = require('fs').promises;
 const path = require('path');
 const Docker = require('dockerode');
 const { getLocalIP } = require('../utils/network');
+const { REVERSE_PROXY_DIR } = require('../config/paths');
 
 const execPromise = util.promisify(exec);
 const docker = new Docker();
-
-const REVERSE_PROXY_DIR = '/data/config/reverse-proxy';
 const EXPECTED_CONFIG = {
   composeFile: path.join(REVERSE_PROXY_DIR, 'docker-compose.yml'),
   caddyfile: path.join(REVERSE_PROXY_DIR, 'Caddyfile'),
