@@ -51,7 +51,7 @@ const generateBaseUrls = () => {
     if (!port) return; // ignorer si pas de port défini
     apps[upper] = {
       PUBLIC: domains[id] ? `https://${domains[id]}` : '',
-      PRIVATE: privateUrl('ryvie.local', port)
+      PRIVATE: privateUrl('ryvietest.local', port)
     };
   });
 
@@ -59,13 +59,13 @@ const generateBaseUrls = () => {
     // URLs du frontend
     FRONTEND: {
       PUBLIC: `https://${domains.app}`,
-      PRIVATE: `http://ryvie.local:${LOCAL_PORTS.FRONTEND}`
+      PRIVATE: `http://ryvietest.local:${LOCAL_PORTS.FRONTEND}`
     },
 
     // URLs du serveur principal
     SERVER: {
       PUBLIC: `https://${domains.status}`,
-      PRIVATE: `http://ryvie.local:${LOCAL_PORTS.SERVER}`
+      PRIVATE: `http://ryvietest.local:${LOCAL_PORTS.SERVER}`
     },
 
     // URLs des applications (connues + dynamiques)
@@ -75,15 +75,15 @@ const generateBaseUrls = () => {
     RDRIVE_BACKEND: {
       BACKEND: {
         PUBLIC: `https://${domains['backend.rdrive']}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.BACKEND_RDRIVE}`
+        PRIVATE: `http://ryvietest.local:${LOCAL_PORTS.BACKEND_RDRIVE}`
       },
       CONNECTOR: {
         PUBLIC: `https://${domains['connector.rdrive']}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.CONNECTOR_RDRIVE}`
+        PRIVATE: `http://ryvietest.local:${LOCAL_PORTS.CONNECTOR_RDRIVE}`
       },
       DOCUMENT: {
         PUBLIC: `https://${domains['document.rdrive']}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.DOCUMENT_RDRIVE}`
+        PRIVATE: `http://ryvietest.local:${LOCAL_PORTS.DOCUMENT_RDRIVE}`
       }
     }
   };
