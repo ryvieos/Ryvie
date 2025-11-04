@@ -153,10 +153,35 @@ async function fetchAppsFromRelease(release) {
 }
 
 /**
+ * Enrichit les apps avec l'icône extraite de la galerie
+ */
+function enrichAppsWithIcons(apps) {
+  if (!Array.isArray(apps)) return apps;
+  
+  return apps.map(app => {
+    if (!app.gallery || !Array.isArray(app.gallery)) {
+      return { ...app, icon: null, previews: [] };
+    }
+    
+    // L'icône est l'image dont le nom contient 'icon'
+    const icon = app.gallery.find(url => url.toLowerCase().includes('icon')) || null;
+    // Les previews sont toutes les autres images
+    const previews = app.gallery.filter(url => !url.toLowerCase().includes('icon'));
+    
+    return {
+      ...app,
+      icon,
+      previews
+    };
+  });
+}
+
+/**
  * Récupère les apps depuis le fichier local
  */
 async function getApps() {
-  return await loadAppsFromFile();
+  const apps = await loadAppsFromFile();
+  return enrichAppsWithIcons(apps);
 }
 
 /**
@@ -169,7 +194,22 @@ async function getAppById(appId) {
     return null;
   }
   
-  return apps.find(app => app.id === appId) || null;
+  const app = apps.find(app => app.id === appId);
+  if (!app) return null;
+  
+  // Enrichir avec l'icône et les previews
+  if (!app.gallery || !Array.isArray(app.gallery)) {
+    return { ...app, icon: null, previews: [] };
+  }
+  
+  const icon = app.gallery.find(url => url.toLowerCase().includes('icon')) || null;
+  const previews = app.gallery.filter(url => !url.toLowerCase().includes('icon'));
+  
+  return {
+    ...app,
+    icon,
+    previews
+  };
 }
 
 /**
