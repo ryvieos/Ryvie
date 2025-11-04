@@ -4,6 +4,7 @@ const { verifyToken } = require('../middleware/auth');
 const { getServerInfo, restartServer } = require('../services/systemService');
 const si = require('systeminformation');
 const { getLocalIP } = require('../utils/network');
+const { APPS_DIR, MANIFESTS_DIR } = require('../config/paths');
 
 // GET /status (non-authenticated health endpoint)
 router.get('/status', (req, res) => {
@@ -54,11 +55,11 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
         let appSize = 0;
         console.log(`[Storage Detail] Calcul taille pour app: ${app.id} (${app.name})`);
 
-        // Taille du dossier de l'app dans /data/apps
+        // Taille du dossier de l'app dans APPS_DIR
         // Chercher tous les dossiers qui contiennent l'id de l'app (insensible à la casse)
         try {
-          if (fs.existsSync('/data/apps')) {
-            const appsDirs = fs.readdirSync('/data/apps', { withFileTypes: true })
+          if (fs.existsSync(APPS_DIR)) {
+            const appsDirs = fs.readdirSync(APPS_DIR, { withFileTypes: true })
               .filter(dirent => dirent.isDirectory())
               .map(dirent => dirent.name);
             
@@ -68,7 +69,7 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
             );
             
             if (matchingDir) {
-              const appFolder = `/data/apps/${matchingDir}`;
+              const appFolder = `${APPS_DIR}/${matchingDir}`;
               console.log(`[Storage Detail] Dossier trouvé: ${appFolder}`);
               
               const { stdout } = await execPromise(`sudo du -sb ${appFolder} 2>/dev/null | cut -f1`, { timeout: 30000 });
@@ -77,7 +78,7 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
               console.log(`[Storage Detail] Taille dossier ${appFolder}: ${folderSize} bytes (${folderSizeGB.toFixed(2)} GB)`);
               appSize += folderSizeGB;
             } else {
-              console.log(`[Storage Detail] Aucun dossier trouvé pour ${app.id} dans /data/apps`);
+              console.log(`[Storage Detail] Aucun dossier trouvé pour ${app.id} dans ${APPS_DIR}`);
             }
           }
         } catch (error) {
@@ -124,9 +125,9 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
         // Note: On ne compte PAS les images Docker car elles ont des layers partagés
         // qui seraient comptés en double. Les images sont déjà incluses dans df /data
         
-        // Récupérer l'icône depuis /data/config/manifests/{appId}/
+        // Récupérer l'icône depuis MANIFESTS_DIR/{appId}/
         let iconUrl = null;
-        const manifestDir = `/data/config/manifests/${app.id}`;
+        const manifestDir = `${MANIFESTS_DIR}/${app.id}`;
         const possibleIcons = ['icon.svg', 'icon.png', 'icon.jpg', 'icon.jpeg'];
         
         for (const iconName of possibleIcons) {

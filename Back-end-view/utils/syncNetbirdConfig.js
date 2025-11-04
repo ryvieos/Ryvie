@@ -1,11 +1,12 @@
 const fs = require('fs');
 const path = require('path');
+const { NETBIRD_FILE } = require('../config/paths');
 
 /**
  * Synchronise le fichier netbird-data.json depuis /data/config/netbird vers le frontend
  */
 function syncNetbirdConfig() {
-  const sourceFile = '/data/config/netbird/netbird-data.json';
+  const sourceFile = NETBIRD_FILE;
   const targetFile = path.join(__dirname, '../../Ryvie-Front/src/config/netbird-data.json');
   
   try {

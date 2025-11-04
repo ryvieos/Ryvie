@@ -1,9 +1,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-
-const RYVIE_DIR = '/opt/Ryvie';
-const APPS_DIR = '/data/apps';
+const { APPS_DIR, RYVIE_DIR } = require('../config/paths');
 
 /**
  * Met à jour Ryvie (git pull + pm2 reload)

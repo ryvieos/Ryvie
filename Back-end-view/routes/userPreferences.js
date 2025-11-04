@@ -5,11 +5,9 @@ const path = require('path');
 const multer = require('multer');
 const axios = require('axios');
 const { verifyToken } = require('../middleware/auth');
+const { PREFERENCES_DIR, BACKGROUNDS_DIR, PRESETS_DIR, MANIFESTS_DIR } = require('../config/paths');
 
 // Répertoire pour stocker les préférences utilisateur
-const PREFERENCES_DIR = '/data/config/user-preferences';
-const BACKGROUNDS_DIR = '/data/images/backgrounds'; // Fonds uploadés par les utilisateurs
-const PRESETS_DIR = '/opt/Ryvie/Ryvie-Front/public/images/backgrounds'; // Fonds prédéfinis
 
 // S'assurer que les répertoires existent
 if (!fs.existsSync(PREFERENCES_DIR)) {
@@ -23,7 +21,7 @@ if (!fs.existsSync(PREFERENCES_DIR)) {
 async function getInstalledAppIds() {
   const fs = require('fs');
   const path = require('path');
-  const manifestsDir = '/data/config/manifests';
+  const manifestsDir = MANIFESTS_DIR;
   const apps = [];
   try {
     if (!fs.existsSync(manifestsDir)) return apps;
@@ -148,7 +146,7 @@ async function generateDefaultLauncher() {
     // Charger les apps depuis les manifests
     const fs = require('fs');
     const path = require('path');
-    const manifestsDir = '/data/config/manifests';
+    const manifestsDir = MANIFESTS_DIR;
     
     const apps = [];
     if (fs.existsSync(manifestsDir)) {
