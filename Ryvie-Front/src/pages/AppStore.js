@@ -18,6 +18,30 @@ import '../styles/Transitions.css';
 import '../styles/AppStore.css';
 
 const AppStore = () => {
+  // Améliore le rendu de description: paragraphes + liens cliquables
+  const renderDescription = (text = '') => {
+    const urlRegex = /(https?:\/\/[\w.-]+(?:\/[\w\-._~:\/?#[\]@!$&'()*+,;=%]*)?)/gi;
+    const paragraphs = String(text).split(/\n{2,}/);
+    return (
+      <div className="description-content">
+        {paragraphs.map((para, idx) => (
+          <p key={idx}>
+            {para.split(urlRegex).map((part, i) => {
+              if (urlRegex.test(part)) {
+                urlRegex.lastIndex = 0;
+                return (
+                  <a key={i} href={part} target="_blank" rel="noopener noreferrer">
+                    {part}
+                  </a>
+                );
+              }
+              return <span key={i}>{part}</span>;
+            })}
+          </p>
+        ))}
+      </div>
+    );
+  };
   const navigate = useNavigate();
   // États locaux pour suivre les données, la recherche et les retours utilisateurs
   const [loading, setLoading] = useState(true);
@@ -136,15 +160,24 @@ const AppStore = () => {
   const nextFeatured = () => scrollToPage(featuredPage + 1);
   const prevFeatured = () => scrollToPage(featuredPage - 1);
 
-  // Auto-défilement de la galerie d'aperçus dans la modale (carrousel simple 3-1-2-3) + garde-bords
+  // Auto-défilement de la galerie d'aperçus dans la modale (carrousel dynamique) + garde-bords
   useEffect(() => {
     const container = previewRef.current;
     if (!selectedApp || !container) return;
     
     const originalImages = Array.from(container.querySelectorAll('.preview-image'));
-    if (originalImages.length === 0) return;
+    const count = originalImages.length;
+    if (count === 0) return;
     
-    // Ajouter un clone de la dernière image au début (3 avant 1)
+    // Cas 1 seule image: centrer et sortir
+    if (count === 1) {
+      setTimeout(() => {
+        originalImages[0].scrollIntoView({ block: 'nearest', inline: 'center' });
+      }, 0);
+      return;
+    }
+    
+    // Ajouter un clone de la dernière image au début
     const lastClone = originalImages[originalImages.length - 1].cloneNode(true);
     container.insertBefore(lastClone, originalImages[0]);
     
@@ -160,7 +193,7 @@ const AppStore = () => {
       }
     }, 0);
     
-    let currentIndex = 1; // Commence à la première vraie image
+    let currentIndex = 1; // Commence à la première vraie image (après le clone de fin)
 
     // Garde-bords: si on atteint visuellement la fin/début, repositionner immédiatement sur la vraie image équivalente
     const onScroll = () => {
@@ -189,17 +222,22 @@ const AppStore = () => {
     // Auto-défilement (sans pause au survol)
     let timer = setInterval(() => {
       const allImages = Array.from(container.querySelectorAll('.preview-image'));
-      currentIndex++;
-      
-      const targetImage = allImages[currentIndex];
+      if (allImages.length <= 2) {
+        // Pour 2 images (+ 2 clones), alterner proprement entre index 1 et 2
+        currentIndex = currentIndex === 1 ? 2 : 1;
+      } else {
+        currentIndex++;
+        if (currentIndex >= allImages.length) currentIndex = 1; // sécurité
+      }
+
+      const targetIndex = Math.max(0, Math.min(currentIndex, allImages.length - 1));
+      const targetImage = allImages[targetIndex];
       if (targetImage) {
         targetImage.scrollIntoView({ 
           behavior: 'smooth', 
           block: 'nearest', 
           inline: 'center' 
         });
-        
-        // La garde-bords onScroll se chargera de resynchroniser si on atteint le clone en bout de liste
       }
     }, 3500);
     
@@ -468,8 +506,8 @@ const AppStore = () => {
 
       {/* Titre de section */}
       <div className="section-header">
-        <p className="section-kicker">MOST INSTALLS</p>
-        <h2 className="section-title">In popular demand</h2>
+        <p className="section-kicker">LES PLUS INSTALLÉES</p>
+        <h2 className="section-title">Très demandées</h2>
         <span className="section-meta">{apps.length} app{apps.length > 1 ? 's' : ''}</span>
       </div>
 
@@ -599,8 +637,6 @@ const AppStore = () => {
                   <div 
                     className="preview-gallery"
                     ref={previewRef}
-                    onMouseEnter={() => setPreviewHovered(true)}
-                    onMouseLeave={() => setPreviewHovered(false)}
                   >
                     {selectedApp.previews.map((preview, index) => (
                       <img 
@@ -619,7 +655,7 @@ const AppStore = () => {
               
               <div className="detail-section">
                 <h3>Description</h3>
-                <p>{selectedApp.description}</p>
+                {renderDescription(selectedApp.description)}
               </div>
               
               {selectedApp.repo && (
