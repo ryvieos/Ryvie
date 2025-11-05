@@ -19,6 +19,7 @@ import '../styles/AppStore.css';
 
 const AppStore = () => {
   const navigate = useNavigate();
+  // États locaux pour suivre les données, la recherche et les retours utilisateurs
   const [loading, setLoading] = useState(true);
   const [apps, setApps] = useState([]);
   const [filteredApps, setFilteredApps] = useState([]);
@@ -52,6 +53,10 @@ const AppStore = () => {
     }
   }, [searchQuery, apps]);
 
+/**
+ * Récupère la liste des applications depuis l'API AppStore.
+ * Actualise l'état global et gère l'affichage d'erreur si besoin.
+ */
   const fetchApps = async () => {
     try {
       setLoading(true);
@@ -69,6 +74,9 @@ const AppStore = () => {
     }
   };
 
+/**
+ * Récupère l'état de santé du catalogue pour afficher la version disponible.
+ */
   const fetchCatalogHealth = async () => {
     try {
       const accessMode = getCurrentAccessMode() || 'private';
@@ -80,6 +88,9 @@ const AppStore = () => {
     }
   };
 
+/**
+ * Vérifie auprès du serveur si une mise à jour du catalogue est disponible.
+ */
   const checkForUpdates = async () => {
     try {
       const accessMode = getCurrentAccessMode() || 'private';
@@ -98,6 +109,9 @@ const AppStore = () => {
     }
   };
 
+/**
+ * Lance la mise à jour du catalogue et recharge les données en cas de succès.
+ */
   const updateCatalog = async () => {
     try {
       setIsUpdating(true);
@@ -128,11 +142,17 @@ const AppStore = () => {
     }
   };
 
+/**
+ * Affiche un toast temporaire pour informer l'utilisateur.
+ */
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
   };
 
+/**
+ * Retourne une couleur indicative pour la catégorie d'application.
+ */
   const getCategoryColor = (category) => {
     const colors = {
       productivity: '#1976d2',
