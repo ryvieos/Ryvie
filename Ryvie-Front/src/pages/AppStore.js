@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import urlsConfig from '../config/urls';
@@ -24,12 +24,33 @@ const AppStore = () => {
   const [apps, setApps] = useState([]);
   const [filteredApps, setFilteredApps] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedApp, setSelectedApp] = useState(null);
   const [catalogHealth, setCatalogHealth] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [enlargedImage, setEnlargedImage] = useState(null);
+  const [featuredApps, setFeaturedApps] = useState([]);
+  const featuredRef = useRef(null);
+  const [featuredHovered, setFeaturedHovered] = useState(false);
+  const [featuredPage, setFeaturedPage] = useState(0);
+  const previewRef = useRef(null);
+  const [previewHovered, setPreviewHovered] = useState(false);
+
+  // Convertit une couleur hex en rgb
+  const hexToRgb = (hex) => {
+    if (!hex) return '17,24,39';
+    const sanitized = hex.replace('#', '');
+    const bigint = parseInt(sanitized.length === 3
+      ? sanitized.split('').map(c => c + c).join('')
+      : sanitized, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `${r},${g},${b}`;
+  };
 
   // Charger les apps au montage
   useEffect(() => {
@@ -37,21 +58,159 @@ const AppStore = () => {
     fetchCatalogHealth();
   }, []);
 
-  // Filtrer les apps selon la recherche
+  // Déboucer la recherche pour fluidifier la saisie
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredApps(apps);
-    } else {
-      const query = searchQuery.toLowerCase();
-      setFilteredApps(
-        apps.filter(app => 
-          app.name?.toLowerCase().includes(query) ||
-          app.description?.toLowerCase().includes(query) ||
-          app.category?.toLowerCase().includes(query)
-        )
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 200);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // Filtrer les apps selon la recherche et la catégorie
+  useEffect(() => {
+    let filtered = apps;
+    
+    // Filtre par catégorie
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(app => 
+        app.category?.toLowerCase() === selectedCategory.toLowerCase()
       );
     }
-  }, [searchQuery, apps]);
+    
+    // Filtre par recherche
+    if (debouncedQuery.trim()) {
+      const query = debouncedQuery.toLowerCase();
+      filtered = filtered.filter(app => 
+        app.name?.toLowerCase().includes(query) ||
+        app.description?.toLowerCase().includes(query) ||
+        app.category?.toLowerCase().includes(query)
+      );
+    }
+    
+    setFilteredApps(filtered);
+  }, [debouncedQuery, selectedCategory, apps]);
+
+  // Extraire les catégories uniques
+  const categories = ['all', ...new Set(apps.map(app => app.category).filter(Boolean))];
+
+  // Sélectionner 6 apps aléatoires pour Featured (défilement par pages de 2)
+  useEffect(() => {
+    if (apps.length > 0) {
+      const shuffled = [...apps].sort(() => 0.5 - Math.random());
+      setFeaturedApps(shuffled.slice(0, 6));
+    }
+  }, [apps]);
+
+  // Auto défilement du carrousel Featured (par "page" de 2 cartes)
+  useEffect(() => {
+    const container = featuredRef.current;
+    if (!container) return;
+    let intervalId;
+    const tick = () => {
+      if (featuredHovered) return; // pause au survol
+      const page = container.clientWidth; // avance d'une vue (2 cartes)
+      const maxScroll = container.scrollWidth - container.clientWidth;
+      const next = container.scrollLeft + page;
+      container.scrollTo({ left: next >= maxScroll ? 0 : next, behavior: 'smooth' });
+    };
+    intervalId = setInterval(tick, 4000);
+    return () => clearInterval(intervalId);
+  }, [featuredApps, featuredHovered]);
+
+  // Synchroniser la pagination avec le scroll
+  const onFeaturedScroll = () => {
+    const container = featuredRef.current;
+    if (!container) return;
+    const pageWidth = container.clientWidth;
+    const index = Math.round(container.scrollLeft / pageWidth);
+    setFeaturedPage(index);
+  };
+
+  const scrollToPage = (index) => {
+    const container = featuredRef.current;
+    if (!container) return;
+    const pageWidth = container.clientWidth;
+    const maxIndex = Math.max(0, Math.ceil((featuredApps.length || 0) / 2) - 1);
+    const clamped = Math.min(Math.max(index, 0), maxIndex);
+    container.scrollTo({ left: clamped * pageWidth, behavior: 'smooth' });
+  };
+
+  const nextFeatured = () => scrollToPage(featuredPage + 1);
+  const prevFeatured = () => scrollToPage(featuredPage - 1);
+
+  // Auto-défilement de la galerie d'aperçus dans la modale (carrousel simple 3-1-2-3) + garde-bords
+  useEffect(() => {
+    const container = previewRef.current;
+    if (!selectedApp || !container) return;
+    
+    const originalImages = Array.from(container.querySelectorAll('.preview-image'));
+    if (originalImages.length === 0) return;
+    
+    // Ajouter un clone de la dernière image au début (3 avant 1)
+    const lastClone = originalImages[originalImages.length - 1].cloneNode(true);
+    container.insertBefore(lastClone, originalImages[0]);
+    
+    // Ajouter un clone de la première image à la fin (pour boucler)
+    const firstClone = originalImages[0].cloneNode(true);
+    container.appendChild(firstClone);
+    
+    // Centrer sur la première vraie image (index 1 maintenant car 3 est avant)
+    setTimeout(() => {
+      const allImages = Array.from(container.querySelectorAll('.preview-image'));
+      if (allImages[1]) {
+        allImages[1].scrollIntoView({ block: 'nearest', inline: 'center' });
+      }
+    }, 0);
+    
+    let currentIndex = 1; // Commence à la première vraie image
+
+    // Garde-bords: si on atteint visuellement la fin/début, repositionner immédiatement sur la vraie image équivalente
+    const onScroll = () => {
+      const imgs = Array.from(container.querySelectorAll('.preview-image'));
+      if (imgs.length < 3) return;
+      const nearEnd = container.scrollLeft >= (container.scrollWidth - container.clientWidth - 8);
+      const nearStart = container.scrollLeft <= 8;
+      if (nearEnd) {
+        // On est sur le clone de la première image; revenir instantanément à la première vraie
+        const firstReal = imgs[1];
+        if (firstReal) {
+          firstReal.scrollIntoView({ block: 'nearest', inline: 'center' });
+          currentIndex = 1;
+        }
+      } else if (nearStart) {
+        // Si l'utilisateur revient au tout début, aller à la dernière vraie image
+        const lastReal = imgs[imgs.length - 2];
+        if (lastReal) {
+          lastReal.scrollIntoView({ block: 'nearest', inline: 'center' });
+          currentIndex = imgs.length - 2;
+        }
+      }
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    
+    // Auto-défilement (sans pause au survol)
+    let timer = setInterval(() => {
+      const allImages = Array.from(container.querySelectorAll('.preview-image'));
+      currentIndex++;
+      
+      const targetImage = allImages[currentIndex];
+      if (targetImage) {
+        targetImage.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'nearest', 
+          inline: 'center' 
+        });
+        
+        // La garde-bords onScroll se chargera de resynchroniser si on atteint le clone en bout de liste
+      }
+    }, 3500);
+    
+    return () => {
+      clearInterval(timer);
+      // Nettoyer les clones
+      if (lastClone.parentNode) lastClone.remove();
+      if (firstClone.parentNode) firstClone.remove();
+      container.removeEventListener('scroll', onScroll);
+    };
+  }, [selectedApp]);
 
 /**
  * Récupère la liste des applications depuis l'API AppStore.
@@ -168,49 +327,109 @@ const AppStore = () => {
 
   if (loading) {
     return (
-      <div className="appstore-loading">
-        <div className="spinner"></div>
-        <p>Chargement du catalogue...</p>
+      <div className="appstore-container">
+        <div className="search-bar" style={{opacity:0.5}}>
+          <FontAwesomeIcon icon={faSearch} className="search-icon" />
+          <input type="text" className="search-input" placeholder="Rechercher une application..." disabled />
+        </div>
+        <div className="apps-grid">
+          {Array.from({length:8}).map((_,i)=> (
+            <div className="app-card skeleton" key={i}>
+              <div className="app-card-header">
+                <div className="skeleton-thumb"></div>
+                <div className="app-card-title-section">
+                  <div className="skeleton-line w-60"></div>
+                  <div className="skeleton-line w-32"></div>
+                </div>
+                <div className="skeleton-pill"></div>
+              </div>
+              <div className="app-card-body">
+                <div className="skeleton-line w-100"></div>
+                <div className="skeleton-line w-80"></div>
+                <div className="skeleton-chips"></div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="appstore-container">
-      {/* Header */}
-      <div className="appstore-header">
-        <div className="header-title">
-          <img src={require('../icons/app-AppStore.jpeg')} alt="App Store" className="header-icon" />
-          <div>
-            <h1>App Store</h1>
-            <p className="header-subtitle">
-              {apps.length} application{apps.length > 1 ? 's' : ''} disponible{apps.length > 1 ? 's' : ''}
-              {catalogHealth?.storage?.releaseTag && (
-                <span className="version-badge">{catalogHealth.storage.releaseTag}</span>
-              )}
-            </p>
+
+      {/* Section Featured Apps */}
+      {featuredApps.length > 0 && (
+        <div className="featured-section">
+          <div className="section-header-simple">
+            <h2 className="section-title-simple">Applications en vedette</h2>
           </div>
-        </div>
-        
-        <div className="header-actions">
-          <button 
-            className="btn-secondary"
-            onClick={checkForUpdates}
-            title="Vérifier les mises à jour"
+          <div 
+            className="featured-carousel"
+            ref={featuredRef}
+            onMouseEnter={() => setFeaturedHovered(true)}
+            onMouseLeave={() => setFeaturedHovered(false)}
+            onScroll={onFeaturedScroll}
           >
-            <FontAwesomeIcon icon={faInfoCircle} />
-          </button>
-          <button 
-            className="btn-primary"
-            onClick={updateCatalog}
-            disabled={isUpdating}
-            title="Mettre à jour le catalogue"
-          >
-            <FontAwesomeIcon icon={faSync} spin={isUpdating} />
-            {isUpdating ? ' Mise à jour...' : ' Actualiser'}
-          </button>
+            {featuredApps.map((app) => (
+              <div 
+                key={app.id} 
+                className="featured-card"
+                onClick={() => setSelectedApp(app)}
+              >
+                <div 
+                  className="featured-card-content"
+                  style={(() => {
+                    const base = getCategoryColor(app.category);
+                    const rgb = hexToRgb(base);
+                    const bg = app.previews && app.previews[0] ? `, url(${app.previews[0]})` : '';
+                    return {
+                      backgroundImage: `linear-gradient(90deg, rgba(${rgb},0.55) 0%, rgba(17,24,39,0.35) 60%)${bg}`
+                    };
+                  })()}
+                >
+                  <div className="featured-overlay">
+                    <div className="featured-left">
+                      {app.icon ? (
+                        <img src={app.icon} alt={app.name} className="featured-badge-icon" />
+                      ) : (
+                        <div className="featured-badge-placeholder">{app.name?.charAt(0).toUpperCase()}</div>
+                      )}
+                      <div className="featured-texts">
+                        <h3 className="featured-title">{app.name}</h3>
+                        <p className="featured-subtitle">{app.description}</p>
+                      </div>
+                    </div>
+                    <button
+                      className="featured-install-btn"
+                      onClick={(e) => { e.stopPropagation(); setSelectedApp(app); }}
+                    >
+                      Installer
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Contrôles carrousel */}
+          {featuredApps.length > 2 && (
+            <>
+              <button className="featured-nav featured-prev" onClick={prevFeatured} aria-label="Précédent">‹</button>
+              <button className="featured-nav featured-next" onClick={nextFeatured} aria-label="Suivant">›</button>
+              <div className="featured-dots">
+                {Array.from({ length: Math.ceil(featuredApps.length / 2) }).map((_, i) => (
+                  <button
+                    key={i}
+                    className={`featured-dot ${i === featuredPage ? 'active' : ''}`}
+                    onClick={() => scrollToPage(i)}
+                    aria-label={`Aller à la page ${i + 1}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Barre de recherche */}
       <div className="search-bar">
@@ -232,6 +451,28 @@ const AppStore = () => {
         )}
       </div>
 
+      {/* Filtres par catégorie */}
+      <div className="category-filters">
+        {categories.map((category) => (
+          <button
+            key={category}
+            className={`category-chip ${
+              selectedCategory === category ? 'active' : ''
+            }`}
+            onClick={() => setSelectedCategory(category)}
+          >
+            {category === 'all' ? 'Toutes' : category.charAt(0).toUpperCase() + category.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Titre de section */}
+      <div className="section-header">
+        <p className="section-kicker">MOST INSTALLS</p>
+        <h2 className="section-title">In popular demand</h2>
+        <span className="section-meta">{apps.length} app{apps.length > 1 ? 's' : ''}</span>
+      </div>
+
       {/* Grille des applications */}
       <div className="apps-grid">
         {filteredApps.length === 0 ? (
@@ -245,22 +486,35 @@ const AppStore = () => {
             </p>
           </div>
         ) : (
-          filteredApps.map((app) => (
+          filteredApps.map((app, index) => (
             <div 
               key={app.id} 
-              className="app-card"
+              className="app-card card-reveal"
+              style={{ ['--i']: index }}
               onClick={() => setSelectedApp(app)}
             >
-              {app.icon ? (
-                <img src={app.icon} alt={app.name} className="app-icon" />
-              ) : (
-                <div className="app-icon-placeholder">
-                  {app.name?.charAt(0).toUpperCase()}
+              <div className="app-card-header">
+                {app.icon ? (
+                  <img src={app.icon} alt={app.name} className="app-icon" loading="lazy" />
+                ) : (
+                  <div className="app-icon-placeholder">
+                    {app.name?.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                
+                <div className="app-card-title-section">
+                  <h3 className="app-name">{app.name}</h3>
+                  <p className="app-subtitle">
+                    {app.category ? app.category.charAt(0).toUpperCase() + app.category.slice(1) : 'App'}
+                  </p>
                 </div>
-              )}
+                
+                <button className="app-get-button" onClick={(e) => { e.stopPropagation(); }}>
+                  Installer
+                </button>
+              </div>
               
-              <div className="app-info">
-                <h3 className="app-name">{app.name}</h3>
+              <div className="app-card-body">
                 <p className="app-description">{app.description}</p>
                 
                 <div className="app-meta">
@@ -301,40 +555,60 @@ const AppStore = () => {
                   {selectedApp.name?.charAt(0).toUpperCase()}
                 </div>
               )}
-              <div>
+              <div className="modal-header-info">
                 <h2>{selectedApp.name}</h2>
+                {selectedApp.category && (
+                  <p className="modal-subtitle">
+                    {selectedApp.category.charAt(0).toUpperCase() + selectedApp.category.slice(1)}
+                  </p>
+                )}
                 <p className="modal-version">Version {selectedApp.version}</p>
+              </div>
+              <div className="modal-header-actions">
+                <button className="btn-primary btn-install-header">
+                  <FontAwesomeIcon icon={faDownload} /> Installer
+                </button>
               </div>
             </div>
             
-            <div className="modal-body">
-              <div className="detail-section">
-                <h3>Description</h3>
-                <p>{selectedApp.description}</p>
-              </div>
-              
+            <div className="modal-meta">
               {selectedApp.category && (
-                <div className="detail-section">
-                  <h3>Catégorie</h3>
-                  <span 
-                    className="category-badge"
-                    style={{ backgroundColor: getCategoryColor(selectedApp.category) }}
-                  >
-                    {selectedApp.category}
-                  </span>
+                <div className="meta-item">
+                  <div className="meta-label">Catégorie</div>
+                  <div className="meta-value">{selectedApp.category.charAt(0).toUpperCase() + selectedApp.category.slice(1)}</div>
                 </div>
               )}
-              
+              {selectedApp.developer && (
+                <div className="meta-item">
+                  <div className="meta-label">Développeur</div>
+                  <div className="meta-value">{selectedApp.developer}</div>
+                </div>
+              )}
+              {selectedApp.version && (
+                <div className="meta-item">
+                  <div className="meta-label">Version</div>
+                  <div className="meta-value">{selectedApp.version}</div>
+                </div>
+              )}
+            </div>
+            
+            <div className="modal-body">
               {selectedApp.previews && selectedApp.previews.length > 0 && (
                 <div className="detail-section">
                   <h3>Aperçu</h3>
-                  <div className="preview-gallery">
+                  <div 
+                    className="preview-gallery"
+                    ref={previewRef}
+                    onMouseEnter={() => setPreviewHovered(true)}
+                    onMouseLeave={() => setPreviewHovered(false)}
+                  >
                     {selectedApp.previews.map((preview, index) => (
                       <img 
                         key={index}
-                        src={preview} 
+                        src={preview}
                         alt={`${selectedApp.name} preview ${index + 1}`}
                         className="preview-image"
+                        loading="lazy"
                         onClick={() => setEnlargedImage(preview)}
                         onError={(e) => e.target.style.display = 'none'}
                       />
@@ -342,6 +616,11 @@ const AppStore = () => {
                   </div>
                 </div>
               )}
+              
+              <div className="detail-section">
+                <h3>Description</h3>
+                <p>{selectedApp.description}</p>
+              </div>
               
               {selectedApp.repo && (
                 <div className="detail-section">
@@ -370,23 +649,9 @@ const AppStore = () => {
                   </a>
                 </div>
               )}
-              
-              {selectedApp.developer && (
-                <div className="detail-section">
-                  <h3>Développeur</h3>
-                  <p>{selectedApp.developer}</p>
-                </div>
-              )}
             </div>
             
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setSelectedApp(null)}>
-                Fermer
-              </button>
-              <button className="btn-primary">
-                <FontAwesomeIcon icon={faDownload} /> Installer
-              </button>
-            </div>
+            
           </div>
         </div>
       )}
@@ -409,6 +674,16 @@ const AppStore = () => {
           </div>
         </div>
       )}
+
+      {/* Bouton floating actualiser */}
+      <button 
+        className="floating-refresh-btn"
+        onClick={updateCatalog}
+        disabled={isUpdating}
+        title="Actualiser le catalogue"
+      >
+        <FontAwesomeIcon icon={faSync} spin={isUpdating} />
+      </button>
 
       {/* Toast notifications */}
       {toast.show && (
