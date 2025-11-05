@@ -271,7 +271,69 @@ async function updateApp(appName) {
   }
 }
 
+
+/**
+ * Met à jour le catalogue d'apps du store
+ */
+async function updateStoreCatalog() {
+  const appStoreService = require('./appStoreService');
+  const { checkStoreCatalogUpdate } = require('./updateCheckService');
+  
+  try {
+    console.log('[Update] Vérification du catalogue...');
+    
+    // D'abord, vérifier si une mise à jour est nécessaire
+    const checkResult = await checkStoreCatalogUpdate();
+    
+    if (!checkResult.updateAvailable) {
+      console.log(`[Update] ✅ Catalogue déjà à jour (${checkResult.currentVersion})`);
+      return {
+        success: true,
+        message: `Catalogue déjà à jour (${checkResult.currentVersion})`,
+        version: checkResult.currentVersion,
+        updated: false
+      };
+    }
+    
+    console.log(`[Update] Mise à jour du catalogue: ${checkResult.currentVersion || 'aucune'} → ${checkResult.latestVersion}`);
+    
+    // Récupérer la dernière release
+    const latestRelease = await appStoreService.getLatestRelease();
+    
+    // Télécharger apps.json depuis la release
+    const data = await appStoreService.fetchAppsFromRelease(latestRelease);
+    
+    // Sauvegarder sur disque
+    await appStoreService.saveAppsToFile(data);
+    
+    // Mettre à jour les métadonnées
+    appStoreService.metadata.releaseTag = latestRelease.tag;
+    appStoreService.metadata.lastCheck = Date.now();
+    await appStoreService.saveMetadata();
+    
+    console.log(`[Update] ✅ Catalogue mis à jour vers ${latestRelease.tag}`);
+    
+    return {
+      success: true,
+      message: `Catalogue mis à jour vers ${latestRelease.tag}`,
+      version: latestRelease.tag,
+      appsCount: Array.isArray(data) ? data.length : 0,
+      updated: true
+    };
+  } catch (error) {
+    console.error('[Update] ❌ Erreur lors de la mise à jour du catalogue:', error.message);
+    
+    return {
+      success: false,
+      message: `Erreur: ${error.message}`,
+      updated: false
+    };
+  }
+}
+
+
 module.exports = {
   updateRyvie,
-  updateApp
+  updateApp,
+  updateStoreCatalog
 };

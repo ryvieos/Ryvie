@@ -357,8 +357,57 @@ async function checkAllUpdates() {
   };
 }
 
+
+/**
+ * Vérifie les mises à jour du catalogue d'apps du store
+ */
+async function checkStoreCatalogUpdate() {
+  const appStoreService = require('./appStoreService');
+  
+  try {
+    console.log('[updateCheck] Vérification de nouvelle release du catalogue...');
+    const latestRelease = await appStoreService.getLatestRelease();
+    
+    // Charger les métadonnées locales
+    const localMetadata = await appStoreService.loadMetadata();
+    
+    const currentTag = localMetadata.releaseTag;
+    const latestTag = latestRelease.tag;
+    
+    const updateAvailable = currentTag !== latestTag;
+    
+    if (updateAvailable) {
+      console.log(`[updateCheck] Nouvelle release du catalogue détectée: ${currentTag || 'aucune'} → ${latestTag}`);
+    } else {
+      console.log(`[updateCheck] Catalogue déjà à jour (${latestTag})`);
+    }
+    
+    return {
+      name: 'App Store Catalog',
+      repo: process.env.GITHUB_REPO || 'Loghin01/ryvie-apps',
+      currentVersion: currentTag,
+      latestVersion: latestTag,
+      updateAvailable,
+      status: updateAvailable ? 'update-available' : 'up-to-date'
+    };
+  } catch (error) {
+    console.error('[updateCheck] Erreur lors de la vérification du catalogue:', error.message);
+    return {
+      name: 'App Store Catalog',
+      currentVersion: null,
+      latestVersion: null,
+      updateAvailable: false,
+      status: 'error',
+      error: error.message
+    };
+  }
+}
+
+
 module.exports = {
   checkAllUpdates,
   checkRyvieUpdate,
-  checkAppsUpdates
+  checkAppsUpdates,
+  checkStoreCatalogUpdate
 };
+
