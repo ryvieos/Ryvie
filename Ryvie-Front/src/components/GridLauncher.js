@@ -437,11 +437,7 @@ const GridLauncher = ({
               top: `${dragPosition.y}px`,
               width: `${slotSize * (draggedItem.itemData.w || 1) + gap * ((draggedItem.itemData.w || 1) - 1)}px`,
               height: `${slotSize * (draggedItem.itemData.h || 1) + gap * ((draggedItem.itemData.h || 1) - 1)}px`,
-              background: draggedItem.itemId === 'weather' 
-                ? 'linear-gradient(135deg, rgba(100, 180, 255, 0.5), rgba(80, 150, 255, 0.5))'
-                : draggedItem.itemId?.startsWith('widget-')
-                  ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.5), rgba(118, 75, 162, 0.5))'
-                  : 'rgba(255, 255, 255, 0.5)',
+              background: 'rgba(255, 255, 255, 0.5)',
               borderRadius: 'var(--tile-radius)',
               backdropFilter: 'blur(10px)'
             }}

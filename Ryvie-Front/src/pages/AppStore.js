@@ -45,6 +45,7 @@ const AppStore = () => {
   const navigate = useNavigate();
   // États locaux pour suivre les données, la recherche et les retours utilisateurs
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [apps, setApps] = useState([]);
   const [filteredApps, setFilteredApps] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,8 +79,11 @@ const AppStore = () => {
 
   // Charger les apps au montage
   useEffect(() => {
-    fetchApps();
-    fetchCatalogHealth();
+    (async () => {
+      const minDelay = new Promise((r) => setTimeout(r, 1000));
+      await Promise.all([minDelay, fetchApps(), fetchCatalogHealth()]);
+      setInitialLoading(false);
+    })();
   }, []);
 
   // Déboucer la recherche pour fluidifier la saisie
@@ -363,6 +367,15 @@ const AppStore = () => {
     return colors[category?.toLowerCase()] || colors.other;
   };
 
+  if (initialLoading) {
+    return (
+      <div className="appstore-container appstore-loading">
+        <div className="spinner"></div>
+        <p>Chargement du catalogue...</p>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="appstore-container">
@@ -507,7 +520,7 @@ const AppStore = () => {
       {/* Titre de section */}
       <div className="section-header">
         <p className="section-kicker">LES PLUS INSTALLÉES</p>
-        <h2 className="section-title">Très demandées</h2>
+        <h2 className="section-title">Apps</h2>
         <span className="section-meta">{apps.length} app{apps.length > 1 ? 's' : ''}</span>
       </div>
 
