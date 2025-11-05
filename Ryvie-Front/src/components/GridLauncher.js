@@ -335,6 +335,7 @@ const GridLauncher = ({
           
           const colIndex = layout[appId].col || 0;
           const animDelayMs = colIndex * 180;
+          const isClickable = !appsConfig?.[appId]?.showStatus || (appStatus?.[appId]?.status === 'running');
 
           return (
             <div
@@ -345,7 +346,7 @@ const GridLauncher = ({
                 gridColumn: layout[appId].col + 1,
                 gridRow: layout[appId].row + 1,
                 animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards`,
-                cursor: 'pointer'
+                cursor: isClickable ? 'pointer' : 'not-allowed'
               }}
               onPointerDown={(e) => handlers.onPointerDown(e, appId, { w: 1, h: 1 })}
               onClick={(e) => {
@@ -353,6 +354,7 @@ const GridLauncher = ({
                 // Ne pas ouvrir si le menu contextuel est actif
                 if (activeContextMenu) return;
                 if (!hasDragged) {
+                  if (!isClickable) return;
                   try { handleClick(appId); } catch (_) {}
                 }
               }}
@@ -362,6 +364,7 @@ const GridLauncher = ({
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
+                  if (!isClickable) return;
                   try { handleClick(appId); } catch (_) {}
                 }
               }}

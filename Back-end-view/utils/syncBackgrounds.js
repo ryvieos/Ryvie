@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const { BACKGROUNDS_DIR, PRESETS_DIR } = require('../config/paths');
 
-const SOURCE_DIR = '/opt/Ryvie/Ryvie-Front/public/images/backgrounds';
-const DEST_DIR = '/data/images/backgrounds';
+const SOURCE_DIR = PRESETS_DIR;
+const DEST_DIR = BACKGROUNDS_DIR;
 
 /**
  * Synchronise les fonds d'écran depuis public/ vers /data/images/backgrounds/

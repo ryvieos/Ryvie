@@ -1016,10 +1016,13 @@ const Home = () => {
         StorageManager.setItem('appStatus_cache', newAppStatus);
       };
       
+      // Écouter les deux noms d'événement pour compatibilité
       socket.on('appsStatusUpdate', handleAppsStatusUpdate);
+      socket.on('apps-status-update', handleAppsStatusUpdate);
       
       return () => {
         socket.off('appsStatusUpdate', handleAppsStatusUpdate);
+        socket.off('apps-status-update', handleAppsStatusUpdate);
       };
     }
   }, [accessMode, socket, appsConfig]);

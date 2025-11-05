@@ -6,6 +6,7 @@ const Docker = require('dockerode');
 const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
+const crypto = require('crypto');
 
 // Charger les variables d'environnement du fichier .env
 dotenv.config();
@@ -142,8 +143,41 @@ let realtime;
 
 // Charger les paramètres au démarrage
 const fs = require('fs');
-const SETTINGS_FILE = '/data/config/server-settings.json';
+const { SETTINGS_FILE } = require('./config/paths');
 try {
+  // S'assurer que le dossier existe et créer un fichier avec id si absent
+  const path = require('path');
+  const dir = path.dirname(SETTINGS_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  if (fs.existsSync(SETTINGS_FILE)) {
+    const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    // Générer un id si manquant
+    if (!settings.id) {
+      settings.id = (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex'));
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    }
+    if (settings.tokenExpirationMinutes) {
+      process.env.JWT_EXPIRES_MINUTES = settings.tokenExpirationMinutes.toString();
+      console.log(`✅ Durée d'expiration du token chargée: ${settings.tokenExpirationMinutes} minutes`);
+    }
+  } else {
+    const defaults = {
+      id: (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex')),
+      tokenExpirationMinutes: 15
+    };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaults, null, 2));
+    process.env.JWT_EXPIRES_MINUTES = defaults.tokenExpirationMinutes.toString();
+    console.log(`✅ Fichier de paramètres créé avec id ${defaults.id} et durée ${defaults.tokenExpirationMinutes} minutes`);
+  }
+} catch (error) {
+  console.warn('⚠️  Impossible de charger/créer les paramètres serveur, utilisation des valeurs par défaut');
+}
+
+try {
+  // Deuxième passe lecture pour log (si premier bloc a déjà fait le nécessaire)
   if (fs.existsSync(SETTINGS_FILE)) {
     const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
     if (settings.tokenExpirationMinutes) {
@@ -151,13 +185,31 @@ try {
       console.log(`✅ Durée d'expiration du token chargée: ${settings.tokenExpirationMinutes} minutes`);
     }
   }
-} catch (error) {
-  console.warn('⚠️  Impossible de charger les paramètres serveur, utilisation des valeurs par défaut');
-}
+} catch (_) {}
 
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
+    // Vérifier et démarrer le reverse proxy Caddy si nécessaire
+    console.log('🔍 Vérification du reverse proxy Caddy...');
+    try {
+      const { ensureCaddyRunning } = require('./services/reverseProxyService');
+      const caddyResult = await ensureCaddyRunning();
+      if (caddyResult.success) {
+        if (caddyResult.alreadyRunning) {
+          console.log('✅ Caddy est déjà en cours d\'exécution');
+        } else if (caddyResult.started) {
+          console.log('✅ Caddy a été démarré avec succès');
+        }
+      } else {
+        console.error('❌ Erreur lors de la vérification/démarrage de Caddy:', caddyResult.error);
+        console.error('⚠️  Le reverse proxy n\'est pas disponible, l\'application peut ne pas être accessible via ryvie.local');
+      }
+    } catch (caddyError) {
+      console.error('❌ Erreur critique lors de la vérification de Caddy:', caddyError.message);
+      console.error('⚠️  Continuons le démarrage sans le reverse proxy...');
+    }
+    
     // Vérifier les snapshots en attente (après une mise à jour)
     const { checkPendingSnapshots } = require('./utils/snapshotCleanup');
     checkPendingSnapshots();

@@ -2,12 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const Docker = require('dockerode');
+const { MANIFESTS_DIR, APPS_DIR } = require('../config/paths');
 
 const docker = new Docker();
 
 // Configuration
-const MANIFESTS_DIR = '/data/config/manifests';
-const APPS_SOURCE_DIR = '/data/apps';
+const APPS_SOURCE_DIR = APPS_DIR;
 
 /**
  * Liste toutes les apps installées (avec manifests)
