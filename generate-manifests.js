@@ -471,12 +471,16 @@ function main() {
   
   console.log('\n📋 Résumé des apps:');
   const appPorts = {};
+  const allPorts = {};
   generatedManifests.forEach(manifest => {
     const ryviePort = getRyvieAppPort(manifest.sourceDir, manifest.dockerComposePath);
     const displayPort = ryviePort || manifest.mainPort || 'N/A';
     console.log(`   • ${manifest.name} (${manifest.id}) - Port: ${displayPort}`);
     if (ryviePort || manifest.mainPort) {
       appPorts[manifest.id] = ryviePort || manifest.mainPort;
+    }
+    if (manifest.ports && Object.keys(manifest.ports).length > 0) {
+      allPorts[manifest.id] = manifest.ports;
     }
   });
 
@@ -489,6 +493,17 @@ function main() {
     console.log(`\n📝 Ports des apps écrits pour le frontend: ${frontendPortsPath}`);
   } catch (e) {
     console.log(`\n⚠️  Impossible d'écrire app-ports.json pour le frontend: ${e.message}`);
+  }
+
+  // Écrire tous les ports détaillés pour le frontend
+  try {
+    const allPortsPath = path.join(__dirname, 'Ryvie-Front/src/config/all-ports.json');
+    const dir = path.dirname(allPortsPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(allPortsPath, JSON.stringify(allPorts, null, 2));
+    console.log(`📝 Ports détaillés écrits pour le frontend: ${allPortsPath}`);
+  } catch (e) {
+    console.log(`⚠️  Impossible d'écrire all-ports.json pour le frontend: ${e.message}`);
   }
   
   console.log('\n🎉 Génération terminée !');
