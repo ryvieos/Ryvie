@@ -559,27 +559,27 @@ const AppStore = () => {
                     {app.category ? app.category.charAt(0).toUpperCase() + app.category.slice(1) : 'App'}
                   </p>
                 </div>
-                
-                <button className="app-get-button" onClick={(e) => { e.stopPropagation(); }}>
-                  Installer
-                </button>
               </div>
               
               <div className="app-card-body">
                 <p className="app-description">{app.description}</p>
-                
-                <div className="app-meta">
-                  {app.category && (
-                    <span 
-                      className="category-badge"
-                      style={{ backgroundColor: getCategoryColor(app.category) }}
-                    >
-                      {app.category}
-                    </span>
-                  )}
-                  {app.version && (
-                    <span className="version-text">v{app.version}</span>
-                  )}
+                <div className="app-footer">
+                  <div className="app-meta">
+                    {app.category && (
+                      <span 
+                        className="category-badge"
+                        style={{ backgroundColor: getCategoryColor(app.category) }}
+                      >
+                        {app.category}
+                      </span>
+                    )}
+                    {app.version && (
+                      <span className="version-text">v{app.version}</span>
+                    )}
+                  </div>
+                  <button className="app-get-button" onClick={(e) => { e.stopPropagation(); }}>
+                    Installer
+                  </button>
                 </div>
               </div>
             </div>
