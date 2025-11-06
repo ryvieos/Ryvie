@@ -67,16 +67,16 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     return () => clearInterval(interval);
   }, [accessMode]);
 
+  const CPU_BASE = '#23D780'; // vert
+  const RAM_BASE = '#23D780'; // vert
+  const DANGER = '#dc3545';
+
   const getCpuColor = (value) => {
-    if (value < 50) return '#28a745';
-    if (value < 80) return '#ffc107';
-    return '#dc3545';
+    return value > 90 ? DANGER : CPU_BASE;
   };
 
   const getRamColor = (value) => {
-    if (value < 60) return '#28a745';
-    if (value < 85) return '#ffc107';
-    return '#dc3545';
+    return value > 90 ? DANGER : RAM_BASE;
   };
 
   const formatBytes = (bytes) => {
@@ -85,51 +85,84 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     return `${gb.toFixed(1)} GB`;
   };
 
+  const usedRam = data.ramTotal > 0 ? (data.ramTotal * (data.ram / 100)) : 0;
+
+  const Gauge = ({ value = 0, color = '#22c55e', label = '', sub = '' }) => {
+    const size = 80;
+    const stroke = 10;
+    const center = size / 2;
+    const r = center - stroke / 2;
+    const circumference = 2 * Math.PI * r;
+    const clamped = Math.max(0, Math.min(100, value));
+    const dash = (clamped / 100) * circumference;
+    const gap = circumference - dash;
+
+    return (
+      <div className="gauge">
+        <svg
+          className="gauge-svg"
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {/* Trail */}
+          <circle
+            cx={center}
+            cy={center}
+            r={r}
+            fill="none"
+            stroke="rgba(255,255,255,0.25)"
+            strokeWidth={stroke}
+          />
+          {/* Value arc */}
+          <circle
+            cx={center}
+            cy={center}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={`${dash} ${gap}`}
+            transform={`rotate(-90 ${center} ${center})`}
+          />
+        </svg>
+        <div className="gauge-center">
+          <span className="gauge-value">{clamped}</span>
+          <span className="gauge-unit">%</span>
+        </div>
+        <div className="gauge-label">{label}</div>
+        <div className="gauge-sub">{sub}</div>
+      </div>
+    );
+  };
   return (
-    <BaseWidget id={id} title="CPU & RAM" icon="💻" onRemove={onRemove} w={2} h={2}>
+    <BaseWidget 
+      id={id} 
+      title="System status" 
+      icon="💻" 
+      onRemove={onRemove} 
+      w={2} 
+      h={2}
+      className="gradient"
+      action={<button className="widget-chevron" aria-label="Open">›</button>}
+    >
       {loading ? (
         <div className="widget-loading">Chargement...</div>
       ) : (
-        <div className="cpu-ram-content">
-          {/* CPU */}
-          <div className="stat-item">
-            <div className="stat-header">
-              <div className="stat-label">CPU</div>
-              <div className="stat-value" style={{ color: getCpuColor(data.cpu) }}>
-                {data.cpu}%
-              </div>
-            </div>
-            <div className="stat-bar-container">
-              <div
-                className="stat-bar"
-                style={{
-                  width: `${data.cpu}%`,
-                  background: `linear-gradient(90deg, ${getCpuColor(data.cpu)}, ${getCpuColor(data.cpu)}dd)`
-                }}
-              />
-            </div>
-          </div>
-
-          {/* RAM */}
-          <div className="stat-item">
-            <div className="stat-header">
-              <div className="stat-label">RAM</div>
-              <div className="stat-value" style={{ color: getRamColor(data.ram) }}>
-                {data.ram}%
-              </div>
-            </div>
-            <div className="stat-bar-container">
-              <div
-                className="stat-bar"
-                style={{
-                  width: `${data.ram}%`,
-                  background: `linear-gradient(90deg, ${getRamColor(data.ram)}, ${getRamColor(data.ram)}dd)`
-                }}
-              />
-            </div>
-            {data.ramTotal > 0 && (
-              <div className="stat-total">{formatBytes(data.ramTotal)} total</div>
-            )}
+        <div className="cpu-ram-card">
+          <div className="gauges">
+            <Gauge
+              value={data.cpu}
+              color={getCpuColor(data.cpu)}
+              label="CPU"
+            />
+            <Gauge
+              value={data.ram}
+              color={getRamColor(data.ram)}
+              label="RAM"
+            />
           </div>
         </div>
       )}
