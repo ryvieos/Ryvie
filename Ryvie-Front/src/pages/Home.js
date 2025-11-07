@@ -846,15 +846,27 @@ const Home = () => {
     } catch (_) {}
   }, [accessMode, currentUserName, appsConfig, launcherLoadedFromBackend, widgets]);
   
-  // Handler: ajouter un widget
+  // Handler: ajouter un widget (empêcher les doublons)
   const handleAddWidget = React.useCallback((widgetType) => {
-    console.log('[Home] Ajout d\'un widget:', widgetType);
-    const newWidget = {
-      id: `widget-${widgetType}-${widgetIdCounter.current++}`,
-      type: widgetType
-    };
+    console.log('[Home] Tentative d\'ajout d\'un widget:', widgetType);
     
-    setWidgets(prev => [...prev, newWidget]);
+    // Vérifier si un widget de ce type existe déjà
+    setWidgets(prev => {
+      const alreadyExists = prev.some(w => w.type === widgetType);
+      
+      if (alreadyExists) {
+        console.log('[Home] ⚠️ Un widget de type', widgetType, 'existe déjà');
+        return prev; // Ne rien faire
+      }
+      
+      console.log('[Home] ✅ Ajout du widget:', widgetType);
+      const newWidget = {
+        id: `widget-${widgetType}-${widgetIdCounter.current++}`,
+        type: widgetType
+      };
+      
+      return [...prev, newWidget];
+    });
   }, []);
   
   // Handler: supprimer un widget

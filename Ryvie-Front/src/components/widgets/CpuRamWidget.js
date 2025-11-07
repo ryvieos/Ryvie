@@ -228,7 +228,24 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
       action={<button className="widget-chevron" aria-label="Open">›</button>}
     >
       {loading ? (
-        <div className="widget-loading">Chargement...</div>
+        <div className="cpu-ram-card">
+          <div className="gauges">
+            <div className="gauge-skeleton">
+              <div className="gauge-circle-skeleton" />
+              <div className="gauge-text-skeleton">
+                <div className="gauge-value-skeleton" />
+                <div className="gauge-label-skeleton" />
+              </div>
+            </div>
+            <div className="gauge-skeleton">
+              <div className="gauge-circle-skeleton" />
+              <div className="gauge-text-skeleton">
+                <div className="gauge-value-skeleton" />
+                <div className="gauge-label-skeleton" />
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="cpu-ram-card">
           <div className="gauges">
