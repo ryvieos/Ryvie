@@ -56,6 +56,7 @@ const adminRouter = require('./routes/admin');
 const systemRouter = require('./routes/system');
 const storageRouter = require('./routes/storage');
 const userPreferencesRouter = require('./routes/userPreferences');
+const appStoreRouter = require('./routes/appStore');
 const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
 const { getLocalIP } = require('./utils/network');
@@ -133,6 +134,9 @@ app.use('/api', userPreferencesRouter);
 // Mount Settings routes
 const settingsRouter = require('./routes/settings');
 app.use('/api', settingsRouter);
+
+// Mount App Store routes
+app.use('/api', appStoreRouter);
 
 // Realtime (Socket.IO + Docker events) handled by services/realtimeService.js
 let realtime;
@@ -228,7 +232,11 @@ async function startServer() {
     } catch (manifestError) {
       console.error('⚠️  Erreur lors de la génération des manifests:', manifestError.message);
     }
-
+    
+    // Initialiser le service App Store
+    const { initialize: initAppStore } = require('./services/appStoreService');
+    await initAppStore();
+    
     // Synchroniser les fonds d'écran au démarrage
     syncBackgrounds();
     

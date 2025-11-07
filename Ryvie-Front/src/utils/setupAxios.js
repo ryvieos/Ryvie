@@ -45,6 +45,7 @@ export const handleTokenError = (errorCode = null) => {
   // Rediriger vers la page de connexion (sauf si déjà sur la page de login)
   const redirectToLogin = () => {
     const loginHash = '#/login';
+    const loginPath = '/login';
     console.log('Redirecting to login page:', loginHash);
     
     // Ne rien faire si on est déjà sur la page de login
@@ -53,6 +54,25 @@ export const handleTokenError = (errorCode = null) => {
         return;
       }
     } catch { /* noop */ }
+
+    // Si l'on est dans un iframe/overlay, demander au parent de fermer l'overlay et de naviguer
+    try {
+      const inIframe = typeof window !== 'undefined' && window.top && window.top !== window.self;
+      if (inIframe) {
+        try {
+          window.parent.postMessage({ type: 'CLOSE_OVERLAY_AND_NAVIGATE', path: loginPath }, '*');
+          return; // Ne pas modifier l'URL de l'iframe locale
+        } catch (e) {
+          console.warn('Failed to postMessage to parent, falling back to local redirect:', e);
+        }
+      } else {
+        // Même hors iframe, si un overlay écoute les messages dans cette fenêtre, le fermer proprement
+        try {
+          window.postMessage({ type: 'CLOSE_OVERLAY_AND_NAVIGATE', path: loginPath }, '*');
+          // Laisser une petite chance au parent (même fenêtre) de gérer la navigation; sinon fallback plus bas
+        } catch {}
+      }
+    } catch {}
 
     if (window.electronAPI) {
       // In Electron environment, use IPC to redirect

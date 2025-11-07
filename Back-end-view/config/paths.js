@@ -9,6 +9,7 @@ const BACKGROUNDS_DIR = '/data/images/backgrounds';
 const PRESETS_DIR = '/opt/Ryvie/Ryvie-Front/public/images/backgrounds';
 const MANIFESTS_DIR = '/data/config/manifests';
 const APPS_DIR = '/data/apps';
+const STORE_CATALOG = '/data/config/appStore';  
 const REVERSE_PROXY_DIR = '/data/config/reverse-proxy';
 
 module.exports = {
@@ -20,5 +21,6 @@ module.exports = {
   PRESETS_DIR,
   MANIFESTS_DIR,
   APPS_DIR,
+  STORE_CATALOG,
   REVERSE_PROXY_DIR
 };
