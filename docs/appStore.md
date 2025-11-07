@@ -36,7 +36,7 @@ Stockage local (/data/config/appStore)
 
 ```bash
 # Dépôt GitHub contenant le catalogue (optionnel)
-GITHUB_REPO=Loghin01/ryvie-apps
+GITHUB_REPO=ryvieos/Ryvie-Apps
 
 # Token GitHub pour accès privé (optionnel)
 GITHUB_TOKEN=(pas pour l'instant)
@@ -64,7 +64,7 @@ Affiche le nombre d'applications disponibles
 
 Logs typiques :
 [appStore] Initialisation du service...
- [appStore] GitHub Repo: Loghin01/ryvie-apps
+ [appStore] GitHub Repo: ryvieos/Ryvie-Apps
 [appStore] Répertoire de données: /data/config/appStore
 [appStore] Release actuelle: v1.0.4
 [appStore] ✅ Catalogue déjà à jour avec 2 apps
@@ -76,7 +76,7 @@ Retourne :
 javascript:
 	{
 	  name: 'App Store Catalog',
-	  repo: 'Loghin01/ryvie-apps',
+	  repo: 'ryvieos/Ryvie-Apps',
 	  currentVersion: 'v1.0.4',      // null si aucune version locale
 	  latestVersion: 'v1.0.5',
 	  updateAvailable: true,          // true si currentVersion ≠ latestVersion
@@ -126,7 +126,7 @@ javascript:
 	{
 	  status: 'ok',
 	  timestamp: '2025-11-04T14:30:00.000Z',
-	  githubRepo: 'Loghin01/ryvie-apps',
+	  githubRepo: 'ryvieos/Ryvie-Apps',
 	  storage: {
 	    type: 'file',
 	    hasData: true,

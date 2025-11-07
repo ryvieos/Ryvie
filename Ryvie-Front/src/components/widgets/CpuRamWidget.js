@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from '../../utils/setupAxios';
 import BaseWidget from './BaseWidget';
 import urlsConfig from '../../config/urls';
@@ -12,6 +12,10 @@ const { getServerUrl } = urlsConfig;
 const CpuRamWidget = ({ id, onRemove, accessMode }) => {
   const [data, setData] = useState({ cpu: 0, ram: 0, ramTotal: 0 });
   const [loading, setLoading] = useState(true);
+  const [smoothed, setSmoothed] = useState({ cpu: 0, ram: 0 });
+  const [displayed, setDisplayed] = useState({ cpu: 0, ram: 0 });
+  const cpuAnimRef = useRef(null);
+  const ramAnimRef = useRef(null);
 
   useEffect(() => {
     const fetchSystemStats = async () => {
@@ -62,21 +66,96 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     };
 
     fetchSystemStats();
-    const interval = setInterval(fetchSystemStats, 5000); // Mise à jour toutes les 5 secondes
+    const interval = setInterval(fetchSystemStats, 10000); // Mise à jour toutes les 3 secondes (CasaOS-style)
 
     return () => clearInterval(interval);
   }, [accessMode]);
 
+  // Apply exponential moving average to smooth spikes
+  useEffect(() => {
+    const ALPHA = 0.4; // moderate smoothing - reactive but stable
+    setSmoothed((prev) => ({
+      cpu: prev.cpu === 0 ? data.cpu : ALPHA * data.cpu + (1 - ALPHA) * prev.cpu,
+      ram: prev.ram === 0 ? data.ram : ALPHA * data.ram + (1 - ALPHA) * prev.ram,
+    }));
+  }, [data.cpu, data.ram]);
+
+  const ANIM_INTERVAL_MS = 50; // animation speed
+
+  // Animate CPU value 1-by-1 toward smoothed target
+  useEffect(() => {
+    if (cpuAnimRef.current) {
+      cancelAnimationFrame(cpuAnimRef.current);
+      cpuAnimRef.current = null;
+    }
+    let current = displayed.cpu;
+    const target = Math.round(Math.max(0, Math.min(100, smoothed.cpu)));
+    if (current === target) return;
+    let last = performance.now();
+    const step = (now) => {
+      if (now - last >= ANIM_INTERVAL_MS) {
+        if (current < target) current += 1;
+        else if (current > target) current -= 1;
+        setDisplayed((prev) => ({ ...prev, cpu: current }));
+        last = now;
+      }
+      if (current !== target) {
+        cpuAnimRef.current = requestAnimationFrame(step);
+      } else {
+        cpuAnimRef.current = null;
+      }
+    };
+    cpuAnimRef.current = requestAnimationFrame(step);
+    return () => {
+      if (cpuAnimRef.current) {
+        cancelAnimationFrame(cpuAnimRef.current);
+        cpuAnimRef.current = null;
+      }
+    };
+  }, [smoothed.cpu, displayed.cpu]);
+
+  // Animate RAM value 1-by-1 toward smoothed target
+  useEffect(() => {
+    if (ramAnimRef.current) {
+      cancelAnimationFrame(ramAnimRef.current);
+      ramAnimRef.current = null;
+    }
+    let current = displayed.ram;
+    const target = Math.round(Math.max(0, Math.min(100, smoothed.ram)));
+    if (current === target) return;
+    let last = performance.now();
+    const step = (now) => {
+      if (now - last >= ANIM_INTERVAL_MS) {
+        if (current < target) current += 1;
+        else if (current > target) current -= 1;
+        setDisplayed((prev) => ({ ...prev, ram: current }));
+        last = now;
+      }
+      if (current !== target) {
+        ramAnimRef.current = requestAnimationFrame(step);
+      } else {
+        ramAnimRef.current = null;
+      }
+    };
+    ramAnimRef.current = requestAnimationFrame(step);
+    return () => {
+      if (ramAnimRef.current) {
+        cancelAnimationFrame(ramAnimRef.current);
+        ramAnimRef.current = null;
+      }
+    };
+  }, [smoothed.ram, displayed.ram]);
+
+  const CPU_BASE = '#23D780'; // vert
+  const RAM_BASE = '#23D780'; // vert
+  const DANGER = '#dc3545';
+
   const getCpuColor = (value) => {
-    if (value < 50) return '#28a745';
-    if (value < 80) return '#ffc107';
-    return '#dc3545';
+    return value > 90 ? DANGER : CPU_BASE;
   };
 
   const getRamColor = (value) => {
-    if (value < 60) return '#28a745';
-    if (value < 85) return '#ffc107';
-    return '#dc3545';
+    return value > 90 ? DANGER : RAM_BASE;
   };
 
   const formatBytes = (bytes) => {
@@ -85,51 +164,101 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     return `${gb.toFixed(1)} GB`;
   };
 
+  const usedRam = data.ramTotal > 0 ? (data.ramTotal * (data.ram / 100)) : 0;
+
+  const Gauge = ({ value = 0, color = '#22c55e', label = '', sub = '' }) => {
+    const size = 80;
+    const stroke = 10;
+    const center = size / 2;
+    const r = center - stroke / 2;
+    const circumference = 2 * Math.PI * r;
+    const clamped = Math.max(0, Math.min(100, value));
+    const dash = (clamped / 100) * circumference;
+    const gap = circumference - dash;
+
+    return (
+      <div className="gauge">
+        <svg
+          className="gauge-svg"
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {/* Trail */}
+          <circle
+            cx={center}
+            cy={center}
+            r={r}
+            fill="none"
+            stroke="rgba(255,255,255,0.25)"
+            strokeWidth={stroke}
+          />
+          {/* Value arc */}
+          <circle
+            cx={center}
+            cy={center}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={`${dash} ${gap}`}
+            transform={`rotate(-90 ${center} ${center})`}
+          />
+        </svg>
+        <div className="gauge-center">
+          <span className="gauge-value">{clamped}</span>
+          <span className="gauge-unit">%</span>
+        </div>
+        <div className="gauge-label">{label}</div>
+        <div className="gauge-sub">{sub}</div>
+      </div>
+    );
+  };
   return (
-    <BaseWidget id={id} title="CPU & RAM" icon="💻" onRemove={onRemove} w={2} h={2}>
+    <BaseWidget 
+      id={id} 
+      title="System status" 
+      icon="💻" 
+      onRemove={onRemove} 
+      w={2} 
+      h={2}
+      className="gradient"
+      action={<button className="widget-chevron" aria-label="Open">›</button>}
+    >
       {loading ? (
-        <div className="widget-loading">Chargement...</div>
-      ) : (
-        <div className="cpu-ram-content">
-          {/* CPU */}
-          <div className="stat-item">
-            <div className="stat-header">
-              <div className="stat-label">CPU</div>
-              <div className="stat-value" style={{ color: getCpuColor(data.cpu) }}>
-                {data.cpu}%
+        <div className="cpu-ram-card">
+          <div className="gauges">
+            <div className="gauge-skeleton">
+              <div className="gauge-circle-skeleton" />
+              <div className="gauge-text-skeleton">
+                <div className="gauge-value-skeleton" />
+                <div className="gauge-label-skeleton" />
               </div>
             </div>
-            <div className="stat-bar-container">
-              <div
-                className="stat-bar"
-                style={{
-                  width: `${data.cpu}%`,
-                  background: `linear-gradient(90deg, ${getCpuColor(data.cpu)}, ${getCpuColor(data.cpu)}dd)`
-                }}
-              />
+            <div className="gauge-skeleton">
+              <div className="gauge-circle-skeleton" />
+              <div className="gauge-text-skeleton">
+                <div className="gauge-value-skeleton" />
+                <div className="gauge-label-skeleton" />
+              </div>
             </div>
           </div>
-
-          {/* RAM */}
-          <div className="stat-item">
-            <div className="stat-header">
-              <div className="stat-label">RAM</div>
-              <div className="stat-value" style={{ color: getRamColor(data.ram) }}>
-                {data.ram}%
-              </div>
-            </div>
-            <div className="stat-bar-container">
-              <div
-                className="stat-bar"
-                style={{
-                  width: `${data.ram}%`,
-                  background: `linear-gradient(90deg, ${getRamColor(data.ram)}, ${getRamColor(data.ram)}dd)`
-                }}
-              />
-            </div>
-            {data.ramTotal > 0 && (
-              <div className="stat-total">{formatBytes(data.ramTotal)} total</div>
-            )}
+        </div>
+      ) : (
+        <div className="cpu-ram-card">
+          <div className="gauges">
+            <Gauge
+              value={displayed.cpu}
+              color={getCpuColor(displayed.cpu)}
+              label="CPU"
+            />
+            <Gauge
+              value={displayed.ram}
+              color={getRamColor(displayed.ram)}
+              label="RAM"
+            />
           </div>
         </div>
       )}

@@ -11,14 +11,16 @@ import '../../styles/Widgets.css';
  * @param {number} w - Largeur en slots (défaut: 2)
  * @param {number} h - Hauteur en slots (défaut: 2)
  */
-const BaseWidget = ({ id, title, icon, children, onRemove, w = 2, h = 2 }) => {
+const BaseWidget = ({ id, title, icon, children, onRemove, w = 2, h = 2, className = '', action = null }) => {
   return (
-    <div className={`base-widget widget-${w}x${h}`}>
+    <div className={`base-widget widget-${w}x${h} ${className}`}>
+      <div className="widget-inner">
       <div className="widget-header">
         <div className="widget-title">
           <span className="widget-icon">{icon}</span>
           <span className="widget-title-text">{title}</span>
         </div>
+        {action}
         {onRemove && (
           <button 
             className="widget-remove-btn" 
@@ -40,6 +42,7 @@ const BaseWidget = ({ id, title, icon, children, onRemove, w = 2, h = 2 }) => {
       </div>
       <div className="widget-content">
         {children}
+      </div>
       </div>
     </div>
   );

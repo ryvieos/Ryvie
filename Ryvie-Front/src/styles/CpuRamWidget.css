@@ -1,86 +1,167 @@
-/* Widget CPU & RAM - Style moderne inspiré de Settings.css */
+/* CPU & RAM circular gauges card */
 
-.cpu-ram-content {
+.cpu-ram-card {
+  height: 100%;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  justify-content: center;
-  flex: 1;
-  padding: 0;
-}
-
-.cpu-ram-content .stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.cpu-ram-content .stat-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: center;
 }
 
-.cpu-ram-content .stat-label {
-  font-size: 13px;
+.gauges {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+/* Conteneur de chaque jauge - taille fixe identique */
+.gauge {
+  width: 90px;
+  height: 110px;
+  min-width: 90px;
+  min-height: 110px;
+  max-width: 90px;
+  max-height: 110px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  flex-grow: 0;
+}
+
+/* SVG de la jauge - taille fixe identique pour les deux */
+.gauge-svg {
+  width: 90px;
+  height: 90px;
+  min-width: 90px;
+  min-height: 90px;
+  max-width: 90px;
+  max-height: 90px;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Texte centré dans le cerclee */
+.gauge-center {
+  position: absolute;
+  top: 45px;
+  left: 45px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  color: #ffffff;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.gauge-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.gauge-unit {
+  font-size: 12px;
   font-weight: 600;
-  color: #4a5568;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.cpu-ram-content .stat-value {
-  font-size: 20px;
-  font-weight: 700;
+  opacity: 0.9;
   line-height: 1;
 }
 
-.cpu-ram-content .stat-bar-container {
-  width: 100%;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 999px;
-  overflow: hidden;
-  position: relative;
-}
-
-.cpu-ram-content .stat-bar {
-  height: 100%;
-  border-radius: 999px;
-  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-}
-
-.cpu-ram-content .stat-bar::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-  animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.cpu-ram-content .stat-total {
-  font-size: 11px;
-  color: #718096;
-  margin-top: 4px;
+/* Label sous la jauge */
+.gauge-label {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #ffffff;
   text-align: center;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .cpu-ram-content {
-    gap: 16px;
-  }
-  
-  .cpu-ram-content .stat-value {
-    font-size: 20px;
-  }
+/* Sous-texte */
+.gauge-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+}
+
+/* Smooth CSS transition for gauge arc (CasaOS-style) */
+.gauge-svg circle {
+  transition: stroke-dasharray 0.5s ease, stroke 0.3s ease;
+}
+
+/* Skeleton state */
+.gauge-skeleton {
+  width: 90px;
+  height: 110px;
+  min-width: 90px;
+  min-height: 110px;
+  max-width: 90px;
+  max-height: 110px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  flex-grow: 0;
+}
+
+.gauge-circle-skeleton {
+  width: 90px;
+  height: 90px;
+  min-width: 90px;
+  min-height: 90px;
+  max-width: 90px;
+  max-height: 90px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.gauge-circle-skeleton::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+.gauge-text-skeleton {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.gauge-value-skeleton {
+  width: 32px;
+  height: 24px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 4px;
+  margin-bottom: 2px;
+}
+
+.gauge-label-skeleton {
+  width: 24px;
+  height: 14px;
+  background: rgba(255,255,255,0.18);
+  border-radius: 3px;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
 }

@@ -1,3 +1,6 @@
+.base-widget.gradient .widget-content {
+  overflow: hidden; /* évite la barre de défilement */
+}
 /* Styles pour les widgets */
 
 .base-widget {
@@ -57,6 +60,7 @@
 
 .widget-title-text {
   user-select: none;
+  font-size: 16px;
 }
 
 .widget-remove-btn {
@@ -98,6 +102,52 @@
   flex-direction: column;
   overflow: auto;
 }
+
+/* Gradient variant: header + content in a single rounded gradient card */
+.base-widget.gradient { 
+  background: transparent; 
+  padding: 0; 
+  box-shadow: none;
+}
+.base-widget.gradient .widget-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.36), rgba(17, 24, 39, 0.26));
+  color: #eef3ff;
+  border-radius: 18px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
+}
+.base-widget.gradient .widget-header {
+  margin-bottom: 6px;
+  color: #e9f3ff;
+}
+.base-widget.gradient .widget-icon {
+  background: rgba(255,255,255,0.18);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.2);
+}
+.base-widget.gradient .widget-title-text { color: #ffffff; font-weight: 700; }
+
+/* Chevron action on the right */
+.widget-chevron {
+  background: rgba(255,255,255,0.18);
+  border: none;
+  color: #ffffff;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.widget-chevron:hover { background: rgba(255,255,255,0.28); }
 
 /* Badges (percent values, etc.) */
 .badge {
@@ -148,9 +198,7 @@
     padding: 12px;
   }
 
-  .widget-title {
-    font-size: 13px;
-  }
+  .widget-title-text { font-size: 14px; }
 
   .widget-icon {
     font-size: 16px;

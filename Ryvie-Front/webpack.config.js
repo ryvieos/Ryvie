@@ -52,6 +52,16 @@ module.exports = {
   resolve: {
     extensions: ['.js', '.jsx'],
   },
+  // ✅ Empêcher la recompilation en boucle des fichiers JSON modifiés par le backend
+  watchOptions: {
+    ignored: [
+      '**/node_modules/**',
+      '**/src/config/app-ports.json',
+      '**/src/config/netbird-data.json',
+    ],
+    aggregateTimeout: 600,
+    poll: false,
+  },
   devServer: {
     static: path.join(__dirname, 'dist'),
     hot: true,

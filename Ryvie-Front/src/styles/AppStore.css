@@ -146,6 +146,12 @@
   border-radius: 4px;
 }
 
+/* Masquer les contrôles du carrousel (flèches et points) */
+.featured-nav,
+.featured-dots {
+  display: none !important;
+}
+
 .featured-card {
   min-width: calc(50% - 8px);
   width: calc(50% - 8px);

@@ -333,7 +333,8 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
       
       {!imgError && activeContextMenu && activeContextMenu.iconId === id && (
         <ContextMenuPortal x={activeContextMenu.x} y={activeContextMenu.y}>
-          {appStatusData?.status === 'running' ? (
+          {/* Show stop/restart when running OR when in pending state (orange blinking) */}
+          {(appStatusData?.status === 'running' || pendingAction === 'starting' || pendingAction === 'stopping') ? (
             <>
               <div 
                 className="context-menu-item" 
@@ -344,8 +345,14 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
                   handleAppAction('stop'); 
                 }}
               >
-                ⏹️ Arrêter
+                <span className="context-menu-icon context-menu-icon-stop" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <rect x="6" y="6" width="12" height="12" rx="3" ry="3" />
+                  </svg>
+                </span>
+                <span>Arrêter</span>
               </div>
+              <div className="context-menu-separator" role="separator" />
               <div 
                 className="context-menu-item" 
                 onClick={(e) => { 
@@ -355,7 +362,13 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
                   handleAppAction('restart'); 
                 }}
               >
-                🔄 Redémarrer
+                <span className="context-menu-icon context-menu-icon-restart" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M21 12a9 9 0 1 1-3.3-6.9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <polyline points="21 3 21 9 15 9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <span>Redémarrer</span>
               </div>
             </>
           ) : (
@@ -368,7 +381,12 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
                 handleAppAction('start'); 
               }}
             >
-              ▶️ Démarrer
+              <span className="context-menu-icon context-menu-icon-start" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <polygon points="9 6 19 12 9 18 9 6" />
+                </svg>
+              </span>
+              <span>Démarrer</span>
             </div>
           )}
         </ContextMenuPortal>
