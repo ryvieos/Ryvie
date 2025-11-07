@@ -3,6 +3,7 @@ import axios from '../../utils/setupAxios';
 import BaseWidget from './BaseWidget';
 import urlsConfig from '../../config/urls';
 import '../../styles/StorageWidget.css';
+import storageIcon from '../../icons/storage-icon.png';
 
 const { getServerUrl } = urlsConfig;
 
@@ -64,10 +65,10 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
     return () => clearInterval(interval);
   }, [accessMode]);
 
-  const getStorageColor = (value) => {
-    if (value < 70) return '#28a745';
-    if (value < 90) return '#ffc107';
-    return '#dc3545';
+  const getStatus = (value) => {
+    if (value < 70) return 'ok';
+    if (value < 90) return 'warn';
+    return 'danger';
   };
 
   const formatBytes = (bytes) => {
@@ -81,34 +82,31 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
   };
 
   return (
-    <BaseWidget id={id} title="Stockage" icon="💾" onRemove={onRemove} w={2} h={2}>
+    <BaseWidget id={id} title="Stockage" icon="💾" onRemove={onRemove} w={2} h={2} className="gradient">
       {loading ? (
         <div className="widget-loading">Chargement...</div>
       ) : data.length === 0 ? (
         <div className="widget-empty">Aucun disque détecté</div>
       ) : (
         <div className="storage-content">
-          {data.slice(0, 2).map((disk, index) => {
+          {data.slice(0, 1).map((disk, index) => {
             const usedPercent = Math.round((disk.used / disk.total) * 100);
+            const status = getStatus(usedPercent);
             return (
-              <div key={index} className="storage-item">
-                <div className="storage-header">
-                  <span className="storage-name">{disk.mount || disk.device}</span>
-                  <span className="storage-percent" style={{ color: getStorageColor(usedPercent) }}>
-                    {usedPercent}%
-                  </span>
+              <div key={index} className={`storage-item status-${status}`}>
+                {/* Top row: icon left, state + percent right */}
+                <div className="storage-top">
+                  <img className="disk-icon-img" src={storageIcon} alt="" aria-hidden />
+                  <div className="top-right">
+                    <div className={`health-badge health-${status}`}>
+                      {status === 'ok' ? 'Healthy' : status === 'warn' ? 'Warning' : 'Critical'}
+                    </div>
+                    <div className={`storage-percent percent-${status}`}>{usedPercent}%</div>
+                  </div>
                 </div>
+                {/* Progress bar */}
                 <div className="stat-bar-container">
-                  <div
-                    className="stat-bar"
-                    style={{
-                      width: `${usedPercent}%`,
-                      background: `linear-gradient(90deg, ${getStorageColor(usedPercent)}, ${getStorageColor(usedPercent)}dd)`
-                    }}
-                  />
-                </div>
-                <div className="storage-details">
-                  {formatBytes(disk.used)} / {formatBytes(disk.total)}
+                  <div className={`stat-bar bar-${status}`} style={{ width: `${usedPercent}%` }} />
                 </div>
               </div>
             );

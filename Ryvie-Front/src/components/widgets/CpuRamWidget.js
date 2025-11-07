@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from '../../utils/setupAxios';
 import BaseWidget from './BaseWidget';
 import urlsConfig from '../../config/urls';
@@ -12,6 +12,10 @@ const { getServerUrl } = urlsConfig;
 const CpuRamWidget = ({ id, onRemove, accessMode }) => {
   const [data, setData] = useState({ cpu: 0, ram: 0, ramTotal: 0 });
   const [loading, setLoading] = useState(true);
+  const [smoothed, setSmoothed] = useState({ cpu: 0, ram: 0 });
+  const [displayed, setDisplayed] = useState({ cpu: 0, ram: 0 });
+  const cpuAnimRef = useRef(null);
+  const ramAnimRef = useRef(null);
 
   useEffect(() => {
     const fetchSystemStats = async () => {
@@ -62,10 +66,85 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     };
 
     fetchSystemStats();
-    const interval = setInterval(fetchSystemStats, 5000); // Mise à jour toutes les 5 secondes
+    const interval = setInterval(fetchSystemStats, 10000); // Mise à jour toutes les 3 secondes (CasaOS-style)
 
     return () => clearInterval(interval);
   }, [accessMode]);
+
+  // Apply exponential moving average to smooth spikes
+  useEffect(() => {
+    const ALPHA = 0.4; // moderate smoothing - reactive but stable
+    setSmoothed((prev) => ({
+      cpu: prev.cpu === 0 ? data.cpu : ALPHA * data.cpu + (1 - ALPHA) * prev.cpu,
+      ram: prev.ram === 0 ? data.ram : ALPHA * data.ram + (1 - ALPHA) * prev.ram,
+    }));
+  }, [data.cpu, data.ram]);
+
+  const ANIM_INTERVAL_MS = 50; // animation speed
+
+  // Animate CPU value 1-by-1 toward smoothed target
+  useEffect(() => {
+    if (cpuAnimRef.current) {
+      cancelAnimationFrame(cpuAnimRef.current);
+      cpuAnimRef.current = null;
+    }
+    let current = displayed.cpu;
+    const target = Math.round(Math.max(0, Math.min(100, smoothed.cpu)));
+    if (current === target) return;
+    let last = performance.now();
+    const step = (now) => {
+      if (now - last >= ANIM_INTERVAL_MS) {
+        if (current < target) current += 1;
+        else if (current > target) current -= 1;
+        setDisplayed((prev) => ({ ...prev, cpu: current }));
+        last = now;
+      }
+      if (current !== target) {
+        cpuAnimRef.current = requestAnimationFrame(step);
+      } else {
+        cpuAnimRef.current = null;
+      }
+    };
+    cpuAnimRef.current = requestAnimationFrame(step);
+    return () => {
+      if (cpuAnimRef.current) {
+        cancelAnimationFrame(cpuAnimRef.current);
+        cpuAnimRef.current = null;
+      }
+    };
+  }, [smoothed.cpu, displayed.cpu]);
+
+  // Animate RAM value 1-by-1 toward smoothed target
+  useEffect(() => {
+    if (ramAnimRef.current) {
+      cancelAnimationFrame(ramAnimRef.current);
+      ramAnimRef.current = null;
+    }
+    let current = displayed.ram;
+    const target = Math.round(Math.max(0, Math.min(100, smoothed.ram)));
+    if (current === target) return;
+    let last = performance.now();
+    const step = (now) => {
+      if (now - last >= ANIM_INTERVAL_MS) {
+        if (current < target) current += 1;
+        else if (current > target) current -= 1;
+        setDisplayed((prev) => ({ ...prev, ram: current }));
+        last = now;
+      }
+      if (current !== target) {
+        ramAnimRef.current = requestAnimationFrame(step);
+      } else {
+        ramAnimRef.current = null;
+      }
+    };
+    ramAnimRef.current = requestAnimationFrame(step);
+    return () => {
+      if (ramAnimRef.current) {
+        cancelAnimationFrame(ramAnimRef.current);
+        ramAnimRef.current = null;
+      }
+    };
+  }, [smoothed.ram, displayed.ram]);
 
   const CPU_BASE = '#23D780'; // vert
   const RAM_BASE = '#23D780'; // vert
@@ -154,13 +233,13 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
         <div className="cpu-ram-card">
           <div className="gauges">
             <Gauge
-              value={data.cpu}
-              color={getCpuColor(data.cpu)}
+              value={displayed.cpu}
+              color={getCpuColor(displayed.cpu)}
               label="CPU"
             />
             <Gauge
-              value={data.ram}
-              color={getRamColor(data.ram)}
+              value={displayed.ram}
+              color={getRamColor(displayed.ram)}
               label="RAM"
             />
           </div>

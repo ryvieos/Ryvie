@@ -60,6 +60,7 @@
 
 .widget-title-text {
   user-select: none;
+  font-size: 16px;
 }
 
 .widget-remove-btn {
@@ -112,11 +113,14 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #1f5f8f, #2a7db8);
-  color: #e7f3ff;
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.36), rgba(17, 24, 39, 0.26));
+  color: #eef3ff;
   border-radius: 18px;
   padding: 12px 14px;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.18);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
 }
 .base-widget.gradient .widget-header {
   margin-bottom: 6px;
@@ -194,9 +198,7 @@
     padding: 12px;
   }
 
-  .widget-title {
-    font-size: 13px;
-  }
+  .widget-title-text { font-size: 14px; }
 
   .widget-icon {
     font-size: 16px;

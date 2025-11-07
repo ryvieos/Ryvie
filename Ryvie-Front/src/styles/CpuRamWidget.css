@@ -91,3 +91,8 @@
   color: rgba(255, 255, 255, 0.8);
   text-align: center;
 }
+
+/* Smooth CSS transition for gauge arc (CasaOS-style) */
+.gauge-svg circle {
+  transition: stroke-dasharray 0.5s ease, stroke 0.3s ease;
+}
