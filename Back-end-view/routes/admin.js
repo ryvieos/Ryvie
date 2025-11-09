@@ -352,8 +352,8 @@ async function triggerLdapSync() {
     const client = require('http');
     const options = {
       hostname: 'localhost',
-      port: parseInt(process.env.LDAP_SYNC_PORT || '2283', 10),
-      path: '/api/admin/users/sync-ldap',
+      port: parseInt(process.env.LDAP_SYNC_PORT || '3013', 10),
+      path: '/api/ldap/sync',
       method: 'GET',
       timeout: 10000,
     };

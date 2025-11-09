@@ -130,6 +130,254 @@ router.post('/authenticate', authLimiter, async (req, res) => {
   });
 });
 
+// GET /api/ldap/check-first-time - Vérifier si c'est la première connexion
+router.get('/ldap/check-first-time', async (req, res) => {
+  const ldapClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
+
+  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
+    if (err) {
+      ldapClient.destroy();
+      return res.status(500).json({ error: 'Échec de connexion LDAP', isFirstTime: false });
+    }
+
+    const filter = ldapConfig.userFilter;
+    ldapClient.search(
+      ldapConfig.userSearchBase,
+      { filter, scope: 'sub', attributes: ['uid'] },
+      (err, ldapRes) => {
+        if (err) {
+          ldapClient.unbind();
+          return res.status(500).json({ error: 'Erreur de recherche LDAP', isFirstTime: false });
+        }
+
+        let userCount = 0;
+        ldapRes.on('searchEntry', (entry) => {
+          try {
+            const attrs = {};
+            entry.pojo.attributes.forEach(attr => { attrs[attr.type] = attr.values[0]; });
+            const uid = attrs.uid;
+            // Ne compter que les utilisateurs réels (pas read-only)
+            if (uid && uid !== 'read-only') {
+              userCount++;
+            }
+          } catch (e) {
+            console.error('[check-first-time] Erreur lors du parsing:', e);
+          }
+        });
+
+        ldapRes.on('end', () => {
+          ldapClient.unbind();
+          // Si seulement l'utilisateur read-only existe (userCount === 0), c'est la première fois
+          const isFirstTime = userCount === 0;
+          console.log(`[check-first-time] Nombre d'utilisateurs: ${userCount}, isFirstTime: ${isFirstTime}`);
+          res.json({ isFirstTime, userCount });
+        });
+
+        ldapRes.on('error', (err) => {
+          ldapClient.unbind();
+          console.error('[check-first-time] Erreur LDAP:', err);
+          res.status(500).json({ error: 'Erreur LDAP', isFirstTime: false });
+        });
+      }
+    );
+  });
+});
+
+// POST /api/ldap/create-first-user - Créer le premier utilisateur admin
+router.post('/ldap/create-first-user', async (req, res) => {
+  const { uid, name, email, password } = req.body;
+
+  if (!uid || !name || !email || !password) {
+    return res.status(400).json({ error: 'Tous les champs sont requis (uid, name, email, password)' });
+  }
+
+  const ldapClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
+
+  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
+    if (err) {
+      ldapClient.destroy();
+      return res.status(500).json({ error: 'Échec de connexion LDAP' });
+    }
+
+    // Vérifier d'abord qu'il n'y a bien qu'un seul utilisateur (read-only)
+    const checkFilter = ldapConfig.userFilter;
+    ldapClient.search(
+      ldapConfig.userSearchBase,
+      { filter: checkFilter, scope: 'sub', attributes: ['uid'] },
+      (err, checkRes) => {
+        if (err) {
+          ldapClient.unbind();
+          return res.status(500).json({ error: 'Erreur de vérification LDAP' });
+        }
+
+        let userCount = 0;
+        checkRes.on('searchEntry', (entry) => {
+          try {
+            const attrs = {};
+            entry.pojo.attributes.forEach(attr => { attrs[attr.type] = attr.values[0]; });
+            const existingUid = attrs.uid;
+            if (existingUid && existingUid !== 'read-only') {
+              userCount++;
+            }
+          } catch (e) {}
+        });
+
+        checkRes.on('end', () => {
+          if (userCount > 0) {
+            ldapClient.unbind();
+            return res.status(403).json({ error: 'Des utilisateurs existent déjà. Cette route est réservée à la première configuration.' });
+          }
+
+          // Créer l'utilisateur
+          const userDN = `uid=${uid},${ldapConfig.userSearchBase}`;
+          const userEntry = {
+            objectClass: ['inetOrgPerson', 'posixAccount', 'shadowAccount'],
+            uid,
+            cn: name,
+            sn: name.split(' ').pop() || name,
+            mail: email,
+            userPassword: password,
+            uidNumber: '10000',
+            gidNumber: '10000',
+            homeDirectory: `/home/${uid}`,
+            loginShell: '/bin/bash',
+          };
+
+          ldapClient.add(userDN, userEntry, (err) => {
+            if (err) {
+              ldapClient.unbind();
+              console.error('[create-first-user] Erreur création utilisateur:', err);
+              return res.status(500).json({ error: 'Erreur lors de la création de l\'utilisateur', details: err.message });
+            }
+
+            // Ajouter l'utilisateur au groupe Admin
+            const adminGroupDN = ldapConfig.adminGroup;
+            const modification = {
+              member: userDN,
+            };
+
+            ldapClient.modify(
+              adminGroupDN,
+              [new ldap.Change({ operation: 'add', modification })],
+              (err) => {
+                ldapClient.unbind();
+                if (err) {
+                  console.error('[create-first-user] Erreur ajout au groupe admin:', err);
+                  return res.status(500).json({ error: 'Utilisateur créé mais erreur lors de l\'ajout au groupe admin', details: err.message });
+                }
+
+                console.log(`[create-first-user] Premier utilisateur admin créé: ${uid}`);
+                res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
+              }
+            );
+          });
+        });
+
+        checkRes.on('error', (err) => {
+          ldapClient.unbind();
+          console.error('[create-first-user] Erreur vérification:', err);
+          res.status(500).json({ error: 'Erreur de vérification LDAP' });
+        });
+      }
+    );
+  });
+});
+
+// GET /api/ldap/sync - Synchroniser les utilisateurs LDAP avec les applications
+router.get('/ldap/sync', async (req, res) => {
+  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  let users = [];
+
+  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
+    if (err) {
+      ldapClient.destroy();
+      return res.status(500).json({ error: 'Échec de la connexion LDAP' });
+    }
+
+    ldapClient.search(
+      ldapConfig.userSearchBase,
+      { filter: ldapConfig.userFilter, scope: 'sub', attributes: ['cn', 'uid', 'mail', 'dn'] },
+      (err, ldapRes) => {
+        if (err) {
+          ldapClient.unbind();
+          return res.status(500).json({ error: 'Erreur de recherche LDAP' });
+        }
+
+        ldapRes.on('searchEntry', (entry) => {
+          try {
+            const attrs = {};
+            entry.pojo.attributes.forEach(attr => { attrs[attr.type] = attr.values[0]; });
+            const uid = attrs.uid || attrs.cn;
+            if (uid && uid !== 'read-only') {
+              users.push({
+                dn: entry.pojo.objectName,
+                name: attrs.cn || uid,
+                uid,
+                email: attrs.mail || `${uid}@${process.env.DEFAULT_EMAIL_DOMAIN || 'localhost'}`,
+              });
+            }
+          } catch (e) {
+            console.error('[ldap-sync] Erreur parsing entry:', e);
+          }
+        });
+
+        ldapRes.on('end', () => {
+          // Récupérer les rôles
+          const roles = {};
+          ldapClient.search(
+            ldapConfig.groupSearchBase,
+            { filter: ldapConfig.groupFilter, scope: 'sub', attributes: ['cn', 'member'] },
+            (err, groupRes) => {
+              if (err) {
+                ldapClient.unbind();
+                return res.status(500).json({ error: 'Erreur lors de la recherche des groupes LDAP' });
+              }
+
+              groupRes.on('searchEntry', (groupEntry) => {
+                const members = groupEntry.pojo.attributes.find(attr => attr.type === 'member')?.values || [];
+                members.forEach((member) => {
+                  if (!roles[member]) roles[member] = [];
+                  roles[member].push(groupEntry.pojo.objectName);
+                });
+              });
+
+              groupRes.on('end', () => {
+                ldapClient.unbind();
+                const usersWithRoles = users.map(user => ({
+                  ...user,
+                  role: getRole(user.dn, roles[user.dn] || []),
+                }));
+
+                console.log(`[ldap-sync] ${usersWithRoles.length} utilisateurs synchronisés`);
+                res.json({ message: 'Synchronisation LDAP réussie', users: usersWithRoles, count: usersWithRoles.length });
+              });
+
+              groupRes.on('error', (err) => {
+                ldapClient.unbind();
+                console.error('[ldap-sync] Erreur groupes:', err);
+                res.status(500).json({ error: 'Erreur lors de la récupération des groupes' });
+              });
+            }
+          );
+        });
+
+        ldapRes.on('error', (err) => {
+          ldapClient.unbind();
+          console.error('[ldap-sync] Erreur recherche:', err);
+          res.status(500).json({ error: 'Erreur lors de la recherche LDAP' });
+        });
+      }
+    );
+  });
+});
+
+function getRole(dn, groupMemberships) {
+  if (groupMemberships.includes(ldapConfig.adminGroup)) return 'Admin';
+  if (groupMemberships.includes(ldapConfig.userGroup)) return 'User';
+  if (groupMemberships.includes(ldapConfig.guestGroup)) return 'Guest';
+  return 'Unknown';
+}
+
 // POST /api/refresh-token
 router.post('/refresh-token', async (req, res) => {
   const { token } = req.body || {};
