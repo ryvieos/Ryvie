@@ -299,6 +299,28 @@ function extractPortsFromCompose(composePath) {
       ports[hostPort] = parseInt(containerPort);
     }
     
+    // Support du format long YAML (ports: - target: <container> ... published: <host>)
+    // On capture des blocs où target et published apparaissent, dans n'importe quel ordre
+    // Exemple:
+    // ports:\n  - target: 2283\n    published: 3013\n
+    const longFormRegex1 = /target:\s*(\d+)[\s\S]*?published:\s*(\d+)/g;
+    while ((match = longFormRegex1.exec(composeContent)) !== null) {
+      const containerPort = match[1];
+      const hostPort = match[2];
+      if (!ports[hostPort]) {
+        ports[hostPort] = parseInt(containerPort);
+      }
+    }
+    // Cas inversé (published avant target)
+    const longFormRegex2 = /published:\s*(\d+)[\s\S]*?target:\s*(\d+)/g;
+    while ((match = longFormRegex2.exec(composeContent)) !== null) {
+      const hostPort = match[1];
+      const containerPort = match[2];
+      if (!ports[hostPort]) {
+        ports[hostPort] = parseInt(containerPort);
+      }
+    }
+    
     return ports;
   } catch (error) {
     console.log(`   ⚠️  Impossible de lire ${composePath}: ${error.message}`);
@@ -341,7 +363,8 @@ function generateManifest(appData) {
     category: metadata.category,
     developer: metadata.developer,
     ports: ports,
-    mainPort: metadata.mainPort || Object.values(ports)[0] || null,
+    // mainPort doit refléter le port hôte (clé du mapping)
+    mainPort: metadata.mainPort || (Object.keys(ports).length > 0 ? parseInt(Object.keys(ports)[0]) : null),
     launchType: metadata.launchType,
     dockerComposePath: metadata.dockerComposePath,
     sourceDir: appDir,
