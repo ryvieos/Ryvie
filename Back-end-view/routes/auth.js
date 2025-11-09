@@ -253,27 +253,72 @@ router.post('/ldap/create-first-user', async (req, res) => {
               return res.status(500).json({ error: 'Erreur lors de la création de l\'utilisateur', details: err.message });
             }
 
-            // Ajouter l'utilisateur au groupe Admin
+            console.log(`[create-first-user] Utilisateur créé: ${uid}`);
+
+            // Vérifier si le groupe admins existe, sinon le créer
             const adminGroupDN = ldapConfig.adminGroup;
-            const modification = new ldap.Attribute({
-              type: 'member',
-              values: [userDN]
-            });
+            ldapClient.search(adminGroupDN, { scope: 'base', attributes: ['cn'] }, (err, searchRes) => {
+              let groupExists = false;
 
-            ldapClient.modify(
-              adminGroupDN,
-              [new ldap.Change({ operation: 'add', modification })],
-              (err) => {
-                ldapClient.unbind();
-                if (err) {
-                  console.error('[create-first-user] Erreur ajout au groupe admin:', err);
-                  return res.status(500).json({ error: 'Utilisateur créé mais erreur lors de l\'ajout au groupe admin', details: err.message });
+              searchRes.on('searchEntry', () => {
+                groupExists = true;
+              });
+
+              searchRes.on('error', (err) => {
+                // Le groupe n'existe pas (erreur 32 = No such object)
+                if (err.code === 32) {
+                  console.log('[create-first-user] Le groupe admins n\'existe pas, création...');
+                  
+                  // Créer le groupe admins
+                  const groupEntry = {
+                    objectClass: 'groupOfNames',
+                    cn: 'admins',
+                    member: userDN
+                  };
+
+                  ldapClient.add(adminGroupDN, groupEntry, (err) => {
+                    ldapClient.unbind();
+                    if (err) {
+                      console.error('[create-first-user] Erreur création groupe admin:', err);
+                      return res.status(500).json({ error: 'Utilisateur créé mais erreur lors de la création du groupe admin', details: err.message });
+                    }
+
+                    console.log(`[create-first-user] Groupe admins créé et utilisateur ajouté: ${uid}`);
+                    res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
+                  });
+                } else {
+                  ldapClient.unbind();
+                  console.error('[create-first-user] Erreur recherche groupe admin:', err);
+                  return res.status(500).json({ error: 'Erreur lors de la vérification du groupe admin', details: err.message });
                 }
+              });
 
-                console.log(`[create-first-user] Premier utilisateur admin créé: ${uid}`);
-                res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
-              }
-            );
+              searchRes.on('end', () => {
+                if (groupExists) {
+                  // Le groupe existe, ajouter l'utilisateur
+                  console.log('[create-first-user] Le groupe admins existe, ajout de l\'utilisateur...');
+                  const modification = new ldap.Attribute({
+                    type: 'member',
+                    values: [userDN]
+                  });
+
+                  ldapClient.modify(
+                    adminGroupDN,
+                    [new ldap.Change({ operation: 'add', modification })],
+                    (err) => {
+                      ldapClient.unbind();
+                      if (err) {
+                        console.error('[create-first-user] Erreur ajout au groupe admin:', err);
+                        return res.status(500).json({ error: 'Utilisateur créé mais erreur lors de l\'ajout au groupe admin', details: err.message });
+                      }
+
+                      console.log(`[create-first-user] Premier utilisateur admin créé: ${uid}`);
+                      res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
+                    }
+                  );
+                }
+              });
+            });
           });
         });
 

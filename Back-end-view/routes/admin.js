@@ -185,26 +185,84 @@ router.post('/add-user', verifyToken, isAdmin, async (req, res) => {
                         return res.status(500).json({ error: 'Impossible d\'ajouter au groupe' });
                       }
 
-                      const change = new ldap.Change({ operation: 'add', modification: new ldap.Attribute({ type: 'member', values: [newUserDN] }) });
-                      groupClient.modify(roleGroup, change, (err) => {
-                        ldapClient.unbind();
-                        adminAuthClient.unbind();
-                        groupClient.unbind();
+                      // Vérifier si le groupe existe, sinon le créer
+                      groupClient.search(roleGroup, { scope: 'base', attributes: ['cn'] }, (err, searchRes) => {
+                        let groupExists = false;
 
-                        if (err && err.name !== 'AttributeOrValueExistsError') {
-                          console.error('Erreur ajout au groupe :', err);
-                          return res.status(500).json({ error: 'Utilisateur créé, mais échec d\'ajout au groupe' });
-                        }
+                        searchRes.on('searchEntry', () => {
+                          groupExists = true;
+                        });
 
-                        triggerLdapSync()
-                          .catch(() => {})
-                          .finally(() => {
-                            try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
-                            return res.json({
-                              message: `Utilisateur "${uid}" ajouté avec succès en tant que ${role}`,
-                              user: { cn, sn, uid, mail, role },
+                        searchRes.on('error', (err) => {
+                          // Le groupe n'existe pas (erreur 32 = No such object)
+                          if (err.code === 32) {
+                            console.log(`[add-user] Le groupe ${role} n'existe pas, création...`);
+                            
+                            // Créer le groupe
+                            const groupName = roleGroup.split(',')[0].split('=')[1]; // Extraire 'admins', 'users' ou 'guests'
+                            const groupEntry = {
+                              objectClass: 'groupOfNames',
+                              cn: groupName,
+                              member: newUserDN
+                            };
+
+                            groupClient.add(roleGroup, groupEntry, (err) => {
+                              ldapClient.unbind();
+                              adminAuthClient.unbind();
+                              groupClient.unbind();
+
+                              if (err) {
+                                console.error(`[add-user] Erreur création groupe ${role}:`, err);
+                                return res.status(500).json({ error: `Utilisateur créé mais erreur lors de la création du groupe ${role}`, details: err.message });
+                              }
+
+                              console.log(`[add-user] Groupe ${role} créé et utilisateur ajouté: ${uid}`);
+                              triggerLdapSync()
+                                .catch(() => {})
+                                .finally(() => {
+                                  try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                                  return res.json({
+                                    message: `Utilisateur "${uid}" ajouté avec succès en tant que ${role}`,
+                                    user: { cn, sn, uid, mail, role },
+                                  });
+                                });
                             });
-                          });
+                          } else {
+                            ldapClient.unbind();
+                            adminAuthClient.unbind();
+                            groupClient.unbind();
+                            console.error(`[add-user] Erreur recherche groupe ${role}:`, err);
+                            return res.status(500).json({ error: `Erreur lors de la vérification du groupe ${role}`, details: err.message });
+                          }
+                        });
+
+                        searchRes.on('end', () => {
+                          if (groupExists) {
+                            // Le groupe existe, ajouter l'utilisateur
+                            console.log(`[add-user] Le groupe ${role} existe, ajout de l'utilisateur...`);
+                            const change = new ldap.Change({ operation: 'add', modification: new ldap.Attribute({ type: 'member', values: [newUserDN] }) });
+                            groupClient.modify(roleGroup, change, (err) => {
+                              ldapClient.unbind();
+                              adminAuthClient.unbind();
+                              groupClient.unbind();
+
+                              if (err && err.name !== 'AttributeOrValueExistsError') {
+                                console.error('Erreur ajout au groupe :', err);
+                                return res.status(500).json({ error: 'Utilisateur créé, mais échec d\'ajout au groupe' });
+                              }
+
+                              triggerLdapSync()
+                                .catch(() => {})
+                                .finally(() => {
+                                  try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                                  return res.json({
+                                    message: `Utilisateur "${uid}" ajouté avec succès en tant que ${role}`,
+                                    user: { cn, sn, uid, mail, role },
+                                  });
+                                });
+                            });
+                          }
+                        });
                       });
                     });
                   });
