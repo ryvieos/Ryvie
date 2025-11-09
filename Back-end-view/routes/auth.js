@@ -130,6 +130,26 @@ router.post('/authenticate', authLimiter, async (req, res) => {
   });
 });
 
+function triggerLdapSync() {
+  return new Promise((resolve) => {
+    const http = require('http');
+    const options = {
+      hostname: 'localhost',
+      port: parseInt(process.env.LDAP_SYNC_PORT || '3013', 10),
+      path: '/api/ldap/sync',
+      method: 'GET',
+      timeout: 10000,
+    };
+    const req = http.request(options, (res) => {
+      res.on('data', () => {});
+      res.on('end', () => resolve(true));
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.end();
+  });
+}
+
 // GET /api/ldap/check-first-time - Vérifier si c'est la première connexion
 router.get('/ldap/check-first-time', async (req, res) => {
   const ldapClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
@@ -284,7 +304,12 @@ router.post('/ldap/create-first-user', async (req, res) => {
                     }
 
                     console.log(`[create-first-user] Groupe admins créé et utilisateur ajouté: ${uid}`);
-                    res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
+                    triggerLdapSync()
+                      .catch(() => {})
+                      .finally(() => {
+                        try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                        return res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
+                      });
                   });
                 } else {
                   ldapClient.unbind();
@@ -313,7 +338,12 @@ router.post('/ldap/create-first-user', async (req, res) => {
                       }
 
                       console.log(`[create-first-user] Premier utilisateur admin créé: ${uid}`);
-                      res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
+                      triggerLdapSync()
+                        .catch(() => {})
+                        .finally(() => {
+                          try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                          return res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
+                        });
                     }
                   );
                 }
