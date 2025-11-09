@@ -49,8 +49,9 @@ router.post('/authenticate', authLimiter, async (req, res) => {
     const escaped = escapeLdapFilterValue(uid);
     const primaryFilter = `(uid=${escaped})`;
     const fallbackFilter = `(cn=${escaped})`;
-    const userFilter = `(|${primaryFilter}${fallbackFilter})`;
-    const searchFilter = `(&${primaryFilter}${ldapConfig.userFilter})`;
+    const emailFilter = `(mail=${escaped})`;
+    const userFilter = `(|${primaryFilter}${fallbackFilter}${emailFilter})`;
+    const searchFilter = `(&${userFilter}${ldapConfig.userFilter})`;
 
     ldapClient.search(ldapConfig.userSearchBase, { filter: searchFilter, scope: 'sub', attributes: ['dn', 'cn', 'mail', 'uid'] }, (err, ldapRes) => {
       if (err) return res.status(500).json({ error: 'Erreur de recherche utilisateur' });

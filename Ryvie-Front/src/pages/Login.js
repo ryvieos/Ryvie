@@ -185,7 +185,7 @@ const Login = () => {
         
         <form onSubmit={handleLogin} className="login-form">
           <div className="form-group">
-            <label htmlFor="username">Nom d'utilisateur</label>
+            <label htmlFor="username">Nom d'utilisateur ou Email</label>
             <input
               type="text"
               id="username"
@@ -193,6 +193,7 @@ const Login = () => {
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
               autoFocus
+              placeholder="nom d'utilisateur ou email"
             />
           </div>
           
