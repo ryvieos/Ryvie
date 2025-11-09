@@ -230,8 +230,8 @@ router.post('/ldap/create-first-user', async (req, res) => {
             return res.status(403).json({ error: 'Des utilisateurs existent déjà. Cette route est réservée à la première configuration.' });
           }
 
-          // Créer l'utilisateur
-          const userDN = `uid=${uid},${ldapConfig.userSearchBase}`;
+          // Créer l'utilisateur avec employeeType pour définir le rôle
+          const userDN = `cn=${name},${ldapConfig.userSearchBase}`;
           const userEntry = {
             objectClass: ['inetOrgPerson', 'posixAccount', 'shadowAccount'],
             uid,
@@ -243,6 +243,7 @@ router.post('/ldap/create-first-user', async (req, res) => {
             gidNumber: '10000',
             homeDirectory: `/home/${uid}`,
             loginShell: '/bin/bash',
+            employeeType: 'admins',  // Définit le rôle de l'utilisateur
           };
 
           ldapClient.add(userDN, userEntry, (err) => {
@@ -254,9 +255,10 @@ router.post('/ldap/create-first-user', async (req, res) => {
 
             // Ajouter l'utilisateur au groupe Admin
             const adminGroupDN = ldapConfig.adminGroup;
-            const modification = {
-              member: userDN,
-            };
+            const modification = new ldap.Attribute({
+              type: 'member',
+              values: [userDN]
+            });
 
             ldapClient.modify(
               adminGroupDN,

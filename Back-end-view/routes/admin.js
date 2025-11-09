@@ -135,15 +135,29 @@ router.post('/add-user', verifyToken, isAdmin, async (req, res) => {
                     return res.status(409).json({ error: `Un utilisateur avec ce ${conflict} existe déjà.` });
                   }
 
-                  // 6) Create user entry
-                  const newUserDN = `uid=${uid},${ldapConfig.userSearchBase}`;
+                  // 6) Create user entry with posixAccount and employeeType
+                  const newUserDN = `cn=${cn},${ldapConfig.userSearchBase}`;
+                  
+                  // Générer uidNumber et gidNumber uniques (basé sur timestamp)
+                  const uidNumber = String(10000 + Math.floor(Math.random() * 90000));
+                  const gidNumber = uidNumber;
+                  
+                  // Mapper le rôle vers employeeType
+                  const employeeTypeMap = { Admin: 'admins', User: 'users', Guest: 'guests' };
+                  const employeeType = employeeTypeMap[role] || 'users';
+                  
                   const entry = {
+                    objectClass: ['inetOrgPerson', 'posixAccount', 'shadowAccount'],
                     cn,
                     sn,
                     uid,
                     mail,
-                    objectClass: ['top', 'person', 'organizationalPerson', 'inetOrgPerson'],
                     userPassword: password,
+                    uidNumber,
+                    gidNumber,
+                    homeDirectory: `/home/${uid}`,
+                    loginShell: '/bin/bash',
+                    employeeType,
                   };
 
                   adminAuthClient.add(newUserDN, entry, (err) => {
