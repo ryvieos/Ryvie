@@ -193,10 +193,12 @@ router.post('/ldap/create-first-user', async (req, res) => {
 
   const ldapClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
 
-  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
+  // Utiliser les credentials admin pour la création d'utilisateur
+  ldapClient.bind(ldapConfig.adminBindDN, ldapConfig.adminBindPassword, (err) => {
     if (err) {
       ldapClient.destroy();
-      return res.status(500).json({ error: 'Échec de connexion LDAP' });
+      console.error('[create-first-user] Échec de connexion LDAP admin:', err);
+      return res.status(500).json({ error: 'Échec de connexion LDAP avec les credentials admin' });
     }
 
     // Vérifier d'abord qu'il n'y a bien qu'un seul utilisateur (read-only)
