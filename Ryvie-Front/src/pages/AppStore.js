@@ -576,9 +576,27 @@ const AppStore = () => {
                       <span className="version-text">v{app.version}</span>
                     )}
                   </div>
-                  <button className="app-get-button" onClick={(e) => { e.stopPropagation(); }}>
-                    Installer
-                  </button>
+                  {(() => {
+                    const isInstalled = Boolean(app.installedVersion);
+                    const isUpdateAvailable = Boolean(app.updateAvailable);
+                    const isDisabled = isInstalled && !isUpdateAvailable;
+                    const label = isUpdateAvailable ? 'Mettre à jour' : (isInstalled ? 'À jour' : 'Installer');
+
+                    const handleClick = (event) => {
+                      event.stopPropagation();
+                      // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
+                    };
+
+                    return (
+                      <button
+                        className="app-get-button"
+                        disabled={isDisabled}
+                        onClick={isDisabled ? undefined : handleClick}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -615,9 +633,27 @@ const AppStore = () => {
                 <p className="modal-version">Version {selectedApp.version}</p>
               </div>
               <div className="modal-header-actions">
-                <button className="btn-primary btn-install-header">
-                  <FontAwesomeIcon icon={faDownload} /> Installer
-                </button>
+                {(() => {
+                  const isInstalled = Boolean(selectedApp.installedVersion);
+                  const isUpdateAvailable = Boolean(selectedApp.updateAvailable);
+                  const isDisabled = isInstalled && !isUpdateAvailable;
+                  const label = isUpdateAvailable ? 'Mettre à jour' : (isInstalled ? 'À jour' : 'Installer');
+
+                  const handleClick = (event) => {
+                    event.stopPropagation();
+                    // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
+                  };
+
+                  return (
+                    <button
+                      className="btn-primary btn-install-header"
+                      disabled={isDisabled}
+                      onClick={isDisabled ? undefined : handleClick}
+                    >
+                      <FontAwesomeIcon icon={faDownload} /> {label}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
             
