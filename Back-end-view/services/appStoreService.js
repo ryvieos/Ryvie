@@ -280,7 +280,12 @@ function enrichAppsWithIcons(apps) {
  */
 async function getApps() {
   const apps = await loadAppsFromFile();
-  return enrichAppsWithIcons(apps);
+  if (!Array.isArray(apps)) {
+    return [];
+  }
+
+  const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(apps);
+  return enrichAppsWithIcons(enrichedApps);
 }
 
 /**
@@ -293,22 +298,14 @@ async function getAppById(appId) {
     return null;
   }
   
-  const app = apps.find(app => app.id === appId);
-  if (!app) return null;
-  
-  // Enrichir avec l'icône et les previews
-  if (!app.gallery || !Array.isArray(app.gallery)) {
-    return { ...app, icon: null, previews: [] };
+  const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(apps);
+  const target = enrichedApps.find(app => app.id === appId);
+  if (!target) {
+    return null;
   }
   
-  const icon = app.gallery.find(url => url.toLowerCase().includes('icon')) || null;
-  const previews = app.gallery.filter(url => !url.toLowerCase().includes('icon'));
-  
-  return {
-    ...app,
-    icon,
-    previews
-  };
+  const enriched = enrichAppsWithIcons([target]);
+  return enriched[0] || null;
 }
 
 /**
