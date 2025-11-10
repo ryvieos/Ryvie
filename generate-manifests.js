@@ -159,7 +159,7 @@ function getRyvieAppPort(appDir, dockerComposeRelativePath) {
  * Extrait des métadonnées (id, name, port) depuis ryvie-app.yml si présent
  */
 function getRyvieAppMeta(appDir, dockerComposeRelativePath) {
-  const meta = { id: null, name: null, port: null };
+  const meta = { id: null, name: null, port: null, version: null };
   try {
     const composeDir = dockerComposeRelativePath
       ? path.dirname(path.join(appDir, dockerComposeRelativePath))
@@ -181,6 +181,8 @@ function getRyvieAppMeta(appDir, dockerComposeRelativePath) {
           if (nameMatch) meta.name = nameMatch[1].trim();
           const portMatch = content.match(/^\s*port\s*:\s*["']?(\d{1,5})["']?/mi);
           if (portMatch) meta.port = parseInt(portMatch[1], 10);
+          const versionMatch = content.match(/^\s*version\s*:\s*["']?([^"'\n]+)["']?/mi);
+          if (versionMatch) meta.version = versionMatch[1].trim();
           // Dès qu'on a lu un fichier, on peut retourner (le plus proche du compose est prioritaire)
           return meta;
         } catch (_) {
@@ -495,6 +497,7 @@ function main() {
   console.log('\n📋 Résumé des apps:');
   const appPorts = {};
   const allPorts = {};
+  const appVersions = {};
   generatedManifests.forEach(manifest => {
     const ryviePort = getRyvieAppPort(manifest.sourceDir, manifest.dockerComposePath);
     const displayPort = ryviePort || manifest.mainPort || 'N/A';
@@ -505,13 +508,21 @@ function main() {
     if (manifest.ports && Object.keys(manifest.ports).length > 0) {
       allPorts[manifest.id] = manifest.ports;
     }
+    if (manifest.version) {
+      appVersions[manifest.id] = manifest.version;
+    }
   });
+
+  const frontendConfigDir = path.join(__dirname, 'Ryvie-Front/src/config');
+  try {
+    if (!fs.existsSync(frontendConfigDir)) fs.mkdirSync(frontendConfigDir, { recursive: true });
+  } catch (e) {
+    console.log(`\n⚠️  Impossible de préparer le dossier de config frontend: ${e.message}`);
+  }
 
   // Écrire le mapping des ports pour le frontend
   try {
-    const frontendPortsPath = path.join(__dirname, 'Ryvie-Front/src/config/app-ports.json');
-    const dir = path.dirname(frontendPortsPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const frontendPortsPath = path.join(frontendConfigDir, 'app-ports.json');
     fs.writeFileSync(frontendPortsPath, JSON.stringify(appPorts, null, 2));
     console.log(`\n📝 Ports des apps écrits pour le frontend: ${frontendPortsPath}`);
   } catch (e) {
@@ -527,6 +538,15 @@ function main() {
     console.log(`📝 Ports détaillés écrits pour le frontend: ${allPortsPath}`);
   } catch (e) {
     console.log(`⚠️  Impossible d'écrire all-ports.json pour le frontend: ${e.message}`);
+  }
+
+  // Écrire les versions des apps pour le frontend
+  try {
+    const versionsPath = path.join(frontendConfigDir, 'apps-versions.json');
+    fs.writeFileSync(versionsPath, JSON.stringify(appVersions, null, 2));
+    console.log(`📝 Versions des apps écrites pour le frontend: ${versionsPath}`);
+  } catch (e) {
+    console.log(`⚠️  Impossible d'écrire apps-versions.json pour le frontend: ${e.message}`);
   }
   
   console.log('\n🎉 Génération terminée !');
