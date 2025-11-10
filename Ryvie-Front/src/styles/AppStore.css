@@ -621,6 +621,19 @@
   transform: scale(1.05);
 }
 
+.app-get-button:disabled {
+  background: #f5f5f5;
+  color: #9ca3af;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+.app-get-button:disabled:hover {
+  background: #f5f5f5;
+  transform: none;
+}
+
 .category-badge {
   padding: 4px 12px;
   border-radius: 12px;

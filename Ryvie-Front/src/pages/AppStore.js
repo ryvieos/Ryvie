@@ -451,12 +451,32 @@ const AppStore = () => {
                         <p className="featured-subtitle">{app.description}</p>
                       </div>
                     </div>
-                    <button
-                      className="featured-install-btn"
-                      onClick={(e) => { e.stopPropagation(); setSelectedApp(app); }}
-                    >
-                      Installer
-                    </button>
+                    {(() => {
+                      const isInstalled = Boolean(app.installedVersion);
+                      const isUpdateAvailable = Boolean(app.updateAvailable);
+                      const isDisabled = isInstalled && !isUpdateAvailable;
+                      const label = isUpdateAvailable ? 'Mettre à jour' : (isInstalled ? 'À jour' : 'Installer');
+
+                      const handleClick = (event) => {
+                        event.stopPropagation();
+
+                        if (isDisabled) {
+                          return;
+                        }
+
+                        setSelectedApp(app);
+                      };
+
+                      return (
+                        <button
+                          className="featured-install-btn"
+                          disabled={isDisabled}
+                          onClick={handleClick}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -584,6 +604,11 @@ const AppStore = () => {
 
                     const handleClick = (event) => {
                       event.stopPropagation();
+
+                      if (isDisabled) {
+                        return;
+                      }
+
                       // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                     };
 
@@ -591,7 +616,7 @@ const AppStore = () => {
                       <button
                         className="app-get-button"
                         disabled={isDisabled}
-                        onClick={isDisabled ? undefined : handleClick}
+                        onClick={handleClick}
                       >
                         {label}
                       </button>
@@ -641,6 +666,11 @@ const AppStore = () => {
 
                   const handleClick = (event) => {
                     event.stopPropagation();
+
+                    if (isDisabled) {
+                      return;
+                    }
+
                     // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                   };
 
@@ -648,7 +678,7 @@ const AppStore = () => {
                     <button
                       className="btn-primary btn-install-header"
                       disabled={isDisabled}
-                      onClick={isDisabled ? undefined : handleClick}
+                      onClick={handleClick}
                     >
                       <FontAwesomeIcon icon={faDownload} /> {label}
                     </button>

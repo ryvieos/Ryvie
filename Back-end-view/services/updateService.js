@@ -287,11 +287,25 @@ async function updateStoreCatalog() {
     
     if (!checkResult.updateAvailable) {
       console.log(`[Update] ✅ Catalogue déjà à jour (${checkResult.currentVersion})`);
+
+      let detectedUpdates = [];
+      try {
+        const localApps = await appStoreService.loadAppsFromFile();
+        if (Array.isArray(localApps)) {
+          const enrichment = await appStoreService.enrichAppsWithInstalledVersions(localApps);
+          await appStoreService.saveAppsToFile(enrichment.apps);
+          detectedUpdates = enrichment.updates;
+        }
+      } catch (enrichError) {
+        console.warn('[Update] ⚠️ Impossible de rafraîchir les informations d\'installation:', enrichError.message);
+      }
+
       return {
         success: true,
         message: `Catalogue déjà à jour (${checkResult.currentVersion})`,
         version: checkResult.currentVersion,
-        updated: false
+        updated: false,
+        updates: detectedUpdates
       };
     }
     
