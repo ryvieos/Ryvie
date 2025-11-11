@@ -41,14 +41,20 @@ function generateCaddyfileContent() {
   auto_https off
 }
 
-# Rediriger HTTPS vers HTTP (pour éviter le forçage HTTPS de Chrome)
+# Rediriger HTTPS -> HTTP (évite le forçage HTTPS local)
 https://ryvie.local {
   redir http://ryvie.local{uri} permanent
 }
 
+# Site local
 http://ryvie.local {
   encode gzip
-  # Proxy vers le frontend webpack-dev-server sur l'hôte
+
+  # 1) Connecteur OnlyOffice sous le même host (NE PAS retirer le préfixe)
+  @onlyoffice path /plugins/onlyoffice*
+  reverse_proxy @onlyoffice ${hostIP}:5000
+
+  # 2) Tout le reste vers le frontend (webpack dev)
   reverse_proxy ${hostIP}:3000
 }
 `;
@@ -143,8 +149,11 @@ async function checkComposeFile() {
  * Extrait l'IP du Caddyfile actuel
  */
 function extractIPFromCaddyfile(content) {
-  const match = content.match(/reverse_proxy\s+(\d+\.\d+\.\d+\.\d+):(\d+)/);
-  return match ? match[1] : null;
+  // Chercher toutes les occurrences de reverse_proxy avec IP
+  const matches = content.matchAll(/reverse_proxy(?:\s+@\w+)?\s+(\d+\.\d+\.\d+\.\d+):(\d+)/g);
+  const ips = [...matches].map(m => m[1]);
+  // Retourner la dernière IP trouvée (celle du frontend)
+  return ips.length > 0 ? ips[ips.length - 1] : null;
 }
 
 /**
@@ -158,7 +167,8 @@ async function checkCaddyfile() {
     const checks = [
       content.includes('auto_https off'),
       content.includes('ryvie.local'),
-      content.includes('reverse_proxy') && content.includes(':3000')
+      content.includes('reverse_proxy') && content.includes(':3000'),
+      content.includes('@onlyoffice') && content.includes(':5000')
     ];
     
     const isValid = checks.every(check => check);
@@ -348,12 +358,35 @@ async function ensureCaddyRunning() {
     }
     
     if (!caddyfileCheck.exists || !caddyfileCheck.valid) {
-      console.error('[reverseProxyService] ❌ Caddyfile manquant ou invalide');
-      return {
-        success: false,
-        error: 'Caddyfile manquant ou invalide',
-        details: { composeCheck, caddyfileCheck }
-      };
+      console.warn('[reverseProxyService] ⚠️  Caddyfile manquant ou invalide, régénération...');
+      
+      // Supprimer l'ancien Caddyfile s'il existe
+      try {
+        await fs.unlink(EXPECTED_CONFIG.caddyfile);
+        console.log('[reverseProxyService] 🗑️  Ancien Caddyfile supprimé');
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          console.warn('[reverseProxyService] ⚠️  Erreur lors de la suppression:', error.message);
+        }
+      }
+      
+      // Recréer le Caddyfile
+      const caddyfileContent = generateCaddyfileContent();
+      await fs.writeFile(EXPECTED_CONFIG.caddyfile, caddyfileContent);
+      console.log('[reverseProxyService] ✅ Nouveau Caddyfile créé avec IP:', getLocalIP());
+      
+      // Redémarrer Caddy si il est en cours d'exécution
+      const containerStatus = await checkCaddyContainer();
+      if (containerStatus.running) {
+        console.log('[reverseProxyService] 🔄 Redémarrage de Caddy pour appliquer la nouvelle configuration...');
+        const restartResult = await restartCaddy();
+        
+        if (!restartResult.success) {
+          console.warn('[reverseProxyService] ⚠️  Échec du redémarrage de Caddy:', restartResult.error);
+        } else {
+          console.log('[reverseProxyService] ✅ Caddy redémarré avec succès');
+        }
+      }
     }
     
     console.log('[reverseProxyService] ✅ Fichiers de configuration OK');
