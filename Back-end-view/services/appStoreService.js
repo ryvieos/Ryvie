@@ -1,7 +1,7 @@
 const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
-const { STORE_CATALOG } = require('../config/paths');
+const { STORE_CATALOG, RYVIE_DIR } = require('../config/paths');
 
 // Configuration
 const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
@@ -11,12 +11,111 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 // Local files
 const APPS_FILE = path.join(STORE_CATALOG, 'apps.json');
 const METADATA_FILE = path.join(STORE_CATALOG, 'metadata.json');
+// Snapshot des versions installées généré côté manifests (utilisé pour détecter les mises à jour)
+const APPS_VERSIONS_FILE = path.join(RYVIE_DIR, 'Ryvie-Front/src/config/apps-versions.json');
 
 // Metadata in memory
 let metadata = {
   releaseTag: null,
   lastCheck: null
 };
+
+// Lit le snapshot local des versions installées (retourne {} si absent)
+async function loadInstalledVersions() {
+  try {
+    const raw = await fs.readFile(APPS_VERSIONS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return {};
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('[appStore] Impossible de lire apps-versions.json:', error.message);
+    }
+    return {};
+  }
+}
+
+// Uniformise les chaînes de version pour faciliter la comparaison
+function normalizeVersion(version) {
+  if (!version || typeof version !== 'string') return null;
+  return version.trim().replace(/^v/i, '');
+}
+
+function extractNumericParts(version) {
+  const normalized = normalizeVersion(version);
+  if (!normalized) return null;
+  return normalized
+    .split('.')
+    .map(part => {
+      const match = part.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    });
+}
+
+// Compare deux versions SemVer (avec préfixe optionnel v) et indique l'état
+function compareAppVersions(installed, latest) {
+  const normalizedInstalled = normalizeVersion(installed);
+  const normalizedLatest = normalizeVersion(latest);
+  if (!normalizedInstalled || !normalizedLatest) {
+    return null;
+  }
+
+  if (normalizedInstalled === normalizedLatest) {
+    return 'up-to-date';
+  }
+
+  const installedParts = extractNumericParts(installed) || [];
+  const latestParts = extractNumericParts(latest) || [];
+  const maxLen = Math.max(installedParts.length, latestParts.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const current = installedParts[i] || 0;
+    const next = latestParts[i] || 0;
+
+    if (next > current) return 'update-available';
+    if (next < current) return 'ahead';
+  }
+
+  return 'up-to-date';
+}
+
+// Ajoute installedVersion/updateAvailable aux apps et liste celles à mettre à jour
+async function enrichAppsWithInstalledVersions(apps) {
+  if (!Array.isArray(apps)) {
+    return { apps, updates: [] };
+  }
+
+  const installedVersions = await loadInstalledVersions();
+  const updates = [];
+
+  const enriched = apps.map(app => {
+    const installedVersion = installedVersions?.[app.id];
+    if (!installedVersion) {
+      return app;
+    }
+
+    const status = compareAppVersions(installedVersion, app.version);
+    const enhancedApp = {
+      ...app,
+      installedVersion,
+      updateAvailable: status === 'update-available'
+    };
+
+    if (status === 'update-available') {
+      updates.push({
+        id: app.id,
+        installedVersion,
+        latestVersion: app.version
+      });
+    }
+
+    return enhancedApp;
+  });
+
+  return { apps: enriched, updates };
+}
 
 /**
  * Récupère la dernière release depuis GitHub
@@ -181,7 +280,12 @@ function enrichAppsWithIcons(apps) {
  */
 async function getApps() {
   const apps = await loadAppsFromFile();
-  return enrichAppsWithIcons(apps);
+  if (!Array.isArray(apps)) {
+    return [];
+  }
+
+  const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(apps);
+  return enrichAppsWithIcons(enrichedApps);
 }
 
 /**
@@ -194,22 +298,14 @@ async function getAppById(appId) {
     return null;
   }
   
-  const app = apps.find(app => app.id === appId);
-  if (!app) return null;
-  
-  // Enrichir avec l'icône et les previews
-  if (!app.gallery || !Array.isArray(app.gallery)) {
-    return { ...app, icon: null, previews: [] };
+  const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(apps);
+  const target = enrichedApps.find(app => app.id === appId);
+  if (!target) {
+    return null;
   }
   
-  const icon = app.gallery.find(url => url.toLowerCase().includes('icon')) || null;
-  const previews = app.gallery.filter(url => !url.toLowerCase().includes('icon'));
-  
-  return {
-    ...app,
-    icon,
-    previews
-  };
+  const enriched = enrichAppsWithIcons([target]);
+  return enriched[0] || null;
 }
 
 /**
@@ -305,5 +401,6 @@ module.exports = {
   metadata,
   APPS_FILE,
   METADATA_FILE,
-  STORE_CATALOG 
+  STORE_CATALOG,
+  enrichAppsWithInstalledVersions
 };
