@@ -4,7 +4,7 @@ const path = require('path');
 const { STORE_CATALOG } = require('../config/paths');
 
 // Configuration
-const GITHUB_REPO = process.env.GITHUB_REPO || 'Loghin01/ryvie-apps';
+const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 

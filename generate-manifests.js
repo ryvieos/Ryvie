@@ -299,6 +299,28 @@ function extractPortsFromCompose(composePath) {
       ports[hostPort] = parseInt(containerPort);
     }
     
+    // Support du format long YAML (ports: - target: <container> ... published: <host>)
+    // On capture des blocs où target et published apparaissent, dans n'importe quel ordre
+    // Exemple:
+    // ports:\n  - target: 2283\n    published: 3013\n
+    const longFormRegex1 = /target:\s*(\d+)[\s\S]*?published:\s*(\d+)/g;
+    while ((match = longFormRegex1.exec(composeContent)) !== null) {
+      const containerPort = match[1];
+      const hostPort = match[2];
+      if (!ports[hostPort]) {
+        ports[hostPort] = parseInt(containerPort);
+      }
+    }
+    // Cas inversé (published avant target)
+    const longFormRegex2 = /published:\s*(\d+)[\s\S]*?target:\s*(\d+)/g;
+    while ((match = longFormRegex2.exec(composeContent)) !== null) {
+      const hostPort = match[1];
+      const containerPort = match[2];
+      if (!ports[hostPort]) {
+        ports[hostPort] = parseInt(containerPort);
+      }
+    }
+    
     return ports;
   } catch (error) {
     console.log(`   ⚠️  Impossible de lire ${composePath}: ${error.message}`);
@@ -341,7 +363,8 @@ function generateManifest(appData) {
     category: metadata.category,
     developer: metadata.developer,
     ports: ports,
-    mainPort: metadata.mainPort || Object.values(ports)[0] || null,
+    // mainPort doit refléter le port hôte (clé du mapping)
+    mainPort: metadata.mainPort || (Object.keys(ports).length > 0 ? parseInt(Object.keys(ports)[0]) : null),
     launchType: metadata.launchType,
     dockerComposePath: metadata.dockerComposePath,
     sourceDir: appDir,
@@ -471,12 +494,16 @@ function main() {
   
   console.log('\n📋 Résumé des apps:');
   const appPorts = {};
+  const allPorts = {};
   generatedManifests.forEach(manifest => {
     const ryviePort = getRyvieAppPort(manifest.sourceDir, manifest.dockerComposePath);
     const displayPort = ryviePort || manifest.mainPort || 'N/A';
     console.log(`   • ${manifest.name} (${manifest.id}) - Port: ${displayPort}`);
     if (ryviePort || manifest.mainPort) {
       appPorts[manifest.id] = ryviePort || manifest.mainPort;
+    }
+    if (manifest.ports && Object.keys(manifest.ports).length > 0) {
+      allPorts[manifest.id] = manifest.ports;
     }
   });
 
@@ -489,6 +516,17 @@ function main() {
     console.log(`\n📝 Ports des apps écrits pour le frontend: ${frontendPortsPath}`);
   } catch (e) {
     console.log(`\n⚠️  Impossible d'écrire app-ports.json pour le frontend: ${e.message}`);
+  }
+
+  // Écrire tous les ports détaillés pour le frontend
+  try {
+    const allPortsPath = path.join(__dirname, 'Ryvie-Front/src/config/all-ports.json');
+    const dir = path.dirname(allPortsPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(allPortsPath, JSON.stringify(allPorts, null, 2));
+    console.log(`📝 Ports détaillés écrits pour le frontend: ${allPortsPath}`);
+  } catch (e) {
+    console.log(`⚠️  Impossible d'écrire all-ports.json pour le frontend: ${e.message}`);
   }
   
   console.log('\n🎉 Génération terminée !');

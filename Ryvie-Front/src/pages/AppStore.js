@@ -521,7 +521,6 @@ const AppStore = () => {
       <div className="section-header">
         <p className="section-kicker">LES PLUS INSTALLÉES</p>
         <h2 className="section-title">Apps</h2>
-        <span className="section-meta">{apps.length} app{apps.length > 1 ? 's' : ''}</span>
       </div>
 
       {/* Grille des applications */}

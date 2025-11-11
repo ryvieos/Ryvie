@@ -194,26 +194,52 @@ router.post('/settings/update-app', verifyToken, isAdmin, async (req, res) => {
 // GET /api/settings/ryvie-domains - Récupérer les domaines publics Netbird (local uniquement, sans token)
 router.get('/settings/ryvie-domains', (req, res) => {
   try {
-    // Vérifier que la requête vient du réseau local ou Netbird
-    const clientIP = req.ip || req.connection.remoteAddress;
-    
-    // Nettoyer l'IP si elle est au format IPv6-mapped IPv4
-    const cleanIP = clientIP.replace('::ffff:', '');
-    
-    const isLocal = cleanIP === '127.0.0.1' || 
-                    cleanIP === '::1' || 
-                    cleanIP.startsWith('127.') ||
-                    cleanIP.startsWith('192.168.') ||
-                    cleanIP.startsWith('10.') ||
-                    cleanIP.startsWith('172.') ||
-                    cleanIP === 'localhost';
-    
+    const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    const clientIPRaw = xff || req.ip || req.connection.remoteAddress || '';
+    const cleanIP = clientIPRaw.replace('::ffff:', '');
+    const hostHeader = String(req.headers.host || '');
+    const hostOnly = hostHeader.split(':')[0].toLowerCase();
+
+    const isLocalHost = hostHeader.startsWith('localhost') || cleanIP === 'localhost' || hostOnly.endsWith('.local');
+    const isLoopback = cleanIP === '127.0.0.1' || cleanIP.startsWith('127.') || cleanIP === '::1';
+
+    let isPrivateIPv4 = false;
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(cleanIP)) {
+      const [a,b] = cleanIP.split('.').map(n => parseInt(n,10));
+      isPrivateIPv4 = cleanIP.startsWith('10.') ||
+                      cleanIP.startsWith('192.168.') ||
+                      (a === 172 && b >= 16 && b <= 31);
+    }
+
+    // IPv6 privé (ULA fc00::/7 => fc.. ou fd..), link-local fe80::/10
+    const isPrivateIPv6 = cleanIP.startsWith('fc') || cleanIP.startsWith('fd') || cleanIP.startsWith('fe80:');
+
+    const isLocal = isLocalHost || isLoopback || isPrivateIPv4 || isPrivateIPv6;
+
+    // Refuser explicitement l'accès si la requête passe par un domaine public Netbird
+    try {
+      if (fs.existsSync(NETBIRD_FILE)) {
+        const nb = JSON.parse(fs.readFileSync(NETBIRD_FILE, 'utf8')) || {};
+        const domains = nb.domains ? Object.values(nb.domains).filter(Boolean).map(d => String(d).toLowerCase()) : [];
+        if (domains.includes(hostOnly) || hostOnly.endsWith('.ryvie.fr')) {
+          console.log(`[settings] Accès via domaine public Netbird refusé (${hostOnly})`);
+          return res.status(403).json({ error: 'Accès refusé: cette API n\'est pas exposée via le domaine public' });
+        }
+      }
+    } catch (_) {}
+
+    // Bloquer le port public 3002 uniquement si la requête n'est PAS locale
+    if (!isLocal && hostHeader.includes(':3002')) {
+      console.log(`[settings] Accès via port public 3002 refusé pour ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP})`);
+      return res.status(403).json({ error: 'Accès refusé: cette API n\'est pas exposée via l\'adresse publique' });
+    }
+
     if (!isLocal) {
-      console.log(`[settings] Tentative d'accès non-local à ryvie-domains depuis ${clientIP} (nettoyé: ${cleanIP})`);
+      console.log(`[settings] Tentative d'accès non-local à ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP})`);
       return res.status(403).json({ error: 'Accès refusé: cette API est uniquement accessible en local' });
     }
     
-    console.log(`[settings] Accès autorisé à ryvie-domains depuis ${clientIP} (nettoyé: ${cleanIP})`);
+    console.log(`[settings] Accès autorisé à ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP})`);
     
     // Charger settings pour récupérer l'id de l'instance
     const settings = loadSettings();

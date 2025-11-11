@@ -47,6 +47,22 @@ const Login = () => {
       // 3) Vérifier si une session est réellement active avant de rediriger
       if (isSessionActive()) {
         navigate('/welcome', { replace: true });
+        return;
+      }
+
+      // 4) Vérifier si c'est la première connexion
+      try {
+        const mode = getCurrentAccessMode() || 'private';
+        const serverUrl = getServerUrl(mode);
+        const response = await axios.get(`${serverUrl}/api/ldap/check-first-time`);
+        
+        if (response.data && response.data.isFirstTime) {
+          console.log('[Login] Première connexion détectée - redirection vers FirstTimeSetup');
+          navigate('/first-time-setup', { replace: true });
+        }
+      } catch (error) {
+        console.error('[Login] Erreur lors de la vérification de la première connexion:', error);
+        // En cas d'erreur, on continue normalement vers la page de login
       }
     };
 
@@ -185,7 +201,7 @@ const Login = () => {
         
         <form onSubmit={handleLogin} className="login-form">
           <div className="form-group">
-            <label htmlFor="username">Nom d'utilisateur</label>
+            <label htmlFor="username">Nom d'utilisateur ou Email</label>
             <input
               type="text"
               id="username"
@@ -193,6 +209,7 @@ const Login = () => {
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
               autoFocus
+              placeholder="nom d'utilisateur ou email"
             />
           </div>
           
@@ -204,6 +221,7 @@ const Login = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
+              placeholder="mot de passe"
             />
           </div>
           

@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import AppStore from './pages/AppStore';
 import User from './pages/User';
 import Login from './pages/Login';
+import FirstTimeSetup from './pages/FirstTimeSetup';
 import Settings from './pages/Settings';
 import StorageSettings from './pages/StorageSettings';
 import Welcome from './pages/Welcome';
@@ -51,6 +52,7 @@ const App = () => {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/first-time-setup" element={<FirstTimeSetup />} />
           <Route path="/" element={
             isSessionActive() ? <Navigate to="/welcome" replace /> : <Navigate to="/login" replace />
           } />

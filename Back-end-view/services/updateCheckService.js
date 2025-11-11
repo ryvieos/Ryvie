@@ -384,7 +384,7 @@ async function checkStoreCatalogUpdate() {
     
     return {
       name: 'App Store Catalog',
-      repo: process.env.GITHUB_REPO || 'Loghin01/ryvie-apps',
+      repo: process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps',
       currentVersion: currentTag,
       latestVersion: latestTag,
       updateAvailable,
