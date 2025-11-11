@@ -165,23 +165,27 @@
 
 .welcome-server-icon {
   position: relative;
-  width: 45px;
-  height: 45px;
+  width: 62px;
+  height: 62px;
   margin-right: 1.2rem;
-  border-radius: 12px;
-  padding: 8px;
+  border-radius: 16px;
   background: linear-gradient(135deg, #ffffff 0%, #e0eaff 100%);
   transition: all 0.3s ease;
   box-shadow: 
     0 5px 15px rgba(71, 118, 230, 0.15),
     0 0 0 1px rgba(71, 118, 230, 0.2);
   z-index: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .welcome-server-icon img {
-  filter: brightness(0) invert(1);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-
 .welcome-server-info {
   flex: 1;
   text-align: left;

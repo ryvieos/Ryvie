@@ -5,7 +5,7 @@
 
   margin: 0 auto;
   min-height: 100vh;
-  background: #fbfdff;
+  background: #ffffff;
   position: relative;
 }
 
@@ -575,7 +575,7 @@
 .app-description {
   margin: 0 0 8px 0;
   font-size: 13px;
-  color: #6b7280;
+  color: #334155;
   line-height: 1.4;
   flex: 1;
   display: -webkit-box;
@@ -619,6 +619,19 @@
 .app-get-button:hover {
   background: #e5e7eb;
   transform: scale(1.05);
+}
+
+.app-get-button:disabled {
+  background: #f5f5f5;
+  color: #9ca3af;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+.app-get-button:disabled:hover {
+  background: #f5f5f5;
+  transform: none;
 }
 
 .category-badge {
@@ -826,7 +839,7 @@
   margin: 0 0 10px 0;
   font-size: 15.5px;
   line-height: 1.75;
-  color: #1f2937;
+  color: #334155;
 }
 .description-content p:last-child { margin-bottom: 0; }
 .description-content a { color: #2563eb; text-decoration: none; }
