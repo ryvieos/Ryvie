@@ -1,7 +1,7 @@
 const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
-const { STORE_CATALOG, RYVIE_DIR } = require('../config/paths');
+const { STORE_CATALOG, RYVIE_DIR, MANIFESTS_DIR } = require('../config/paths');
 
 // Configuration
 const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
@@ -20,21 +20,67 @@ let metadata = {
   lastCheck: null
 };
 
+async function loadInstalledVersionsFromManifests() {
+  try {
+    const entries = await fs.readdir(MANIFESTS_DIR, { withFileTypes: true });
+    const installed = {};
+
+    await Promise.all(entries.map(async entry => {
+      if (!entry.isDirectory()) return;
+      const manifestPath = path.join(MANIFESTS_DIR, entry.name, 'manifest.json');
+      try {
+        const raw = await fs.readFile(manifestPath, 'utf8');
+        const manifest = JSON.parse(raw);
+        if (manifest?.id) {
+          const normalizedId = String(manifest.id).trim();
+          if (!normalizedId) return;
+          const version = typeof manifest.version === 'string' && manifest.version.trim() !== ''
+            ? manifest.version.trim()
+            : null;
+          if (version) {
+            installed[normalizedId] = version;
+          }
+        }
+      } catch (manifestError) {
+        if (manifestError.code !== 'ENOENT') {
+          console.warn(`[appStore] Impossible de lire ${manifestPath}:`, manifestError.message);
+        }
+      }
+    }));
+
+    return installed;
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('[appStore] Impossible de lister les manifests installés:', error.message);
+    }
+    return {};
+  }
+}
+
 // Lit le snapshot local des versions installées (retourne {} si absent)
 async function loadInstalledVersions() {
+  let installed = {};
+
   try {
     const raw = await fs.readFile(APPS_VERSIONS_FILE, 'utf8');
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed;
+      installed = parsed;
     }
-    return {};
   } catch (error) {
     if (error.code !== 'ENOENT') {
       console.warn('[appStore] Impossible de lire apps-versions.json:', error.message);
     }
-    return {};
   }
+
+  if (!installed || Object.keys(installed).length === 0) {
+    const fallback = await loadInstalledVersionsFromManifests();
+    if (Object.keys(fallback).length > 0) {
+      installed = fallback;
+    }
+  }
+
+  return installed || {};
 }
 
 // Uniformise les chaînes de version pour faciliter la comparaison
