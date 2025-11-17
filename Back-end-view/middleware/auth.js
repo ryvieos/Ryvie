@@ -111,6 +111,8 @@ const isAdmin = (req, res, next) => {
 // Vérifie si l'utilisateur a une permission spécifique
 const hasPermission = (permission) => {
   return (req, res, next) => {
+    console.log(`[auth] Vérification permission '${permission}' pour utilisateur:`, req.user);
+    
     // Définir les permissions par rôle
     const permissions = {
       Admin: ['manage_users', 'manage_apps', 'view_server_info', 'access_settings'],
@@ -118,10 +120,14 @@ const hasPermission = (permission) => {
       Guest: []
     };
 
+    console.log(`[auth] Permissions disponibles pour le rôle ${req.user?.role}:`, permissions[req.user?.role]);
+    
     // Vérifier si l'utilisateur a la permission requise
     if (req.user && permissions[req.user.role] && permissions[req.user.role].includes(permission)) {
+      console.log(`[auth] ✅ Permission '${permission}' accordée`);
       next();
     } else {
+      console.log(`[auth] ❌ Permission '${permission}' refusée - rôle: ${req.user?.role}`);
       return res.status(403).json({ 
         error: `Accès refusé. Permission '${permission}' requise.` 
       });

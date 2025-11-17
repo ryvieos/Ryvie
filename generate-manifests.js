@@ -359,7 +359,7 @@ function generateManifest(appData) {
   const manifest = {
     id: finalId,
     name: finalName,
-    version: '1.0.0',
+    version: ryvieMeta.version,
     description: metadata.description,
     icon: `icon${iconExt}`,
     category: metadata.category,
