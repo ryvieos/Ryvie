@@ -328,7 +328,8 @@ const AppStore = () => {
           'success'
         );
         
-        if (response.data.updated) {
+        const shouldReload = response.data.updated || (Array.isArray(response.data.updates) && response.data.updates.length > 0);
+        if (shouldReload) {
           await fetchApps();
           await fetchCatalogHealth();
         }
@@ -365,6 +366,58 @@ const AppStore = () => {
       other: '#607d8b'
     };
     return colors[category?.toLowerCase()] || colors.other;
+  };
+
+  const normalizeVersion = (version) => {
+    if (!version) return null;
+    if (typeof version !== 'string') {
+      return String(version);
+    }
+    return version.trim().replace(/^v/i, '');
+  };
+
+  const compareVersions = (installed, latest) => {
+    const installedNorm = normalizeVersion(installed);
+    const latestNorm = normalizeVersion(latest);
+    if (!installedNorm || !latestNorm) {
+      return null;
+    }
+
+    if (installedNorm === latestNorm) {
+      return 'up-to-date';
+    }
+
+    const installedParts = installedNorm.split('.').map(part => parseInt(part, 10) || 0);
+    const latestParts = latestNorm.split('.').map(part => parseInt(part, 10) || 0);
+    const maxLen = Math.max(installedParts.length, latestParts.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      const local = installedParts[i] || 0;
+      const remote = latestParts[i] || 0;
+      if (remote > local) return 'update-available';
+      if (remote < local) return 'ahead';
+    }
+
+    return 'up-to-date';
+  };
+
+  const evaluateAppStatus = (app) => {
+    const installedVersion = app?.installedVersion;
+    const installed = typeof installedVersion === 'string'
+      ? installedVersion.trim() !== ''
+      : installedVersion !== null && installedVersion !== undefined;
+
+    const updateFlagRaw = app?.updateAvailable;
+    const updateFlag = updateFlagRaw === true || updateFlagRaw === 'true' || updateFlagRaw === 1;
+    const versionStatus = installed ? compareVersions(installedVersion, app?.version) : null;
+    const updateAvailable = updateFlag || versionStatus === 'update-available';
+
+    return {
+      installed,
+      updateAvailable,
+      label: updateAvailable ? 'Mettre à jour' : (installed ? 'À jour' : 'Installer'),
+      disabled: installed && !updateAvailable
+    };
   };
 
   if (initialLoading) {
@@ -451,12 +504,34 @@ const AppStore = () => {
                         <p className="featured-subtitle">{app.description}</p>
                       </div>
                     </div>
-                    <button
-                      className="featured-install-btn"
-                      onClick={(e) => { e.stopPropagation(); setSelectedApp(app); }}
-                    >
-                      Installer
-                    </button>
+                    {(() => {
+                      const { label, disabled } = evaluateAppStatus(app);
+
+                      const handleClick = (event) => {
+                        event.stopPropagation();
+
+                        if (disabled) {
+                          return;
+                        }
+
+                        setSelectedApp(app);
+                        if (label === 'Installer') {
+                          // TODO: branch vers routine d'installation lorsqu'elle sera câblée
+                        } else if (label === 'Mettre à jour') {
+                          // TODO: branch vers routine de mise à jour lorsqu'elle sera câblée
+                        }
+                      };
+
+                      return (
+                        <button
+                          className="featured-install-btn"
+                          disabled={disabled}
+                          onClick={handleClick}
+                        >
+                          {label}
+                        </button>
+                      );
+                  })()}
                   </div>
                 </div>
               </div>
@@ -576,9 +651,29 @@ const AppStore = () => {
                       <span className="version-text">v{app.version}</span>
                     )}
                   </div>
-                  <button className="app-get-button" onClick={(e) => { e.stopPropagation(); }}>
-                    Installer
-                  </button>
+                  {(() => {
+                    const { label, disabled } = evaluateAppStatus(app);
+
+                    const handleClick = (event) => {
+                      event.stopPropagation();
+
+                      if (disabled) {
+                        return;
+                      }
+
+                      // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
+                    };
+
+                    return (
+                      <button
+                        className="app-get-button"
+                        disabled={disabled}
+                        onClick={handleClick}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -615,9 +710,29 @@ const AppStore = () => {
                 <p className="modal-version">Version {selectedApp.version}</p>
               </div>
               <div className="modal-header-actions">
-                <button className="btn-primary btn-install-header">
-                  <FontAwesomeIcon icon={faDownload} /> Installer
-                </button>
+                {(() => {
+                  const { label, disabled } = evaluateAppStatus(selectedApp);
+
+                  const handleClick = (event) => {
+                    event.stopPropagation();
+
+                    if (disabled) {
+                      return;
+                    }
+
+                    // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
+                  };
+
+                  return (
+                    <button
+                      className="btn-primary btn-install-header"
+                      disabled={disabled}
+                      onClick={handleClick}
+                    >
+                      <FontAwesomeIcon icon={faDownload} /> {label}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
             

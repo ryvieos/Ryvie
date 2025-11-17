@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios'; // Centralized axios instance with interceptors
 import '../styles/Welcome.css';
-import serverIcon from '../icons/lettre-r.png';
+import serverIcon from '../icons/icon.png';
 import { setAccessMode as setGlobalAccessMode, getCurrentAccessMode } from '../utils/detectAccessMode';
 import { getCurrentUser, getCurrentUserRole, setCurrentUserName, initializeSession, isSessionActive, startSession } from '../utils/sessionManager';
 import { generateAppConfigFromManifests } from '../config/appConfig';
