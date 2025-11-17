@@ -1277,6 +1277,83 @@ const Settings = () => {
     }
   };
 
+  // Fonction pour désinstaller une application
+  const handleAppUninstall = async (appId, appName) => {
+    const confirmed = await showConfirm(
+      `🗑️ Désinstaller ${appName}`,
+      `Êtes-vous sûr de vouloir désinstaller "${appName}" ?\n\nCette action supprimera :\n- Les containers Docker\n- Les données de l'application\n- Les fichiers de configuration\n\nCette action est irréversible.`
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      // Afficher un message de progression
+      setAppActionStatus({
+        show: true,
+        success: false,
+        message: `Désinstallation de ${appName} en cours...`,
+        appId
+      });
+
+      // Appeler l'API de désinstallation
+      const serverUrl = getServerUrl(accessMode);
+      const response = await axios.delete(`${serverUrl}/api/appstore/apps/${appId}/uninstall`, {
+        timeout: 120000 // 120 secondes pour la désinstallation
+      });
+      
+      if (response.data.success) {
+        // Afficher un message de succès
+        setAppActionStatus({
+          show: true,
+          success: true,
+          message: `${appName} a été désinstallé avec succès`,
+          appId
+        });
+        
+        // Fermer la modale si elle est ouverte
+        if (selectedApp && selectedApp.id === appId) {
+          setSelectedApp(null);
+        }
+        
+        // Rafraîchir la liste des applications après 2 secondes
+        setTimeout(() => {
+          fetchApplications();
+          setAppActionStatus({
+            show: false,
+            success: false,
+            message: '',
+            appId: null
+          });
+        }, 2000);
+      } else {
+        throw new Error(response.data.message || 'Erreur lors de la désinstallation');
+      }
+      
+    } catch (error) {
+      console.error(`Erreur lors de la désinstallation de ${appName}:`, error);
+      
+      // Afficher un message d'erreur
+      setAppActionStatus({
+        show: true,
+        success: false,
+        message: error.response?.data?.message || `Erreur lors de la désinstallation de ${appName}`,
+        appId
+      });
+      
+      // Masquer le message après 5 secondes
+      setTimeout(() => {
+        setAppActionStatus({
+          show: false,
+          success: false,
+          message: '',
+          appId: null
+        });
+      }, 5000);
+    }
+  };
+
   // Fonction pour sélectionner une application et afficher ses détails
   const handleAppSelect = (app) => {
     if (selectedApp && selectedApp.id === app.id) {
@@ -1702,6 +1779,13 @@ const Settings = () => {
                     >
                       Redémarrer tous les conteneurs
                     </button>
+                    <button
+                      className="docker-action-btn-large uninstall"
+                      onClick={() => handleAppUninstall(selectedApp.id, selectedApp.name)}
+                      title="Désinstaller l'application"
+                    >
+                      🗑️ Désinstaller l'application
+                    </button>
                   </div>
                 )}
               </div>
@@ -1768,6 +1852,16 @@ const Settings = () => {
                       disabled={!(app.status === 'running' && app.progress > 0)}
                     >
                       Redémarrer
+                    </button>
+                    <button
+                      className="docker-action-btn uninstall"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAppUninstall(app.id, app.name)
+                      }}
+                      title="Désinstaller l'application"
+                    >
+                      🗑️ Désinstaller
                     </button>
                     <div className="docker-autostart-control" onClick={(e) => e.stopPropagation()}>
                       <label className="switch">

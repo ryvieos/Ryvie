@@ -170,7 +170,9 @@ async function enrichAppsWithInstalledVersions(apps) {
   const enriched = apps.map(app => {
     const installedVersion = installedVersions?.[app.id];
     if (!installedVersion) {
-      return app;
+      // App non installée : supprimer les champs installedVersion et updateAvailable s'ils existent
+      const { installedVersion: _, updateAvailable: __, ...cleanApp } = app;
+      return cleanApp;
     }
 
     const status = compareAppVersions(installedVersion, app.version);
@@ -455,6 +457,15 @@ async function downloadAppFromRepoArchive(release, appId) {
     
     sendProgressUpdate(appId, 65, 'Fichiers vérifiés avec succès', 'verification');
     
+    // Définir les permissions correctes sur le dossier (775 = drwxrwxr-x)
+    try {
+      execSync(`chmod -R 775 "${appDir}"`, { stdio: 'inherit' });
+      console.log(`[appStore] ✅ Permissions configurées (775) pour ${appDir}`);
+    } catch (chmodError) {
+      console.warn(`[appStore] ⚠️ Impossible de définir les permissions:`, chmodError.message);
+      // Non bloquant
+    }
+    
     console.log(`[appStore] 🎉 ${appId} téléchargé avec succès (${downloadedCount} fichier(s))`);
     return appDir;
     
@@ -521,6 +532,13 @@ async function downloadDirectoryRecursive(apiUrl, destinationPath, branch, heade
         // Récursion pour les sous-dossiers
         await downloadDirectoryRecursive(item.url, itemPath, branch, headers);
       }
+    }
+    
+    // Définir les permissions sur le dossier téléchargé
+    try {
+      execSync(`chmod -R 775 "${destinationPath}"`, { stdio: 'pipe' });
+    } catch (chmodError) {
+      console.warn(`[appStore] ⚠️ Impossible de définir les permissions sur ${destinationPath}`);
     }
     
   } catch (error) {
@@ -697,6 +715,16 @@ async function updateAppFromStore(appId) {
     
     console.log(`[Update] ✅ ${appId} téléchargé dans ${appDir}`);
     
+    // Définir les permissions correctes sur le dossier (775 = drwxrwxr-x)
+    console.log('[Update] 🔧 Configuration des permissions...');
+    try {
+      execSync(`chmod -R 775 "${appDir}"`, { stdio: 'inherit' });
+      console.log('[Update] ✅ Permissions configurées (775)');
+    } catch (chmodError) {
+      console.warn('[Update] ⚠️ Impossible de définir les permissions:', chmodError.message);
+      // Non bloquant, on continue
+    }
+    
     // 4. Trouver et exécuter docker-compose
     console.log('[Update] 🔎 Étape courante: docker-compose-up');
     
@@ -764,19 +792,50 @@ async function updateAppFromStore(appId) {
     // Vérifier le statut du container
     currentStep = 'container-status-check';
     console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
-    console.log(`[Update] Vérification du statut du container ${appId}...`);
+    console.log(`[Update] Vérification du statut des containers pour ${appId}...`);
     
     try {
-      // Récupérer le statut du container
-      const statusOutput = execSync(`docker ps -a --filter "name=${appId}" --format "{{.Status}}"`, { 
+      // Récupérer tous les containers liés à l'app avec leur nom et statut
+      const containersOutput = execSync(`docker ps -a --filter "name=${appId}" --format "{{.Names}}:{{.Status}}"`, { 
         encoding: 'utf8' 
       }).trim();
       
-      console.log(`[Update] Container ${appId} - Status: ${statusOutput}`);
+      console.log(`[Update] Containers trouvés:\n${containersOutput}`);
       
-      // Vérifier si le container est exited (erreur)
-      if (statusOutput.toLowerCase().includes('exited')) {
-        throw new Error(`Le container ${appId} s'est arrêté (exited) pendant l'installation/mise à jour`);
+      // Parser les containers
+      const containers = containersOutput.split('\n').filter(line => line.trim());
+      
+      // Filtrer les containers auxiliaires (caddy, proxy, etc.) qui peuvent être arrêtés
+      const mainContainers = containers.filter(line => {
+        const name = line.split(':')[0].toLowerCase();
+        return !name.includes('caddy') && !name.includes('proxy') && !name.includes('nginx');
+      });
+      
+      console.log(`[Update] Containers principaux à vérifier: ${mainContainers.length}`);
+      
+      // Vérifier si au moins un container principal est exited (erreur critique)
+      let hasExitedMain = false;
+      let hasRunningMain = false;
+      
+      for (const containerLine of mainContainers) {
+        const [name, status] = containerLine.split(':');
+        console.log(`[Update] - ${name}: ${status}`);
+        
+        if (status.toLowerCase().includes('exited')) {
+          hasExitedMain = true;
+          console.warn(`[Update] ⚠️ Container principal ${name} est arrêté`);
+        } else if (status.toLowerCase().includes('up')) {
+          hasRunningMain = true;
+        }
+      }
+      
+      // Erreur seulement si tous les containers principaux sont arrêtés
+      if (hasExitedMain && !hasRunningMain && mainContainers.length > 0) {
+        throw new Error(`Les containers principaux de ${appId} se sont arrêtés pendant l'installation`);
+      }
+      
+      if (!hasRunningMain && mainContainers.length > 0) {
+        throw new Error(`Aucun container principal de ${appId} n'est démarré`);
       }
       
       // Vérifier le health status si disponible
@@ -798,11 +857,12 @@ async function updateAppFromStore(appId) {
           console.log(`[Update] ⏳ Container ${appId} est en cours de démarrage`);
         }
       } catch (healthError) {
-        // Pas de healthcheck configuré, on vérifie juste que le container est Up
-        if (!statusOutput.toLowerCase().includes('up')) {
-          throw new Error(`Le container ${appId} n'est pas démarré`);
+        // Pas de healthcheck configuré, on vérifie juste qu'au moins un container principal est Up
+        if (!hasRunningMain) {
+          console.warn(`[Update] ⚠️ Aucun healthcheck disponible et aucun container principal en cours d'exécution`);
+        } else {
+          console.log(`[Update] ℹ️ Containers sans healthcheck, au moins un container principal est Up`);
         }
-        console.log(`[Update] ℹ️ Container ${appId} sans healthcheck, statut: Up`);
       }
       
     } catch (checkError) {
@@ -879,7 +939,8 @@ async function updateAppFromStore(appId) {
     if (appDir) {
       console.log(`[Update] 🧹 Nettoyage du dossier ${appDir}...`);
       try {
-        await fs.rm(appDir, { recursive: true, force: true });
+        // Utiliser sudo rm car les fichiers Docker peuvent appartenir à root
+        execSync(`sudo rm -rf "${appDir}"`, { stdio: 'inherit' });
         console.log(`[Update] ✅ Dossier ${appDir} supprimé`);
       } catch (cleanupError) {
         console.warn(`[Update] ⚠️ Impossible de supprimer ${appDir}:`, cleanupError.message);
@@ -952,6 +1013,16 @@ async function initialize() {
     } else {
       console.error('[appStore] ⚠️  Erreur lors de l\'initialisation:', result.message);
     }
+    
+    // Forcer la régénération des versions installées pour nettoyer les apps fantômes
+    console.log('[appStore] 🔄 Vérification des apps installées...');
+    const localApps = await loadAppsFromFile();
+    if (Array.isArray(localApps)) {
+      const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(localApps);
+      await saveAppsToFile(enrichedApps);
+      const installedCount = enrichedApps.filter(app => app.installedVersion).length;
+      console.log(`[appStore] ✅ ${installedCount} apps installées détectées`);
+    }
   } catch (error) {
     console.error('[appStore] ⚠️  Échec de l\'initialisation:', error.message);
     // Continuer même en cas d'erreur (utiliser le cache local si disponible)
@@ -959,6 +1030,137 @@ async function initialize() {
 }
 
 // Exports pour être utilisés par updateCheckService et updateService
+/**
+ * Désinstalle proprement une application
+ */
+async function uninstallApp(appId) {
+  try {
+    console.log(`[Uninstall] Début de la désinstallation de ${appId}...`);
+    
+    // 1. Arrêter et supprimer les containers Docker
+    const appDir = path.join(APPS_DIR, appId);
+    
+    try {
+      await fs.access(appDir);
+      console.log(`[Uninstall] Dossier de l'app trouvé: ${appDir}`);
+    } catch {
+      console.warn(`[Uninstall] ⚠️ Dossier ${appDir} introuvable, l'app n'est peut-être pas installée`);
+      return {
+        success: false,
+        message: `L'application ${appId} n'est pas installée`
+      };
+    }
+    
+    // 2. Arrêter et supprimer les containers avec docker compose down
+    console.log('[Uninstall] 🛑 Arrêt et suppression des containers...');
+    const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
+    let composeFile = null;
+    
+    for (const file of composeFiles) {
+      try {
+        await fs.access(path.join(appDir, file));
+        composeFile = file;
+        break;
+      } catch {}
+    }
+    
+    if (composeFile) {
+      try {
+        execSync(`docker compose -f ${composeFile} down -v`, { 
+          cwd: appDir, 
+          stdio: 'inherit'
+        });
+        console.log('[Uninstall] ✅ Containers arrêtés et supprimés');
+      } catch (dockerError) {
+        console.warn('[Uninstall] ⚠️ Erreur lors de l\'arrêt des containers:', dockerError.message);
+        // On continue quand même pour nettoyer les fichiers
+      }
+    } else {
+      console.warn('[Uninstall] ⚠️ Aucun fichier docker-compose trouvé');
+    }
+    
+    // 3. Supprimer le dossier de l'application (avec sudo pour les fichiers Docker)
+    console.log(`[Uninstall] 🗑️ Suppression du dossier ${appDir}...`);
+    try {
+      // Utiliser sudo rm car les fichiers Docker peuvent appartenir à root
+      execSync(`sudo rm -rf "${appDir}"`, { stdio: 'inherit' });
+      console.log('[Uninstall] ✅ Dossier de l\'application supprimé');
+    } catch (rmError) {
+      console.error('[Uninstall] ❌ Erreur lors de la suppression du dossier:', rmError.message);
+      throw new Error(`Impossible de supprimer le dossier de l'application: ${rmError.message}`);
+    }
+    
+    // 4. Supprimer le manifest
+    const manifestDir = path.join(MANIFESTS_DIR, appId);
+    console.log(`[Uninstall] 📄 Suppression du manifest ${manifestDir}...`);
+    try {
+      execSync(`sudo rm -rf "${manifestDir}"`, { stdio: 'inherit' });
+      console.log('[Uninstall] ✅ Manifest supprimé');
+    } catch (manifestError) {
+      console.warn('[Uninstall] ⚠️ Erreur lors de la suppression du manifest:', manifestError.message);
+      // Non bloquant
+    }
+    
+    // 5. Régénérer les manifests pour mettre à jour la liste
+    console.log('[Uninstall] 🔄 Régénération des manifests...');
+    try {
+      const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
+      execSync(`node ${manifestScript}`, { stdio: 'inherit' });
+      console.log('[Uninstall] ✅ Manifests régénérés');
+    } catch (manifestError) {
+      console.warn('[Uninstall] ⚠️ Impossible de régénérer les manifests:', manifestError.message);
+    }
+    
+    // 6. Supprimer l'entrée dans apps-versions.json
+    console.log('[Uninstall] 🔄 Mise à jour de apps-versions.json...');
+    try {
+      let installedVersions = {};
+      try {
+        const raw = await fs.readFile(APPS_VERSIONS_FILE, 'utf8');
+        installedVersions = JSON.parse(raw);
+      } catch (readError) {
+        console.log('[Uninstall] apps-versions.json introuvable ou vide');
+      }
+      
+      // Supprimer l'entrée de l'app
+      if (installedVersions[appId]) {
+        delete installedVersions[appId];
+        await fs.writeFile(APPS_VERSIONS_FILE, JSON.stringify(installedVersions, null, 2));
+        console.log('[Uninstall] ✅ apps-versions.json mis à jour');
+      }
+    } catch (versionError) {
+      console.warn('[Uninstall] ⚠️ Impossible de mettre à jour apps-versions.json:', versionError.message);
+    }
+    
+    // 7. Actualiser le catalogue pour mettre à jour les statuts
+    console.log('[Uninstall] 🔄 Actualisation du catalogue...');
+    try {
+      const localApps = await loadAppsFromFile();
+      if (Array.isArray(localApps)) {
+        const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(localApps);
+        await saveAppsToFile(enrichedApps);
+        console.log('[Uninstall] ✅ Catalogue actualisé');
+      }
+    } catch (catalogError) {
+      console.warn('[Uninstall] ⚠️ Impossible d\'actualiser le catalogue:', catalogError.message);
+    }
+    
+    console.log(`[Uninstall] ✅ ${appId} désinstallé avec succès`);
+    
+    return {
+      success: true,
+      message: `${appId} a été désinstallé avec succès`
+    };
+    
+  } catch (error) {
+    console.error(`[Uninstall] ❌ Erreur lors de la désinstallation de ${appId}:`, error.message);
+    return {
+      success: false,
+      message: `Erreur lors de la désinstallation: ${error.message}`
+    };
+  }
+}
+
 module.exports = {
   initialize,
   getApps,
@@ -979,6 +1181,7 @@ module.exports = {
   STORE_CATALOG,
   enrichAppsWithInstalledVersions,
   updateAppFromStore,
+  uninstallApp,
   // Export pour les mises à jour de progression
   progressEmitter
 };

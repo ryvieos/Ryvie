@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, hasPermission } = require('../middleware/auth');
-const { getApps, getAppById, clearCache, getStoreHealth, updateAppFromStore, progressEmitter } = require('../services/appStoreService');
+const { getApps, getAppById, clearCache, getStoreHealth, updateAppFromStore, uninstallApp, progressEmitter } = require('../services/appStoreService');
 const { checkStoreCatalogUpdate } = require('../services/updateCheckService');
 const { updateStoreCatalog } = require('../services/updateService');
 
@@ -191,6 +191,30 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     }
   } catch (error) {
     console.error(`[appStore] Erreur lors de l'installation/mise à jour de ${req.params.id}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/appstore/apps/:id/uninstall - Désinstalle une application
+ */
+router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('manage_apps'), async (req, res) => {
+  try {
+    const appId = req.params.id;
+    console.log(`[appStore] Lancement de la désinstallation de ${appId}...`);
+    
+    const result = await uninstallApp(appId);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error(`[appStore] Erreur lors de la désinstallation de ${req.params.id}:`, error);
     res.status(500).json({
       success: false,
       error: error.message

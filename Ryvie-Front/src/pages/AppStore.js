@@ -511,6 +511,10 @@ try {
       addLog('🔄 Actualisation du catalogue...', 'info');
       await fetchApps();
       addLog('✅ Catalogue actualisé', 'success');
+      
+      // Notifier la page Home pour rafraîchir les icônes du bureau
+      addLog('🔄 Rafraîchissement des icônes du bureau...', 'info');
+      window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
     } else {
       addLog(`❌ Échec: ${response.data.message || 'Erreur inconnue'}`, 'error');
       showToast(response.data.message || 'Erreur lors de l\'installation/mise à jour', 'error');

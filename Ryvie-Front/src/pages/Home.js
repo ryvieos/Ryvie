@@ -167,11 +167,23 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
   };
 
   const handleContextMenu = (e) => {
+    console.log(`[Icon] Clic droit sur ${appConfig.name}`, { 
+      showStatus: appConfig.showStatus, 
+      isAdmin,
+      appConfig 
+    });
+    
     // Ne montrer le menu que pour les apps avec showStatus (pas les icônes système)
-    if (!appConfig.showStatus) return;
+    if (!appConfig.showStatus) {
+      console.log(`[Icon] Menu non affiché: showStatus = false`);
+      return;
+    }
     
     // Ne montrer le menu que pour les admins
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      console.log(`[Icon] Menu non affiché: utilisateur non admin`);
+      return;
+    }
     
     e.preventDefault();
     e.stopPropagation();
@@ -209,11 +221,22 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
     
     console.log(`[Icon] ${action} de ${appConfig.name} (ID: ${appConfig.id})...`);
     
+    // Confirmation pour la désinstallation
+    if (action === 'uninstall') {
+      const confirmMsg = `Êtes-vous sûr de vouloir désinstaller "${appConfig.name}" ?\n\nCette action supprimera :\n- Les containers Docker\n- Les données de l'application\n- Les fichiers de configuration\n\nCette action est irréversible.`;
+      if (!window.confirm(confirmMsg)) {
+        console.log(`[Icon] Désinstallation de ${appConfig.name} annulée par l'utilisateur`);
+        return;
+      }
+    }
+    
     // Définir l'action en cours pour verrouiller les transitions de statut
     if (action === 'stop') {
       setPendingAction('stopping');
     } else if (action === 'start' || action === 'restart') {
       setPendingAction('starting');
+    } else if (action === 'uninstall') {
+      setPendingAction('stopping'); // Utiliser stopping pour la désinstallation
     }
     
     // MISE À JOUR OPTIMISTE IMMÉDIATE - AVANT l'appel API
@@ -243,6 +266,13 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
             status: 'starting', // Orange (en cours de redémarrage)
             progress: 50
           };
+        } else if (action === 'uninstall') {
+          console.log(`[Icon] 🗑️  ${appConfig.name} - Changement IMMÉDIAT du statut vers "stopped" (désinstallation en cours)`);
+          newStatus[appKey] = {
+            ...newStatus[appKey],
+            status: 'stopped', // Rouge (désinstallation en cours)
+            progress: 0
+          };
         }
         
         return newStatus;
@@ -252,12 +282,28 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
     // Puis faire l'appel API en arrière-plan
     try {
       const serverUrl = getServerUrl();
-      const url = `${serverUrl}/api/apps/${appConfig.id}/${action}`;
-      console.log(`[Icon] Appel API: ${url}`);
+      let url, method;
       
-      // Timeout de 120 secondes pour les opérations start/stop/restart (conteneurs multiples)
-      const response = await axios.post(url, {}, { timeout: 120000 });
+      if (action === 'uninstall') {
+        url = `${serverUrl}/api/appstore/apps/${appConfig.id}/uninstall`;
+        method = 'delete';
+      } else {
+        url = `${serverUrl}/api/apps/${appConfig.id}/${action}`;
+        method = 'post';
+      }
+      
+      console.log(`[Icon] Appel API: ${method.toUpperCase()} ${url}`);
+      
+      // Timeout de 120 secondes pour les opérations start/stop/restart/uninstall
+      const response = await axios[method](url, {}, { timeout: 120000 });
       console.log(`[Icon] ✓ ${action} ${appConfig.name} terminé:`, response.data);
+      
+      // Si désinstallation réussie, recharger la page
+      if (action === 'uninstall' && response.data.success) {
+        alert(`${appConfig.name} a été désinstallé avec succès.`);
+        console.log('[Icon] 🔄 Rechargement de la page pour actualiser les icônes...');
+        window.location.reload();
+      }
       
     } catch (error) {
       console.error(`[Icon] ❌ Erreur lors du ${action} de ${appConfig.name}:`, error);
@@ -330,11 +376,21 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
               <div className="context-menu-item" onClick={() => handleAppAction('restart')}>
                 🔄 Redémarrer
               </div>
+              <div className="context-menu-separator"></div>
+              <div className="context-menu-item context-menu-item-danger" onClick={() => handleAppAction('uninstall')}>
+                🗑️ Désinstaller
+              </div>
             </>
           ) : (
-            <div className="context-menu-item" onClick={() => handleAppAction('start')}>
-              ▶️ Démarrer
-            </div>
+            <>
+              <div className="context-menu-item" onClick={() => handleAppAction('start')}>
+                ▶️ Démarrer
+              </div>
+              <div className="context-menu-separator"></div>
+              <div className="context-menu-item context-menu-item-danger" onClick={() => handleAppAction('uninstall')}>
+                🗑️ Désinstaller
+              </div>
+            </>
           )}
         </ContextMenuPortal>
       )}
@@ -634,6 +690,121 @@ const Home = () => {
   }, [appsConfig, DEFAULT_ANCHORS]);
   const savedDefaultOnceRef = React.useRef(false);
   
+  // Fonction pour rafraîchir les icônes du bureau après installation/désinstallation
+  const refreshDesktopIcons = React.useCallback(async () => {
+    if (!accessMode) return;
+    
+    try {
+      console.log('[Home] 🔄 Rafraîchissement des icônes du bureau...');
+      const config = await generateAppConfigFromManifests(accessMode);
+      
+      if (Object.keys(config).length > 0) {
+        console.log('[Home] ✅ Config rechargée:', Object.keys(config).length, 'apps');
+        setAppsConfig(config);
+        StorageManager.setItem('appsConfig_cache', config);
+        
+        // Mettre à jour les icônes
+        const newIconImages = { ...images };
+        Object.keys(config).forEach(iconId => {
+          if (config[iconId].icon) {
+            newIconImages[iconId] = config[iconId].icon;
+          }
+        });
+        setIconImages(newIconImages);
+        StorageManager.setItem('iconImages_cache', newIconImages);
+        
+        // Nettoyer le layout et les anchors pour supprimer les apps désinstallées
+        if (launcherLayout && Object.keys(launcherLayout).length > 0) {
+          const cleanedLayout = {};
+          Object.keys(launcherLayout).forEach(id => {
+            // Garder la météo et les widgets, et les apps qui existent encore
+            if (id === 'weather' || id.startsWith('widget-') || config[id]) {
+              cleanedLayout[id] = launcherLayout[id];
+            } else {
+              console.log(`[Home] 🧹 Suppression de ${id} du layout (app désinstallée)`);
+            }
+          });
+          
+          // Nettoyer aussi les anchors
+          const cleanedAnchors = {};
+          if (launcherAnchors && Object.keys(launcherAnchors).length > 0) {
+            Object.keys(launcherAnchors).forEach(id => {
+              if (id === 'weather' || id.startsWith('widget-') || config[id]) {
+                cleanedAnchors[id] = launcherAnchors[id];
+              } else {
+                console.log(`[Home] 🧹 Suppression de ${id} des anchors (app désinstallée)`);
+              }
+            });
+          }
+          
+          const layoutChanged = Object.keys(cleanedLayout).length !== Object.keys(launcherLayout).length;
+          const anchorsChanged = launcherAnchors && Object.keys(cleanedAnchors).length !== Object.keys(launcherAnchors).length;
+          
+          if (layoutChanged || anchorsChanged) {
+            console.log('[Home] 📝 Mise à jour du layout/anchors après nettoyage');
+            setLauncherLayout(cleanedLayout);
+            if (anchorsChanged) {
+              setLauncherAnchors(cleanedAnchors);
+            }
+            
+            // Sauvegarder le layout et anchors nettoyés dans localStorage
+            try {
+              const currentUser = getCurrentUser();
+              if (currentUser) {
+                const cached = localStorage.getItem(`launcher_${currentUser}`);
+                if (cached) {
+                  const launcher = JSON.parse(cached);
+                  launcher.layout = cleanedLayout;
+                  if (anchorsChanged) {
+                    launcher.anchors = cleanedAnchors;
+                  }
+                  localStorage.setItem(`launcher_${currentUser}`, JSON.stringify(launcher));
+                }
+              }
+            } catch (e) {
+              console.warn('[Home] ⚠️ Erreur lors de la sauvegarde du layout nettoyé:', e);
+            }
+            
+            // Sauvegarder aussi dans le backend
+            try {
+              const serverUrl = getServerUrl(accessMode);
+              const appsList = Object.entries(cleanedLayout)
+                .filter(([id, pos]) => id && config[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+                .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
+                .map(([id]) => id);
+              
+              const payload = {
+                launcher: {
+                  anchors: anchorsChanged ? cleanedAnchors : (launcherAnchors || {}),
+                  layout: cleanedLayout,
+                  widgets: widgets || [],
+                  apps: appsList
+                }
+              };
+              
+              axios.patch(`${serverUrl}/api/user/preferences/launcher`, payload)
+                .then(() => console.log('[Home] 💾 Layout nettoyé sauvegardé dans le backend'))
+                .catch(async (e) => {
+                  console.warn('[Home] ⚠️ Fallback save launcher après nettoyage:', e?.message);
+                  try {
+                    await axios.patch(`${serverUrl}/api/user/preferences`, payload);
+                  } catch (e2) {
+                    console.error('[Home] ❌ Échec de sauvegarde du layout nettoyé:', e2?.message);
+                  }
+                });
+            } catch (e) {
+              console.warn('[Home] ⚠️ Erreur lors de la sauvegarde backend du layout nettoyé:', e);
+            }
+          }
+        }
+        
+        console.log('[Home] ✅ Icônes du bureau rafraîchies');
+      }
+    } catch (error) {
+      console.error('[Home] ❌ Erreur lors du rafraîchissement des icônes:', error);
+    }
+  }, [accessMode, launcherLayout, launcherAnchors, widgets]);
+
   // Écouteur de messages pour fermer l'overlay depuis l'iframe
   useEffect(() => {
     // Si les données sont chargées et que les ancres utilisées sont les défauts (backend vide),
@@ -700,12 +871,15 @@ const Home = () => {
             navigate(event.data.path);
           }
         }, 250);
+      } else if (event.data && event.data.type === 'REFRESH_DESKTOP_ICONS') {
+        console.log('[Home] Réception du message REFRESH_DESKTOP_ICONS');
+        refreshDesktopIcons();
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [navigate]);
+  }, [navigate, refreshDesktopIcons]);
   
   useEffect(() => {
     const initializeAccessMode = () => {
@@ -1667,6 +1841,7 @@ const Home = () => {
               widgets={widgets}
               onAddWidget={handleAddWidget}
               onRemoveWidget={handleRemoveWidget}
+              refreshDesktopIcons={refreshDesktopIcons}
             />
           </div>
           {/* Bouton de déconnexion fixe en bas à gauche */}

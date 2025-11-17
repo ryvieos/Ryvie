@@ -29,7 +29,7 @@ const ContextMenuPortal = ({ children, x, y }) => {
 };
 
 // Composant Icon
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode }) => {
+const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons }) => {
   const appConfig = appsConfig[id] || {};
   const [imgSrc, setImgSrc] = React.useState(src);
   const [imgError, setImgError] = React.useState(false);
@@ -203,11 +203,22 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     
     console.log(`[Icon] 🔄 Action "${action}" sur ${appName} (ID: ${appId})`);
     
+    // Confirmation pour la désinstallation
+    if (action === 'uninstall') {
+      const confirmMsg = `Êtes-vous sûr de vouloir désinstaller "${appName}" ?\n\nCette action supprimera :\n- Les containers Docker\n- Les données de l'application\n- Les fichiers de configuration\n\nCette action est irréversible.`;
+      if (!window.confirm(confirmMsg)) {
+        console.log(`[Icon] Désinstallation de ${appName} annulée par l'utilisateur`);
+        return;
+      }
+    }
+    
     // Définir l'action en cours (pour l'affichage du badge)
     if (action === 'stop') {
       setPendingAction('stopping');
     } else if (action === 'start' || action === 'restart') {
       setPendingAction('starting');
+    } else if (action === 'uninstall') {
+      setPendingAction('stopping'); // Utiliser stopping pour la désinstallation
     }
     
     // Mise à jour optimiste du statut (avant l'appel API)
@@ -229,6 +240,13 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
             status: 'starting',
             progress: 50
           };
+        } else if (action === 'uninstall') {
+          console.log(`[Icon] 🗑️  ${appName} - Mise à jour optimiste: stopped (désinstallation en cours)`);
+          newStatus[appKey] = {
+            ...newStatus[appKey],
+            status: 'stopped',
+            progress: 0
+          };
         }
         
         return newStatus;
@@ -238,6 +256,43 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     // Appel API vers le backend
     try {
       const serverUrl = getServerUrl(accessMode);
+      
+      // Gestion spéciale de la désinstallation
+      if (action === 'uninstall') {
+        const uninstallUrl = `${serverUrl}/api/appstore/apps/${appId}/uninstall`;
+        console.log(`[Icon] 📡 DELETE ${uninstallUrl}`);
+        const response = await axios.delete(uninstallUrl, { timeout: 120000 });
+        console.log(`[Icon] ✅ Désinstallation de ${appName} terminée avec succès`);
+        console.log('[Icon] Réponse:', response.data);
+        
+        if (response.data.success) {
+          // Nettoyer le cache localStorage avant de recharger
+          console.log('[Icon] 🧹 Nettoyage du cache localStorage...');
+          try {
+            // Vider tous les caches liés aux apps
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && (key.includes('appsConfig') || key.includes('launcher_') || key.includes('iconImages'))) {
+                keysToRemove.push(key);
+              }
+            }
+            keysToRemove.forEach(key => {
+              console.log(`[Icon] 🗑️ Suppression du cache: ${key}`);
+              localStorage.removeItem(key);
+            });
+          } catch (e) {
+            console.warn('[Icon] ⚠️ Erreur lors du nettoyage du cache:', e);
+          }
+          
+          alert(`${appName} a été désinstallé avec succès.`);
+          // Recharger la page pour actualiser les icônes
+          console.log('[Icon] 🔄 Rechargement de la page pour actualiser les icônes...');
+          window.location.reload();
+        }
+        return;
+      }
+      
       // Gestion spéciale du restart: tenter /restart, sinon fallback stop+start
       if (action === 'restart') {
         const restartUrl = `${serverUrl}/api/apps/${appId}/restart`;
@@ -370,24 +425,62 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
                 </span>
                 <span>Redémarrer</span>
               </div>
+              <div className="context-menu-separator" role="separator" />
+              <div 
+                className="context-menu-item context-menu-item-danger" 
+                onClick={(e) => { 
+                  console.log('[Icon] 🖱️ Clic sur Désinstaller');
+                  e.preventDefault();
+                  e.stopPropagation(); 
+                  handleAppAction('uninstall'); 
+                }}
+              >
+                <span className="context-menu-icon context-menu-icon-uninstall" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <polyline points="3 6 5 6 21 6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <span>Désinstaller</span>
+              </div>
             </>
           ) : (
-            <div 
-              className="context-menu-item" 
-              onClick={(e) => { 
-                console.log('[Icon] 🖱️ Clic sur Démarrer');
-                e.preventDefault();
-                e.stopPropagation(); 
-                handleAppAction('start'); 
-              }}
-            >
-              <span className="context-menu-icon context-menu-icon-start" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false">
-                  <polygon points="9 6 19 12 9 18 9 6" />
-                </svg>
-              </span>
-              <span>Démarrer</span>
-            </div>
+            <>
+              <div 
+                className="context-menu-item" 
+                onClick={(e) => { 
+                  console.log('[Icon] 🖱️ Clic sur Démarrer');
+                  e.preventDefault();
+                  e.stopPropagation(); 
+                  handleAppAction('start'); 
+                }}
+              >
+                <span className="context-menu-icon context-menu-icon-start" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <polygon points="9 6 19 12 9 18 9 6" />
+                  </svg>
+                </span>
+                <span>Démarrer</span>
+              </div>
+              <div className="context-menu-separator" role="separator" />
+              <div 
+                className="context-menu-item context-menu-item-danger" 
+                onClick={(e) => { 
+                  console.log('[Icon] 🖱️ Clic sur Désinstaller');
+                  e.preventDefault();
+                  e.stopPropagation(); 
+                  handleAppAction('uninstall'); 
+                }}
+              >
+                <span className="context-menu-icon context-menu-icon-uninstall" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <polyline points="3 6 5 6 21 6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <span>Désinstaller</span>
+              </div>
+            </>
           )}
         </ContextMenuPortal>
       )}
