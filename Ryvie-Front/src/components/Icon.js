@@ -288,7 +288,12 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
           alert(`${appName} a été désinstallé avec succès.`);
           // Recharger la page pour actualiser les icônes
           console.log('[Icon] 🔄 Rechargement de la page pour actualiser les icônes...');
-          window.location.reload();
+          
+          // Attendre un court instant pour que le backend régénère les manifests
+          setTimeout(() => {
+            // Forcer un rechargement complet avec cache-busting
+            window.location.href = window.location.href.split('?')[0] + '?t=' + Date.now();
+          }, 1000);
         }
         return;
       }

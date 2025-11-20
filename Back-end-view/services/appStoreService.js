@@ -429,15 +429,43 @@ async function downloadAppFromRepoArchive(release, appId) {
       }
     }
     
-    // 5. Télécharger les sous-dossiers récursivement
+    // 5. Télécharger le fichier .env s'il existe (optionnel mais critique)
+    sendProgressUpdate(appId, 60, 'Vérification du fichier .env...', 'download');
+    console.log(`[appStore] 🔍 Recherche du fichier .env pour ${appId}...`);
+    
+    try {
+      const envFileUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/${appId}/.env`;
+      const envResponse = await axios.get(envFileUrl, {
+        headers: { 'User-Agent': 'Ryvie-App-Store' },
+        timeout: 10000,
+        validateStatus: (status) => status === 200 || status === 404
+      });
+      
+      if (envResponse.status === 200 && envResponse.data) {
+        const envFilePath = path.join(appDir, '.env');
+        await fs.writeFile(envFilePath, envResponse.data);
+        console.log(`[appStore] ✅ Fichier .env téléchargé et sauvegardé`);
+        sendProgressUpdate(appId, 61, 'Fichier .env téléchargé', 'download');
+      } else {
+        console.log(`[appStore] ℹ️ Aucun fichier .env trouvé (optionnel)`);
+      }
+    } catch (envError) {
+      // Le fichier .env est optionnel, on ne bloque pas l'installation
+      if (envError.response?.status === 404) {
+        console.log(`[appStore] ℹ️ Aucun fichier .env disponible pour ${appId} (optionnel)`);
+      } else {
+        console.warn(`[appStore] ⚠️ Erreur lors du téléchargement du .env:`, envError.message);
+      }
+    }
+    
+    // 6. Télécharger les sous-dossiers récursivement
     for (const dir of directories) {
-      sendProgressUpdate(appId, 60, `Téléchargement du dossier: ${dir.name}...`, 'download');
+      sendProgressUpdate(appId, 62, `Téléchargement du dossier: ${dir.name}...`, 'download');
       await downloadDirectoryRecursive(dir.url, path.join(appDir, dir.name), branch, headers);
     }
     
-    sendProgressUpdate(appId, 62, 'Vérification des fichiers téléchargés...', 'verification');
-    
-    // 6. Vérifier que les fichiers requis sont présents
+    // 7. Vérifier que les fichiers requis sont présents
+    sendProgressUpdate(appId, 63, 'Vérification des fichiers requis...', 'verification');
     const requiredFiles = ['docker-compose.yml', 'ryvie-app.yml', 'icon.png'];
     const missingFiles = [];
     
@@ -531,6 +559,31 @@ async function downloadDirectoryRecursive(apiUrl, destinationPath, branch, heade
       } else if (item.type === 'dir') {
         // Récursion pour les sous-dossiers
         await downloadDirectoryRecursive(item.url, itemPath, branch, headers);
+      }
+    }
+    
+    // Vérifier et télécharger le fichier .env s'il existe dans ce dossier (optionnel)
+    // L'API GitHub Contents peut ne pas retourner les fichiers cachés dans certains cas
+    const folderPathInRepo = destinationPath.split('/data/apps/')[1]; // Extraire le chemin relatif
+    if (folderPathInRepo) {
+      try {
+        const envFileUrl = `https://raw.githubusercontent.com/ryvieos/Ryvie-Apps/main/${folderPathInRepo}/.env`;
+        const envResponse = await axios.get(envFileUrl, {
+          headers: { 'User-Agent': 'Ryvie-App-Store' },
+          timeout: 10000,
+          validateStatus: (status) => status === 200 || status === 404
+        });
+        
+        if (envResponse.status === 200 && envResponse.data) {
+          const envFilePath = path.join(destinationPath, '.env');
+          await fs.writeFile(envFilePath, envResponse.data);
+          console.log(`[appStore] ✅ Fichier .env téléchargé dans ${folderPathInRepo}`);
+        }
+      } catch (envError) {
+        // Le fichier .env est optionnel, on ne bloque pas
+        if (envError.response?.status !== 404) {
+          console.warn(`[appStore] ⚠️ Erreur lors du téléchargement du .env dans ${folderPathInRepo}:`, envError.message);
+        }
       }
     }
     
@@ -1051,8 +1104,9 @@ async function uninstallApp(appId) {
       };
     }
     
-    // 2. Arrêter et supprimer les containers avec docker compose down
-    console.log('[Uninstall] 🛑 Arrêt et suppression des containers...');
+    // 2. Récupérer les images utilisées par l'application avant de tout supprimer
+    console.log('[Uninstall] 🔍 Récupération des images Docker de l\'application...');
+    let appImages = [];
     const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
     let composeFile = null;
     
@@ -1066,20 +1120,80 @@ async function uninstallApp(appId) {
     
     if (composeFile) {
       try {
+        // Récupérer les images utilisées par l'app
+        const imagesOutput = execSync(`docker compose -f ${composeFile} images -q`, { 
+          cwd: appDir, 
+          encoding: 'utf8'
+        }).trim();
+        
+        if (imagesOutput) {
+          appImages = imagesOutput.split('\n').filter(img => img.trim());
+          console.log(`[Uninstall] 📦 ${appImages.length} image(s) trouvée(s):`, appImages);
+        }
+      } catch (imagesError) {
+        console.warn('[Uninstall] ⚠️ Impossible de récupérer les images:', imagesError.message);
+      }
+      
+      // 3. Arrêter et supprimer les containers avec docker compose down
+      console.log('[Uninstall] 🛑 Arrêt et suppression des containers...');
+      try {
         execSync(`docker compose -f ${composeFile} down -v`, { 
           cwd: appDir, 
           stdio: 'inherit'
         });
-        console.log('[Uninstall] ✅ Containers arrêtés et supprimés');
+        console.log('[Uninstall] ✅ Containers et volumes arrêtés et supprimés');
       } catch (dockerError) {
         console.warn('[Uninstall] ⚠️ Erreur lors de l\'arrêt des containers:', dockerError.message);
         // On continue quand même pour nettoyer les fichiers
+      }
+      
+      // 4. Supprimer les volumes spécifiques à l'application
+      console.log('[Uninstall] 🗑️ Suppression des volumes de l\'application...');
+      try {
+        // Récupérer les volumes créés par cette app (préfixés par le nom du dossier)
+        const volumesOutput = execSync(`docker volume ls -q --filter "name=${appId}"`, { 
+          encoding: 'utf8' 
+        }).trim();
+        
+        if (volumesOutput) {
+          const volumes = volumesOutput.split('\n').filter(vol => vol.trim());
+          console.log(`[Uninstall] � ${volumes.length} volume(s) trouvé(s):`, volumes);
+          
+          for (const volume of volumes) {
+            try {
+              execSync(`docker volume rm ${volume}`, { stdio: 'inherit' });
+              console.log(`[Uninstall] ✅ Volume ${volume} supprimé`);
+            } catch (volError) {
+              console.warn(`[Uninstall] ⚠️ Impossible de supprimer le volume ${volume}:`, volError.message);
+            }
+          }
+        } else {
+          console.log('[Uninstall] ℹ️ Aucun volume spécifique trouvé');
+        }
+      } catch (volumeError) {
+        console.warn('[Uninstall] ⚠️ Erreur lors de la récupération des volumes:', volumeError.message);
+      }
+      
+      // 5. Supprimer les images Docker de l'application
+      if (appImages.length > 0) {
+        console.log('[Uninstall] 🗑️ Suppression des images Docker...');
+        for (const imageId of appImages) {
+          try {
+            execSync(`docker rmi ${imageId}`, { stdio: 'inherit' });
+            console.log(`[Uninstall] ✅ Image ${imageId} supprimée`);
+          } catch (rmiError) {
+            console.warn(`[Uninstall] ⚠️ Impossible de supprimer l'image ${imageId}:`, rmiError.message);
+            // L'image peut être utilisée par un autre container, on continue
+          }
+        }
+      } else {
+        console.log('[Uninstall] ℹ️ Aucune image spécifique trouvée');
       }
     } else {
       console.warn('[Uninstall] ⚠️ Aucun fichier docker-compose trouvé');
     }
     
-    // 3. Supprimer le dossier de l'application (avec sudo pour les fichiers Docker)
+    // 5b. Supprimer le dossier de l'application (avec sudo pour les fichiers Docker)
     console.log(`[Uninstall] 🗑️ Suppression du dossier ${appDir}...`);
     try {
       // Utiliser sudo rm car les fichiers Docker peuvent appartenir à root
@@ -1090,7 +1204,7 @@ async function uninstallApp(appId) {
       throw new Error(`Impossible de supprimer le dossier de l'application: ${rmError.message}`);
     }
     
-    // 4. Supprimer le manifest
+    // 6. Supprimer le manifest
     const manifestDir = path.join(MANIFESTS_DIR, appId);
     console.log(`[Uninstall] 📄 Suppression du manifest ${manifestDir}...`);
     try {
@@ -1101,7 +1215,7 @@ async function uninstallApp(appId) {
       // Non bloquant
     }
     
-    // 5. Régénérer les manifests pour mettre à jour la liste
+    // 7. Régénérer les manifests pour mettre à jour la liste
     console.log('[Uninstall] 🔄 Régénération des manifests...');
     try {
       const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
@@ -1111,7 +1225,7 @@ async function uninstallApp(appId) {
       console.warn('[Uninstall] ⚠️ Impossible de régénérer les manifests:', manifestError.message);
     }
     
-    // 6. Supprimer l'entrée dans apps-versions.json
+    // 8. Supprimer l'entrée dans apps-versions.json
     console.log('[Uninstall] 🔄 Mise à jour de apps-versions.json...');
     try {
       let installedVersions = {};
@@ -1132,7 +1246,7 @@ async function uninstallApp(appId) {
       console.warn('[Uninstall] ⚠️ Impossible de mettre à jour apps-versions.json:', versionError.message);
     }
     
-    // 7. Actualiser le catalogue pour mettre à jour les statuts
+    // 9. Actualiser le catalogue pour mettre à jour les statuts
     console.log('[Uninstall] 🔄 Actualisation du catalogue...');
     try {
       const localApps = await loadAppsFromFile();

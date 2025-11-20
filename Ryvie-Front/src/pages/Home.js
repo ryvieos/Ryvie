@@ -302,7 +302,12 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
       if (action === 'uninstall' && response.data.success) {
         alert(`${appConfig.name} a été désinstallé avec succès.`);
         console.log('[Icon] 🔄 Rechargement de la page pour actualiser les icônes...');
-        window.location.reload();
+        
+        // Attendre un court instant pour que le backend régénère les manifests
+        setTimeout(() => {
+          // Forcer un rechargement complet avec cache-busting
+          window.location.href = window.location.href.split('?')[0] + '?t=' + Date.now();
+        }, 1000);
       }
       
     } catch (error) {
