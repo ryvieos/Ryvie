@@ -66,6 +66,7 @@ const AppStore = () => {
   const [previewHovered, setPreviewHovered] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [logs, setLogs] = useState([]);
+  const [logsVisible, setLogsVisible] = useState(false);
   const [installProgress, setInstallProgress] = useState({});
 
   // Ajouter un log avec timestamp
@@ -77,6 +78,11 @@ const AppStore = () => {
   // Effacer les logs
   const clearLogs = () => {
     setLogs([]);
+  };
+
+  // Basculer la visibilité des logs
+  const toggleLogs = () => {
+    setLogsVisible(prev => !prev);
   };
 
   // Convertit une couleur hex en rgb
@@ -411,6 +417,7 @@ const AppStore = () => {
     addLog(`👤 Utilisateur: ${sessionInfo.user} (${sessionInfo.userRole})`, 'info');
     
     setIsInstalling(appId);
+    setLogsVisible(false); // Masquer automatiquement les logs lors de l'installation
 
     const accessMode = getCurrentAccessMode() || 'private';
     const serverUrl = getServerUrl(accessMode);
@@ -1048,8 +1055,37 @@ try {
         <FontAwesomeIcon icon={faSync} spin={isUpdating} />
       </button>
 
+      {/* Bouton pour afficher/masquer les logs - TEMPORAIRE: toujours visible */}
+      <button 
+        className="floating-logs-btn"
+        onClick={toggleLogs}
+        title={logsVisible ? "Masquer les logs" : "Afficher les logs"}
+        style={{
+          position: 'fixed',
+          bottom: '32px',
+          right: '104px',
+          width: '56px',
+          height: '56px',
+          borderRadius: '50%',
+          background: '#f59e0b',
+          color: 'white',
+          border: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '20px',
+          cursor: 'pointer',
+          zIndex: 1085
+        }}
+      >
+        <FontAwesomeIcon icon={faInfoCircle} />
+        {logs.length > 0 && (
+          <span className="logs-badge">{logs.length}</span>
+        )}
+      </button>
+
       {/* Logs d'installation */}
-      {logs.length > 0 && (
+      {logs.length > 0 && logsVisible && (
         <div className="logs-panel">
           <div className="logs-header">
             <h3>Logs d'installation</h3>
@@ -1101,6 +1137,18 @@ try {
           z-index: 1000;
           display: flex;
           flex-direction: column;
+          animation: slideInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes slideInUp {
+          from {
+            transform: translateY(20px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
         }
 
         .logs-header {
@@ -1324,6 +1372,17 @@ try {
 
         .modal-progress-section .install-progress-fill {
           background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+        }
+
+        /* Responsive pour le panneau de logs */
+        @media (max-width: 768px) {
+          .logs-panel {
+            bottom: 10px;
+            right: 10px;
+            left: 10px;
+            width: auto;
+            max-height: 250px;
+          }
         }
       `}</style>
     </div>

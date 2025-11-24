@@ -102,6 +102,58 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
+/* Bouton floating pour afficher/masquer les logs */
+.floating-logs-btn {
+  position: fixed;
+  bottom: 32px;
+  right: 104px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4), 0 2px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1085;
+  position: relative;
+}
+
+.floating-logs-btn:hover {
+  background: #d97706;
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.5), 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.floating-logs-btn:active {
+  transform: scale(0.95);
+}
+
+/* Badge de compteur de logs */
+.logs-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  min-width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 6px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  border: 2px solid white;
+}
+
 /* Section Featured Apps */
 .featured-section {
   margin-bottom: 32px;
@@ -1253,5 +1305,28 @@
     left: 16px;
     right: 16px;
     bottom: 16px;
+  }
+
+  /* Boutons flottants sur mobile */
+  .floating-refresh-btn {
+    bottom: 20px;
+    right: 20px;
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
+
+  .floating-logs-btn {
+    bottom: 20px;
+    right: 80px;
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
+
+  .logs-badge {
+    min-width: 20px;
+    height: 20px;
+    font-size: 10px;
   }
 }
