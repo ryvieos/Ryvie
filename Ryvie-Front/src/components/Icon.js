@@ -262,39 +262,34 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
         const uninstallUrl = `${serverUrl}/api/appstore/apps/${appId}/uninstall`;
         console.log(`[Icon] 📡 DELETE ${uninstallUrl}`);
         const response = await axios.delete(uninstallUrl, { timeout: 120000 });
-        console.log(`[Icon] ✅ Désinstallation de ${appName} terminée avec succès`);
-        console.log('[Icon] Réponse:', response.data);
+        console.log(`[Icon] ✅ Désinstallation de ${appName} terminée`);
+        console.log('[Icon] Réponse complète:', response);
+        console.log('[Icon] Réponse data:', response.data);
+        console.log('[Icon] Success flag:', response.data?.success);
         
-        if (response.data.success) {
-          // Nettoyer le cache localStorage avant de recharger
-          console.log('[Icon] 🧹 Nettoyage du cache localStorage...');
-          try {
-            // Vider tous les caches liés aux apps
-            const keysToRemove = [];
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i);
-              if (key && (key.includes('appsConfig') || key.includes('launcher_') || key.includes('iconImages'))) {
-                keysToRemove.push(key);
-              }
+        // Nettoyer le cache localStorage avant de recharger
+        console.log('[Icon] 🧹 Nettoyage du cache localStorage...');
+        try {
+          // Vider tous les caches liés aux apps
+          const keysToRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.includes('appsConfig') || key.includes('launcher_') || key.includes('iconImages'))) {
+              keysToRemove.push(key);
             }
-            keysToRemove.forEach(key => {
-              console.log(`[Icon] 🗑️ Suppression du cache: ${key}`);
-              localStorage.removeItem(key);
-            });
-          } catch (e) {
-            console.warn('[Icon] ⚠️ Erreur lors du nettoyage du cache:', e);
           }
-          
-          alert(`${appName} a été désinstallé avec succès.`);
-          // Recharger la page pour actualiser les icônes
-          console.log('[Icon] 🔄 Rechargement de la page pour actualiser les icônes...');
-          
-          // Attendre un court instant pour que le backend régénère les manifests
-          setTimeout(() => {
-            // Forcer un rechargement complet avec cache-busting
-            window.location.href = window.location.href.split('?')[0] + '?t=' + Date.now();
-          }, 1000);
+          keysToRemove.forEach(key => {
+            console.log(`[Icon] 🗑️ Suppression du cache: ${key}`);
+            localStorage.removeItem(key);
+          });
+        } catch (e) {
+          console.warn('[Icon] ⚠️ Erreur lors du nettoyage du cache:', e);
         }
+        
+        // Afficher le message et recharger
+        alert(`${appName} a été désinstallé avec succès.`);
+        console.log('[Icon] 🔄 Rechargement de la page (F5)...');
+        window.location.reload();
         return;
       }
       

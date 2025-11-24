@@ -298,16 +298,11 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
       const response = await axios[method](url, {}, { timeout: 120000 });
       console.log(`[Icon] ✓ ${action} ${appConfig.name} terminé:`, response.data);
       
-      // Si désinstallation réussie, recharger la page
-      if (action === 'uninstall' && response.data.success) {
+      // Si désinstallation, recharger la page
+      if (action === 'uninstall') {
         alert(`${appConfig.name} a été désinstallé avec succès.`);
-        console.log('[Icon] 🔄 Rechargement de la page pour actualiser les icônes...');
-        
-        // Attendre un court instant pour que le backend régénère les manifests
-        setTimeout(() => {
-          // Forcer un rechargement complet avec cache-busting
-          window.location.href = window.location.href.split('?')[0] + '?t=' + Date.now();
-        }, 1000);
+        console.log('[Icon] 🔄 Rechargement de la page (F5)...');
+        window.location.reload();
       }
       
     } catch (error) {
