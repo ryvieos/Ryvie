@@ -799,32 +799,65 @@ async function updateAppFromStore(appId) {
     const composeFilePath = path.join(appDir, composeFile);
     let content = await fs.readFile(composeFilePath, 'utf8');
 
-    // Supprimer app_proxy et healthchecks AVANT le lancement
-    console.log('[Update] 🔧 Nettoyage du docker-compose.yml...');
+    // Supprimer app_proxy AVANT le lancement (si présent - spécifique à l'infrastructure Ryvie)
+    console.log('[Update] 🔧 Vérification du docker-compose.yml...');
     sendProgressUpdate(appId, 70, 'Configuration des services...', 'configuration');
     
     if (content.includes('app_proxy:')) {
       console.log('[Update] 🔧 Suppression du service app_proxy...');
-      content = content.replace(/  app_proxy:[\s\S]*?(?=\n  \w|\n\n|$)/g, '');
+      // Supprimer le service app_proxy uniquement dans la section services
+      content = content.replace(/(services:\s*\n(?:.*\n)*?)(\s{2}app_proxy:[\s\S]*?)(?=\n\s{2}\w+:|\nnetworks:|\nvolumes:|\n$)/g, '$1');
+      await fs.writeFile(composeFilePath, content);
+      console.log('[Update] ✅ Service app_proxy supprimé');
+    } else {
+      console.log('[Update] ✅ Fichier docker-compose.yml prêt (aucune modification nécessaire)');
     }
     
-    // Supprimer les healthchecks qui causent des problèmes
-    console.log('[Update]   - Suppression des healthchecks');
-    // Supprimer les blocs healthcheck complets
-    content = content.replace(/^\s*healthcheck:\s*\n(\s+.*\n)*/gm, '');
-    // Supprimer aussi les depends_on avec condition (qui dépendent du healthcheck)
-    content = content.replace(/^\s*depends_on:\s*\n(\s+\w+:\s*\n\s+condition:.*\n)+/gm, '');
-    
-    await fs.writeFile(composeFilePath, content);
+    // Vérifier la présence du fichier .env
+    const envPath = path.join(appDir, '.env');
+    try {
+      await fs.access(envPath);
+      console.log('[Update] ✅ Fichier .env présent');
+    } catch {
+      console.log('[Update] ⚠️ Aucun fichier .env (peut être normal pour certaines apps)');
+    }
 
     sendProgressUpdate(appId, 75, 'Lancement des containers...', 'installation');
     
-    // Lancer docker compose (une seule fois, sans healthchecks)
+    // Nettoyer les containers arrêtés de cette app avant de lancer (évite les conflits de namespaces)
+    console.log('[Update] 🧹 Nettoyage des anciens containers...');
+    try {
+      execSync(`docker compose -f ${composeFile} down 2>/dev/null || true`, { 
+        cwd: appDir, 
+        stdio: 'pipe'
+      });
+    } catch (cleanupError) {
+      // Non bloquant - l'app n'existe peut-être pas encore
+      console.log('[Update] ℹ️ Aucun container existant à nettoyer');
+    }
+    
+    // Lancer docker compose
     console.log('[Update] 🚀 Lancement des containers...');
-    execSync(`docker compose -f ${composeFile} up -d`, { 
-      cwd: appDir, 
-      stdio: 'inherit'
-    });
+    console.log(`[Update] 📂 Dossier de travail: ${appDir}`);
+    console.log(`[Update] 📄 Fichier compose: ${composeFile}`);
+    
+    try {
+      execSync(`docker compose -f ${composeFile} up -d`, { 
+        cwd: appDir, 
+        stdio: 'inherit'
+      });
+      console.log('[Update] ✅ Containers lancés avec succès');
+    } catch (composeError) {
+      console.error('[Update] ❌ Erreur lors du lancement docker compose:', composeError.message);
+      console.error('[Update] 📋 Vérification du fichier docker-compose.yml...');
+      
+      // Afficher le contenu du fichier modifié pour debug
+      const modifiedContent = await fs.readFile(composeFilePath, 'utf8');
+      console.error('[Update] 📄 Contenu du docker-compose.yml modifié:');
+      console.error(modifiedContent.substring(0, 1000)); // Premiers 1000 caractères
+      
+      throw new Error(`Échec du lancement docker compose: ${composeError.message}`);
+    }
     
     // Attendre que les containers démarrent avec progression
     currentStep = 'container-start-delay';
