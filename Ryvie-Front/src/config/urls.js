@@ -37,6 +37,55 @@ const privateUrl = (host, port) => {
   return `${scheme}://${host}:${port}`;
 };
 
+/**
+ * Récupère les informations de l'URL courante du navigateur
+ * @returns {{ hostname: string, protocol: string, port: string }}
+ */
+const getCurrentLocation = () => {
+  if (typeof window === 'undefined') {
+    return { hostname: 'ryvie.local', protocol: 'http:', port: '3000' };
+  }
+  return {
+    hostname: window.location.hostname,
+    protocol: window.location.protocol,
+    port: window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
+  };
+};
+
+/**
+ * Vérifie si on est connecté via le tunnel Netbird (backendHost)
+ * @returns {boolean}
+ */
+const isOnNetbirdTunnel = () => {
+  const { hostname } = getCurrentLocation();
+  const backendHost = netbirdData?.received?.backendHost;
+  return backendHost && hostname === backendHost;
+};
+
+/**
+ * Construit l'URL d'une app en fonction de l'URL courante et des données Netbird
+ * Nouvelle logique:
+ * - Si on est sur backendHost ET l'app a un domaine dans netbird-data.json → https://<domaine>
+ * - Sinon → http(s)://<hostname_courant>:<port_app>
+ * @param {string} appId - ID de l'app (ex: 'rdrive', 'rtransfer')
+ * @param {number} port - Port de l'app
+ * @returns {string} - URL complète de l'app
+ */
+const buildAppUrl = (appId, port) => {
+  const { hostname, protocol } = getCurrentLocation();
+  const domains = netbirdData?.domains || {};
+  const appDomain = domains[appId];
+  
+  // Si on est sur le tunnel Netbird ET l'app a un domaine publié → utiliser le domaine HTTPS
+  if (isOnNetbirdTunnel() && appDomain) {
+    return `https://${appDomain}`;
+  }
+  
+  // Sinon, construire l'URL avec le hostname courant et le port de l'app
+  const scheme = protocol === 'https:' ? 'https' : 'http';
+  return `${scheme}://${hostname}:${port}`;
+};
+
 // Génération dynamique des URLs de base
 const generateBaseUrls = () => {
   const domains = netbirdData.domains;
@@ -111,40 +160,71 @@ const getUrl = (urlConfig, accessMode) => {
 };
 
 /**
- * Fonction pour obtenir l'URL du serveur en fonction du mode d'accès
- * @param {string} accessMode - Mode d'accès ('public' ou 'private')
+ * Fonction pour obtenir l'URL du serveur.
+ * Nouvelle logique basée sur l'URL courante:
+ * - Si on est sur backendHost (tunnel Netbird) ET 'status' a un domaine → https://<domaine>
+ * - Sinon → http(s)://<hostname_courant>:<port_server>
+ * @param {string} accessMode - Mode d'accès (ignoré, gardé pour compatibilité)
  * @returns {string} - L'URL du serveur
  */
 const getServerUrl = (accessMode) => {
-  return getUrl(BASE_URLS.SERVER, accessMode);
+  return buildAppUrl('status', LOCAL_PORTS.SERVER);
 };
 
 /**
- * Fonction pour obtenir l'URL d'une application en fonction du mode d'accès
- * @param {string} appName - Nom de l'application (doit correspondre à une clé dans APPS)
- * @param {string} accessMode - Mode d'accès ('public' ou 'private')
+ * Fonction pour obtenir l'URL d'une application.
+ * Nouvelle logique basée sur l'URL courante:
+ * - Si on est sur backendHost (tunnel Netbird) ET l'app a un domaine → https://<domaine>
+ * - Sinon → http(s)://<hostname_courant>:<port_app>
+ * @param {string} appName - Nom de l'application (clé uppercase, ex: 'RDRIVE')
+ * @param {string} accessMode - Mode d'accès (ignoré dans la nouvelle logique, gardé pour compatibilité)
  * @returns {string} - L'URL de l'application
  */
 const getAppUrl = (appName, accessMode) => {
-  if (!BASE_URLS.APPS[appName]) {
-    console.error(`Application non trouvée: ${appName}`);
+  // Convertir en lowercase pour chercher dans appPorts et domains
+  const appId = appName.toLowerCase();
+  
+  // Récupérer le port de l'app
+  const port = appPorts?.[appId] || LOCAL_PORTS[appName];
+  
+  if (!port) {
+    console.error(`Application non trouvée ou port non défini: ${appName}`);
     return '';
   }
-  return getUrl(BASE_URLS.APPS[appName], accessMode);
+  
+  return buildAppUrl(appId, port);
 };
 
 /**
  * Fonction pour obtenir l'URL d'un service backend RDrive
+ * Nouvelle logique basée sur l'URL courante
  * @param {string} serviceName - Nom du service (BACKEND, CONNECTOR, DOCUMENT)
- * @param {string} accessMode - Mode d'accès ('public' ou 'private')
+ * @param {string} accessMode - Mode d'accès (ignoré, gardé pour compatibilité)
  * @returns {string} - L'URL du service backend
  */
 const getRdriveBackendUrl = (serviceName, accessMode) => {
-  if (!BASE_URLS.RDRIVE_BACKEND[serviceName]) {
+  // Mapping des noms de service vers les IDs dans netbird-data.json
+  const serviceToAppId = {
+    'BACKEND': 'backend.rdrive',
+    'CONNECTOR': 'connector.rdrive',
+    'DOCUMENT': 'document.rdrive'
+  };
+  
+  const serviceToPort = {
+    'BACKEND': LOCAL_PORTS.BACKEND_RDRIVE,
+    'CONNECTOR': LOCAL_PORTS.CONNECTOR_RDRIVE,
+    'DOCUMENT': LOCAL_PORTS.DOCUMENT_RDRIVE
+  };
+  
+  const appId = serviceToAppId[serviceName];
+  const port = serviceToPort[serviceName];
+  
+  if (!appId || !port) {
     console.error(`Service RDrive Backend non trouvé: ${serviceName}`);
     return '';
   }
-  return getUrl(BASE_URLS.RDRIVE_BACKEND[serviceName], accessMode);
+  
+  return buildAppUrl(appId, port);
 };
 
 /**
@@ -228,5 +308,9 @@ export default {
   getNetbirdInfo,
   getAccessMode,
   getAutoUrl,
-  getFrontendUrl
+  getFrontendUrl,
+  // Nouvelles fonctions utilitaires
+  getCurrentLocation,
+  isOnNetbirdTunnel,
+  buildAppUrl
 };
