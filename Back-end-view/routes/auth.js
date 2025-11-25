@@ -122,6 +122,7 @@ router.post('/authenticate', authLimiter, async (req, res) => {
               role,
             };
             const token = signToken(user);
+            console.log(`[authenticate] 🔐 Authentification réussie pour ${user.uid} (rôle: ${role})`);
             (async () => { await allowlistToken(token, user); return res.json({ message: 'Authentification réussie', user, token, expiresIn: getTokenExpirationSeconds() }); })();
           }
         });
@@ -478,6 +479,7 @@ router.post('/refresh-token', async (req, res) => {
     await redis.del(key);
     await redis.set(`access:token:${newToken}`, JSON.stringify({ uid, role }), { EX: expirationSeconds });
 
+    console.log(`[refresh-token] 🔄 Token actualisé pour ${uid} (expire dans ${expirationMinutes} minutes)`);
     return res.json({ token: newToken, user: newPayload, expiresIn: expirationSeconds });
   } catch (e) {
     return res.status(401).json({ error: 'Token invalide' });

@@ -17,6 +17,8 @@ const Welcome = () => {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [currentAccessMode, setCurrentAccessMode] = useState(null);
+  const [isPreloading, setIsPreloading] = useState(false);
+  const [preloadStatus, setPreloadStatus] = useState('');
 
   // Restaurer la session depuis les paramètres URL si preserve_session=true
   useEffect(() => {
@@ -184,17 +186,17 @@ const Welcome = () => {
   }, []);
 
   const handlePrivateAccess = async () => {
+    setIsPreloading(true);
+    setUnlocked(true);
+    
     // Centralized access mode
     setGlobalAccessMode('private');
+    setPreloadStatus('Configuration du mode privé...');
     
-
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
-      // Récupérer le rôle de l'utilisateur via session manager
       const userRole = getCurrentUserRole() || 'User';
-      
-      // Get the current session's cookies and update the partition
-      window.electronAPI.invoke('update-session-partition', currentUser, 'private', userRole)
+      await window.electronAPI.invoke('update-session-partition', currentUser, 'private', userRole)
         .then(() => {
           console.log(`Session mise à jour pour ${currentUser} en mode privé avec le rôle ${userRole}`);
         })
@@ -203,18 +205,15 @@ const Welcome = () => {
         });
     }
     
-    setUnlocked(true);
-    
     // Précharger les données avant de naviguer
     await preloadHomeData('private');
     
-    setTimeout(() => {
-      if (isSessionActive()) {
-        navigate('/home');
-      } else {
-        navigate('/login');
-      }
-    }, 10);
+    // Navigation fluide
+    if (isSessionActive()) {
+      navigate('/home');
+    } else {
+      navigate('/login');
+    }
   };
   
   // Fonction de préchargement pour optimiser le premier chargement de Home
@@ -224,6 +223,8 @@ const Welcome = () => {
       const serverUrl = getServerUrl(accessMode);
       const user = getCurrentUser();
       
+      setPreloadStatus('Chargement des applications...');
+      
       // 1. Précharger appsConfig et icônes
       try {
         const config = await generateAppConfigFromManifests(accessMode);
@@ -231,25 +232,47 @@ const Welcome = () => {
           StorageManager.setItem('appsConfig_cache', config);
           console.log('[Welcome] ✅ appsConfig préchargé:', Object.keys(config).length, 'apps');
           
-          // Extraire et sauvegarder les URLs des icônes
+          // Extraire et précharger réellement les icônes
           const iconImages = {};
+          const iconPromises = [];
+          
           Object.keys(config).forEach(iconId => {
             if (config[iconId].icon) {
               iconImages[iconId] = config[iconId].icon;
+              
+              // Précharger l'image pour éviter les carrés blancs
+              const img = new Image();
+              const promise = new Promise((resolve) => {
+                img.onload = () => {
+                  console.log(`[Welcome] ✅ Icône chargée: ${iconId}`);
+                  resolve();
+                };
+                img.onerror = () => {
+                  console.warn(`[Welcome] ⚠️ Erreur chargement icône: ${iconId}`);
+                  resolve(); // Continue même en cas d'erreur
+                };
+                img.src = config[iconId].icon;
+              });
+              iconPromises.push(promise);
             }
           });
+          
+          // Attendre que toutes les icônes soient chargées
+          setPreloadStatus(`Chargement des icônes (${iconPromises.length})...`);
+          await Promise.all(iconPromises);
+          
           StorageManager.setItem('iconImages_cache', iconImages);
-          console.log('[Welcome] ✅ Icônes préchargées:', Object.keys(iconImages).length);
+          console.log('[Welcome] ✅ Toutes les icônes préchargées:', Object.keys(iconImages).length);
         }
       } catch (e) {
         console.warn('[Welcome] ⚠️ Erreur préchargement appsConfig:', e.message);
       }
       
       // 2. Vérifier la connectivité serveur (pour badge Connecté/Déconnecté)
+      setPreloadStatus('Vérification du serveur...');
       try {
         const statusResponse = await axios.get(`${serverUrl}/api/apps/manifests`, { timeout: 3000 });
         if (statusResponse.status === 200) {
-          // Serveur accessible → sauvegarder l'état
           StorageManager.setItem('server_status_cache', { 
             connected: true, 
             timestamp: Date.now() 
@@ -257,7 +280,6 @@ const Welcome = () => {
           console.log('[Welcome] ✅ Serveur accessible (Connecté)');
         }
       } catch (e) {
-        // Serveur non accessible
         StorageManager.setItem('server_status_cache', { 
           connected: false, 
           timestamp: Date.now() 
@@ -267,6 +289,7 @@ const Welcome = () => {
       
       // 3. Précharger les préférences utilisateur (layout, anchors, widgets, etc.)
       if (user) {
+        setPreloadStatus('Chargement de vos préférences...');
         try {
           const res = await axios.get(`${serverUrl}/api/user/preferences`);
           
@@ -276,10 +299,20 @@ const Welcome = () => {
             console.log('[Welcome] ✅ Launcher préchargé');
           }
           
-          // Sauvegarder le fond d'écran
+          // Sauvegarder et précharger le fond d'écran
           if (res.data?.backgroundImage) {
             localStorage.setItem(`ryvie_bg_${user}`, res.data.backgroundImage);
-            console.log('[Welcome] ✅ Fond d\'écran préchargé');
+            
+            // Précharger l'image de fond
+            const bgImg = new Image();
+            await new Promise((resolve) => {
+              bgImg.onload = () => {
+                console.log('[Welcome] ✅ Fond d\'écran préchargé');
+                resolve();
+              };
+              bgImg.onerror = () => resolve();
+              bgImg.src = res.data.backgroundImage;
+            });
           }
           
           console.log('[Welcome] ✅ Préférences préchargées');
@@ -295,17 +328,17 @@ const Welcome = () => {
   };
 
   const handlePublicAccess = async () => {
+    setIsPreloading(true);
+    setUnlocked(true);
+    
     // Centralized access mode
     setGlobalAccessMode('public');
+    setPreloadStatus('Configuration du mode public...');
     
-
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
-      // Récupérer le rôle de l'utilisateur via session manager
       const userRole = getCurrentUserRole() || 'User';
-      
-      // Get the current session's cookies and update the partition
-      window.electronAPI.invoke('update-session-partition', currentUser, 'public', userRole)
+      await window.electronAPI.invoke('update-session-partition', currentUser, 'public', userRole)
         .then(() => {
           console.log(`Session mise à jour pour ${currentUser} en mode public avec le rôle ${userRole}`);
         })
@@ -314,22 +347,25 @@ const Welcome = () => {
         });
     }
     
-    setUnlocked(true);
-    
     // Précharger les données avant de naviguer
     await preloadHomeData('public');
     
-    setTimeout(() => {
-      navigate('/home');
-    }, 10);
+    // Navigation fluide
+    navigate('/home');
   };
   
   return (
-    <div className="welcome-body">
-      <div className="welcome-overlay">
+    <div className={`welcome-body ${isPreloading ? 'preloading' : ''}`}>
+      <div className={`welcome-overlay ${isPreloading ? 'preloading' : ''}`}>
         <div className="welcome-text-container">
           <h1>Bonjour {currentUser} !</h1>
         </div>
+        {isPreloading && (
+          <div className="preload-spinner-overlay">
+            <div className="preload-spinner"></div>
+            <p className="preload-status">{preloadStatus || 'Préparation de votre espace...'}</p>
+          </div>
+        )}
         <div className={`welcome-container ${unlocked ? 'welcome-hidden' : ''}`}>
           {loading && !serverIP ? (
             <>
