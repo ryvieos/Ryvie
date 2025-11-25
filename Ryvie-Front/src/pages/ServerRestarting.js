@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import urlsConfig from '../config/urls';
-const { getServerUrl } = urlsConfig;
+const { getServerUrl, getCurrentLocation } = urlsConfig;
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import '../styles/ServerRestarting.css';
 import ryvieLogo from '../icons/ryvielogo0.png';
@@ -13,8 +13,8 @@ const ServerRestarting = () => {
   const [checkCount, setCheckCount] = useState(0);
   const [statusMessage, setStatusMessage] = useState('Redémarrage en cours');
 
-  const publicUrl = useMemo(() => getServerUrl('public'), []);
-  const privateUrl = useMemo(() => getServerUrl('private'), []);
+  // Utiliser l'URL du serveur basée sur l'URL courante du navigateur
+  const serverUrl = useMemo(() => getServerUrl(), []);
 
   useEffect(() => {
     // Animation des points
@@ -32,19 +32,16 @@ const ServerRestarting = () => {
   useEffect(() => {
     let checkInterval = null;
     const tryCheck = async () => {
-      // Essayer d'abord l'URL publique, puis l'URL locale, et tester 2 endpoints possibles
-      const targets = [publicUrl, privateUrl];
+      // Tester l'URL du serveur basée sur l'URL courante
       const paths = ['/api/status', '/status'];
-      for (const base of targets) {
-        if (!base) continue;
-        for (const p of paths) {
-          try {
-            const resp = await axios.get(`${base}${p}`, { timeout: 5000 });
-            if (resp.status === 200) {
-              return true;
-            }
-          } catch (_) {}
-        }
+      if (!serverUrl) return false;
+      for (const p of paths) {
+        try {
+          const resp = await axios.get(`${serverUrl}${p}`, { timeout: 5000 });
+          if (resp.status === 200) {
+            return true;
+          }
+        } catch (_) {}
       }
       return false;
     };
@@ -72,7 +69,7 @@ const ServerRestarting = () => {
       clearTimeout(stopAfter);
       if (checkInterval) clearInterval(checkInterval);
     };
-  }, [publicUrl, privateUrl]);
+  }, [serverUrl]);
 
   return (
     <div className="server-restarting-container minimal">

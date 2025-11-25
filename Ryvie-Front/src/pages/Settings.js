@@ -874,24 +874,14 @@ const Settings = () => {
     // Rediriger vers l'URL correspondante après 1.5 secondes
     setTimeout(() => {
       const frontendUrl = getFrontendUrl(newMode);
-      const currentPath = window.location.pathname; // Conserver le chemin actuel (ex: /settings)
+      const currentHash = window.location.hash || '#/settings';
       
-      // Construire l'URL avec les paramètres de session
-      const url = new URL(`${frontendUrl}${currentPath}`);
-      // Ajouter le mode cible pour forcer la détection
-      url.searchParams.set('mode', newMode);
-      if (currentUser) {
-        url.searchParams.set('preserve_session', 'true');
-        url.searchParams.set('user', currentUser);
-        url.searchParams.set('role', currentRole);
-        if (currentToken) {
-          url.searchParams.set('token', currentToken);
-        }
-      }
+      // Construire l'URL correctement (hash commence par #, pas besoin de /)
+      const newUrl = `${frontendUrl}${currentHash}`;
       
-      const newUrl = url.toString();
       console.log(`[Settings] Redirection vers ${newMode}: ${newUrl}`);
-      window.location.href = newUrl;
+      // Redirection dans le même onglet
+      window.location.replace(newUrl);
     }, 1500);
   };
 

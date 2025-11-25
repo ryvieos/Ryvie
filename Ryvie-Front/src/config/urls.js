@@ -289,11 +289,38 @@ const getAutoUrl = (type, name) => {
 
 // Exporter les fonctions et constantes (ES modules)
 /**
+ * Obtient l'URL du frontend en fonction du mode d'accès
+ * - Mode 'private' : utilise l'URL courante (hostname:3000)
+ * - Mode 'public' : 
+ *   - Si domains.app existe dans netbird-data.json → https://<domains.app>
+ *   - Sinon → http://<backendHost>:3000
  * @param {string} mode - 'public' ou 'private'
  * @returns {string} - L'URL du frontend
  */
 function getFrontendUrl(mode = 'public') {
-  return mode === 'public' ? BASE_URLS.FRONTEND.PUBLIC : BASE_URLS.FRONTEND.PRIVATE;
+  if (mode === 'private') {
+    // En mode privé, toujours utiliser ryvie.local
+    return `http://ryvie.local:${LOCAL_PORTS.FRONTEND}`;
+  }
+  
+  // Mode public : vérifier netbird-data.json
+  const domains = netbirdData?.domains || {};
+  const backendHost = netbirdData?.received?.backendHost;
+  
+  // Si domains.app existe, utiliser HTTPS avec ce domaine
+  if (domains.app) {
+    return `https://${domains.app}`;
+  }
+  
+  // Sinon, utiliser backendHost avec le port frontend
+  if (backendHost) {
+    return `http://${backendHost}:${LOCAL_PORTS.FRONTEND}`;
+  }
+  
+  // Fallback : URL courante
+  const { hostname, protocol } = getCurrentLocation();
+  const scheme = protocol === 'https:' ? 'https' : 'http';
+  return `${scheme}://${hostname}:${LOCAL_PORTS.FRONTEND}`;
 }
 
 // Export par défaut pour la compatibilité
