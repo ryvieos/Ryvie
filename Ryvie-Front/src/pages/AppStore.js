@@ -278,10 +278,13 @@ const AppStore = () => {
 /**
  * Récupère la liste des applications depuis l'API AppStore.
  * Actualise l'état global et gère l'affichage d'erreur si besoin.
+ * @param {boolean} silent - Si true, ne bloque pas l'interface pendant le chargement
  */
-  const fetchApps = async () => {
+  const fetchApps = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       const response = await axios.get(`${serverUrl}/api/appstore/apps`);
@@ -290,9 +293,13 @@ const AppStore = () => {
       }
     } catch (error) {
       console.error('Erreur lors du chargement des apps:', error);
-      showToast('Erreur lors du chargement du catalogue', 'error');
+      if (!silent) {
+        showToast('Erreur lors du chargement du catalogue', 'error');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -452,6 +459,8 @@ const AppStore = () => {
     eventSource.onerror = (error) => {
       console.error('Erreur SSE:', error);
       addLog('Erreur de connexion aux mises à jour de progression', 'error');
+      eventSource.close();
+      delete activeEventSources.current[appId];
     };
 
     let response;
@@ -514,9 +523,9 @@ try {
       addLog(`📁 Application installée dans: ${response.data.appDir || 'N/A'}`, 'success');
       showToast(`${appName} installé/mis à jour avec succès`, 'success');
 
-      // Rafraîchir la liste des apps pour mettre à jour le statut
+      // Rafraîchir la liste des apps pour mettre à jour le statut (en mode silencieux)
       addLog('🔄 Actualisation du catalogue...', 'info');
-      await fetchApps();
+      await fetchApps(true);
       addLog('✅ Catalogue actualisé', 'success');
       
       // Notifier la page Home pour rafraîchir les icônes du bureau
@@ -542,7 +551,9 @@ try {
         delete newProgress[appId];
         return newProgress;
       });
-    }, 2000);
+      // Rafraîchir la liste des apps en mode silencieux
+      fetchApps(true);
+    }, 3000);
     addLog(`🏁 Processus terminé pour ${appName}`, 'info');
   }
 };
