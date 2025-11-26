@@ -339,7 +339,27 @@ async function downloadAppFromRepoArchive(release, appId) {
   console.log(`[appStore] 📥 Téléchargement de ${appId} via GitHub API...`);
   
   const appDir = path.join(APPS_DIR, appId);
-  await fs.mkdir(appDir, { recursive: true });
+  
+  // Créer un sous-volume Btrfs au lieu d'un simple dossier pour permettre les snapshots
+  try {
+    // Vérifier si le dossier existe déjà
+    try {
+      await fs.access(appDir);
+      console.log(`[appStore] ℹ️  Le dossier ${appDir} existe déjà`);
+      // S'assurer que le propriétaire est correct même si le dossier existe
+      execSync(`sudo chown ryvie:ryvie "${appDir}"`, { stdio: 'inherit' });
+    } catch {
+      // Le dossier n'existe pas, créer un sous-volume Btrfs
+      console.log(`[appStore] 📦 Création du sous-volume Btrfs: ${appDir}`);
+      execSync(`sudo btrfs subvolume create "${appDir}"`, { stdio: 'inherit' });
+      execSync(`sudo chown ryvie:ryvie "${appDir}"`);
+      console.log(`[appStore] ✅ Sous-volume Btrfs créé`);
+    }
+  } catch (btrfsError) {
+    // Si Btrfs échoue, annuler l'installation
+    console.error(`[appStore] ❌ Impossible de créer un sous-volume Btrfs:`, btrfsError.message);
+    throw new Error(`Impossible de créer un sous-volume Btrfs pour ${appId}: ${btrfsError.message}`);
+  }
   
   // Configuration du repo
   const repoOwner = 'ryvieos';
@@ -387,10 +407,7 @@ async function downloadAppFromRepoArchive(release, appId) {
     
     sendProgressUpdate(appId, 5, `Préparation du téléchargement (${files.length} fichiers)...`, 'preparation');
     
-    // 3. S'assurer que le dossier de destination existe
-    await fs.mkdir(appDir, { recursive: true });
-    
-    // 4. Télécharger chaque fichier avec mise à jour de progression
+    // 3. Télécharger chaque fichier avec mise à jour de progression
     let downloadedSize = 0;
     let downloadedCount = 0;
     
@@ -429,7 +446,7 @@ async function downloadAppFromRepoArchive(release, appId) {
       }
     }
     
-    // 5. Télécharger le fichier .env s'il existe (optionnel mais critique)
+    // 4. Télécharger le fichier .env s'il existe (optionnel mais critique)
     sendProgressUpdate(appId, 60, 'Vérification du fichier .env...', 'download');
     console.log(`[appStore] 🔍 Recherche du fichier .env pour ${appId}...`);
     
@@ -458,13 +475,13 @@ async function downloadAppFromRepoArchive(release, appId) {
       }
     }
     
-    // 6. Télécharger les sous-dossiers récursivement
+    // 5. Télécharger les sous-dossiers récursivement
     for (const dir of directories) {
       sendProgressUpdate(appId, 62, `Téléchargement du dossier: ${dir.name}...`, 'download');
       await downloadDirectoryRecursive(dir.url, path.join(appDir, dir.name), branch, headers);
     }
     
-    // 7. Vérifier que les fichiers requis sont présents
+    // 6. Vérifier que les fichiers requis sont présents
     sendProgressUpdate(appId, 63, 'Vérification des fichiers requis...', 'verification');
     const requiredFiles = ['docker-compose.yml', 'ryvie-app.yml', 'icon.png'];
     const missingFiles = [];
@@ -484,15 +501,6 @@ async function downloadAppFromRepoArchive(release, appId) {
     }
     
     sendProgressUpdate(appId, 65, 'Fichiers vérifiés avec succès', 'verification');
-    
-    // Définir les permissions correctes sur le dossier (775 = drwxrwxr-x)
-    try {
-      execSync(`chmod -R 775 "${appDir}"`, { stdio: 'inherit' });
-      console.log(`[appStore] ✅ Permissions configurées (775) pour ${appDir}`);
-    } catch (chmodError) {
-      console.warn(`[appStore] ⚠️ Impossible de définir les permissions:`, chmodError.message);
-      // Non bloquant
-    }
     
     console.log(`[appStore] 🎉 ${appId} téléchargé avec succès (${downloadedCount} fichier(s))`);
     return appDir;
@@ -724,7 +732,7 @@ async function updateAppFromStore(appId) {
     sendProgressUpdate(appId, 3, 'Création du snapshot de sécurité...', 'snapshot');
     
     try {
-      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
+      const snapshotOutput = execSync(`sudo /opt/Ryvie/scripts/snapshot-app.sh ${appId}`, { encoding: 'utf8' });
       console.log(`[Update] Snapshot output: ${snapshotOutput.substring(0, 100)}...`);
       
       // Extraire le chemin du snapshot
@@ -767,17 +775,7 @@ async function updateAppFromStore(appId) {
     sendProgressUpdate(appId, 68, 'Application téléchargée, configuration en cours...', 'extraction');
     
     console.log(`[Update] ✅ ${appId} téléchargé dans ${appDir}`);
-    
-    // Définir les permissions correctes sur le dossier (775 = drwxrwxr-x)
-    console.log('[Update] 🔧 Configuration des permissions...');
-    try {
-      execSync(`chmod -R 775 "${appDir}"`, { stdio: 'inherit' });
-      console.log('[Update] ✅ Permissions configurées (775)');
-    } catch (chmodError) {
-      console.warn('[Update] ⚠️ Impossible de définir les permissions:', chmodError.message);
-      // Non bloquant, on continue
-    }
-    
+
     // 4. Trouver et exécuter docker-compose
     console.log('[Update] 🔎 Étape courante: docker-compose-up');
     
@@ -795,22 +793,6 @@ async function updateAppFromStore(appId) {
 
     if (!composeFile) {
       throw new Error(`Aucun fichier docker-compose trouvé`);
-    }
-    const composeFilePath = path.join(appDir, composeFile);
-    let content = await fs.readFile(composeFilePath, 'utf8');
-
-    // Supprimer app_proxy AVANT le lancement (si présent - spécifique à l'infrastructure Ryvie)
-    console.log('[Update] 🔧 Vérification du docker-compose.yml...');
-    sendProgressUpdate(appId, 70, 'Configuration des services...', 'configuration');
-    
-    if (content.includes('app_proxy:')) {
-      console.log('[Update] 🔧 Suppression du service app_proxy...');
-      // Supprimer le service app_proxy uniquement dans la section services
-      content = content.replace(/(services:\s*\n(?:.*\n)*?)(\s{2}app_proxy:[\s\S]*?)(?=\n\s{2}\w+:|\nnetworks:|\nvolumes:|\n$)/g, '$1');
-      await fs.writeFile(composeFilePath, content);
-      console.log('[Update] ✅ Service app_proxy supprimé');
-    } else {
-      console.log('[Update] ✅ Fichier docker-compose.yml prêt (aucune modification nécessaire)');
     }
     
     // Vérifier la présence du fichier .env
@@ -875,81 +857,40 @@ async function updateAppFromStore(appId) {
     
     sendProgressUpdate(appId, 92, 'Vérification du statut des containers...', 'verification');
     
-    // Vérifier le statut du container
+    // Vérification rapide du statut des containers
     currentStep = 'container-status-check';
-    console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
-    console.log(`[Update] Vérification du statut des containers pour ${appId}...`);
+    console.log(`[Update] 🔎 Vérification du statut des containers pour ${appId}...`);
     
     try {
-      // Récupérer tous les containers liés à l'app avec leur nom et statut
       const containersOutput = execSync(`docker ps -a --filter "name=${appId}" --format "{{.Names}}:{{.Status}}"`, { 
         encoding: 'utf8' 
       }).trim();
       
-      console.log(`[Update] Containers trouvés:\n${containersOutput}`);
+      if (!containersOutput) {
+        throw new Error(`Aucun container trouvé pour ${appId}`);
+      }
       
-      // Parser les containers
       const containers = containersOutput.split('\n').filter(line => line.trim());
+      let isAContainerUp = false;
       
-      // Filtrer les containers auxiliaires (caddy, proxy, etc.) qui peuvent être arrêtés
-      const mainContainers = containers.filter(line => {
-        const name = line.split(':')[0].toLowerCase();
-        return !name.includes('caddy') && !name.includes('proxy') && !name.includes('nginx');
-      });
-      
-      console.log(`[Update] Containers principaux à vérifier: ${mainContainers.length}`);
-      
-      // Vérifier si au moins un container principal est exited (erreur critique)
-      let hasExitedMain = false;
-      let hasRunningMain = false;
-      
-      for (const containerLine of mainContainers) {
+      for (const containerLine of containers) {
         const [name, status] = containerLine.split(':');
-        console.log(`[Update] - ${name}: ${status}`);
         
-        if (status.toLowerCase().includes('exited')) {
-          hasExitedMain = true;
-          console.warn(`[Update] ⚠️ Container principal ${name} est arrêté`);
-        } else if (status.toLowerCase().includes('up')) {
-          hasRunningMain = true;
-        }
-      }
-      
-      // Erreur seulement si tous les containers principaux sont arrêtés
-      if (hasExitedMain && !hasRunningMain && mainContainers.length > 0) {
-        throw new Error(`Les containers principaux de ${appId} se sont arrêtés pendant l'installation`);
-      }
-      
-      if (!hasRunningMain && mainContainers.length > 0) {
-        throw new Error(`Aucun container principal de ${appId} n'est démarré`);
-      }
-      
-      // Vérifier le health status si disponible
-      try {
-        const healthOutput = execSync(
-          `docker inspect --format='{{.State.Health.Status}}' $(docker ps -aq --filter "name=${appId}")`, 
-          { encoding: 'utf8' }
-        ).trim();
-        
-        console.log(`[Update] Container ${appId} - Health: ${healthOutput}`);
-        
-        if (healthOutput === 'unhealthy') {
-          throw new Error(`Le container ${appId} est en état unhealthy`);
-        }
-        
-        if (healthOutput === 'healthy') {
-          console.log(`[Update] ✅ Container ${appId} est healthy`);
-        } else if (healthOutput === 'starting') {
-          console.log(`[Update] ⏳ Container ${appId} est en cours de démarrage`);
-        }
-      } catch (healthError) {
-        // Pas de healthcheck configuré, on vérifie juste qu'au moins un container principal est Up
-        if (!hasRunningMain) {
-          console.warn(`[Update] ⚠️ Aucun healthcheck disponible et aucun container principal en cours d'exécution`);
+        if (status.toLowerCase().includes('up')) {
+          isAContainerUp = true;
         } else {
-          console.log(`[Update] ℹ️ Containers sans healthcheck, au moins un container principal est Up`);
+          const exitCodeMatch = status.match(/exited \((\d+)\)/i);
+          if (exitCodeMatch && parseInt(exitCodeMatch[1]) > 0) {
+            throw new Error(`Container ${name} a crashé avec le code ${exitCodeMatch[1]}`);
+          }
         }
       }
+      
+      if (!isAContainerUp) {
+        throw new Error(`Aucun container en cours d'exécution pour ${appId}`);
+      }
+      
+      console.log(`[Update] ✅ Au moins un container est en cours d'exécution`);
       
     } catch (checkError) {
       console.error(`[Update] ❌ Détails erreur de vérification container: ${checkError.message}`);
@@ -996,16 +937,15 @@ async function updateAppFromStore(appId) {
     sendProgressUpdate(appId, 100, 'Installation terminée avec succès !', 'completed');
     
     // 6. Supprimer le snapshot si tout s'est bien passé
-    if (snapshotPath) {
+    if (snapshotPath && snapshotPath !== 'none') {
       currentStep = 'snapshot-cleanup';
       console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
       console.log('[Update] 🧹 Suppression du snapshot de sécurité...');
       try {
-        execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
-        execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+        execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
         console.log('[Update] ✅ Snapshot supprimé');
       } catch (delError) {
-        console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
+        console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message , '. attention cela peut causer des problèmes à votre machine sur le long terme! Veuillez vérifier manuellement le sous-volume si nécessaire.' );
       }
     }
     
@@ -1033,18 +973,17 @@ async function updateAppFromStore(appId) {
       }
     }
     
-    // Rollback si un snapshot existe
-    if (snapshotPath) {
+    // Rollback automatique si un snapshot existe
+    if (snapshotPath && snapshotPath !== 'none') {
       console.error('[Update] 🔄 Rollback en cours...');
       try {
-        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
+        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback-app.sh "${snapshotPath}" "${appDir}"`, { encoding: 'utf8' });
         console.log(rollbackOutput);
         console.log('[Update] ✅ Rollback terminé');
         
         // Supprimer le snapshot après rollback réussi
         try {
-          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
-          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+          execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
           console.log('[Update] 🧹 Snapshot supprimé après rollback');
         } catch (delError) {
           console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
@@ -1055,17 +994,17 @@ async function updateAppFromStore(appId) {
           message: `Erreur: ${error.message}. Rollback effectué avec succès.`
         };
       } catch (rollbackError) {
-        console.error('[Update] ❌ Erreur lors du rollback:', rollbackError.message);
+        console.error('[Update] ❌ Échec du rollback:', rollbackError.message);
         return {
           success: false,
-          message: `Erreur: ${error.message}. Rollback échoué: ${rollbackError.message}`
+          message: `Erreur: ${error.message}. Échec du rollback: ${rollbackError.message}. Snapshot conservé: ${snapshotPath}`
         };
       }
     }
     
     return {
       success: false,
-      message: `Erreur: ${error.message}`
+      message: `Erreur lors de l'installation: ${error.message}`
     };
   }
 }
@@ -1190,7 +1129,7 @@ async function uninstallApp(appId) {
         
         if (volumesOutput) {
           const volumes = volumesOutput.split('\n').filter(vol => vol.trim());
-          console.log(`[Uninstall] � ${volumes.length} volume(s) trouvé(s):`, volumes);
+          console.log(`[Uninstall]   ${volumes.length} volume(s) trouvé(s):`, volumes);
           
           for (const volume of volumes) {
             try {
