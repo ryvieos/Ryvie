@@ -176,21 +176,49 @@ router.get('/appstore/progress/:appId', (req, res) => {
 
 /**
  * POST /api/appstore/apps/:id/install - Installe ou met à jour une app depuis l'App Store
+ * L'installation se fait dans un processus séparé pour ne pas bloquer le serveur
  */
 router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_apps'), async (req, res) => {
   try {
     const appId = req.params.id;
-    console.log(`[appStore] Lancement de l'installation/mise à jour de ${appId}...`);
+    console.log(`[appStore] Lancement de l'installation/mise à jour de ${appId} dans un processus séparé...`);
     
-    const result = await updateAppFromStore(appId);
+    // Répondre immédiatement au client
+    res.json({
+      success: true,
+      message: `Installation de ${appId} lancée en arrière-plan`,
+      appId: appId
+    });
     
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(500).json(result);
-    }
+    // Lancer l'installation dans un processus enfant séparé (non-bloquant)
+    const { fork } = require('child_process');
+    const workerPath = require('path').join(__dirname, '../workers/installWorker.js');
+    
+    const worker = fork(workerPath, [appId], {
+      detached: false,
+      stdio: 'inherit'
+    });
+    
+    worker.on('message', (message) => {
+      if (message.type === 'log') {
+        console.log(`[Worker ${appId}]`, message.message);
+      }
+    });
+    
+    worker.on('exit', (code) => {
+      if (code === 0) {
+        console.log(`[appStore] ✅ Installation de ${appId} terminée avec succès`);
+      } else {
+        console.error(`[appStore] ❌ Installation de ${appId} échouée avec le code ${code}`);
+      }
+    });
+    
+    worker.on('error', (error) => {
+      console.error(`[appStore] ❌ Erreur du worker pour ${appId}:`, error);
+    });
+    
   } catch (error) {
-    console.error(`[appStore] Erreur lors de l'installation/mise à jour de ${req.params.id}:`, error);
+    console.error(`[appStore] Erreur lors du lancement de l'installation de ${req.params.id}:`, error);
     res.status(500).json({
       success: false,
       error: error.message

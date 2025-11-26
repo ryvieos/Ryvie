@@ -451,6 +451,26 @@ const AppStore = () => {
           } 
         }));
         addLog(data.message, 'info');
+        
+        // Si l'installation est terminée (100%), afficher la notification de succès
+        if (data.progress >= 100) {
+          addLog(`✅ Installation de ${appName} terminée avec succès !`, 'success');
+          showToast(`${appName} installé avec succès !`, 'success');
+          
+          // Rafraîchir la liste des apps et notifier Home
+          setTimeout(async () => {
+            await fetchApps(true);
+            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+            
+            // Nettoyer les logs après un délai (pour laisser le temps de les voir)
+            setTimeout(() => {
+              clearLogs();
+            }, 5000);
+          }, 1000);
+          
+          // Fermer la connexion SSE
+          eventSource.close();
+        }
       } catch (error) {
         console.error('Erreur lors du parsing des données de progression:', error);
       }
@@ -519,21 +539,16 @@ try {
 }
 
     if (response.data.success) {
-      addLog(`✅ Installation/mise à jour réussie: ${appName}`, 'success');
-      addLog(`📁 Application installée dans: ${response.data.appDir || 'N/A'}`, 'success');
-      showToast(`${appName} installé/mis à jour avec succès`, 'success');
-
-      // Rafraîchir la liste des apps pour mettre à jour le statut (en mode silencieux)
-      addLog('🔄 Actualisation du catalogue...', 'info');
-      await fetchApps(true);
-      addLog('✅ Catalogue actualisé', 'success');
+      // Le serveur a lancé l'installation en arrière-plan
+      addLog(`🚀 Installation de ${appName} lancée en arrière-plan`, 'info');
+      addLog(`📊 Suivez la progression ci-dessous...`, 'info');
+      showToast(`Installation de ${appName} en cours...`, 'info');
       
-      // Notifier la page Home pour rafraîchir les icônes du bureau
-      addLog('🔄 Rafraîchissement des icônes du bureau...', 'info');
-      window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+      // La vraie fin de l'installation sera signalée par le SSE à 100%
+      // Pas besoin de rafraîchir ici, le SSE le fera automatiquement
     } else {
-      addLog(`❌ Échec: ${response.data.message || 'Erreur inconnue'}`, 'error');
-      showToast(response.data.message || 'Erreur lors de l\'installation/mise à jour', 'error');
+      addLog(`❌ Échec du lancement: ${response.data.message || 'Erreur inconnue'}`, 'error');
+      showToast(response.data.message || 'Erreur lors du lancement de l\'installation', 'error');
     }
   } catch (error) {
     addLog(`💥 Erreur lors de l'installation/mise à jour de ${appName}: ${error.message}`, 'error');
@@ -737,10 +752,10 @@ try {
                       return (
                         <button
                           className="featured-install-btn"
-                          disabled={disabled || isInstalling === app.id}
+                          disabled={disabled}
                           onClick={handleClick}
                         >
-                          {isInstalling === app.id ? 'Installation...' : label}
+                          {label}
                         </button>
                       );
                   })()}
@@ -882,10 +897,10 @@ try {
                     return (
                       <button
                         className="app-get-button"
-                        disabled={disabled || isInstalling === app.id}
+                        disabled={disabled}
                         onClick={handleClick}
                       >
-                        {isInstalling === app.id ? 'Installation...' : label}
+                        {label}
                       </button>
                     );
                   })()}
@@ -944,10 +959,10 @@ try {
                   return (
                     <button
                       className="btn-primary btn-install-header"
-                      disabled={disabled || isInstalling === selectedApp.id}
+                      disabled={disabled}
                       onClick={handleClick}
                     >
-                      <FontAwesomeIcon icon={faDownload} /> {isInstalling === selectedApp.id ? 'Installation...' : label}
+                      <FontAwesomeIcon icon={faDownload} /> {label}
                     </button>
                   );
                 })()}
