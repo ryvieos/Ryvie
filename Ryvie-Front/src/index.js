@@ -22,10 +22,9 @@ import { CachedRoutes } from './components/CachedRoutes';
 const ProtectedRoute = ({ children }) => {
   const sessionActive = isSessionActive();
   
-  // Si la session n'est pas active, nettoyer les données résiduelles
-  if (!sessionActive) {
-    endSession();
-  }
+  // Ne pas nettoyer automatiquement la session ici pour éviter les boucles
+  // Le nettoyage se fait uniquement lors d'erreurs d'authentification (401)
+  // ou lors d'une déconnexion explicite
   
   return sessionActive ? children : <Navigate to="/login" replace />;
 };
