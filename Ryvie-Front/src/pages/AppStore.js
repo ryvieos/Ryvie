@@ -107,6 +107,14 @@ const AppStore = () => {
     })();
   }, []);
 
+  // Notifier Home du statut d'installation
+  useEffect(() => {
+    window.parent.postMessage({
+      type: 'APPSTORE_INSTALL_STATUS',
+      installing: isInstalling !== null
+    }, window.location.origin); // Sécurisé : uniquement notre domaine
+  }, [isInstalling]);
+
   // Déboucer la recherche pour fluidifier la saisie
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(searchQuery), 200);
@@ -455,21 +463,30 @@ const AppStore = () => {
         // Si l'installation est terminée (100%), afficher la notification de succès
         if (data.progress >= 100) {
           addLog(`✅ Installation de ${appName} terminée avec succès !`, 'success');
+          addLog(`🏁 Processus terminé pour ${appName}`, 'info');
           showToast(`${appName} installé avec succès !`, 'success');
+          
+          // Fermer la connexion SSE
+          eventSource.close();
+          
+          // Nettoyer l'état d'installation
+          setIsInstalling(null);
           
           // Rafraîchir la liste des apps et notifier Home
           setTimeout(async () => {
             await fetchApps(true);
-            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, window.location.origin);
             
-            // Nettoyer les logs après un délai (pour laisser le temps de les voir)
+            // Nettoyer la progression et les logs après un délai
             setTimeout(() => {
+              setInstallProgress(prev => {
+                const newProgress = { ...prev };
+                delete newProgress[appId];
+                return newProgress;
+              });
               clearLogs();
-            }, 5000);
+            }, 50000);
           }, 1000);
-          
-          // Fermer la connexion SSE
-          eventSource.close();
         }
       } catch (error) {
         console.error('Erreur lors du parsing des données de progression:', error);
@@ -478,9 +495,17 @@ const AppStore = () => {
     
     eventSource.onerror = (error) => {
       console.error('Erreur SSE:', error);
-      addLog('Erreur de connexion aux mises à jour de progression', 'error');
+      addLog('❌ Erreur de connexion aux mises à jour de progression', 'error');
       eventSource.close();
       delete activeEventSources.current[appId];
+      
+      // Nettoyer l'état en cas d'erreur SSE
+      setIsInstalling(null);
+      setInstallProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[appId];
+        return newProgress;
+      });
     };
 
     let response;
@@ -554,22 +579,17 @@ try {
     addLog(`💥 Erreur lors de l'installation/mise à jour de ${appName}: ${error.message}`, 'error');
     console.error(`Erreur lors de l'installation/mise à jour de ${appName}:`, error);
     showToast('Erreur lors de l\'installation/mise à jour', 'error');
-  } finally {
+    
+    // En cas d'erreur, nettoyer immédiatement
     setIsInstalling(null);
-    // Fermer la connexion SSE et nettoyer la progression après un délai
     if (eventSource) {
       eventSource.close();
     }
-    setTimeout(() => {
-      setInstallProgress(prev => {
-        const newProgress = { ...prev };
-        delete newProgress[appId];
-        return newProgress;
-      });
-      // Rafraîchir la liste des apps en mode silencieux
-      fetchApps(true);
-    }, 3000);
-    addLog(`🏁 Processus terminé pour ${appName}`, 'info');
+    setInstallProgress(prev => {
+      const newProgress = { ...prev };
+      delete newProgress[appId];
+      return newProgress;
+    });
   }
 };
 
@@ -641,11 +661,23 @@ try {
     const versionStatus = installed ? compareVersions(installedVersion, app?.version) : null;
     const updateAvailable = updateFlag || versionStatus === 'update-available';
 
+    // Déterminer le label en fonction de l'état
+    let label;
+    if (isInstalling === app.id) {
+      label = 'Installation...';
+    } else if (updateAvailable) {
+      label = 'Mettre à jour';
+    } else if (installed) {
+      label = 'À jour';
+    } else {
+      label = 'Installer';
+    }
+
     return {
       installed,
       updateAvailable,
-      label: updateAvailable ? 'Mettre à jour' : (installed ? 'À jour' : 'Installer'),
-      disabled: installed && !updateAvailable
+      label,
+      disabled: (installed && !updateAvailable) || (isInstalling === app.id)
     };
   };
 
@@ -750,13 +782,28 @@ try {
                       };
 
                       return (
-                        <button
-                          className="featured-install-btn"
-                          disabled={disabled}
-                          onClick={handleClick}
-                        >
-                          {label}
-                        </button>
+                        <div className="featured-install-section">
+                          <button
+                            className="featured-install-btn"
+                            disabled={disabled}
+                            onClick={handleClick}
+                          >
+                            {label}
+                          </button>
+                          {installProgress[app.id] && (
+                            <div className="install-progress-container">
+                              <div className="install-progress-bar">
+                                <div 
+                                  className="install-progress-fill"
+                                  style={{ width: `${installProgress[app.id].progress || 0}%` }}
+                                />
+                              </div>
+                              <span className="install-progress-text">
+                                {installProgress[app.id].progress || 0}% - {installProgress[app.id].message || 'En cours...'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       );
                   })()}
                   </div>
@@ -895,13 +942,28 @@ try {
                     };
 
                     return (
-                      <button
-                        className="app-get-button"
-                        disabled={disabled}
-                        onClick={handleClick}
-                      >
-                        {label}
-                      </button>
+                      <div className="app-install-section">
+                        <button
+                          className="app-get-button"
+                          disabled={disabled}
+                          onClick={handleClick}
+                        >
+                          {label}
+                        </button>
+                        {installProgress[app.id] && (
+                          <div className="install-progress-container">
+                            <div className="install-progress-bar">
+                              <div 
+                                className="install-progress-fill"
+                                style={{ width: `${installProgress[app.id].progress || 0}%` }}
+                              />
+                            </div>
+                            <span className="install-progress-text">
+                              {installProgress[app.id].progress || 0}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     );
                   })()}
                 </div>
@@ -957,13 +1019,28 @@ try {
                   };
 
                   return (
-                    <button
-                      className="btn-primary btn-install-header"
-                      disabled={disabled}
-                      onClick={handleClick}
-                    >
-                      <FontAwesomeIcon icon={faDownload} /> {label}
-                    </button>
+                    <div className="modal-install-section">
+                      <button
+                        className="btn-primary btn-install-header"
+                        disabled={disabled}
+                        onClick={handleClick}
+                      >
+                        <FontAwesomeIcon icon={faDownload} /> {label}
+                      </button>
+                      {installProgress[selectedApp.id] && (
+                        <div className="install-progress-container modal-progress">
+                          <div className="install-progress-bar">
+                            <div 
+                              className="install-progress-fill"
+                              style={{ width: `${installProgress[selectedApp.id].progress || 0}%` }}
+                            />
+                          </div>
+                          <span className="install-progress-text">
+                            {installProgress[selectedApp.id].progress || 0}% - {installProgress[selectedApp.id].message || 'En cours...'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   );
                 })()}
               </div>

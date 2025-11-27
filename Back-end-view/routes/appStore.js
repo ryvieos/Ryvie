@@ -202,6 +202,9 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     worker.on('message', (message) => {
       if (message.type === 'log') {
         console.log(`[Worker ${appId}]`, message.message);
+      } else if (message.type === 'progress') {
+        // Retransmettre les événements de progression au progressEmitter principal
+        progressEmitter.emit('progress', message.data);
       }
     });
     

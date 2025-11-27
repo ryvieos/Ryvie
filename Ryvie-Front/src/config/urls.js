@@ -100,7 +100,7 @@ const generateBaseUrls = () => {
     if (!port) return; // ignorer si pas de port défini
     apps[upper] = {
       PUBLIC: domains[id] ? `https://${domains[id]}` : '',
-      PRIVATE: privateUrl('ryvietest.local', port)
+      PRIVATE: privateUrl('ryvie.local', port)
     };
   });
 
@@ -299,8 +299,8 @@ const getAutoUrl = (type, name) => {
  */
 function getFrontendUrl(mode = 'public') {
   if (mode === 'private') {
-    // En mode privé, toujours utiliser ryvietest.local
-    return `http://ryvietest.local:${LOCAL_PORTS.FRONTEND}`;
+    // En mode privé, toujours utiliser ryvie.local
+    return `http://ryvie.local:${LOCAL_PORTS.FRONTEND}`;
   }
   
   // Mode public : vérifier netbird-data.json

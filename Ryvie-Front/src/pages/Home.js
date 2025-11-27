@@ -572,6 +572,9 @@ const Home = () => {
   const [overlayUrl, setOverlayUrl] = useState('');
   const [closingOverlay, setClosingOverlay] = useState(false);
   const [overlayTitle, setOverlayTitle] = useState('App Store');
+  const [appStoreMounted, setAppStoreMounted] = useState(false);
+  const [appStoreInstalling, setAppStoreInstalling] = useState(false);
+  const [pendingUnmount, setPendingUnmount] = useState(false);
 
   const [mounted, setMounted] = useState(false);
   const { socket, isConnected: socketConnected, serverStatus, setServerStatus } = useSocket();
@@ -874,12 +877,25 @@ const Home = () => {
       } else if (event.data && event.data.type === 'REFRESH_DESKTOP_ICONS') {
         console.log('[Home] Réception du message REFRESH_DESKTOP_ICONS');
         refreshDesktopIcons();
+      } else if (event.data && event.data.type === 'APPSTORE_INSTALL_STATUS') {
+        console.log('[Home] Réception du statut d\'installation:', event.data.installing);
+        setAppStoreInstalling(event.data.installing);
+        
+        // Si on attendait la fin d'une installation pour démonter
+        if (pendingUnmount && !event.data.installing) {
+          console.log('[Home] Installation terminée, démontage de l\'AppStore');
+          setTimeout(() => {
+            setAppStoreMounted(false);
+            setOverlayUrl('');
+            setPendingUnmount(false);
+          }, 1000); // Petit délai pour laisser voir la fin
+        }
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [navigate, refreshDesktopIcons]);
+  }, [navigate, refreshDesktopIcons, pendingUnmount]);
   
   useEffect(() => {
     const initializeAccessMode = () => {
@@ -1653,6 +1669,25 @@ const Home = () => {
     navigate('/login', { replace: true });
   };
 
+  // Fonction pour fermer l'overlay AppStore intelligemment
+  const closeAppStoreOverlay = () => {
+    setClosingOverlay(true);
+    setTimeout(() => {
+      setOverlayVisible(false);
+      setClosingOverlay(false);
+      
+      // Démonter l'AppStore si aucune installation n'est en cours
+      if (!appStoreInstalling) {
+        console.log('[Home] Aucune installation en cours, démontage immédiat de l\'AppStore');
+        setAppStoreMounted(false);
+        setOverlayUrl('');
+      } else {
+        console.log('[Home] Installation en cours, démontage différé de l\'AppStore');
+        setPendingUnmount(true);
+      }
+    }, 250);
+  };
+
   const handleClick = (iconId) => {
     console.log("handleClick appelé avec iconId:", iconId);
     
@@ -1670,9 +1705,16 @@ const Home = () => {
       try {
         const base = window.location.origin + window.location.pathname;
         const url = `${base}#/appstore`;
-        setOverlayUrl(url);
+        
+        // Monter l'iframe si elle n'est pas déjà montée
+        if (!appStoreMounted) {
+          setOverlayUrl(url);
+          setAppStoreMounted(true);
+        }
+        
         setOverlayTitle('App Store');
         setOverlayVisible(true);
+        setPendingUnmount(false); // Annuler tout démontage en attente
       } catch (e) {
         console.warn('[Home] Impossible d\'ouvrir l\'AppStore en overlay, navigation de secours /appstore');
         navigate('/appstore');
@@ -1851,62 +1893,56 @@ const Home = () => {
           </button>
         </div>
       
-      {overlayVisible && (
+      {/* Overlay AppStore - toujours monté mais masqué quand non visible */}
+      <div
+        className={`appstore-overlay-backdrop ${closingOverlay ? 'closing' : ''}`}
+        style={{
+          display: overlayVisible ? 'flex' : 'none'
+        }}
+        onClick={(e) => {
+          // fermer uniquement si on clique sur l'arrière-plan (pas à l'intérieur de la modale)
+          if (e.target === e.currentTarget) {
+            closeAppStoreOverlay();
+          }
+        }}
+      >
         <div
-          className={`appstore-overlay-backdrop ${closingOverlay ? 'closing' : ''}`}
-          onClick={(e) => {
-            // fermer uniquement si on clique sur l'arrière-plan (pas à l'intérieur de la modale)
-            if (e.target === e.currentTarget) {
-              setClosingOverlay(true);
-              setTimeout(() => {
-                setOverlayVisible(false);
-                setClosingOverlay(false);
-              }, 250);
-            }
-          }}
+          className={`appstore-overlay-window ${closingOverlay ? 'closing' : ''}`}
+          onClick={(e) => e.stopPropagation()}
         >
           <div
-            className={`appstore-overlay-window ${closingOverlay ? 'closing' : ''}`}
-            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 20,
+              display: 'flex',
+              gap: 8,
+              zIndex: 2
+            }}
           >
-            <div
+            <button
+              onClick={closeAppStoreOverlay}
+              title="Fermer"
               style={{
-                position: 'absolute',
-                top: 8,
-                right: 20,
-                display: 'flex',
-                gap: 8,
-                zIndex: 2
+                border: '1px solid #ddd',
+                background: '#fff',
+                borderRadius: 8,
+                padding: '6px 10px',
+                cursor: 'pointer'
               }}
             >
-              <button
-                onClick={() => {
-                  setClosingOverlay(true);
-                  setTimeout(() => {
-                    setOverlayVisible(false);
-                    setClosingOverlay(false);
-                  }, 250);
-                }}
-                title="Fermer"
-                style={{
-                  border: '1px solid #ddd',
-                  background: '#fff',
-                  borderRadius: 8,
-                  padding: '6px 10px',
-                  cursor: 'pointer'
-                }}
-              >
-                ✕
-              </button>
-            </div>
+              ✕
+            </button>
+          </div>
+          {appStoreMounted && overlayUrl && (
             <iframe
               title={overlayTitle}
               src={overlayUrl}
               style={{ width: '100%', height: '100%', border: 'none' }}
             />
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       </DndProvider>
       
