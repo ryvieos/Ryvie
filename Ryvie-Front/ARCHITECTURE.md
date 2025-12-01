@@ -74,12 +74,12 @@ Géré dans **`Icon.js`** :
 
 ### Backend
 
-Routes dans **`/Back-end-view/routes/apps.js`** :
+Routes dans **`/Ryvie-Back/routes/apps.ts`** :
 - `POST /api/apps/:id/start` - Démarre une app
 - `POST /api/apps/:id/stop` - Arrête une app
 - `POST /api/apps/:id/restart` - Redémarre une app
 
-Services dans **`/Back-end-view/services/`** :
+Services dans **`/Ryvie-Back/services/`** :
 - `appManagerService.js` : Gestion via manifests (système principal)
 - `dockerService.js` : Fallback si manifests indisponibles
 
