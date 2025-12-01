@@ -168,6 +168,16 @@ const getUrl = (urlConfig, accessMode) => {
  * @returns {string} - L'URL du serveur
  */
 const getServerUrl = (accessMode) => {
+  const domains = netbirdData?.domains || {};
+  const { protocol } = getCurrentLocation();
+
+  // En contexte public (HTTPS) et si un domaine Netbird "status" est défini,
+  // toujours utiliser ce domaine comme URL publique du backend.
+  if (protocol === 'https:' && domains.status) {
+    return `https://${domains.status}`;
+  }
+
+  // Fallback: conserver l'ancienne logique basée sur l'URL courante et le port serveur
   return buildAppUrl('status', LOCAL_PORTS.SERVER);
 };
 
