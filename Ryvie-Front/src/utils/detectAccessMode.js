@@ -4,12 +4,50 @@
  */
 
 import urlsConfig from '../config/urls';
-const { getServerUrl } = urlsConfig;
+const { getServerUrl, netbirdData } = urlsConfig;
 import { io } from 'socket.io-client';
 import { isElectron } from './platformUtils';
 
 // Etat global (source de vérité pour la session en cours)
 let currentMode = null; // 'private' | 'public' | null
+
+/**
+ * Détecte le mode d'accès basé sur l'URL courante du navigateur
+ * - Si hostname = backendHost de netbird-data.json → public
+ * - Si hostname = un domaine de netbird-data.json → public
+ * - Sinon → private
+ * @returns {'private' | 'public'}
+ */
+function detectModeFromUrl() {
+  if (typeof window === 'undefined') return 'private';
+  
+  const hostname = window.location.hostname;
+  const backendHost = netbirdData?.received?.backendHost;
+  const domains = netbirdData?.domains || {};
+  
+  // Si on est sur l'IP Netbird (backendHost), c'est le mode public
+  if (backendHost && hostname === backendHost) {
+    console.log(`[AccessMode] Hostname ${hostname} = backendHost → mode PUBLIC`);
+    return 'public';
+  }
+  
+  // Si on est sur un domaine Netbird (*.ryvie.ovh), c'est le mode public
+  const allDomains = Object.values(domains);
+  if (allDomains.includes(hostname)) {
+    console.log(`[AccessMode] Hostname ${hostname} = domaine Netbird → mode PUBLIC`);
+    return 'public';
+  }
+  
+  // Si le hostname contient .ryvie.ovh, c'est le mode public
+  if (hostname.endsWith('.ryvie.ovh')) {
+    console.log(`[AccessMode] Hostname ${hostname} contient .ryvie.ovh → mode PUBLIC`);
+    return 'public';
+  }
+  
+  // Sinon c'est le mode privé (ryvie.local, localhost, etc.)
+  console.log(`[AccessMode] Hostname ${hostname} → mode PRIVATE`);
+  return 'private';
+}
 const listeners = new Set(); // callbacks (mode) => void
 
 function notify(mode) {
@@ -24,20 +62,52 @@ function persist(mode) {
 
 function ensureLoadedFromStorage() {
   if (currentMode !== null) return;
+  
+  // Priorité 1: Détecter le mode basé sur l'URL courante
+  const urlMode = detectModeFromUrl();
+  
+  // Priorité 2: Vérifier le localStorage (mais l'URL a priorité)
   try {
     const stored = localStorage.getItem('accessMode');
+    // Si l'URL indique un mode différent du stockage, l'URL gagne
+    if (urlMode !== stored) {
+      console.log(`[AccessMode] URL indique ${urlMode}, stockage indique ${stored} → utilisation de ${urlMode}`);
+      currentMode = urlMode;
+      persist(urlMode);
+      return;
+    }
     if (stored === 'private' || stored === 'public') {
       currentMode = stored;
     }
   } catch {}
+  
+  // Si toujours pas de mode, utiliser celui de l'URL
+  if (currentMode === null) {
+    currentMode = urlMode;
+    persist(urlMode);
+  }
 }
 
 /**
- * Détecte automatiquement le mode d'accès en testant la connectivité
+ * Détecte automatiquement le mode d'accès
+ * PRIORITÉ: L'URL courante détermine le mode (pas le test de connectivité)
+ * - Si on est sur l'IP Netbird ou un domaine *.ryvie.ovh → PUBLIC
+ * - Sinon → PRIVATE
  * @param {number} timeout - Timeout en millisecondes pour le test (défaut: 2000ms)
- * @returns {Promise<string>} - 'private' si le serveur local est accessible, 'public' sinon
+ * @returns {Promise<string>} - 'private' ou 'public'
  */
 export async function detectAccessMode(timeout = 2000) {
+  // PRIORITÉ: Détecter le mode basé sur l'URL courante
+  const urlMode = detectModeFromUrl();
+  
+  // Si l'URL indique clairement le mode public, ne pas faire de test de connectivité
+  if (urlMode === 'public') {
+    console.log('[AccessMode] URL indique mode PUBLIC - pas de test de connectivité');
+    setAccessMode('public');
+    return 'public';
+  }
+  
+  // En mode privé (URL locale), vérifier la connectivité au serveur
   const privateUrl = getServerUrl('private');
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -78,11 +148,22 @@ export async function detectAccessMode(timeout = 2000) {
 }
 
 /**
- * Récupère le mode d'accès actuel depuis localStorage
+ * Récupère le mode d'accès actuel
+ * La détection est basée sur l'URL courante du navigateur:
+ * - IP Netbird (backendHost) ou domaine *.ryvie.ovh → public
+ * - Sinon (ryvie.local, localhost, etc.) → private
  * @returns {string|null} - 'private', 'public' ou null si non défini
  */
 export function getCurrentAccessMode() {
-  ensureLoadedFromStorage();
+  // Toujours re-détecter basé sur l'URL courante
+  const urlMode = detectModeFromUrl();
+  
+  // Si le mode actuel est différent de ce que l'URL indique, mettre à jour
+  if (currentMode !== urlMode) {
+    console.log(`[AccessMode] Mode actuel (${currentMode}) != URL (${urlMode}) → mise à jour`);
+    currentMode = urlMode;
+    persist(urlMode);
+  }
   
   // IMPORTANT: Si on est en HTTPS, forcer le mode public pour éviter Mixed Content
   if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {

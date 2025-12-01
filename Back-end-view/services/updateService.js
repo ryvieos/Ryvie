@@ -282,20 +282,24 @@ async function updateStoreCatalog() {
   try {
     console.log('[Update] Vérification du catalogue...');
     
+    // Vérifier si le fichier local existe
+    const localApps = await appStoreService.loadAppsFromFile();
+    const catalogMissing = !localApps || !Array.isArray(localApps);
+    
     // D'abord, vérifier si une mise à jour est nécessaire
     const checkResult = await checkStoreCatalogUpdate();
     
-    if (!checkResult.updateAvailable) {
+    if (!checkResult.updateAvailable && !catalogMissing) {
       console.log(`[Update] ✅ Catalogue déjà à jour (${checkResult.currentVersion})`);
 
       let detectedUpdates = [];
       try {
-        const localApps = await appStoreService.loadAppsFromFile();
-        if (Array.isArray(localApps)) {
-          const enrichment = await appStoreService.enrichAppsWithInstalledVersions(localApps);
-          await appStoreService.saveAppsToFile(enrichment.apps);
-          detectedUpdates = enrichment.updates;
-        }
+        console.log('[Update] 🔄 Actualisation des statuts d\'installation...');
+        const enrichment = await appStoreService.enrichAppsWithInstalledVersions(localApps);
+        // Sauvegarder les apps enrichies pour actualiser les statuts
+        await appStoreService.saveAppsToFile(enrichment.apps);
+        detectedUpdates = enrichment.updates;
+        console.log(`[Update] ✅ Statuts actualisés: ${enrichment.apps.filter(a => a.installedVersion).length} apps installées, ${detectedUpdates.length} mise(s) à jour disponible(s)`);
       } catch (enrichError) {
         console.warn('[Update] ⚠️ Impossible de rafraîchir les informations d\'installation:', enrichError.message);
       }
@@ -309,6 +313,10 @@ async function updateStoreCatalog() {
       };
     }
     
+    if (catalogMissing) {
+      console.log('[Update] 📥 Catalogue local absent, téléchargement depuis GitHub...');
+    }
+    
     console.log(`[Update] Mise à jour du catalogue: ${checkResult.currentVersion || 'aucune'} → ${checkResult.latestVersion}`);
     
     // Récupérer la dernière release
@@ -317,8 +325,23 @@ async function updateStoreCatalog() {
     // Télécharger apps.json depuis la release
     const data = await appStoreService.fetchAppsFromRelease(latestRelease);
     
-    // Sauvegarder sur disque
-    await appStoreService.saveAppsToFile(data);
+    // Enrichir avec les informations d'installation
+    let detectedUpdates = [];
+    let enrichedData = data;
+    try {
+      console.log('[Update] 🔄 Actualisation des statuts d\'installation...');
+      if (Array.isArray(data)) {
+        const enrichment = await appStoreService.enrichAppsWithInstalledVersions(data);
+        enrichedData = enrichment.apps;
+        detectedUpdates = enrichment.updates;
+        console.log(`[Update] ✅ Statuts actualisés: ${enrichedData.filter(a => a.installedVersion).length} apps installées, ${detectedUpdates.length} mise(s) à jour disponible(s)`);
+      }
+    } catch (enrichError) {
+      console.warn('[Update] ⚠️ Impossible de rafraîchir les informations d\'installation:', enrichError.message);
+    }
+    
+    // Sauvegarder sur disque avec les informations enrichies
+    await appStoreService.saveAppsToFile(enrichedData);
     
     // Mettre à jour les métadonnées
     appStoreService.metadata.releaseTag = latestRelease.tag;
@@ -331,8 +354,9 @@ async function updateStoreCatalog() {
       success: true,
       message: `Catalogue mis à jour vers ${latestRelease.tag}`,
       version: latestRelease.tag,
-      appsCount: Array.isArray(data) ? data.length : 0,
-      updated: true
+      appsCount: Array.isArray(enrichedData) ? enrichedData.length : 0,
+      updated: true,
+      updates: detectedUpdates
     };
   } catch (error) {
     console.error('[Update] ❌ Erreur lors de la mise à jour du catalogue:', error.message);

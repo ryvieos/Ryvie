@@ -77,33 +77,61 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
       return;
     }
 
-    stream.on('data', (data) => {
+    let buffer = '';
+
+    stream.on('data', (chunk) => {
       try {
-        const event = JSON.parse(data.toString());
-        const containerName = event.Actor?.Attributes?.name;
+        // Ajouter le chunk au buffer
+        buffer += chunk.toString();
         
-        if (event.Type === 'container') {
-          // Événements start/stop
-          if (event.Action === 'start' || event.Action === 'stop') {
-            if (containerName) {
-              if (event.Action === 'start') {
-                if (!activeContainers.includes(containerName)) {
-                  activeContainers.push(containerName);
+        // Essayer de parser chaque ligne JSON complète
+        const lines = buffer.split('\n');
+        
+        // Garder la dernière ligne (potentiellement incomplète) dans le buffer
+        buffer = lines.pop() || '';
+        
+        // Traiter chaque ligne complète
+        lines.forEach(line => {
+          if (!line.trim()) return;
+          
+          try {
+            const event = JSON.parse(line);
+            const containerName = event.Actor?.Attributes?.name;
+            
+            if (event.Type === 'container') {
+              // Événements start/stop
+              if (event.Action === 'start' || event.Action === 'stop') {
+                if (containerName) {
+                  if (event.Action === 'start') {
+                    if (!activeContainers.includes(containerName)) {
+                      activeContainers.push(containerName);
+                    }
+                  } else if (event.Action === 'stop') {
+                    activeContainers = activeContainers.filter(name => name !== containerName);
+                  }
+                  io.emit('containers', { activeContainers });
+                  // Broadcast updated apps status
+                  broadcastAppStatus().then(() => {
+                    console.log(`[realtime] Mise à jour statuts après ${event.Action} de ${containerName}`);
+                  }).catch(() => {});
                 }
-              } else if (event.Action === 'stop') {
-                activeContainers = activeContainers.filter(name => name !== containerName);
               }
-              io.emit('containers', { activeContainers });
-              // Broadcast updated apps status
-              broadcastAppStatus().then(() => {
-                console.log(`[realtime] Mise à jour statuts après ${event.Action} de ${containerName}`);
-              }).catch(() => {});
             }
+          } catch (parseError) {
+            // Ignorer silencieusement les lignes qui ne sont pas du JSON valide
+            // (peut arriver avec des messages de debug Docker)
           }
-        }
+        });
       } catch (e) {
-        console.error('Failed to parse Docker event', e);
+        console.error('Failed to process Docker event stream', e);
+        // Réinitialiser le buffer en cas d'erreur
+        buffer = '';
       }
+    });
+
+    stream.on('error', (streamError) => {
+      console.error('Docker event stream error', streamError);
+      buffer = '';
     });
   });
 

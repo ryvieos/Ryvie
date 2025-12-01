@@ -251,14 +251,32 @@ router.get('/settings/ryvie-domains', (req, res) => {
     
     const data = fs.readFileSync(NETBIRD_FILE, 'utf8');
     const netbirdData = JSON.parse(data);
-    
+
+    const tunnelHost = netbirdData && netbirdData.received && netbirdData.received.backendHost
+      ? netbirdData.received.backendHost
+      : null;
+
+    let setupKey = null;
+    try {
+      const envPath = '/data/config/netbird/.env';
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        const line = envContent.split(/\r?\n/).find(l => l.trim().startsWith('NETBIRD_SETUP_KEY='));
+        if (line) {
+          setupKey = line.substring('NETBIRD_SETUP_KEY='.length).trim();
+        }
+      }
+    } catch (_) {}
+
     // Retourner les domaines publics avec l'ID
     if (netbirdData.domains) {
       res.json({
         success: true,
         id: netbirdData.id || null,
         ryvieId: settings?.id || null,
-        domains: netbirdData.domains
+        domains: netbirdData.domains,
+        tunnelHost: tunnelHost,
+        setupKey: setupKey
       });
     } else {
       res.status(404).json({ error: 'Aucun domaine trouvé dans le fichier', ryvieId: settings?.id || null });

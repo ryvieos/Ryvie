@@ -34,7 +34,8 @@ const GridLauncher = ({
   accessMode,
   widgets = [],
   onAddWidget,
-  onRemoveWidget
+  onRemoveWidget,
+  refreshDesktopIcons
 }) => {
   const gridRef = useRef(null);
   const { SLOT_SIZE: slotSize, GAP: gap, BASE_COLS: baseCols, BASE_ROWS: baseRows, MIN_COLS: minCols, HORIZONTAL_PADDING: horizontalPadding } = GRID_CONFIG;
@@ -387,6 +388,7 @@ const GridLauncher = ({
                 isAdmin={isAdmin}
                 setAppStatus={setAppStatus}
                 accessMode={accessMode}
+                refreshDesktopIcons={refreshDesktopIcons}
               />
             </div>
           );

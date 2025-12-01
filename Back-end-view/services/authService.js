@@ -67,7 +67,9 @@ async function clearFailedAttempts(uid, ip) {
 
 function signToken(user) {
   const expirationMinutes = getTokenExpirationMinutes();
-  return jwt.sign(user, JWT_SECRET, { expiresIn: `${expirationMinutes}m` });
+  const token = jwt.sign(user, JWT_SECRET, { expiresIn: `${expirationMinutes}m` });
+  console.log(`[authService] ✅ Nouveau token généré pour ${user.uid} (expire dans ${expirationMinutes} minutes)`);
+  return token;
 }
 
 async function allowlistToken(token, user) {
@@ -76,6 +78,7 @@ async function allowlistToken(token, user) {
     const key = `access:token:${token}`;
     const expirationSeconds = getTokenExpirationSeconds();
     await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: expirationSeconds });
+    console.log(`[authService] ✅ Token enregistré dans Redis pour ${user.uid} (TTL: ${expirationSeconds}s)`);
   } catch (e) {
     console.warn('[login] Impossible d\'enregistrer le token dans Redis:', e?.message || e);
   }

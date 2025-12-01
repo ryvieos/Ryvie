@@ -1626,6 +1626,15 @@ select:disabled {
   background-color: #006cbe;
 }
 
+.docker-action-btn.uninstall {
+  background-color: #dc2626;
+  color: white;
+}
+
+.docker-action-btn.uninstall:hover {
+  background-color: #b91c1c;
+}
+
 .docker-action-btn:disabled {
   background-color: #ccc;
   cursor: not-allowed;
@@ -1939,6 +1948,15 @@ select:disabled {
 
 .docker-action-btn-large.restart:hover {
   background-color: #006cbe;
+}
+
+.docker-action-btn-large.uninstall {
+  background-color: #dc2626;
+  color: white;
+}
+
+.docker-action-btn-large.uninstall:hover {
+  background-color: #b91c1c;
 }
 
 .docker-action-btn-large:disabled {

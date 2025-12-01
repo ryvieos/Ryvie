@@ -186,6 +186,19 @@
   background: rgba(59, 130, 246, 0.12);
 }
 
+.context-menu-item-danger {
+  color: #dc2626;
+}
+
+.context-menu-item-danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+  color: #991b1b;
+}
+
+.context-menu-item-danger:active {
+  background: rgba(220, 38, 38, 0.12);
+}
+
 .context-menu-icon {
   display: inline-flex;
   align-items: center;
@@ -205,6 +218,10 @@
 .context-menu-icon-stop svg rect,
 .context-menu-icon-start svg polygon {
   fill: currentColor;
+}
+
+.context-menu-item-danger .context-menu-icon {
+  color: #dc2626; /* red-600 */
 }
 
 .context-menu-separator {

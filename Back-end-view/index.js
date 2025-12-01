@@ -70,9 +70,15 @@ app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
+    origin: true, // Allow all origins
     methods: ["GET", "POST"],
+    credentials: true,
   },
+  // Allow Private Network Access for Socket.IO
+  allowRequest: (req, callback) => {
+    // Always allow the request, but set the Private Network Access header if needed
+    callback(null, true);
+  }
 });
 
 // Security middleware
@@ -81,7 +87,25 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-app.use(cors());
+// CORS configuration with Private Network Access support
+// Required for Chrome to allow requests from http://ryvie.local:3000 to http://ryvie.local:3002
+app.use(cors({
+  origin: true, // Allow all origins
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+}));
+
+// Handle Private Network Access preflight requests (Chrome security feature)
+// This header is required when accessing local network resources from a web page
+app.use((req, res, next) => {
+  // Add Private Network Access header for preflight responses
+  if (req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
+
 app.use(express.json({ limit: '10mb' }));
 
 // General API rate limiting

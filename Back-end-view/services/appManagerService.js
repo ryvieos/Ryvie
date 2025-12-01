@@ -108,6 +108,7 @@ function getContainerState(container) {
     const healthStatus = container.Status?.match(/\(([^)]+)\)/)?.[1];
     
     if (healthStatus) {
+      // Le container a un health check configuré
       if (healthStatus.includes('starting')) {
         return 'starting';
       }
@@ -117,14 +118,17 @@ function getContainerState(container) {
       if (healthStatus.includes('unhealthy')) {
         return 'unhealthy';
       }
+    } else {
+      // Pas de health check configuré
+      // Si running depuis moins de 30s, considérer comme "starting"
+      if (status.includes('second') || status.includes('Less than')) {
+        return 'starting';
+      }
+      // Sinon, considérer comme healthy (le container tourne correctement)
+      return 'healthy';
     }
     
-    // Pas de health check mais running depuis moins de 30s = starting
-    if (status.includes('second') || status.includes('Less than')) {
-      return 'starting';
-    }
-    
-    // Running sans health check = healthy
+    // Fallback: running = healthy
     return 'healthy';
   }
   
