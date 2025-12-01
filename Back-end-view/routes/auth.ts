@@ -28,7 +28,7 @@ const authLimiter = rateLimit({
 });
 
 // POST /api/authenticate
-router.post('/authenticate', authLimiter, async (req, res) => {
+router.post('/authenticate', authLimiter, async (req: any, res: any) => {
   const { uid: rawUid, password: rawPassword } = req.body;
   const uid = (rawUid || '').trim();
   const password = (rawPassword || '').trim();
@@ -105,7 +105,7 @@ router.post('/authenticate', authLimiter, async (req, res) => {
           (async () => {
             try {
               role = await getUserRole(userDN);
-            } catch (e) {
+            } catch (e: any) {
               role = 'Guest';
             } finally {
               complete();
@@ -152,7 +152,7 @@ function triggerLdapSync() {
 }
 
 // GET /api/ldap/check-first-time - Vérifier si c'est la première connexion
-router.get('/ldap/check-first-time', async (req, res) => {
+router.get('/ldap/check-first-time', async (req: any, res: any) => {
   const ldapClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
 
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
@@ -181,7 +181,7 @@ router.get('/ldap/check-first-time', async (req, res) => {
             if (uid && uid !== 'read-only') {
               userCount++;
             }
-          } catch (e) {
+          } catch (e: any) {
             console.error('[check-first-time] Erreur lors du parsing:', e);
           }
         });
@@ -205,7 +205,7 @@ router.get('/ldap/check-first-time', async (req, res) => {
 });
 
 // POST /api/ldap/create-first-user - Créer le premier utilisateur admin
-router.post('/ldap/create-first-user', async (req, res) => {
+router.post('/ldap/create-first-user', async (req: any, res: any) => {
   const { uid, name, email, password } = req.body;
 
   if (!uid || !name || !email || !password) {
@@ -242,7 +242,7 @@ router.post('/ldap/create-first-user', async (req, res) => {
             if (existingUid && existingUid !== 'read-only') {
               userCount++;
             }
-          } catch (e) {}
+          } catch (e: any) {}
         });
 
         checkRes.on('end', () => {
@@ -308,7 +308,7 @@ router.post('/ldap/create-first-user', async (req, res) => {
                     triggerLdapSync()
                       .catch(() => {})
                       .finally(() => {
-                        try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                        try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                         return res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
                       });
                   });
@@ -342,7 +342,7 @@ router.post('/ldap/create-first-user', async (req, res) => {
                       triggerLdapSync()
                         .catch(() => {})
                         .finally(() => {
-                          try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                          try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                           return res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
                         });
                     }
@@ -364,7 +364,7 @@ router.post('/ldap/create-first-user', async (req, res) => {
 });
 
 // GET /api/ldap/sync - Synchroniser les utilisateurs LDAP avec les applications
-router.get('/ldap/sync', async (req, res) => {
+router.get('/ldap/sync', async (req: any, res: any) => {
   const ldapClient = ldap.createClient({ url: ldapConfig.url });
   let users = [];
 
@@ -396,7 +396,7 @@ router.get('/ldap/sync', async (req, res) => {
                 email: attrs.mail || `${uid}@${process.env.DEFAULT_EMAIL_DOMAIN || 'localhost'}`,
               });
             }
-          } catch (e) {
+          } catch (e: any) {
             console.error('[ldap-sync] Erreur parsing entry:', e);
           }
         });
@@ -459,7 +459,7 @@ function getRole(dn, groupMemberships) {
 }
 
 // POST /api/refresh-token
-router.post('/refresh-token', async (req, res) => {
+router.post('/refresh-token', async (req: any, res: any) => {
   const { token } = req.body || {};
   if (!token) return res.status(400).json({ error: 'Token requis' });
 
@@ -481,9 +481,9 @@ router.post('/refresh-token', async (req, res) => {
 
     console.log(`[refresh-token] 🔄 Token actualisé pour ${uid} (expire dans ${expirationMinutes} minutes)`);
     return res.json({ token: newToken, user: newPayload, expiresIn: expirationSeconds });
-  } catch (e) {
+  } catch (e: any) {
     return res.status(401).json({ error: 'Token invalide' });
   }
 });
 
-module.exports = router;
+export = router;

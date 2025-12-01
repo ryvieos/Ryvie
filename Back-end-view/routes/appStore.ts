@@ -8,7 +8,7 @@ const { updateStoreCatalog } = require('../services/updateService');
 /**
  * GET /api/appstore/apps - Liste toutes les apps disponibles
  */
-router.get('/appstore/apps', async (req, res) => {
+router.get('/appstore/apps', async (req: any, res: any) => {
   try {
     const apps = await getApps();
     res.json({
@@ -16,7 +16,7 @@ router.get('/appstore/apps', async (req, res) => {
       count: Array.isArray(apps) ? apps.length : 0,
       data: apps || []
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de la récupération des apps:', error);
     res.status(500).json({
       success: false,
@@ -28,7 +28,7 @@ router.get('/appstore/apps', async (req, res) => {
 /**
  * GET /api/appstore/apps/:id - Récupère une app par son ID
  */
-router.get('/appstore/apps/:id', async (req, res) => {
+router.get('/appstore/apps/:id', async (req: any, res: any) => {
   try {
     const appId = req.params.id;
     const app = await getAppById(appId);
@@ -44,7 +44,7 @@ router.get('/appstore/apps/:id', async (req, res) => {
       success: true,
       data: app
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[appStore] Erreur lors de la récupération de l'app ${req.params.id}:`, error);
     res.status(500).json({
       success: false,
@@ -56,11 +56,11 @@ router.get('/appstore/apps/:id', async (req, res) => {
 /**
  * GET /api/appstore/health - Santé du service
  */
-router.get('/appstore/health', async (req, res) => {
+router.get('/appstore/health', async (req: any, res: any) => {
   try {
     const health = await getStoreHealth();
     res.json(health);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de la récupération de la santé:', error);
     res.status(500).json({
       status: 'error',
@@ -72,12 +72,12 @@ router.get('/appstore/health', async (req, res) => {
 /**
  * GET /api/appstore/check - Vérifie les mises à jour du catalogue
  */
-router.get('/appstore/check', verifyToken, async (req, res) => {
+router.get('/appstore/check', verifyToken, async (req: any, res: any) => {
   try {
     console.log('[appStore] Vérification des mises à jour du catalogue...');
     const update = await checkStoreCatalogUpdate();
     res.json(update);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de la vérification:', error);
     res.status(500).json({
       error: 'Erreur lors de la vérification des mises à jour',
@@ -89,7 +89,7 @@ router.get('/appstore/check', verifyToken, async (req, res) => {
 /**
  * POST /api/appstore/update - Met à jour le catalogue
  */
-router.post('/appstore/update', verifyToken, hasPermission('manage_apps'), async (req, res) => {
+router.post('/appstore/update', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
   try {
     console.log('[appStore] Lancement de la mise à jour du catalogue...');
     const result = await updateStoreCatalog();
@@ -99,7 +99,7 @@ router.post('/appstore/update', verifyToken, hasPermission('manage_apps'), async
     } else {
       res.status(500).json(result);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de la mise à jour:', error);
     res.status(500).json({
       success: false,
@@ -111,14 +111,14 @@ router.post('/appstore/update', verifyToken, hasPermission('manage_apps'), async
 /**
  * POST /api/appstore/cache/clear - Efface le cache local
  */
-router.post('/appstore/cache/clear', verifyToken, hasPermission('manage_apps'), async (req, res) => {
+router.post('/appstore/cache/clear', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
   try {
     await clearCache();
     res.json({
       success: true,
       message: 'Cache local effacé'
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de l\'effacement du cache:', error);
     res.status(500).json({
       success: false,
@@ -130,7 +130,7 @@ router.post('/appstore/cache/clear', verifyToken, hasPermission('manage_apps'), 
 /**
  * GET /api/appstore/progress/:appId - Server-Sent Events pour suivre la progression d'installation
  */
-router.get('/appstore/progress/:appId', (req, res) => {
+router.get('/appstore/progress/:appId', (req: any, res: any) => {
   const appId = req.params.appId;
   
   // Configurer les headers pour SSE
@@ -178,7 +178,7 @@ router.get('/appstore/progress/:appId', (req, res) => {
  * POST /api/appstore/apps/:id/install - Installe ou met à jour une app depuis l'App Store
  * L'installation se fait dans un processus séparé pour ne pas bloquer le serveur
  */
-router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_apps'), async (req, res) => {
+router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
   try {
     const appId = req.params.id;
     console.log(`[appStore] Lancement de l'installation/mise à jour de ${appId} dans un processus séparé...`);
@@ -220,7 +220,7 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
       console.error(`[appStore] ❌ Erreur du worker pour ${appId}:`, error);
     });
     
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[appStore] Erreur lors du lancement de l'installation de ${req.params.id}:`, error);
     res.status(500).json({
       success: false,
@@ -232,7 +232,7 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
 /**
  * DELETE /api/appstore/apps/:id/uninstall - Désinstalle une application
  */
-router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('manage_apps'), async (req, res) => {
+router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
   try {
     const appId = req.params.id;
     console.log(`[appStore] Lancement de la désinstallation de ${appId}...`);
@@ -244,7 +244,7 @@ router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('manage
     } else {
       res.status(500).json(result);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[appStore] Erreur lors de la désinstallation de ${req.params.id}:`, error);
     res.status(500).json({
       success: false,
@@ -253,4 +253,4 @@ router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('manage
   }
 });
 
-module.exports = router;
+export = router;

@@ -24,7 +24,7 @@ async function updateRyvie() {
         snapshotPath = match[1].trim();
         console.log(`[Update] Snapshot créé: ${snapshotPath}`);
       }
-    } catch (snapError) {
+    } catch (snapError: any) {
       console.error('[Update] ⚠️ Impossible de créer le snapshot:', snapError.message);
       console.log('[Update] Continuation sans snapshot...');
     }
@@ -49,7 +49,7 @@ async function updateRyvie() {
       needsRestart: true,
       snapshotPath
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[Update] ❌ Erreur lors de la mise à jour de Ryvie:', error.message);
     
     // Rollback si un snapshot existe
@@ -65,7 +65,7 @@ async function updateRyvie() {
           execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
           execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
           console.log('[Update] 🧹 Snapshot supprimé après rollback');
-        } catch (delError) {
+        } catch (delError: any) {
           console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
         }
         
@@ -73,7 +73,7 @@ async function updateRyvie() {
           success: false,
           message: `Erreur: ${error.message}. Rollback effectué avec succès.`
         };
-      } catch (rollbackError) {
+      } catch (rollbackError: any) {
         console.error('[Update] ❌ Erreur lors du rollback:', rollbackError.message);
         return {
           success: false,
@@ -119,7 +119,7 @@ async function updateApp(appName) {
         snapshotPath = match[1].trim();
         console.log(`[Update] Snapshot créé: ${snapshotPath}`);
       }
-    } catch (snapError) {
+    } catch (snapError: any) {
       console.error('[Update] ⚠️ Impossible de créer le snapshot:', snapError.message);
       console.log('[Update] Continuation sans snapshot...');
     }
@@ -201,7 +201,7 @@ async function updateApp(appName) {
         } else if (healthOutput === 'starting') {
           console.log(`[Update] ⏳ Container ${appName} est en cours de démarrage`);
         }
-      } catch (healthError) {
+      } catch (healthError: any) {
         // Pas de healthcheck configuré, on vérifie juste que le container est Up
         if (!statusOutput.toLowerCase().includes('up')) {
           throw new Error(`Le container ${appName} n'est pas démarré`);
@@ -209,7 +209,7 @@ async function updateApp(appName) {
         console.log(`[Update] ℹ️ Container ${appName} sans healthcheck, statut: Up`);
       }
       
-    } catch (checkError) {
+    } catch (checkError: any) {
       throw new Error(`Vérification du container échouée: ${checkError.message}`);
     }
     
@@ -222,7 +222,7 @@ async function updateApp(appName) {
         execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
         execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
         console.log('[Update] ✅ Snapshot supprimé');
-      } catch (delError) {
+      } catch (delError: any) {
         console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
       }
     }
@@ -231,7 +231,7 @@ async function updateApp(appName) {
       success: true,
       message: `${appName} mis à jour avec succès`
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[Update] ❌ Erreur lors de la mise à jour de ${appName}:`, error.message);
     
     // Rollback si un snapshot existe
@@ -247,7 +247,7 @@ async function updateApp(appName) {
           execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
           execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
           console.log('[Update] 🧹 Snapshot supprimé après rollback');
-        } catch (delError) {
+        } catch (delError: any) {
           console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
         }
         
@@ -255,7 +255,7 @@ async function updateApp(appName) {
           success: false,
           message: `Erreur: ${error.message}. Rollback effectué avec succès.`
         };
-      } catch (rollbackError) {
+      } catch (rollbackError: any) {
         console.error('[Update] ❌ Erreur lors du rollback:', rollbackError.message);
         return {
           success: false,
@@ -300,7 +300,7 @@ async function updateStoreCatalog() {
         await appStoreService.saveAppsToFile(enrichment.apps);
         detectedUpdates = enrichment.updates;
         console.log(`[Update] ✅ Statuts actualisés: ${enrichment.apps.filter(a => a.installedVersion).length} apps installées, ${detectedUpdates.length} mise(s) à jour disponible(s)`);
-      } catch (enrichError) {
+      } catch (enrichError: any) {
         console.warn('[Update] ⚠️ Impossible de rafraîchir les informations d\'installation:', enrichError.message);
       }
 
@@ -336,7 +336,7 @@ async function updateStoreCatalog() {
         detectedUpdates = enrichment.updates;
         console.log(`[Update] ✅ Statuts actualisés: ${enrichedData.filter(a => a.installedVersion).length} apps installées, ${detectedUpdates.length} mise(s) à jour disponible(s)`);
       }
-    } catch (enrichError) {
+    } catch (enrichError: any) {
       console.warn('[Update] ⚠️ Impossible de rafraîchir les informations d\'installation:', enrichError.message);
     }
     
@@ -358,7 +358,7 @@ async function updateStoreCatalog() {
       updated: true,
       updates: detectedUpdates
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[Update] ❌ Erreur lors de la mise à jour du catalogue:', error.message);
     
     return {
@@ -370,7 +370,7 @@ async function updateStoreCatalog() {
 }
 
 
-module.exports = {
+export = {
   updateRyvie,
   updateApp,
   updateStoreCatalog

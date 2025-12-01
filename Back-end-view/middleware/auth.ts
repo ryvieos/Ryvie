@@ -12,7 +12,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dQMsVQS39XkJRCHsAhJn3Hn2';
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const redisClient = createClient({ url: REDIS_URL });
 
-redisClient.on('error', (err) => {
+redisClient.on('error', (err: any) => {
   console.warn('[auth middleware] Redis client error:', err?.message || err);
 });
 
@@ -23,13 +23,13 @@ redisClient.on('error', (err) => {
       await redisClient.connect();
       console.log('[auth middleware] Connected to Redis');
     }
-  } catch (e) {
+  } catch (e: any) {
     console.warn('[auth middleware] Unable to connect to Redis at startup. Will retry on demand.');
   }
 })();
 
 // Vérifie si le token est valide
-const verifyToken = async (req, res, next) => {
+const verifyToken = async (req: any, res: any, next: any) => {
   // Récupérer le token de l'en-tête Authorization
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1]; // Format: "Bearer TOKEN"
@@ -56,13 +56,13 @@ const verifyToken = async (req, res, next) => {
       if (!exists) {
         return res.status(401).json({ error: 'Token révoqué ou inconnu' });
       }
-    } catch (e) {
+    } catch (e: any) {
       // If Redis is down, fail open to avoid outage, but warn
       console.warn('[auth middleware] Redis unavailable, skipping allowlist check');
     }
 
     next(); // Passer au middleware suivant
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur de vérification du token:', error);
     
     // Handle specific JWT errors
@@ -75,7 +75,7 @@ const verifyToken = async (req, res, next) => {
             const key = `access:token:${token}`;
             await redisClient.del(key);
           }
-        } catch (e) {
+        } catch (e: any) {
           console.warn('[auth] Could not clear invalid token from Redis');
         }
       }
@@ -98,7 +98,7 @@ const verifyToken = async (req, res, next) => {
 };
 
 // Vérifie si l'utilisateur est admin
-const isAdmin = (req, res, next) => {
+const isAdmin = (req: any, res: any, next: any) => {
   if (req.user && req.user.role === 'Admin') {
     next();
   } else {
@@ -109,12 +109,12 @@ const isAdmin = (req, res, next) => {
 };
 
 // Vérifie si l'utilisateur a une permission spécifique
-const hasPermission = (permission) => {
-  return (req, res, next) => {
+const hasPermission = (permission: string) => {
+  return (req: any, res: any, next: any) => {
     console.log(`[auth] Vérification permission '${permission}' pour utilisateur:`, req.user);
     
     // Définir les permissions par rôle
-    const permissions = {
+    const permissions: any = {
       Admin: ['manage_users', 'manage_apps', 'view_server_info', 'access_settings'],
       User: ['view_server_info'],
       Guest: []

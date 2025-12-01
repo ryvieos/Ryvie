@@ -88,16 +88,16 @@ async function restartServer() {
     setTimeout(async () => {
       try {
         await execPromise('sudo reboot');
-      } catch (error) {
+      } catch (error: any) {
         console.error('[systemService] Erreur lors du reboot:', error);
       }
     }, 1000);
     
     return { success: true, message: 'Le serveur va redémarrer dans quelques secondes...' };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[systemService] Erreur lors du redémarrage:', error);
     throw error;
   }
 }
 
-module.exports = { getServerInfo, restartServer };
+export = { getServerInfo, restartServer };

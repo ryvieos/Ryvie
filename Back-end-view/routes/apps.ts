@@ -7,18 +7,18 @@ const { getAppStatus, startApp, stopApp, restartApp } = require('../services/doc
 const appManager = require('../services/appManagerService');
 
 // GET /api/apps - list applications and status
-router.get('/apps', async (req, res) => {
+router.get('/apps', async (req: any, res: any) => {
   try {
     const apps = await getAppStatus();
     res.status(200).json(apps);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur lors de la récupération du statut des applications:', error);
     res.status(500).json({ error: 'Erreur serveur lors de la récupération du statut des applications' });
   }
 });
 
 // POST /api/apps/:id/start - start an application
-router.post('/apps/:id/start', verifyToken, hasPermission('manage_apps'), async (req, res) => {
+router.post('/apps/:id/start', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
   const { id } = req.params;
   try {
     // Essayer d'abord avec appManager (manifests)
@@ -30,14 +30,14 @@ router.post('/apps/:id/start', verifyToken, hasPermission('manage_apps'), async 
     }
     
     res.status(200).json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Erreur lors du démarrage de l'application ${id}:`, error);
     res.status(500).json({ error: `Erreur serveur lors du démarrage de l'application`, message: error.message });
   }
 });
 
 // POST /api/apps/:id/stop - stop an application
-router.post('/apps/:id/stop', verifyToken, hasPermission('manage_apps'), async (req, res) => {
+router.post('/apps/:id/stop', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
   const { id } = req.params;
   try {
     // Essayer d'abord avec appManager (manifests)
@@ -49,14 +49,14 @@ router.post('/apps/:id/stop', verifyToken, hasPermission('manage_apps'), async (
     }
     
     res.status(200).json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Erreur lors de l'arrêt de l'application ${id}:`, error);
     res.status(500).json({ error: `Erreur serveur lors de l'arrêt de l'application`, message: error.message });
   }
 });
 
 // POST /api/apps/:id/restart - restart an application
-router.post('/apps/:id/restart', verifyToken, hasPermission('manage_apps'), async (req, res) => {
+router.post('/apps/:id/restart', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
   const { id } = req.params;
   try {
     // Essayer d'abord avec appManager (manifests)
@@ -68,14 +68,14 @@ router.post('/apps/:id/restart', verifyToken, hasPermission('manage_apps'), asyn
     }
     
     res.status(200).json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Erreur lors du redémarrage de l'application ${id}:`, error);
     res.status(500).json({ error: `Erreur serveur lors du redémarrage de l'application`, message: error.message });
   }
 });
 
 // GET /api/apps/:id/icon - get application icon
-router.get('/apps/:id/icon', async (req, res) => {
+router.get('/apps/:id/icon', async (req: any, res: any) => {
   const { id } = req.params;
   try {
     const iconPath = appManager.getAppIcon(id);
@@ -103,21 +103,21 @@ router.get('/apps/:id/icon', async (req, res) => {
     
     const iconStream = fs.createReadStream(iconPath);
     iconStream.pipe(res);
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Erreur lors de la récupération de l'icône de ${id}:`, error);
     res.status(500).json({ error: 'Erreur serveur lors de la récupération de l\'icône' });
   }
 });
 
 // GET /api/apps/manifests - list all apps with manifests
-router.get('/apps/manifests', async (req, res) => {
+router.get('/apps/manifests', async (req: any, res: any) => {
   try {
     const apps = await appManager.listInstalledApps();
     res.status(200).json(apps);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur lors de la récupération des manifests:', error);
     res.status(500).json({ error: 'Erreur serveur lors de la récupération des manifests' });
   }
 });
 
-module.exports = router;
+export = router;

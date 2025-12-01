@@ -35,9 +35,9 @@ async function getInstalledAppIds() {
       try {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
         if (manifest.id) apps.push(`app-${manifest.id}`);
-      } catch (_) {}
+      } catch (_: any) {}
     }
-  } catch (_) {}
+  } catch (_: any) {}
   return apps;
 }
 if (!fs.existsSync(BACKGROUNDS_DIR)) {
@@ -45,7 +45,7 @@ if (!fs.existsSync(BACKGROUNDS_DIR)) {
 }
 
 // GET /api/geocode/search?q=NAME - Chercher plusieurs villes (auto-complétion)
-router.get('/geocode/search', async (req, res) => {
+router.get('/geocode/search', async (req: any, res: any) => {
   try {
     const q = (req.query.q || '').toString().trim();
     if (!q || q.length < 2) return res.json({ results: [] });
@@ -59,7 +59,7 @@ router.get('/geocode/search', async (req, res) => {
       admin1: it.admin1 || null
     }));
     res.json({ results: items });
-  } catch (e) {
+  } catch (e: any) {
     console.error('[userPreferences] Erreur geocode/search:', e.message);
     res.json({ results: [] });
   }
@@ -107,7 +107,7 @@ function loadUserPreferences(username) {
     try {
       const data = fs.readFileSync(filePath, 'utf8');
       return JSON.parse(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[userPreferences] Erreur lecture préférences de ${username}:`, error);
       return null;
     }
@@ -125,7 +125,7 @@ function saveUserPreferences(username, preferences) {
   try {
     fs.writeFileSync(filePath, JSON.stringify(preferences, null, 2), 'utf8');
     return true;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[userPreferences] Erreur sauvegarde préférences de ${username}:`, error);
     return false;
   }
@@ -166,7 +166,7 @@ async function generateDefaultLauncher() {
             if (manifest.id) {
               apps.push(`app-${manifest.id}`);
             }
-          } catch (e) {
+          } catch (e: any) {
             console.warn(`[generateDefaultLauncher] Erreur lecture manifest ${folder}:`, e.message);
           }
         } else {
@@ -197,7 +197,7 @@ async function generateDefaultLauncher() {
       widgets: [],
       apps
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[generateDefaultLauncher] Erreur:', error);
     return {
       anchors,
@@ -209,7 +209,7 @@ async function generateDefaultLauncher() {
 }
 
 // GET /api/user/preferences - Récupérer les préférences de l'utilisateur
-router.get('/user/preferences', verifyToken, async (req, res) => {
+router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username; // uid est le nom d'utilisateur dans le JWT
     console.log('[userPreferences] GET pour utilisateur:', username);
@@ -279,8 +279,8 @@ router.get('/user/preferences', verifyToken, async (req, res) => {
         const layout = preferences.launcher.layout || {};
         const anchors = preferences.launcher.anchors || {};
         obsolete.forEach((appId) => {
-          try { delete layout[appId]; } catch (_) {}
-          try { delete anchors[appId]; } catch (_) {}
+          try { delete layout[appId]; } catch (_: any) {}
+          try { delete anchors[appId]; } catch (_: any) {}
         });
         // Filtrer la liste des apps
         const cleanedApps = existingApps.filter(id => !obsolete.includes(id));
@@ -290,19 +290,19 @@ router.get('/user/preferences', verifyToken, async (req, res) => {
         console.log(`[userPreferences] Nettoyage: ${obsolete.length} app(s) supprimée(s) des préférences:`, obsolete);
         saveUserPreferences(username, preferences);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('[userPreferences] Réconciliation des apps échouée:', e?.message);
     }
     
     res.json(preferences);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur GET:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // POST /api/user/preferences - Sauvegarder les préférences de l'utilisateur
-router.post('/user/preferences', verifyToken, (req, res) => {
+router.post('/user/preferences', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] POST pour utilisateur:', username);
@@ -313,14 +313,14 @@ router.post('/user/preferences', verifyToken, (req, res) => {
     } else {
       res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur POST:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // PATCH /api/user/preferences/zones - Mettre à jour uniquement les zones
-router.patch('/user/preferences/zones', verifyToken, (req, res) => {
+router.patch('/user/preferences/zones', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] PATCH zones pour utilisateur:', username);
@@ -342,14 +342,14 @@ router.patch('/user/preferences/zones', verifyToken, (req, res) => {
     } else {
       res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur PATCH zones:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // PATCH /api/user/preferences/launcher - Mettre à jour la disposition du launcher (anchors/layout/widgets/apps)
-router.patch('/user/preferences/launcher', verifyToken, (req, res) => {
+router.patch('/user/preferences/launcher', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] PATCH launcher pour utilisateur:', username);
@@ -382,14 +382,14 @@ router.patch('/user/preferences/launcher', verifyToken, (req, res) => {
     } else {
       return res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur PATCH launcher:', error);
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // PATCH /api/user/preferences - Merge générique de préférences (incluant éventuellement launcher)
-router.patch('/user/preferences', verifyToken, (req, res) => {
+router.patch('/user/preferences', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] PATCH generic pour utilisateur:', username);
@@ -426,14 +426,14 @@ router.patch('/user/preferences', verifyToken, (req, res) => {
     } else {
       return res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur PATCH generic:', error);
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // PATCH /api/user/preferences/weather-city - Mettre à jour la ville météo
-router.patch('/user/preferences/weather-city', verifyToken, (req, res) => {
+router.patch('/user/preferences/weather-city', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] PATCH weather-city pour utilisateur:', username);
@@ -462,14 +462,14 @@ router.patch('/user/preferences/weather-city', verifyToken, (req, res) => {
     } else {
       res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur PATCH weather-city:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // PATCH /api/user/preferences/background - Mettre à jour le fond d'écran
-router.patch('/user/preferences/background', verifyToken, (req, res) => {
+router.patch('/user/preferences/background', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] PATCH background pour utilisateur:', username);
@@ -495,14 +495,14 @@ router.patch('/user/preferences/background', verifyToken, (req, res) => {
     } else {
       res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur PATCH background:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // PATCH /api/user/preferences/dark-mode - Mettre à jour le mode sombre
-router.patch('/user/preferences/dark-mode', verifyToken, (req, res) => {
+router.patch('/user/preferences/dark-mode', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] PATCH dark-mode pour utilisateur:', username);
@@ -528,14 +528,14 @@ router.patch('/user/preferences/dark-mode', verifyToken, (req, res) => {
     } else {
       res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur PATCH dark-mode:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // GET /api/backgrounds/presets - Lister tous les fonds d'écran prédéfinis depuis public/
-router.get('/backgrounds/presets', (req, res) => {
+router.get('/backgrounds/presets', (req: any, res: any) => {
   try {
     console.log('[userPreferences] Liste des fonds prédéfinis depuis public/');
     
@@ -561,14 +561,14 @@ router.get('/backgrounds/presets', (req, res) => {
       .sort((a, b) => a.name.localeCompare(b.name)); // Tri alphabétique
     
     res.json({ backgrounds: presetBackgrounds });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur liste fonds prédéfinis:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // GET /api/user/preferences/backgrounds/list - Lister les fonds personnalisés de l'utilisateur
-router.get('/user/preferences/backgrounds/list', verifyToken, (req, res) => {
+router.get('/user/preferences/backgrounds/list', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] Liste des fonds pour:', username);
@@ -592,14 +592,14 @@ router.get('/user/preferences/backgrounds/list', verifyToken, (req, res) => {
       .sort((a, b) => b.uploadDate - a.uploadDate); // Plus récent en premier
     
     res.json({ backgrounds: userBackgrounds });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur liste fonds:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // POST /api/user/preferences/background/upload - Uploader un fond d'écran personnalisé
-router.post('/user/preferences/background/upload', verifyToken, upload.single('background'), async (req, res) => {
+router.post('/user/preferences/background/upload', verifyToken, upload.single('background'), async (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     
@@ -638,14 +638,14 @@ router.post('/user/preferences/background/upload', verifyToken, upload.single('b
     } else {
       res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur upload background:', error);
     res.status(500).json({ error: error.message || 'Erreur serveur' });
   }
 });
 
 // GET /api/user/preferences/background/image - Récupérer l'image de fond personnalisée
-router.get('/user/preferences/background/image', verifyToken, (req, res) => {
+router.get('/user/preferences/background/image', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     const preferences = loadUserPreferences(username);
@@ -666,14 +666,14 @@ router.get('/user/preferences/background/image', verifyToken, (req, res) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.sendFile(imagePath);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur récupération image:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // GET /api/backgrounds/default - Servir le fond d'écran par défaut
-router.get('/backgrounds/default', (req, res) => {
+router.get('/backgrounds/default', (req: any, res: any) => {
   const defaultBgPath = path.join(BACKGROUNDS_DIR, 'background.webp');
   
   if (fs.existsSync(defaultBgPath)) {
@@ -687,7 +687,7 @@ router.get('/backgrounds/default', (req, res) => {
 });
 
 // GET /api/backgrounds/presets/:filename - Servir un fond prédéfini
-router.get('/backgrounds/presets/:filename', (req, res) => {
+router.get('/backgrounds/presets/:filename', (req: any, res: any) => {
   const filename = req.params.filename;
   const imagePath = path.join(PRESETS_DIR, filename);
   
@@ -703,7 +703,7 @@ router.get('/backgrounds/presets/:filename', (req, res) => {
 });
 
 // GET /api/backgrounds/:filename - Servir une image de fond uploadée
-router.get('/backgrounds/:filename', (req, res) => {
+router.get('/backgrounds/:filename', (req: any, res: any) => {
   const filename = req.params.filename;
   const imagePath = path.join(BACKGROUNDS_DIR, filename);
   
@@ -719,7 +719,7 @@ router.get('/backgrounds/:filename', (req, res) => {
 });
 
 // DELETE /api/user/preferences/background/:filename - Supprimer un fond personnalisé
-router.delete('/user/preferences/background/:filename', verifyToken, (req, res) => {
+router.delete('/user/preferences/background/:filename', verifyToken, (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     const filename = req.params.filename;
@@ -748,14 +748,14 @@ router.delete('/user/preferences/background/:filename', verifyToken, (req, res) 
     }
     
     res.json({ success: true, message: 'Fond supprimé' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur suppression fond:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // GET /api/geolocate - Obtenir la position via l'IP du client
-router.get('/geolocate', async (req, res) => {
+router.get('/geolocate', async (req: any, res: any) => {
   try {
     // Récupérer l'IP du client
     let clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress || req.socket.remoteAddress;
@@ -786,7 +786,7 @@ router.get('/geolocate', async (req, res) => {
         const ipResp = await axios.get('https://api.ipify.org?format=json', { timeout: 3000 });
         clientIp = ipResp.data.ip;
         console.log('[userPreferences] IP publique récupérée:', clientIp);
-      } catch (ipErr) {
+      } catch (ipErr: any) {
         console.warn('[userPreferences] Impossible de récupérer IP publique:', ipErr.message);
       }
     }
@@ -815,7 +815,7 @@ router.get('/geolocate', async (req, res) => {
           country: 'France'
         });
       }
-    } catch (apiErr) {
+    } catch (apiErr: any) {
       console.error('[userPreferences] Erreur API géolocalisation:', apiErr.message);
       // Fallback sur Paris
       res.json({
@@ -825,14 +825,14 @@ router.get('/geolocate', async (req, res) => {
         country: 'France'
       });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur géolocalisation:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // GET /api/geocode/:city - Géocoder une ville pour obtenir ses coordonnées
-router.get('/geocode/:city', async (req, res) => {
+router.get('/geocode/:city', async (req: any, res: any) => {
   try {
     const city = req.params.city;
     console.log('[userPreferences] Géocodage de:', city);
@@ -851,10 +851,10 @@ router.get('/geocode/:city', async (req, res) => {
     } else {
       res.status(404).json({ error: 'Ville non trouvée' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[userPreferences] Erreur géocodage:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-module.exports = router;
+export = router;

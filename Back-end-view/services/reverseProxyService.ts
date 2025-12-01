@@ -69,7 +69,7 @@ async function ensureConfigFiles() {
     try {
       await fs.mkdir(REVERSE_PROXY_DIR, { recursive: true });
       console.log('[reverseProxyService] 📁 Dossier créé:', REVERSE_PROXY_DIR);
-    } catch (error) {
+    } catch (error: any) {
       if (error.code !== 'EEXIST') throw error;
     }
     
@@ -79,7 +79,7 @@ async function ensureConfigFiles() {
       const dirPath = path.join(REVERSE_PROXY_DIR, dir);
       try {
         await fs.mkdir(dirPath, { recursive: true });
-      } catch (error) {
+      } catch (error: any) {
         if (error.code !== 'EEXIST') throw error;
       }
     }
@@ -106,7 +106,7 @@ async function ensureConfigFiles() {
     }
     
     return { success: true, filesCreated };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[reverseProxyService] ❌ Erreur lors de la création des fichiers:', error);
     return { success: false, error: error.message };
   }
@@ -136,7 +136,7 @@ async function checkComposeFile() {
     }
     
     return { exists: true, valid: isValid, content };
-  } catch (error) {
+  } catch (error: any) {
     if (error.code === 'ENOENT') {
       console.warn('[reverseProxyService] ⚠️  docker-compose.yml non trouvé:', EXPECTED_CONFIG.composeFile);
       return { exists: false, valid: false };
@@ -187,7 +187,7 @@ async function checkCaddyfile() {
     }
     
     return { exists: true, valid: isValid, content, currentIP, hasHttpsRedirect };
-  } catch (error) {
+  } catch (error: any) {
     if (error.code === 'ENOENT') {
       console.warn('[reverseProxyService] ⚠️  Caddyfile non trouvé:', EXPECTED_CONFIG.caddyfile);
       return { exists: false, valid: false };
@@ -219,7 +219,7 @@ async function checkCaddyContainer() {
       state: caddyContainer.State,
       status: caddyContainer.Status
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[reverseProxyService] Erreur lors de la vérification du container:', error);
     return { exists: false, running: false, error: error.message };
   }
@@ -243,7 +243,7 @@ async function stopCaddy() {
     
     console.log('[reverseProxyService] ✅ Caddy arrêté avec succès');
     return { success: true, output: stdout };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[reverseProxyService] ❌ Erreur lors de l\'arrêt de Caddy:', error.message);
     return { success: false, error: error.message };
   }
@@ -267,7 +267,7 @@ async function startCaddy() {
     
     console.log('[reverseProxyService] ✅ Caddy démarré avec succès');
     return { success: true, output: stdout };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[reverseProxyService] ❌ Erreur lors du démarrage de Caddy:', error.message);
     return { success: false, error: error.message };
   }
@@ -285,7 +285,7 @@ async function updateCaddyfileIP() {
     console.log('[reverseProxyService] ✅ Caddyfile mis à jour avec IP:', newIP);
     
     return { success: true, newIP };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[reverseProxyService] ❌ Erreur lors de la mise à jour du Caddyfile:', error.message);
     return { success: false, error: error.message };
   }
@@ -315,7 +315,7 @@ async function restartCaddy() {
     
     console.log('[reverseProxyService] ✅ Caddy redémarré avec succès');
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[reverseProxyService] ❌ Erreur lors du redémarrage de Caddy:', error.message);
     return { success: false, error: error.message };
   }
@@ -364,7 +364,7 @@ async function ensureCaddyRunning() {
       try {
         await fs.unlink(EXPECTED_CONFIG.caddyfile);
         console.log('[reverseProxyService] 🗑️  Ancien Caddyfile supprimé');
-      } catch (error) {
+      } catch (error: any) {
         if (error.code !== 'ENOENT') {
           console.warn('[reverseProxyService] ⚠️  Erreur lors de la suppression:', error.message);
         }
@@ -493,7 +493,7 @@ async function ensureCaddyRunning() {
       };
     }
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('[reverseProxyService] ❌ Erreur lors de la vérification/démarrage:', error);
     return {
       success: false,
@@ -523,7 +523,7 @@ async function getReverseProxyStatus() {
         container: containerStatus
       }
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[reverseProxyService] Erreur lors de la récupération du statut:', error);
     return {
       configured: false,
@@ -533,7 +533,7 @@ async function getReverseProxyStatus() {
   }
 }
 
-module.exports = {
+export = {
   ensureCaddyRunning,
   getReverseProxyStatus,
   checkCaddyContainer,

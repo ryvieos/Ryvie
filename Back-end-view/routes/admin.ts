@@ -7,7 +7,7 @@ const { getRole, parseDnParts, escapeRdnValue } = require('../services/ldapServi
 const { startApp } = require('../services/dockerService');
 
 // GET /api/admin/users/sync-ldap
-router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req, res) => {
+router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req: any, res: any) => {
   const ldapClient = ldap.createClient({ url: ldapConfig.url });
   let users = [];
 
@@ -56,7 +56,7 @@ router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req, res) => {
 });
 
 // POST /api/add-user — create a new LDAP user and assign role group (moved from auth.js)
-router.post('/add-user', verifyToken, isAdmin, async (req, res) => {
+router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
   const { adminUid, adminPassword, newUser } = req.body || {};
 
   if (!adminUid || !adminPassword || !newUser) {
@@ -220,7 +220,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req, res) => {
                               triggerLdapSync()
                                 .catch(() => {})
                                 .finally(() => {
-                                  try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                                  try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                                   return res.json({
                                     message: `Utilisateur "${uid}" ajouté avec succès en tant que ${role}`,
                                     user: { cn, sn, uid, mail, role },
@@ -254,7 +254,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req, res) => {
                               triggerLdapSync()
                                 .catch(() => {})
                                 .finally(() => {
-                                  try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                                  try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                                   return res.json({
                                     message: `Utilisateur "${uid}" ajouté avec succès en tant que ${role}`,
                                     user: { cn, sn, uid, mail, role },
@@ -277,7 +277,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req, res) => {
 });
 
 // POST /api/delete-user (kept for backward compatibility)
-router.post('/delete-user', verifyToken, isAdmin, async (req, res) => {
+router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => {
   const { adminUid, adminPassword, uid } = req.body;
 
   if (!adminUid || !adminPassword || !uid) {
@@ -397,7 +397,7 @@ router.post('/delete-user', verifyToken, isAdmin, async (req, res) => {
                                   triggerLdapSync()
                                     .catch(() => {})
                                     .finally(() => {
-                                      try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                                      try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                                       return res.json({ message: `Utilisateur "${uid}" supprimé avec succès` });
                                     });
                                 });
@@ -442,7 +442,7 @@ async function triggerLdapSync() {
 }
 
 // PUT /api/update-user — update attributes, password, and role membership
-router.put('/update-user', verifyToken, isAdmin, async (req, res) => {
+router.put('/update-user', verifyToken, isAdmin, async (req: any, res: any) => {
   const { adminUid, adminPassword, targetUid, name, email, role, password } = req.body;
 
   if (!adminUid || !adminPassword || !targetUid || !name || !email || !role) {
@@ -634,7 +634,7 @@ router.put('/update-user', verifyToken, isAdmin, async (req, res) => {
                           triggerLdapSync()
                             .catch(() => {})
                             .finally(() => {
-                              try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_) {}
+                              try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                               res.json({ message: `Utilisateur "${targetUid}" mis à jour avec succès`, user: { name, email, role, uid: targetUid } });
                             });
                         });
@@ -651,4 +651,4 @@ router.put('/update-user', verifyToken, isAdmin, async (req, res) => {
   });
 });
 
-module.exports = router;
+export = router;

@@ -27,7 +27,7 @@ async function getLatestGitHubTag(owner, repo) {
       return response.data[0].name; // Le premier tag est le plus récent
     }
     return null;
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.status === 404) {
       console.log(`[updateCheck] Repo ${owner}/${repo} non trouvé ou pas de releases`);
       return null;
@@ -47,7 +47,7 @@ function getCurrentBranch(dir) {
       encoding: 'utf8'
     }).trim();
     return branch;
-  } catch (e) {
+  } catch (e: any) {
     console.log(`[updateCheck] Impossible de déterminer la branche pour ${dir}`);
     return 'main';
   }
@@ -77,7 +77,7 @@ async function getLatestGitHubReleaseForBranch(owner, repo, branch) {
 
     if (!latest) return null;
     return latest.tag_name || latest.name || null;
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.status === 404) {
       console.log(`[updateCheck] Releases introuvables pour ${owner}/${repo}`);
       return null;
@@ -97,7 +97,7 @@ function getCurrentRyvieVersion() {
       encoding: 'utf8'
     }).trim();
     return tag;
-  } catch (error) {
+  } catch (error: any) {
     console.log('[updateCheck] Impossible de récupérer le tag Git actuel pour Ryvie');
     return null;
   }
@@ -154,7 +154,7 @@ function getLocalLatestTag(dir) {
       return 0;
     });
     return sorted[sorted.length - 1] || null;
-  } catch (_) {
+  } catch (_: any) {
     return null;
   }
 }
@@ -185,7 +185,7 @@ function getRemoteLatestTag(dir) {
       return 0;
     });
     return sorted[sorted.length - 1] || null;
-  } catch (_) {
+  } catch (_: any) {
     return null;
   }
 }
@@ -199,7 +199,7 @@ async function checkRyvieUpdate() {
   // Fetch tags pour s'assurer d'avoir les derniers tags distants
   try {
     execSync('git fetch --tags origin', { cwd: RYVIE_DIR, stdio: 'pipe' });
-  } catch (e) {
+  } catch (e: any) {
     console.log('[updateCheck] Impossible de fetch les tags pour Ryvie:', e.message);
   }
   
@@ -253,7 +253,7 @@ function getAppManifest(appDir) {
     }
     
     return manifest;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[updateCheck] Erreur lors de la lecture du manifest dans ${appDir}:`, error.message);
     return null;
   }
@@ -269,7 +269,7 @@ function getAppCurrentVersion(appDir) {
       encoding: 'utf8'
     }).trim();
     return tag;
-  } catch (error) {
+  } catch (error: any) {
     // Pas de tag Git, essayer de lire depuis le manifest ou autre
     return null;
   }
@@ -313,7 +313,7 @@ async function checkAppsUpdates() {
     // Fetch tags pour avoir les derniers tags
     try {
       execSync('git fetch --tags origin', { cwd: appPath, stdio: 'pipe' });
-    } catch (e) {
+    } catch (e: any) {
       console.log(`[updateCheck] Impossible de fetch les tags pour ${appFolder}:`, e.message);
     }
     
@@ -390,7 +390,7 @@ async function checkStoreCatalogUpdate() {
       updateAvailable,
       status: updateAvailable ? 'update-available' : 'up-to-date'
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[updateCheck] Erreur lors de la vérification du catalogue:', error.message);
     return {
       name: 'App Store Catalog',
@@ -404,7 +404,7 @@ async function checkStoreCatalogUpdate() {
 }
 
 
-module.exports = {
+export = {
   checkAllUpdates,
   checkRyvieUpdate,
   checkAppsUpdates,

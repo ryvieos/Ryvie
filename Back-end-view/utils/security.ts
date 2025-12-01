@@ -56,7 +56,7 @@ function encryptData(plaintext, key) {
       iv: iv.toString('base64'),
       tag: tag.toString('base64')
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[security] Encryption failed:', error);
     throw new Error('Encryption failed');
   }
@@ -81,7 +81,7 @@ function decryptData(encryptedData, key) {
     decrypted += decipher.final('utf8');
     
     return decrypted;
-  } catch (error) {
+  } catch (error: any) {
     console.error('[security] Decryption failed:', error);
     throw new Error('Decryption failed');
   }
@@ -180,7 +180,7 @@ function checkRateLimit(key, maxAttempts, windowMs, store) {
   };
 }
 
-module.exports = {
+export = {
   generateSecureKey,
   deriveKey,
   encryptData,

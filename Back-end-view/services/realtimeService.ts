@@ -117,12 +117,12 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
                 }
               }
             }
-          } catch (parseError) {
+          } catch (parseError: any) {
             // Ignorer silencieusement les lignes qui ne sont pas du JSON valide
             // (peut arriver avec des messages de debug Docker)
           }
         });
-      } catch (e) {
+      } catch (e: any) {
         console.error('Failed to process Docker event stream', e);
         // Réinitialiser le buffer en cas d'erreur
         buffer = '';
@@ -142,4 +142,4 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
   };
 }
 
-module.exports = { setupRealtime };
+export = { setupRealtime };

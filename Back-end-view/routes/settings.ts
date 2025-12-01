@@ -29,7 +29,7 @@ function loadSettings() {
       saveSettings(defaults);
       return defaults;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[settings] Erreur lors du chargement des paramètres:', error);
   }
   
@@ -49,25 +49,25 @@ function saveSettings(settings) {
     }
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
     return true;
-  } catch (error) {
+  } catch (error: any) {
     console.error('[settings] Erreur lors de la sauvegarde des paramètres:', error);
     return false;
   }
 }
 
 // GET /api/settings/token-expiration - Récupérer la durée d'expiration du token
-router.get('/settings/token-expiration', verifyToken, (req, res) => {
+router.get('/settings/token-expiration', verifyToken, (req: any, res: any) => {
   try {
     const settings = loadSettings();
     res.json({ minutes: settings.tokenExpirationMinutes || 15 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[settings] Erreur GET token-expiration:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // PATCH /api/settings/token-expiration - Modifier la durée d'expiration du token
-router.patch('/settings/token-expiration', verifyToken, (req, res) => {
+router.patch('/settings/token-expiration', verifyToken, (req: any, res: any) => {
   try {
     const { minutes } = req.body;
     
@@ -91,19 +91,19 @@ router.patch('/settings/token-expiration', verifyToken, (req, res) => {
     } else {
       res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[settings] Erreur PATCH token-expiration:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // GET /api/settings/updates - Vérifier les mises à jour disponibles
-router.get('/settings/updates', verifyToken, async (req, res) => {
+router.get('/settings/updates', verifyToken, async (req: any, res: any) => {
   try {
     console.log('[settings] Vérification des mises à jour...');
     const updates = await checkAllUpdates();
     res.json(updates);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[settings] Erreur lors de la vérification des mises à jour:', error);
     res.status(500).json({ 
       error: 'Erreur lors de la vérification des mises à jour',
@@ -113,7 +113,7 @@ router.get('/settings/updates', verifyToken, async (req, res) => {
 });
 
 // POST /api/settings/update-ryvie - Mettre à jour Ryvie
-router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req, res) => {
+router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req: any, res: any) => {
   try {
     console.log('[settings] Démarrage de la mise à jour de Ryvie...');
     const result = await updateRyvie();
@@ -141,7 +141,7 @@ router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req, res) => 
         try {
           execSync('/usr/local/bin/pm2 reload all --force', { stdio: 'inherit' });
           console.log('[settings] PM2 reload lancé');
-        } catch (error) {
+        } catch (error: any) {
           console.error('[settings] ❌ Erreur lors du redémarrage PM2:', error.message);
         }
       }, 1000);
@@ -151,7 +151,7 @@ router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req, res) => 
     } else {
       res.status(500).json(result);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[settings] Erreur lors de la mise à jour de Ryvie:', error);
     res.status(500).json({ 
       success: false,
@@ -162,7 +162,7 @@ router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req, res) => 
 });
 
 // POST /api/settings/update-app - Mettre à jour une application
-router.post('/settings/update-app', verifyToken, isAdmin, async (req, res) => {
+router.post('/settings/update-app', verifyToken, isAdmin, async (req: any, res: any) => {
   try {
     const { appName } = req.body;
     
@@ -181,7 +181,7 @@ router.post('/settings/update-app', verifyToken, isAdmin, async (req, res) => {
     } else {
       res.status(500).json(result);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[settings] Erreur lors de la mise à jour de l'app:`, error);
     res.status(500).json({ 
       success: false,
@@ -192,7 +192,7 @@ router.post('/settings/update-app', verifyToken, isAdmin, async (req, res) => {
 });
 
 // GET /api/settings/ryvie-domains - Récupérer les domaines publics Netbird (local uniquement, sans token)
-router.get('/settings/ryvie-domains', (req, res) => {
+router.get('/settings/ryvie-domains', (req: any, res: any) => {
   try {
     const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
     const clientIPRaw = xff || req.ip || req.connection.remoteAddress || '';
@@ -226,7 +226,7 @@ router.get('/settings/ryvie-domains', (req, res) => {
           return res.status(403).json({ error: 'Accès refusé: cette API n\'est pas exposée via le domaine public' });
         }
       }
-    } catch (_) {}
+    } catch (_: any) {}
 
     // Bloquer le port public 3002 uniquement si la requête n'est PAS locale
     if (!isLocal && hostHeader.includes(':3002')) {
@@ -266,7 +266,7 @@ router.get('/settings/ryvie-domains', (req, res) => {
           setupKey = line.substring('NETBIRD_SETUP_KEY='.length).trim();
         }
       }
-    } catch (_) {}
+    } catch (_: any) {}
 
     // Retourner les domaines publics avec l'ID
     if (netbirdData.domains) {
@@ -281,7 +281,7 @@ router.get('/settings/ryvie-domains', (req, res) => {
     } else {
       res.status(404).json({ error: 'Aucun domaine trouvé dans le fichier', ryvieId: settings?.id || null });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[settings] Erreur lors de la lecture des domaines Netbird:', error);
     res.status(500).json({ 
       error: 'Erreur serveur',
@@ -290,4 +290,4 @@ router.get('/settings/ryvie-domains', (req, res) => {
   }
 });
 
-module.exports = router;
+export = router;

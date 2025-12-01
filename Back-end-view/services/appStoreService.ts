@@ -72,7 +72,7 @@ async function loadInstalledVersionsFromManifests() {
             installed[normalizedId] = version;
           }
         }
-      } catch (manifestError) {
+      } catch (manifestError: any) {
         if (manifestError.code !== 'ENOENT') {
           console.warn(`[appStore] Impossible de lire ${manifestPath}:`, manifestError.message);
         }
@@ -80,7 +80,7 @@ async function loadInstalledVersionsFromManifests() {
     }));
 
     return installed;
-  } catch (error) {
+  } catch (error: any) {
     if (error.code !== 'ENOENT') {
       console.warn('[appStore] Impossible de lister les manifests installés:', error.message);
     }
@@ -98,7 +98,7 @@ async function loadInstalledVersions() {
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       installed = parsed;
     }
-  } catch (error) {
+  } catch (error: any) {
     if (error.code !== 'ENOENT') {
       console.warn('[appStore] Impossible de lire apps-versions.json:', error.message);
     }
@@ -223,7 +223,7 @@ async function getLatestRelease() {
       publishedAt: response.data.published_at,
       assets: response.data.assets
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de la récupération de la dernière release:', error.message);
     throw new Error('Échec de la récupération de la release depuis GitHub');
   }
@@ -235,7 +235,7 @@ async function getLatestRelease() {
 async function ensureDataDirectory() {
   try {
     await fs.mkdir(STORE_CATALOG, { recursive: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de la création du répertoire de données:', error.message);
   }
 }
@@ -247,7 +247,7 @@ async function loadAppsFromFile() {
   try {
     const data = await fs.readFile(APPS_FILE, 'utf8');
     return JSON.parse(data);
-  } catch (error) {
+  } catch (error: any) {
     if (error.code === 'ENOENT') {
       console.log('[appStore] Aucun fichier apps.json local trouvé');
       return null;
@@ -265,7 +265,7 @@ async function saveAppsToFile(data) {
     await ensureDataDirectory();
     await fs.writeFile(APPS_FILE, JSON.stringify(data, null, 2), 'utf8');
     console.log('[appStore] apps.json sauvegardé sur disque');
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de la sauvegarde de apps.json:', error.message);
     throw error;
   }
@@ -278,7 +278,7 @@ async function loadMetadata() {
   try {
     const data = await fs.readFile(METADATA_FILE, 'utf8');
     return JSON.parse(data);
-  } catch (error) {
+  } catch (error: any) {
     if (error.code === 'ENOENT') {
       return { releaseTag: null, lastCheck: null };
     }
@@ -294,7 +294,7 @@ async function saveMetadata() {
   try {
     await ensureDataDirectory();
     await fs.writeFile(METADATA_FILE, JSON.stringify(metadata, null, 2), 'utf8');
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de la sauvegarde des métadonnées:', error.message);
   }
 }
@@ -326,7 +326,7 @@ async function fetchAppsFromRelease(release) {
     
     console.log(`[appStore] apps.json récupéré depuis la release: ${release.tag}`);
     return response.data;
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de la récupération de apps.json depuis la release:', error.message);
     throw new Error('Échec de la récupération de apps.json depuis la release');
   }
@@ -355,7 +355,7 @@ async function downloadAppFromRepoArchive(release, appId) {
       execSync(`sudo chown ryvie:ryvie "${appDir}"`);
       console.log(`[appStore] ✅ Sous-volume Btrfs créé`);
     }
-  } catch (btrfsError) {
+  } catch (btrfsError: any) {
     // Si Btrfs échoue, annuler l'installation
     console.error(`[appStore] ❌ Impossible de créer un sous-volume Btrfs:`, btrfsError.message);
     throw new Error(`Impossible de créer un sous-volume Btrfs pour ${appId}: ${btrfsError.message}`);
@@ -440,7 +440,7 @@ async function downloadAppFromRepoArchive(release, appId) {
         
         console.log(`[appStore] ✅ ${fileName} téléchargé (${(fileResponse.data.length / 1024).toFixed(2)} Ko)`);
         
-      } catch (fileError) {
+      } catch (fileError: any) {
         console.error(`[appStore] ❌ Erreur lors du téléchargement de ${fileName}:`, fileError.message);
         throw new Error(`Échec du téléchargement de ${fileName}`);
       }
@@ -466,7 +466,7 @@ async function downloadAppFromRepoArchive(release, appId) {
       } else {
         console.log(`[appStore] ℹ️ Aucun fichier .env trouvé (optionnel)`);
       }
-    } catch (envError) {
+    } catch (envError: any) {
       // Le fichier .env est optionnel, on ne bloque pas l'installation
       if (envError.response?.status === 404) {
         console.log(`[appStore] ℹ️ Aucun fichier .env disponible pour ${appId} (optionnel)`);
@@ -505,7 +505,7 @@ async function downloadAppFromRepoArchive(release, appId) {
     console.log(`[appStore] 🎉 ${appId} téléchargé avec succès (${downloadedCount} fichier(s))`);
     return appDir;
     
-  } catch (error) {
+  } catch (error: any) {
     // Gestion des erreurs spécifiques à GitHub
     if (error.response?.status === 404) {
       throw new Error(`Application "${appId}" non trouvée dans le repo ${repoOwner}/${repoName}`);
@@ -525,7 +525,7 @@ async function downloadAppFromRepoArchive(release, appId) {
     try {
       await fs.rm(appDir, { recursive: true, force: true });
       console.log(`[appStore] 🧹 Dossier ${appDir} nettoyé après erreur`);
-    } catch (cleanupError) {
+    } catch (cleanupError: any) {
       console.error(`[appStore] ⚠️  Erreur lors du nettoyage:`, cleanupError.message);
     }
     
@@ -587,7 +587,7 @@ async function downloadDirectoryRecursive(apiUrl, destinationPath, branch, heade
           await fs.writeFile(envFilePath, envResponse.data);
           console.log(`[appStore] ✅ Fichier .env téléchargé dans ${folderPathInRepo}`);
         }
-      } catch (envError) {
+      } catch (envError: any) {
         // Le fichier .env est optionnel, on ne bloque pas
         if (envError.response?.status !== 404) {
           console.warn(`[appStore] ⚠️ Erreur lors du téléchargement du .env dans ${folderPathInRepo}:`, envError.message);
@@ -598,11 +598,11 @@ async function downloadDirectoryRecursive(apiUrl, destinationPath, branch, heade
     // Définir les permissions sur le dossier téléchargé
     try {
       execSync(`chmod -R 775 "${destinationPath}"`, { stdio: 'pipe' });
-    } catch (chmodError) {
+    } catch (chmodError: any) {
       console.warn(`[appStore] ⚠️ Impossible de définir les permissions sur ${destinationPath}`);
     }
     
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[appStore] ❌ Erreur lors du téléchargement récursif:`, error.message);
     throw error;
   }
@@ -678,7 +678,7 @@ async function clearCache() {
     
     console.log('[appStore] Cache local effacé');
     return true;
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] Erreur lors de l\'effacement du cache:', error.message);
     throw error;
   }
@@ -747,7 +747,7 @@ async function updateAppFromStore(appId) {
         console.error('[Update] ❌ Impossible d\'extraire le chemin du snapshot depuis la sortie');
         throw new Error('Impossible d\'extraire le chemin du snapshot depuis la sortie');
       }
-    } catch (snapError) {
+    } catch (snapError: any) {
       console.error('[Update] ❌ Impossible de créer le snapshot:', snapError.message);
       throw new Error(`Création du snapshot échouée: ${snapError.message}. Mise à jour annulée pour des raisons de sécurité.`);
     }
@@ -813,7 +813,7 @@ async function updateAppFromStore(appId) {
         cwd: appDir, 
         stdio: 'pipe'
       });
-    } catch (cleanupError) {
+    } catch (cleanupError: any) {
       // Non bloquant - l'app n'existe peut-être pas encore
       console.log('[Update] ℹ️ Aucun container existant à nettoyer');
     }
@@ -829,7 +829,7 @@ async function updateAppFromStore(appId) {
         stdio: 'inherit'
       });
       console.log('[Update] ✅ Containers lancés avec succès');
-    } catch (composeError) {
+    } catch (composeError: any) {
       console.error('[Update] ❌ Erreur lors du lancement docker compose:', composeError.message);
       console.error('[Update] 📋 Vérification du fichier docker-compose.yml...');
       
@@ -892,7 +892,7 @@ async function updateAppFromStore(appId) {
       
       console.log(`[Update] ✅ Au moins un container est en cours d'exécution`);
       
-    } catch (checkError) {
+    } catch (checkError: any) {
       console.error(`[Update] ❌ Détails erreur de vérification container: ${checkError.message}`);
       if (checkError.stdout) {
         console.error('[Update] stdout:', checkError.stdout.toString());
@@ -913,7 +913,7 @@ async function updateAppFromStore(appId) {
       const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
       execSync(`node ${manifestScript}`, { stdio: 'inherit' });
       console.log('[Update] ✅ Manifests régénérés');
-    } catch (manifestError) {
+    } catch (manifestError: any) {
       console.warn('[Update] ⚠️ Impossible de régénérer les manifests:', manifestError.message);
     }
     
@@ -928,7 +928,7 @@ async function updateAppFromStore(appId) {
         await saveAppsToFile(enrichedApps);
         console.log('[Update] ✅ Catalogue actualisé');
       }
-    } catch (catalogError) {
+    } catch (catalogError: any) {
       console.warn('[Update] ⚠️ Impossible d\'actualiser le catalogue:', catalogError.message);
     }
     
@@ -944,7 +944,7 @@ async function updateAppFromStore(appId) {
       try {
         execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
         console.log('[Update] ✅ Snapshot supprimé');
-      } catch (delError) {
+      } catch (delError: any) {
         console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message , '. attention cela peut causer des problèmes à votre machine sur le long terme! Veuillez vérifier manuellement le sous-volume si nécessaire.' );
       }
     }
@@ -954,7 +954,7 @@ async function updateAppFromStore(appId) {
       message: `${appId} installé/mis à jour avec succès depuis l'App Store`,
       appDir
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[Update] ❌ Erreur à l'étape ${currentStep}:`, error.message);
     if (error.stack) {
       console.error('[Update] Stack trace:', error.stack);
@@ -968,7 +968,7 @@ async function updateAppFromStore(appId) {
         // Utiliser sudo rm car les fichiers Docker peuvent appartenir à root
         execSync(`sudo rm -rf "${appDir}"`, { stdio: 'inherit' });
         console.log(`[Update] ✅ Dossier ${appDir} supprimé`);
-      } catch (cleanupError) {
+      } catch (cleanupError: any) {
         console.warn(`[Update] ⚠️ Impossible de supprimer ${appDir}:`, cleanupError.message);
       }
     }
@@ -985,7 +985,7 @@ async function updateAppFromStore(appId) {
         try {
           execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
           console.log('[Update] 🧹 Snapshot supprimé après rollback');
-        } catch (delError) {
+        } catch (delError: any) {
           console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
         }
         
@@ -993,7 +993,7 @@ async function updateAppFromStore(appId) {
           success: false,
           message: `Erreur: ${error.message}. Rollback effectué avec succès.`
         };
-      } catch (rollbackError) {
+      } catch (rollbackError: any) {
         console.error('[Update] ❌ Échec du rollback:', rollbackError.message);
         return {
           success: false,
@@ -1048,7 +1048,7 @@ async function initialize() {
       const installedCount = enrichedApps.filter(app => app.installedVersion).length;
       console.log(`[appStore] ✅ ${installedCount} apps installées détectées`);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appStore] ⚠️  Échec de l\'initialisation:', error.message);
     // Continuer même en cas d'erreur (utiliser le cache local si disponible)
   }
@@ -1102,7 +1102,7 @@ async function uninstallApp(appId) {
           appImages = imagesOutput.split('\n').filter(img => img.trim());
           console.log(`[Uninstall] 📦 ${appImages.length} image(s) trouvée(s):`, appImages);
         }
-      } catch (imagesError) {
+      } catch (imagesError: any) {
         console.warn('[Uninstall] ⚠️ Impossible de récupérer les images:', imagesError.message);
       }
       
@@ -1114,7 +1114,7 @@ async function uninstallApp(appId) {
           stdio: 'inherit'
         });
         console.log('[Uninstall] ✅ Containers et volumes arrêtés et supprimés');
-      } catch (dockerError) {
+      } catch (dockerError: any) {
         console.warn('[Uninstall] ⚠️ Erreur lors de l\'arrêt des containers:', dockerError.message);
         // On continue quand même pour nettoyer les fichiers
       }
@@ -1135,14 +1135,14 @@ async function uninstallApp(appId) {
             try {
               execSync(`docker volume rm ${volume}`, { stdio: 'inherit' });
               console.log(`[Uninstall] ✅ Volume ${volume} supprimé`);
-            } catch (volError) {
+            } catch (volError: any) {
               console.warn(`[Uninstall] ⚠️ Impossible de supprimer le volume ${volume}:`, volError.message);
             }
           }
         } else {
           console.log('[Uninstall] ℹ️ Aucun volume spécifique trouvé');
         }
-      } catch (volumeError) {
+      } catch (volumeError: any) {
         console.warn('[Uninstall] ⚠️ Erreur lors de la récupération des volumes:', volumeError.message);
       }
       
@@ -1153,7 +1153,7 @@ async function uninstallApp(appId) {
           try {
             execSync(`docker rmi ${imageId}`, { stdio: 'inherit' });
             console.log(`[Uninstall] ✅ Image ${imageId} supprimée`);
-          } catch (rmiError) {
+          } catch (rmiError: any) {
             console.warn(`[Uninstall] ⚠️ Impossible de supprimer l'image ${imageId}:`, rmiError.message);
             // L'image peut être utilisée par un autre container, on continue
           }
@@ -1171,7 +1171,7 @@ async function uninstallApp(appId) {
       // Utiliser sudo rm car les fichiers Docker peuvent appartenir à root
       execSync(`sudo rm -rf "${appDir}"`, { stdio: 'inherit' });
       console.log('[Uninstall] ✅ Dossier de l\'application supprimé');
-    } catch (rmError) {
+    } catch (rmError: any) {
       console.error('[Uninstall] ❌ Erreur lors de la suppression du dossier:', rmError.message);
       throw new Error(`Impossible de supprimer le dossier de l'application: ${rmError.message}`);
     }
@@ -1182,7 +1182,7 @@ async function uninstallApp(appId) {
     try {
       execSync(`sudo rm -rf "${manifestDir}"`, { stdio: 'inherit' });
       console.log('[Uninstall] ✅ Manifest supprimé');
-    } catch (manifestError) {
+    } catch (manifestError: any) {
       console.warn('[Uninstall] ⚠️ Erreur lors de la suppression du manifest:', manifestError.message);
       // Non bloquant
     }
@@ -1193,7 +1193,7 @@ async function uninstallApp(appId) {
       const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
       execSync(`node ${manifestScript}`, { stdio: 'inherit' });
       console.log('[Uninstall] ✅ Manifests régénérés');
-    } catch (manifestError) {
+    } catch (manifestError: any) {
       console.warn('[Uninstall] ⚠️ Impossible de régénérer les manifests:', manifestError.message);
     }
     
@@ -1204,7 +1204,7 @@ async function uninstallApp(appId) {
       try {
         const raw = await fs.readFile(APPS_VERSIONS_FILE, 'utf8');
         installedVersions = JSON.parse(raw);
-      } catch (readError) {
+      } catch (readError: any) {
         console.log('[Uninstall] apps-versions.json introuvable ou vide');
       }
       
@@ -1214,7 +1214,7 @@ async function uninstallApp(appId) {
         await fs.writeFile(APPS_VERSIONS_FILE, JSON.stringify(installedVersions, null, 2));
         console.log('[Uninstall] ✅ apps-versions.json mis à jour');
       }
-    } catch (versionError) {
+    } catch (versionError: any) {
       console.warn('[Uninstall] ⚠️ Impossible de mettre à jour apps-versions.json:', versionError.message);
     }
     
@@ -1227,7 +1227,7 @@ async function uninstallApp(appId) {
         await saveAppsToFile(enrichedApps);
         console.log('[Uninstall] ✅ Catalogue actualisé');
       }
-    } catch (catalogError) {
+    } catch (catalogError: any) {
       console.warn('[Uninstall] ⚠️ Impossible d\'actualiser le catalogue:', catalogError.message);
     }
     
@@ -1238,7 +1238,7 @@ async function uninstallApp(appId) {
       message: `${appId} a été désinstallé avec succès`
     };
     
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[Uninstall] ❌ Erreur lors de la désinstallation de ${appId}:`, error.message);
     return {
       success: false,
@@ -1247,7 +1247,7 @@ async function uninstallApp(appId) {
   }
 }
 
-module.exports = {
+export = {
   initialize,
   getApps,
   getAppById,

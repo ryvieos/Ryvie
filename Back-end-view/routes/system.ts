@@ -7,7 +7,7 @@ const { getLocalIP } = require('../utils/network');
 const { APPS_DIR, MANIFESTS_DIR } = require('../config/paths');
 
 // GET /status (non-authenticated health endpoint)
-router.get('/status', (req, res) => {
+router.get('/status', (req: any, res: any) => {
   res.status(200).json({
     message: 'Server is running',
     serverDetected: false,
@@ -16,18 +16,18 @@ router.get('/status', (req, res) => {
 });
 
 // GET /api/server-info
-router.get('/server-info', verifyToken, async (req, res) => {
+router.get('/server-info', verifyToken, async (req: any, res: any) => {
   try {
     const serverInfo = await getServerInfo();
     res.json(serverInfo);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur lors de la récupération des informations du serveur :', error);
     res.status(500).json({ error: 'Erreur serveur lors de la récupération des informations' });
   }
 });
 
 // GET /api/storage-detail
-router.get('/storage-detail', verifyToken, async (req, res) => {
+router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
   try {
     const { exec } = require('child_process');
     const util = require('util');
@@ -81,7 +81,7 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
               console.log(`[Storage Detail] Aucun dossier trouvé pour ${app.id} dans ${APPS_DIR}`);
             }
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`[Storage Detail] Erreur recherche dossier ${app.id}:`, error.message);
         }
 
@@ -114,11 +114,11 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
               const volSize = parseInt(stdout.trim()) / 1e9 || 0;
               console.log(`[Storage Detail] Volume ${volName}: ${volSize.toFixed(4)} GB`);
               appSize += volSize;
-            } catch (error) {
+            } catch (error: any) {
               console.error(`[Storage Detail] Erreur calcul volume ${volName}:`, error.message);
             }
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`[Storage Detail] Erreur récupération volumes ${app.id}:`, error.message);
         }
 
@@ -153,7 +153,7 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
           size: appSize,
           sizeFormatted: `${appSize.toFixed(2)} GB`
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error(`[Storage Detail] Erreur calcul taille app ${app.id}:`, error);
       }
     }
@@ -176,13 +176,13 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
           const dirSize = parseInt(sizeOut.trim()) / 1e9 || 0;
           console.log(`[Storage Detail] /data/${dir}: ${dirSize.toFixed(4)} GB`);
           othersSize += dirSize;
-        } catch (error) {
+        } catch (error: any) {
           console.error(`[Storage Detail] Erreur calcul /data/${dir}:`, error.message);
         }
       }
       
       console.log(`[Storage Detail] Total "Autres": ${othersSize.toFixed(2)} GB`);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[Storage Detail] Erreur calcul "Autres":`, error.message);
       othersSize = 0;
     }
@@ -238,14 +238,14 @@ router.get('/storage-detail', verifyToken, async (req, res) => {
       },
       apps: appsDetails
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur récupération détail stockage:', error);
     res.status(500).json({ error: 'Erreur serveur lors de la récupération du détail du stockage' });
   }
 });
 
 // GET /api/disks
-router.get('/disks', async (req, res) => {
+router.get('/disks', async (req: any, res: any) => {
   try {
     const diskLayout = await si.diskLayout();
     const fsSizes = await si.fsSize();
@@ -284,14 +284,14 @@ router.get('/disks', async (req, res) => {
         free: `${totalFree.toFixed(1)} GB`,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Erreur récupération info disques :', err);
     res.status(500).json({ error: 'Impossible de récupérer les informations de disques' });
   }
 });
 
 // POST /api/server-restart
-router.post('/server-restart', verifyToken, async (req, res) => {
+router.post('/server-restart', verifyToken, async (req: any, res: any) => {
   try {
     // Vérifier que l'utilisateur est admin
     if (req.user.role !== 'Admin') {
@@ -301,10 +301,10 @@ router.post('/server-restart', verifyToken, async (req, res) => {
     console.log(`[System] Redémarrage du serveur demandé par ${req.user.username}`);
     const result = await restartServer();
     res.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erreur lors du redémarrage du serveur:', error);
     res.status(500).json({ error: 'Erreur serveur lors du redémarrage' });
   }
 });
 
-module.exports = router;
+export = router;

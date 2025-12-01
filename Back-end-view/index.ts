@@ -98,7 +98,7 @@ app.use(cors({
 
 // Handle Private Network Access preflight requests (Chrome security feature)
 // This header is required when accessing local network resources from a web page
-app.use((req, res, next) => {
+app.use((req: any, res: any, next: any) => {
   // Add Private Network Access header for preflight responses
   if (req.headers['access-control-request-private-network']) {
     res.setHeader('Access-Control-Allow-Private-Network', 'true');
@@ -200,7 +200,7 @@ try {
     process.env.JWT_EXPIRES_MINUTES = defaults.tokenExpirationMinutes.toString();
     console.log(`✅ Fichier de paramètres créé avec id ${defaults.id} et durée ${defaults.tokenExpirationMinutes} minutes`);
   }
-} catch (error) {
+} catch (error: any) {
   console.warn('⚠️  Impossible de charger/créer les paramètres serveur, utilisation des valeurs par défaut');
 }
 
@@ -213,7 +213,7 @@ try {
       console.log(`✅ Durée d'expiration du token chargée: ${settings.tokenExpirationMinutes} minutes`);
     }
   }
-} catch (_) {}
+} catch (_: any) {}
 
 // Initialisation et démarrage des serveurs
 async function startServer() {
@@ -233,7 +233,7 @@ async function startServer() {
         console.error('❌ Erreur lors de la vérification/démarrage de Caddy:', caddyResult.error);
         console.error('⚠️  Le reverse proxy n\'est pas disponible, l\'application peut ne pas être accessible via ryvie.local');
       }
-    } catch (caddyError) {
+    } catch (caddyError: any) {
       console.error('❌ Erreur critique lors de la vérification de Caddy:', caddyError.message);
       console.error('⚠️  Continuons le démarrage sans le reverse proxy...');
     }
@@ -250,10 +250,10 @@ async function startServer() {
     console.log('🔧 Génération des manifests des applications...');
     try {
       const { execSync } = require('child_process');
-      const manifestScript = require('path').join(__dirname, '..', 'generate-manifests.js');
+      const manifestScript = require('path').join(__dirname, '..', '..', 'generate-manifests.js');
       execSync(`node ${manifestScript}`, { stdio: 'inherit' });
       console.log('✅ Manifests générés avec succès');
-    } catch (manifestError) {
+    } catch (manifestError: any) {
       console.error('⚠️  Erreur lors de la génération des manifests:', manifestError.message);
     }
     
@@ -274,7 +274,7 @@ async function startServer() {
     httpServer.listen(PORT, () => {
       console.log(`HTTP Server running on http://${getLocalIP()}:${PORT}`);
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Erreur lors de l\'initialisation du serveur :', err);
   }
 }

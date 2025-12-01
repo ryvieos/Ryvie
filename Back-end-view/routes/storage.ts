@@ -80,7 +80,7 @@ async function isDeviceMounted(devicePath) {
     const mountpoint = allMountpoints[0] || null;
     
     return { mounted, mountpoint };
-  } catch (error) {
+  } catch (error: any) {
     return { mounted: false, mountpoint: null };
   }
 }
@@ -105,7 +105,7 @@ async function getNextPartLabel(arrayDevice) {
     const nextLetter = String.fromCharCode(97 + activeDevices);
     
     return `md0_${nextLetter}`;
-  } catch (error) {
+  } catch (error: any) {
     // Par défaut, commencer à 'b' (le premier membre est supposé être 'a')
     return 'md0_b';
   }
@@ -143,7 +143,7 @@ async function getUsedDevSize(arrayDevice) {
     
     // Par défaut, retourner une taille minimale
     return 10 * 1024 * 1024 * 1024; // 10 GiB
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error getting used dev size:', error);
     return 10 * 1024 * 1024 * 1024; // 10 GiB par défaut
   }
@@ -166,7 +166,7 @@ function getPartitionPath(diskPath, partNum) {
  * GET /api/storage/inventory
  * Récupère l'inventaire complet des devices et points de montage
  */
-router.get('/storage/inventory', authenticateToken, async (req, res) => {
+router.get('/storage/inventory', authenticateToken, async (req: any, res: any) => {
   try {
     // Exécuter les commandes d'inventaire en parallèle
     const [lsblkResult, findmntResult, blkidResult] = await Promise.all([
@@ -181,13 +181,13 @@ router.get('/storage/inventory', authenticateToken, async (req, res) => {
     
     try {
       lsblkData = JSON.parse(lsblkResult.stdout);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error parsing lsblk output:', e);
     }
 
     try {
       findmntData = JSON.parse(findmntResult.stdout);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error parsing findmnt output:', e);
     }
 
@@ -200,7 +200,7 @@ router.get('/storage/inventory', authenticateToken, async (req, res) => {
         timestamp: new Date().toISOString()
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching storage inventory:', error);
     res.status(500).json({
       success: false,
@@ -215,7 +215,7 @@ router.get('/storage/inventory', authenticateToken, async (req, res) => {
  * Effectue les pré-vérifications avant d'ajouter un disque au RAID mdadm
  * Body: { array: string, disk: string }
  */
-router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => {
+router.post('/storage/mdraid-prechecks', authenticateToken, async (req: any, res: any) => {
   try {
     const { array, disk } = req.body;
 
@@ -257,7 +257,7 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
           reasons.push(`✓ /data is mounted on ${array} (btrfs)`);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       reasons.push(`❌ Error checking /data mount: ${error.message}`);
       canProceed = false;
     }
@@ -279,14 +279,14 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
             device: memberDevice,
             size: memberSize
           });
-        } catch (e) {
+        } catch (e: any) {
           // Ignorer si on ne peut pas obtenir la taille
         }
       }
       
       requiredSizeBytes = await getUsedDevSize(array);
       reasons.push(`✓ Current RAID size per member: ${Math.floor(requiredSizeBytes / 1024 / 1024)} MiB`);
-    } catch (error) {
+    } catch (error: any) {
       reasons.push(`⚠ Could not determine required size: ${error.message}`);
     }
 
@@ -306,7 +306,7 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
       deviceSizeBytes = parseInt(lsblkResult.stdout.trim());
       
       reasons.push(`✓ New disk ${disk} size: ${Math.floor(deviceSizeBytes / 1024 / 1024)} MiB`);
-    } catch (error) {
+    } catch (error: any) {
       reasons.push(`❌ Could not determine disk size: ${error.message}`);
       canProceed = false;
     }
@@ -355,7 +355,7 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
               
               reasons.push(`Smart optimization available: Remove ${smallestMember.device} and expand ${secondSmallestMember.device} for ${Math.floor(targetSize / 1024 / 1024)}G RAID capacity`);
             }
-          } catch (e) {
+          } catch (e: any) {
             // Pas grave si on ne peut pas détecter l'optimisation
           }
         }
@@ -368,7 +368,7 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
       if (examineResult.stdout.includes('Magic')) {
         reasons.push(`⚠ WARNING: Disk ${disk} contains existing mdadm superblock (will be wiped)`);
       }
-    } catch (error) {
+    } catch (error: any) {
       // Pas de superbloc trouvé, c'est OK
       reasons.push(`✓ No existing mdadm superblock on ${disk}`);
     }
@@ -434,7 +434,7 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
       newPartitionPath,
       smartOptimization // Nouvelle info pour le frontend
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error during mdraid pre-checks:', error);
     res.status(500).json({
       success: false,
@@ -449,7 +449,7 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req, res) => 
  * Optimise le RAID en retirant le plus petit membre, agrandissant un autre, et ajoutant un nouveau disque
  * Body: { array: string, smartOptimization: object }
  */
-router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, res) => {
+router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req: any, res: any) => {
   const { array, smartOptimization } = req.body;
 
   const logs = [];
@@ -486,7 +486,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
       log(`Marking ${smartOptimization.smallestMember} as failed...`, 'info');
       await executeCommand('sudo', ['-n', 'mdadm', '--fail', array, smartOptimization.smallestMember]);
       log(`✓ Marked as failed`, 'success');
-    } catch (e) {
+    } catch (e: any) {
       log(`Note: Could not mark as failed: ${e.message}`, 'warning');
     }
 
@@ -501,7 +501,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
       try {
         await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', smartOptimization.smallestMember]);
         log(`✓ Superblock wiped from ${smartOptimization.smallestMember}`, 'success');
-      } catch (e) {
+      } catch (e: any) {
         log(`Warning: Could not wipe superblock: ${e.message}`, 'warning');
       }
       
@@ -516,10 +516,10 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
           await executeCommand('sudo', ['-n', 'partprobe', disk]);
           log(`✓ Partition ${smartOptimization.smallestMember} deleted`, 'success');
         }
-      } catch (e) {
+      } catch (e: any) {
         log(`Note: Could not delete partition: ${e.message}`, 'warning');
       }
-    } catch (error) {
+    } catch (error: any) {
       log(`Error removing smallest member: ${error.message}`, 'error');
       throw error;
     }
@@ -565,13 +565,13 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
       await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
       log(`✓ Filesystem resized`, 'success');
       
-    } catch (error) {
+    } catch (error: any) {
       log(`Error during expansion: ${error.message}`, 'error');
       // Tenter de remonter /data en cas d'erreur
       try {
         await executeCommand('sudo', ['-n', 'mount', '/data']);
         log(`✓ Remounted /data after error`, 'info');
-      } catch (e) {}
+      } catch (e: any) {}
       throw error;
     }
 
@@ -616,7 +616,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
       
       await executeCommand('sleep', ['3']);
       
-    } catch (error) {
+    } catch (error: any) {
       log(`Error adding new disk: ${error.message}`, 'error');
       throw error;
     }
@@ -635,7 +635,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
       
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log(`✓ Updated initramfs`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Warning: Config update: ${error.message}`, 'warning');
     }
 
@@ -700,7 +700,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       log(`Could not monitor resync: ${error.message}`, 'warning');
     }
 
@@ -715,7 +715,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
       const dfResult = await executeCommand('df', ['-h', '/data']);
       log(`📊 Filesystem capacity:`, 'info');
       log(dfResult.stdout.trim(), 'info');
-    } catch (error) {
+    } catch (error: any) {
       log(`Could not get final status: ${error.message}`, 'warning');
     }
 
@@ -728,7 +728,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
       message: 'RAID optimization completed successfully',
       finalCapacity: smartOptimization.finalRaidCapacity
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error during RAID optimization:', error);
     
     log(`Fatal error: ${error.message}`, 'error');
@@ -747,7 +747,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req, r
  * Ajoute un disque au RAID mdadm /dev/md0
  * Body: { array: string, disk: string, dryRun: boolean }
  */
-router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
+router.post('/storage/mdraid-add-disk', authenticateToken, async (req: any, res: any) => {
   const { array, disk, dryRun = false } = req.body;
 
   // Initialiser logs en dehors du try pour qu'il soit accessible dans le catch
@@ -867,7 +867,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       const wipeResult = await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]);
       log(`✓ Wiped ${disk}`, 'success');
       if (wipeResult.stdout) log(wipeResult.stdout.trim(), 'info');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error wiping ${disk}: ${error.message}`, 'error');
       throw error;
     }
@@ -876,7 +876,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       log(`Creating GPT partition table on ${disk}...`, 'info');
       await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mklabel', 'gpt']);
       log(`✓ Created GPT table on ${disk}`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error creating GPT table: ${error.message}`, 'error');
       throw error;
     }
@@ -888,7 +888,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       log(`Creating partition from 1MiB to ${endMiB}MiB...`, 'info');
       await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mkpart', 'primary', '1MiB', `${endMiB}MiB`]);
       log(`✓ Created partition`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error creating partition: ${error.message}`, 'error');
       throw error;
     }
@@ -897,7 +897,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       log(`Setting partition label to ${nextPartLabel}...`, 'info');
       await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'name', '1', nextPartLabel]);
       log(`✓ Set partition label`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error setting partition label: ${error.message}`, 'error');
       throw error;
     }
@@ -906,7 +906,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       log(`Setting RAID flag on partition...`, 'info');
       await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'set', '1', 'raid', 'on']);
       log(`✓ Set RAID flag`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error setting RAID flag: ${error.message}`, 'error');
       throw error;
     }
@@ -916,7 +916,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       await executeCommand('sudo', ['-n', 'partprobe', disk]);
       await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
       log(`✓ Partition table updated`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Warning: partprobe/udevadm: ${error.message}`, 'warning');
     }
 
@@ -967,7 +967,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
                 try {
                   await executeCommand('sudo', ['-n', 'mdadm', '--fail', mdArray, newPartitionPath]);
                   log(`✓ Marked ${newPartitionPath} as failed in ${mdArray}`, 'success');
-                } catch (e) {
+                } catch (e: any) {
                   log(`Note: Could not mark as failed (may already be): ${e.message}`, 'info');
                 }
                 
@@ -987,15 +987,15 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
                     await executeCommand('sleep', ['2']);
                     await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
                   }
-                } catch (e) {
+                } catch (e: any) {
                   log(`Note: Could not stop ${mdArray}: ${e.message}`, 'info');
                 }
               }
-            } catch (e) {
+            } catch (e: any) {
               // Array n'existe pas ou erreur, continuer
             }
           }
-        } catch (e) {
+        } catch (e: any) {
           log(`Warning checking existing arrays: ${e.message}`, 'warning');
         }
         
@@ -1016,13 +1016,13 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
                   await executeCommand('sudo', ['-n', 'mdadm', '--stop', mdArray]);
                   log(`✓ Stopped ${mdArray}`, 'success');
                   await executeCommand('sleep', ['1']);
-                } catch (e) {
+                } catch (e: any) {
                   log(`Note: Could not stop ${mdArray}: ${e.message}`, 'info');
                 }
               }
             }
           }
-        } catch (e) {
+        } catch (e: any) {
           log(`Warning cleaning orphaned arrays: ${e.message}`, 'warning');
         }
         
@@ -1033,7 +1033,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       } else {
         log(`✓ No existing RAID membership found`, 'success');
       }
-    } catch (error) {
+    } catch (error: any) {
       // Pas de superbloc existant, c'est OK
       log(`✓ No existing superblock found (clean partition)`, 'success');
     }
@@ -1043,7 +1043,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       log(`Wiping all signatures from ${newPartitionPath}...`, 'info');
       await executeCommand('sudo', ['-n', 'wipefs', '-a', newPartitionPath]);
       log(`✓ Wiped partition signatures`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Warning: wipefs on partition: ${error.message}`, 'warning');
     }
     
@@ -1053,7 +1053,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
       await executeCommand('sleep', ['2']);
       log(`✓ Device settled`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Warning: udev settle: ${error.message}`, 'warning');
     }
 
@@ -1078,7 +1078,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       } else {
         log(`✓ Verified: ${newPartitionPath} is now part of the array`, 'success');
       }
-    } catch (error) {
+    } catch (error: any) {
       log(`Error adding partition to RAID: ${error.message}`, 'error');
       throw error;
     }
@@ -1095,7 +1095,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
       fs.unlinkSync(tmpFile);
       log(`✓ Updated /etc/mdadm/mdadm.conf`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error updating mdadm.conf: ${error.message}`, 'error');
       throw error;
     }
@@ -1105,7 +1105,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       const initramfsResult = await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log(`✓ Updated initramfs`, 'success');
       if (initramfsResult.stdout) log(initramfsResult.stdout.trim(), 'info');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error updating initramfs: ${error.message}`, 'error');
       throw error;
     }
@@ -1189,7 +1189,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       } else {
         log('ℹ️ No resync detected (array may already be synchronized)', 'info');
       }
-    } catch (error) {
+    } catch (error: any) {
       log(`Could not monitor resync: ${error.message}`, 'warning');
     }
 
@@ -1200,7 +1200,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
       log('📊 Final /proc/mdstat:', 'info');
       log(mdstatResult.stdout.trim(), 'info');
-    } catch (error) {
+    } catch (error: any) {
       log(`Could not read /proc/mdstat: ${error.message}`, 'warning');
     }
 
@@ -1208,7 +1208,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
       log(`📊 mdadm --detail ${array}:`, 'info');
       log(detailResult.stdout.trim(), 'info');
-    } catch (error) {
+    } catch (error: any) {
       log(`Could not get mdadm details: ${error.message}`, 'warning');
     }
 
@@ -1216,7 +1216,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       const lsblkResult = await executeCommand('lsblk', ['-o', 'NAME,SIZE,TYPE,FSTYPE,PARTLABEL,PARTTYPE', disk]);
       log(`📊 lsblk ${disk}:`, 'info');
       log(lsblkResult.stdout.trim(), 'info');
-    } catch (error) {
+    } catch (error: any) {
       log(`Could not run lsblk: ${error.message}`, 'warning');
     }
 
@@ -1230,7 +1230,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
       newPartition: newPartitionPath,
       partLabel: nextPartLabel
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error adding disk to mdraid:', error);
     
     // Ajouter l'erreur aux logs
@@ -1249,7 +1249,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req, res) => {
  * GET /api/storage/mdraid-status
  * Récupère l'état du RAID mdadm
  */
-router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
+router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: any) => {
   try {
     const status = {
       array: '/dev/md0',
@@ -1268,7 +1268,7 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
       status.mounted = (source === '/dev/md0' && fstype === 'btrfs');
       status.fstype = fstype;
       status.source = source;
-    } catch (error) {
+    } catch (error: any) {
       // /data n'est pas monté
     }
 
@@ -1297,7 +1297,7 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
         try {
           const lsblkResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', device]);
           size = parseInt(lsblkResult.stdout.trim());
-        } catch (e) {
+        } catch (e: any) {
           // Ignorer l'erreur
         }
         
@@ -1311,7 +1311,7 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
           size: size
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       // Le RAID n'existe pas ou erreur
       status.error = error.message;
     }
@@ -1341,7 +1341,7 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
       } else {
         status.syncing = false;
       }
-    } catch (error) {
+    } catch (error: any) {
       // Erreur lecture mdstat - s'assurer que syncing est false
       status.syncing = false;
     }
@@ -1350,7 +1350,7 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
       success: true,
       status
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching mdraid status:', error);
     res.status(500).json({
       success: false,
@@ -1365,7 +1365,7 @@ router.get('/storage/mdraid-status', authenticateToken, async (req, res) => {
  * Arrête la resynchronisation en cours sur un array RAID
  * Body: { array: string }
  */
-router.post('/storage/mdraid-stop-resync', authenticateToken, async (req, res) => {
+router.post('/storage/mdraid-stop-resync', authenticateToken, async (req: any, res: any) => {
   const { array } = req.body;
 
   const logs = [];
@@ -1489,7 +1489,7 @@ router.post('/storage/mdraid-stop-resync', authenticateToken, async (req, res) =
               diskRemoved: diskToRemove,
               logs
             });
-          } catch (removeError) {
+          } catch (removeError: any) {
             log(`❌ Erreur lors du retrait: ${removeError.message}`, 'error');
             res.json({
               success: false,
@@ -1506,7 +1506,7 @@ router.post('/storage/mdraid-stop-resync', authenticateToken, async (req, res) =
           });
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       log(`❌ Erreur lors de l'arrêt: ${error.message}`, 'error');
       res.status(500).json({
         success: false,
@@ -1514,7 +1514,7 @@ router.post('/storage/mdraid-stop-resync', authenticateToken, async (req, res) =
         logs
       });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error stopping resync:', error);
     log(`❌ Erreur: ${error.message}`, 'error');
     res.status(500).json({
@@ -1530,7 +1530,7 @@ router.post('/storage/mdraid-stop-resync', authenticateToken, async (req, res) =
  * Retire un disque du RAID mdadm /dev/md0
  * Body: { array: string, partition: string }
  */
-router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) => {
+router.post('/storage/mdraid-remove-disk', authenticateToken, async (req: any, res: any) => {
   const { array, partition } = req.body;
 
   const logs = [];
@@ -1599,7 +1599,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
       }
       
       log(`✓ Array has ${activeDevices} active devices, safe to remove one`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`❌ Error checking array: ${error.message}`, 'error');
       return res.status(500).json({
         success: false,
@@ -1616,7 +1616,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
       const failResult = await executeCommand('sudo', ['-n', 'mdadm', '--fail', array, partition]);
       log(`✓ Marked ${partition} as failed`, 'success');
       if (failResult.stdout) log(failResult.stdout.trim(), 'info');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error marking device as failed: ${error.message}`, 'warning');
       log('Continuing with removal...', 'info');
     }
@@ -1640,7 +1640,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
       } else {
         log(`✓ Verified: ${partition} successfully removed from array`, 'success');
       }
-    } catch (error) {
+    } catch (error: any) {
       log(`Error removing device: ${error.message}`, 'error');
       throw error;
     }
@@ -1652,7 +1652,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
       log(`Zeroing superblock on ${partition}...`, 'info');
       await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partition]);
       log(`✓ Zeroed superblock on ${partition}`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Warning: Could not zero superblock: ${error.message}`, 'warning');
     }
 
@@ -1660,7 +1660,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
       log(`Wiping signatures from ${partition}...`, 'info');
       await executeCommand('sudo', ['-n', 'wipefs', '-a', partition]);
       log(`✓ Wiped signatures from ${partition}`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Warning: Could not wipe signatures: ${error.message}`, 'warning');
     }
 
@@ -1676,7 +1676,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
       fs.unlinkSync(tmpFile);
       log(`✓ Updated /etc/mdadm/mdadm.conf`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error updating mdadm.conf: ${error.message}`, 'error');
       throw error;
     }
@@ -1685,7 +1685,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
       log(`Updating initramfs...`, 'info');
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log(`✓ Updated initramfs`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       log(`Error updating initramfs: ${error.message}`, 'error');
       throw error;
     }
@@ -1697,7 +1697,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
       const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
       log(`📊 mdadm --detail ${array}:`, 'info');
       log(detailResult.stdout.trim(), 'info');
-    } catch (error) {
+    } catch (error: any) {
       log(`Could not get mdadm details: ${error.message}`, 'warning');
     }
 
@@ -1710,7 +1710,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
       message: 'Disk removed from RAID successfully',
       removedPartition: partition
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error removing disk from mdraid:', error);
     
     log(`Fatal error: ${error.message}`, 'error');
@@ -1725,5 +1725,5 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req, res) =
 });
 
 
-module.exports = router;
+export = router;
 module.exports.setSocketIO = setSocketIO;

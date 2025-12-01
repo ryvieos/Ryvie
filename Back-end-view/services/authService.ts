@@ -15,7 +15,7 @@ function getTokenExpirationMinutes() {
         return Math.max(1, parseInt(settings.tokenExpirationMinutes, 10));
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.warn('[authService] Erreur lecture settings, utilisation valeur par défaut');
   }
   // Fallback sur la variable d'environnement ou 15 minutes par défaut
@@ -37,7 +37,7 @@ async function checkBruteForce(uid, ip) {
       return { blocked: true, retryAfter: ttl > 0 ? ttl : (parseInt(process.env.BRUTE_FORCE_BLOCK_DURATION_MS || '900000', 10) / 1000) };
     }
     return { blocked: false };
-  } catch (e) {
+  } catch (e: any) {
     console.warn('[bruteforce] Redis indisponible, fallback permissif');
     return { blocked: false };
   }
@@ -50,7 +50,7 @@ async function recordFailedAttempt(uid, ip) {
     const attempts = (parseInt(await redis.get(key) || '0', 10) + 1);
     await redis.set(key, attempts, { EX: 15 * 60 });
     return attempts;
-  } catch (e) {
+  } catch (e: any) {
     console.warn('[bruteforce] Redis indisponible, impossible d\'enregistrer');
     return 0;
   }
@@ -60,7 +60,7 @@ async function clearFailedAttempts(uid, ip) {
   try {
     const redis = await ensureConnected();
     await redis.del(`bruteforce:${uid}:${ip}`);
-  } catch (e) {
+  } catch (e: any) {
     console.warn('[bruteforce] Redis indisponible, impossible de nettoyer');
   }
 }
@@ -79,12 +79,12 @@ async function allowlistToken(token, user) {
     const expirationSeconds = getTokenExpirationSeconds();
     await redis.set(key, JSON.stringify({ uid: user.uid, role: user.role }), { EX: expirationSeconds });
     console.log(`[authService] ✅ Token enregistré dans Redis pour ${user.uid} (TTL: ${expirationSeconds}s)`);
-  } catch (e) {
+  } catch (e: any) {
     console.warn('[login] Impossible d\'enregistrer le token dans Redis:', e?.message || e);
   }
 }
 
-module.exports = {
+export = {
   getTokenExpirationSeconds,
   checkBruteForce,
   recordFailedAttempt,

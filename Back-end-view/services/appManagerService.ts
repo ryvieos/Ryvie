@@ -36,13 +36,13 @@ async function listInstalledApps() {
             ...dockerStatus
           });
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error(`[appManager] Erreur lors de la lecture du manifest de ${appId}:`, error.message);
       }
     }
 
     return apps;
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appManager] Erreur lors de la liste des apps:', error);
     return [];
   }
@@ -61,7 +61,7 @@ async function getAppManifest(appId) {
   try {
     const manifestContent = fs.readFileSync(manifestPath, 'utf8');
     return JSON.parse(manifestContent);
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[appManager] Erreur lors de la lecture du manifest ${appId}:`, error.message);
     return null;
   }
@@ -220,7 +220,7 @@ async function getAppDockerStatus(appId) {
       ports: ports.sort((a, b) => a - b),
       containers: containerDetails
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[appManager] Erreur lors de la récupération du statut Docker de ${appId}:`, error.message);
     return {
       status: 'unknown',
@@ -272,7 +272,7 @@ async function startApp(appId) {
           await docker.getContainer(container.Id).start();
           startedCount++;
           console.log(`[appManager] ✓ Container ${containerName} démarré`);
-        } catch (startError) {
+        } catch (startError: any) {
           console.error(`[appManager] Erreur lors du démarrage de ${containerName}:`, startError.message);
           errorCount++;
         }
@@ -291,7 +291,7 @@ async function startApp(appId) {
       startedCount,
       errorCount
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[appManager] Erreur lors du démarrage de ${appId}:`, error.message);
     return { success: false, message: error.message };
   }
@@ -335,7 +335,7 @@ async function stopApp(appId) {
           stoppedCount++;
           console.log(`[appManager] ✓ Container ${containerName} arrêté`);
           
-        } catch (stopError) {
+        } catch (stopError: any) {
           console.error(`[appManager] Erreur lors de l'arrêt de ${containerName}:`, stopError.message);
           
           // Si l'arrêt normal échoue, tenter un kill forcé
@@ -344,7 +344,7 @@ async function stopApp(appId) {
             await docker.getContainer(container.Id).kill();
             stoppedCount++;
             console.log(`[appManager] ✓ Container ${containerName} killé avec succès`);
-          } catch (killError) {
+          } catch (killError: any) {
             console.error(`[appManager] Échec du kill forcé sur ${containerName}:`, killError.message);
             errorCount++;
           }
@@ -364,7 +364,7 @@ async function stopApp(appId) {
       stoppedCount,
       errorCount
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[appManager] Erreur lors de l'arrêt de ${appId}:`, error.message);
     return { success: false, message: error.message };
   }
@@ -396,7 +396,7 @@ async function restartApp(appId) {
       stopResult,
       startResult
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[appManager] Erreur lors du redémarrage de ${appId}:`, error.message);
     return { success: false, message: error.message };
   }
@@ -427,13 +427,13 @@ async function syncAppsWithDocker() {
     const installedApps = await listInstalledApps();
     console.log(`[appManager] ${installedApps.length} apps installées détectées`);
     return installedApps;
-  } catch (error) {
+  } catch (error: any) {
     console.error('[appManager] Erreur lors de la synchronisation:', error);
     return [];
   }
 }
 
-module.exports = {
+export = {
   listInstalledApps,
   getAppManifest,
   getAppDockerStatus,

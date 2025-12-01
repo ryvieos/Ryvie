@@ -27,9 +27,9 @@ function syncNetbirdConfig() {
     console.log('✅ Configuration Netbird synchronisée avec succès');
     console.log(`   Source: ${sourceFile}`);
     console.log(`   Destination: ${targetFile}`);
-  } catch (error) {
+  } catch (error: any) {
     console.error('⚠️  Erreur lors de la synchronisation de netbird-data.json:', error.message);
   }
 }
 
-module.exports = { syncNetbirdConfig };
+export = { syncNetbirdConfig };

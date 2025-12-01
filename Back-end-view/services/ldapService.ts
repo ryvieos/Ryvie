@@ -101,7 +101,7 @@ async function listUsersWithRoles() {
               if (uid !== 'read-only') {
                 ldapUsers.push({ dn, name: cn, uid, email: mail });
               }
-            } catch (e) {
+            } catch (e: any) {
               // ignore malformed entries
             }
           });
@@ -164,7 +164,7 @@ async function listUsersPublic() {
                   role: uid === 'jules' ? 'Admin' : 'User',
                 });
               }
-            } catch (e) {}
+            } catch (e: any) {}
           });
 
           ldapRes.on('end', () => {
@@ -177,7 +177,7 @@ async function listUsersPublic() {
   });
 }
 
-module.exports = {
+export = {
   escapeLdapFilterValue,
   escapeRdnValue,
   parseDnParts,

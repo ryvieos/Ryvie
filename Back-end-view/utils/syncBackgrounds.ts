@@ -61,7 +61,7 @@ function syncBackgrounds() {
     });
     
     console.log(`[SyncBackgrounds] ✅ Synchronisation terminée: ${copiedCount} fichier(s) copié(s), ${skippedCount} fichier(s) déjà à jour`);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[SyncBackgrounds] ❌ Erreur lors de la synchronisation:', error);
   }
 }
@@ -90,7 +90,7 @@ function watchBackgrounds() {
           try {
             fs.copyFileSync(sourcePath, destPath);
             console.log(`[SyncBackgrounds] ✅ Synchronisé: ${filename}`);
-          } catch (error) {
+          } catch (error: any) {
             console.error(`[SyncBackgrounds] ❌ Erreur copie ${filename}:`, error.message);
           }
         }
@@ -99,7 +99,7 @@ function watchBackgrounds() {
   });
 }
 
-module.exports = {
+export = {
   syncBackgrounds,
   watchBackgrounds
 };

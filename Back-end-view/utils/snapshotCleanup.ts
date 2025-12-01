@@ -39,12 +39,12 @@ function cleanAllSnapshots() {
           execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
           execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
           console.log(`[SnapshotCleanup] ✅ Snapshot supprimé: ${snapshot}`);
-        } catch (delError) {
+        } catch (delError: any) {
           console.error(`[SnapshotCleanup] ❌ Erreur lors de la suppression de ${snapshot}:`, delError.message);
         }
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[SnapshotCleanup] Erreur lors du nettoyage des snapshots:', error.message);
   }
 }
@@ -82,7 +82,7 @@ function checkPendingSnapshots() {
             
             // Supprimer le fichier de tracking
             fs.unlinkSync(SNAPSHOT_PENDING_FILE);
-          } catch (delError) {
+          } catch (delError: any) {
             console.error('[SnapshotCleanup] ❌ Erreur lors de la suppression du snapshot:', delError.message);
           }
         } else {
@@ -96,21 +96,21 @@ function checkPendingSnapshots() {
             
             // Supprimer le fichier de tracking
             fs.unlinkSync(SNAPSHOT_PENDING_FILE);
-          } catch (rollbackError) {
+          } catch (rollbackError: any) {
             console.error('[SnapshotCleanup] ❌ Erreur lors du rollback:', rollbackError.message);
           }
         }
-      } catch (checkError) {
+      } catch (checkError: any) {
         console.error('[SnapshotCleanup] ❌ Erreur lors de la vérification:', checkError.message);
       }
     }, 5000);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('[SnapshotCleanup] Erreur lors de la lecture du snapshot en attente:', error.message);
   }
 }
 
-module.exports = {
+export = {
   registerPendingSnapshot,
   checkPendingSnapshots
 };

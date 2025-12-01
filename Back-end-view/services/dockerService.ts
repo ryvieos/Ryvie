@@ -45,7 +45,7 @@ async function getAppStatus() {
         description: app.description
       }));
     }
-  } catch (error) {
+  } catch (error: any) {
     console.log('[dockerService] Erreur avec appManager, fallback sur ancien système:', error.message);
   }
 
@@ -124,7 +124,7 @@ async function startApp(appId) {
       try {
         await docker.getContainer(c.Id).start();
         startedCount++;
-      } catch (e) {
+      } catch (e: any) {
         failedCount++;
       }
     }
@@ -144,7 +144,7 @@ async function stopApp(appId) {
       try {
         await docker.getContainer(c.Id).stop();
         stoppedCount++;
-      } catch (e) {
+      } catch (e: any) {
         failedCount++;
       }
     }
@@ -165,14 +165,14 @@ async function restartApp(appId) {
       if (c.State === 'running') await cont.restart();
       else await cont.start();
       restartedCount++;
-    } catch (e) {
+    } catch (e: any) {
       failedCount++;
     }
   }
   return { success: failedCount === 0, message: `${restartedCount} conteneur(s) redémarré(s), ${failedCount} échec(s)`, appId };
 }
 
-module.exports = {
+export = {
   getAllContainers,
   getAppStatus,
   startApp,
