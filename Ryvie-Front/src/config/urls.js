@@ -75,13 +75,18 @@ const buildAppUrl = (appId, port) => {
   const { hostname, protocol } = getCurrentLocation();
   const domains = netbirdData?.domains || {};
   const appDomain = domains[appId];
-  
-  // Si on est sur le tunnel Netbird ET l'app a un domaine publié → utiliser le domaine HTTPS
+
+  // En contexte HTTPS, si un domaine Netbird est défini pour cette application,
+  // toujours utiliser ce domaine public (accès via reverse proxy/domaine).
+  if (protocol === 'https:' && appDomain) {
+    return `https://${appDomain}`;
+  }
+
+  // Fallback: conserver l'ancienne logique basée sur le tunnel Netbird + hostname:port
   if (isOnNetbirdTunnel() && appDomain) {
     return `https://${appDomain}`;
   }
-  
-  // Sinon, construire l'URL avec le hostname courant et le port de l'app
+
   const scheme = protocol === 'https:' ? 'https' : 'http';
   return `${scheme}://${hostname}:${port}`;
 };
