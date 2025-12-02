@@ -123,9 +123,20 @@ const GridLauncher = ({
       setRows(newRows);
     };
 
+    // 1) Calcul immédiat au montage
     updateGridLayout();
-    
-    // Debounce pour le resize (éviter trop de recalculs)
+
+    // 2) Recalcul différé pour laisser le temps au DOM et aux prefs
+    //    (launcherLayout, widgets, barres du navigateur...) de se stabiliser.
+    //    Cela évite que la première organisation soit faite sur une taille
+    //    intermédiaire de la fenêtre.
+    const delayedTimeoutId = setTimeout(() => {
+      try {
+        updateGridLayout();
+      } catch (_) {}
+    }, 200);
+
+    // 3) Debounce pour le resize (éviter trop de recalculs)
     const debouncedResize = () => {
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
@@ -135,6 +146,7 @@ const GridLauncher = ({
     
     window.addEventListener('resize', debouncedResize);
     return () => {
+      clearTimeout(delayedTimeoutId);
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
       }

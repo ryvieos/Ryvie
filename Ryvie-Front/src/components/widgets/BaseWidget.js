@@ -11,9 +11,16 @@ import '../../styles/Widgets.css';
  * @param {number} w - Largeur en slots (défaut: 2)
  * @param {number} h - Hauteur en slots (défaut: 2)
  */
-const BaseWidget = ({ id, title, icon, children, onRemove, w = 2, h = 2, className = '', action = null }) => {
+const BaseWidget = ({ id, title, icon, children, onRemove, w = 2, h = 2, className = '', action = null, onClick = null }) => {
   return (
-    <div className={`base-widget widget-${w}x${h} ${className}`}>
+    <div
+      className={`base-widget widget-${w}x${h} ${className}`}
+      onClick={(e) => {
+        if (!onClick) return;
+        console.log('[BaseWidget] click on widget', id);
+        onClick(e);
+      }}
+    >
       <div className="widget-inner">
       <div className="widget-header">
         <div className="widget-title">

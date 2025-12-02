@@ -469,6 +469,15 @@ const Taskbar = ({ handleClick, appsConfig, onLoaded }) => {
         const label = config?.name || iconId;
         try { console.debug('[Taskbar] Render icon', { iconId, label, hasImage: !!imgSrc, route: config?.route, src: imgSrc }); } catch (_) {}
         if (imgSrc) total += 1;
+
+        // Ajouter un fond blanc uniquement pour les icônes User et Transfer
+        const isUserOrTransfer =
+          iconId === 'task-user.svg' ||
+          iconId === 'task-user.png' ||
+          iconId === 'task-transfer.svg' ||
+          iconId === 'task-transfer.png';
+        const circleClassName = `taskbar-circle${isUserOrTransfer ? ' taskbar-circle--white' : ''}`;
+
         const Img = () => (
           <img
             src={imgSrc}
@@ -484,7 +493,7 @@ const Taskbar = ({ handleClick, appsConfig, onLoaded }) => {
         );
 
         return (
-          <div key={index} className="taskbar-circle" aria-label={label} title={label}>
+          <div key={index} className={circleClassName} aria-label={label} title={label}>
             {config.route && config.route !== '/userlogin' ? (
               <Link to={config.route} aria-label={label} title={label} style={{ width: '100%', height: '100%' }}>
                 {imgSrc ? <Img /> : null}
@@ -595,6 +604,7 @@ const Home = () => {
   }, []);
   const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
   const [taskbarReady, setTaskbarReady] = useState(false); // Animations taskbar quand les icônes de la barre sont chargées
+  const taskbarLoadedOnceRef = React.useRef(false); // Assure que l'animation ne se joue qu'une seule fois
   const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
   const [bgUrl, setBgUrl] = useState(null);         // URL calculée courante
   const [prevBgUrl, setPrevBgUrl] = useState(null); // URL précédente pour crossfade
@@ -1520,10 +1530,7 @@ const Home = () => {
     loadAndCacheBackground();
   }, [backgroundImage, accessMode]);
 
-  // Taskbar prête quand toutes les images locales sont chargées
-  useEffect(() => {
-    setTaskbarReady(false);
-  }, [appsConfig]);
+  // Taskbar prête quand toutes les images locales sont chargées (une seule fois)
 
   // Fermer le menu contextuel si on clique ailleurs
   useEffect(() => {
@@ -1848,7 +1855,15 @@ const Home = () => {
             </div>
           )}
 
-          <Taskbar handleClick={handleClick} appsConfig={appsConfig} onLoaded={() => setTaskbarReady(true)} />
+          <Taskbar
+            handleClick={handleClick}
+            appsConfig={appsConfig}
+            onLoaded={() => {
+              if (taskbarLoadedOnceRef.current) return;
+              taskbarLoadedOnceRef.current = true;
+              setTaskbarReady(true);
+            }}
+          />
           {currentUserName && (
             <div className="user-chip" title="Utilisateur connecté">
               <div className="avatar">{String(currentUserName).charAt(0).toUpperCase()}</div>

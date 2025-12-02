@@ -10,6 +10,10 @@
   padding: 2px 4px 0;
 }
 
+.storage-clickable {
+  cursor: pointer;
+}
+
 .storage-item {
   position: relative;
   display: flex;
@@ -235,4 +239,18 @@
   .storage-percent {
     font-size: 20px;
   }
+}
+
+/* Détail stockage (modal portée depuis Settings.js) */
+.storage-detail-modal {
+  border-radius: 16px;
+  overflow-y: auto;
+  /* Masquer les scrollbars tout en gardant le scroll fonctionnel */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE / Edge */
+}
+
+.storage-detail-modal::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
