@@ -15,22 +15,33 @@
   width: 100%;
   min-height: calc(100vh - 100px);
   max-height: calc(100vh - 100px);
-  padding: 40px 20px;
+  padding: 20px;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: flex-start;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
+}
+
+/* Masquer visuellement les scrollbars de la grille, tout en gardant le scroll actif */
+.grid-launcher {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;      /* IE/Edge legacy */
+}
+
+.grid-launcher::-webkit-scrollbar { /* Chrome, Edge, Safari */
+  display: none;
 }
 
 /* Grille CSS Grid */
 .grid-container {
   display: grid;
   position: relative;
-  padding: 20px;
-  width: 100%;
+  padding: 0;
+  width: fit-content;
   max-width: 100%;
   box-sizing: border-box;
+  margin: 0 auto;
 }
 
 /* Slots (fond transparent) - TAILLE FIXE */

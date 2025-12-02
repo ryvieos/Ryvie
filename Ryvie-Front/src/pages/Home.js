@@ -1727,9 +1727,16 @@ const Home = () => {
       try {
         const base = window.location.origin + window.location.pathname;
         const url = `${base}#/userlogin`;
-        setOverlayUrl(url);
+        
+        // Monter l'iframe si elle n'est pas déjà montée
+        if (!appStoreMounted) {
+          setOverlayUrl(url);
+          setAppStoreMounted(true);
+        }
+        
         setOverlayTitle('Nouvelle session utilisateur');
         setOverlayVisible(true);
+        setPendingUnmount(false); // Annuler tout démontage en attente
       } catch (e) {
         console.warn('[Home] Impossible d\'ouvrir Userlogin en overlay, navigation de secours /userlogin');
         navigate('/userlogin');

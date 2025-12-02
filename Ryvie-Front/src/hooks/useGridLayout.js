@@ -59,12 +59,19 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
         return mutated ? next : prevAnchors;
       });
 
-      // Vérifier si des items dépassent avec le nouveau nombre de colonnes OU si cols a changé
-      const needsReorganization = colsChanged || Object.keys(newLayout).some(itemId => {
+      // Vérifier si des items dépassent avec le nouveau nombre de colonnes
+      // IMPORTANT: Toujours réorganiser si cols a changé pour éviter les items coupés
+      const itemsOverflowing = Object.keys(newLayout).filter(itemId => {
         const pos = newLayout[itemId];
         const item = items.find(i => i.id === itemId);
         return item && pos && (pos.col + (item.w || 1) > cols);
       });
+      
+      const needsReorganization = colsChanged || itemsOverflowing.length > 0;
+      
+      if (itemsOverflowing.length > 0) {
+        console.log('[useGridLayout] ⚠️ Items dépassant détectés:', itemsOverflowing);
+      }
 
       if (needsReorganization) {
         console.log('[useGridLayout] 🔄 Réorganisation intelligente, cols:', cols);

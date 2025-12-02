@@ -38,16 +38,29 @@ const GridLauncher = ({
   refreshDesktopIcons
 }) => {
   const gridRef = useRef(null);
+  const resizeTimeoutRef = useRef(null);
   const { SLOT_SIZE: slotSize, GAP: gap, BASE_COLS: baseCols, BASE_ROWS: baseRows, MIN_COLS: minCols, HORIZONTAL_PADDING: horizontalPadding } = GRID_CONFIG;
   const [cols, setCols] = useState(baseCols);
+  const [rows, setRows] = useState(baseRows);
   const [snappedPosition, setSnappedPosition] = useState(null);
   const pendingManualSaveRef = useRef(false); // Track si on doit sauvegarder après un drag manuel
 
-  // Calculer le nombre de colonnes qui rentrent dans la largeur de la fenêtre
+  // Calculer le nombre de colonnes et lignes qui rentrent dans l'espace disponible
   useEffect(() => {
     const updateGridLayout = () => {
-      // Largeur disponible basée sur la fenêtre moins une marge pour les paddings/éléments latéraux
-      const availableWidth = Math.max(320, window.innerWidth - horizontalPadding);
+      // Calculer la largeur disponible uniquement à partir de la fenêtre, pour
+      // couvrir le cas plein écran -> fenêtre (bouton "réduire") où les mesures
+      // DOM peuvent être transitoirement incorrectes.
+      const windowWidth = window.innerWidth || 1024;
+
+      // Largeur fixe de la taskbar à gauche (voir Home.css: .taskbar width: 80px)
+      const taskbarWidth = 80;
+      // Padding horizontal de .background + .grid-launcher (20px de chaque côté environ)
+      const launcherPadding = 40; // 20px * 2
+      // Marge de sécurité un peu plus large pour éviter toute colonne coupée
+      const safetyMargin = 32;
+
+      const availableWidth = Math.max(320, windowWidth - taskbarWidth - launcherPadding - safetyMargin);
 
       // Calculer combien de colonnes de taille slotSize + gap peuvent rentrer
       // Formule: n * slotSize + (n-1) * gap <= availableWidth
@@ -56,15 +69,78 @@ const GridLauncher = ({
       const maxCols = Math.floor((availableWidth + gap) / (slotSize + gap));
       
       // Limiter entre minCols colonnes minimum et baseCols colonnes maximum (grille de base)
-      const newCols = Math.max(minCols, Math.min(baseCols, maxCols));
+      let newCols = Math.max(minCols, Math.min(baseCols, maxCols));
+
+      // Sécurité supplémentaire : s'assurer que la largeur réelle de la grille ne dépasse pas
+      // la largeur disponible (utile lors des transitions plein écran -> fenêtre réduite).
+      const tileFullWidth = slotSize + gap; // largeur d'une colonne (slot + gap)
+      const computeGridWidth = (colsCount) => colsCount * tileFullWidth - gap;
+      while (newCols > minCols && computeGridWidth(newCols) > availableWidth) {
+        newCols -= 1;
+      }
+      
+      console.log('[GridLauncher] Calcul colonnes:', {
+        windowWidth,
+        availableWidth,
+        maxCols,
+        newCols
+      });
+      
+      // Calculer le nombre de lignes en fonction de la hauteur réellement disponible
+      // dans le conteneur .grid-launcher (plutôt que window.innerHeight), afin
+      // d'éviter que la grille dépasse et déclenche un scroll inutile.
+      let availableHeight = null;
+      try {
+        if (gridRef.current) {
+          const launcher = gridRef.current.closest('.grid-launcher');
+          if (launcher) {
+            // padding-top/bottom : 20px chacun dans GridLauncher.css
+            const launcherStyles = window.getComputedStyle(launcher);
+            const paddingTop = parseFloat(launcherStyles.paddingTop || '20');
+            const paddingBottom = parseFloat(launcherStyles.paddingBottom || '20');
+            availableHeight = launcher.clientHeight - paddingTop - paddingBottom;
+          }
+        }
+      } catch (_) {}
+
+      if (!availableHeight || Number.isNaN(availableHeight)) {
+        // Fallback raisonnable si on n'a pas pu lire le DOM
+        availableHeight = Math.max(400, window.innerHeight - 140);
+      }
+
+      // On calcule un nombre de lignes qui remplit la zone utile sans la dépasser.
+      // Petite marge négative pour être sûr de ne jamais provoquer de scroll
+      // à cause d'un pixel de trop.
+      const safetyHeight = 8; // px
+      const effectiveHeight = Math.max(0, availableHeight - safetyHeight);
+      const maxRows = Math.max(2, Math.floor((effectiveHeight + gap) / (slotSize + gap)));
+      
+      // Nombre de lignes effectif : dépend de la hauteur disponible
+      // en utilisant maxRows (au moins 2 lignes).
+      const newRows = maxRows;
       
       setCols(newCols);
+      setRows(newRows);
     };
 
     updateGridLayout();
-    window.addEventListener('resize', updateGridLayout);
-    return () => window.removeEventListener('resize', updateGridLayout);
-  }, [gap, slotSize, baseCols, minCols, horizontalPadding]);
+    
+    // Debounce pour le resize (éviter trop de recalculs)
+    const debouncedResize = () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      resizeTimeoutRef.current = setTimeout(updateGridLayout, 50);
+    };
+    
+    window.addEventListener('resize', debouncedResize);
+    return () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      window.removeEventListener('resize', debouncedResize);
+    };
+  }, [gap, slotSize, baseCols, baseRows, minCols, horizontalPadding, apps.length, widgets.length]);
 
   // Préparer les items pour le layout
   const items = [
@@ -210,13 +286,6 @@ const GridLauncher = ({
   // Rendre les slots de la grille
   const renderSlots = () => {
     const slots = [];
-    // Toujours garder le même nombre de cases visibles au minimum (baseCols x baseRows)
-    const baseTotalSlots = baseCols * baseRows;
-    // Besoin réel en fonction des items: météo 3x2 = 6 + chaque app 1x1
-    const itemsRequiredSlots = 6 + apps.length;
-    const totalSlots = Math.max(baseTotalSlots, itemsRequiredSlots);
-    // Calculer le nombre de lignes en fonction du nombre de colonnes actuel
-    const rows = Math.ceil(totalSlots / cols);
 
     // Construire un set des cases occupées (pour afficher un slot visible uniquement sous les apps)
     const occupied = new Set();
