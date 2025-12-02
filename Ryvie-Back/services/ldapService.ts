@@ -153,8 +153,8 @@ async function listUsersPublic() {
 
           ldapRes.on('searchEntry', (entry) => {
             try {
-              const attrs = {};
-              entry.pojo.attributes.forEach(attr => { attrs[attr.type] = attr.values[0]; });
+              const attrs: any = {};
+              entry.pojo.attributes.forEach((attr: any) => { attrs[attr.type] = attr.values[0]; });
               const uid = attrs.uid || attrs.cn;
               if (uid && uid !== 'read-only') {
                 ldapUsers.push({

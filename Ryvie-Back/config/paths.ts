@@ -1,4 +1,5 @@
 // Configuration centralisée des chemins de fichiers
+export {};
 const path = require('path');
 
 const RYVIE_DIR = '/opt/Ryvie';

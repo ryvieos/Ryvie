@@ -254,10 +254,10 @@ router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
         // si des apps existent déjà, prendre la plus grande colonne sur la row 2 et l'anchor max
         for (const [id, pos] of Object.entries(layout)) {
           if (!pos) continue;
-          if (typeof pos.col === 'number') col = Math.max(col, pos.col + 1);
+          if (typeof (pos as any).col === 'number') col = Math.max(col, (pos as any).col + 1);
         }
         for (const a of Object.values(anchors)) {
-          if (typeof a === 'number') anchor = Math.max(anchor, a + 1);
+          if (typeof a === 'number') anchor = Math.max(anchor, (a as number) + 1);
         }
         const row = 2;
         missing.forEach((appId) => {

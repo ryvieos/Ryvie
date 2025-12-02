@@ -1,7 +1,15 @@
+export {};
 const express = require('express');
 const router = express.Router();
 const { spawn } = require('child_process');
 const { authenticateToken } = require('../middleware/auth');
+
+// Type for command execution result
+interface CommandResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
 
 // Instance Socket.IO pour les logs en temps réel
 let io = null;
@@ -19,7 +27,7 @@ function setSocketIO(socketIO) {
  * @param {Function} onLog - Callback pour les logs en temps réel
  * @returns {Promise<{stdout: string, stderr: string, exitCode: number}>}
  */
-function executeCommand(command, args = [], streamLogs = false, onLog = null) {
+function executeCommand(command: string, args: string[] = [], streamLogs = false, onLog: ((log: {type: string, text: string}) => void) | null = null): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     const process = spawn(command, args);
     let stdout = '';
@@ -1251,7 +1259,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req: any, res:
  */
 router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: any) => {
   try {
-    const status = {
+    const status: any = {
       array: '/dev/md0',
       exists: false,
       mounted: false,

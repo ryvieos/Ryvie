@@ -834,7 +834,7 @@ async function updateAppFromStore(appId) {
       console.error('[Update] 📋 Vérification du fichier docker-compose.yml...');
       
       // Afficher le contenu du fichier modifié pour debug
-      const modifiedContent = await fs.readFile(composeFilePath, 'utf8');
+      const modifiedContent = await fs.readFile(path.join(appDir, composeFile), 'utf8');
       console.error('[Update] 📄 Contenu du docker-compose.yml modifié:');
       console.error(modifiedContent.substring(0, 1000)); // Premiers 1000 caractères
       

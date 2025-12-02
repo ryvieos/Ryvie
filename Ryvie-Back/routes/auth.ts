@@ -1,3 +1,4 @@
+export {};
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const ldap = require('ldapjs');
@@ -14,6 +15,7 @@ const {
   signToken,
   allowlistToken,
 } = require('../services/authService');
+const { startApp } = require('../services/dockerService');
 
 const router = express.Router();
 
@@ -114,7 +116,7 @@ router.post('/authenticate', authLimiter, async (req: any, res: any) => {
 
           function complete() {
             ldapClient.unbind();
-            const attrs = {}; userEntry.pojo.attributes.forEach(attr => attrs[attr.type] = attr.values[0]);
+            const attrs: any = {}; userEntry.pojo.attributes.forEach((attr: any) => attrs[attr.type] = attr.values[0]);
             const user = {
               uid: attrs.uid || attrs.cn || uid,
               name: attrs.cn || uid,
@@ -174,8 +176,8 @@ router.get('/ldap/check-first-time', async (req: any, res: any) => {
         let userCount = 0;
         ldapRes.on('searchEntry', (entry) => {
           try {
-            const attrs = {};
-            entry.pojo.attributes.forEach(attr => { attrs[attr.type] = attr.values[0]; });
+            const attrs: any = {};
+            entry.pojo.attributes.forEach((attr: any) => { attrs[attr.type] = attr.values[0]; });
             const uid = attrs.uid;
             // Ne compter que les utilisateurs réels (pas read-only)
             if (uid && uid !== 'read-only') {
@@ -236,8 +238,8 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
         let userCount = 0;
         checkRes.on('searchEntry', (entry) => {
           try {
-            const attrs = {};
-            entry.pojo.attributes.forEach(attr => { attrs[attr.type] = attr.values[0]; });
+            const attrs: any = {};
+            entry.pojo.attributes.forEach((attr: any) => { attrs[attr.type] = attr.values[0]; });
             const existingUid = attrs.uid;
             if (existingUid && existingUid !== 'read-only') {
               userCount++;
@@ -385,8 +387,8 @@ router.get('/ldap/sync', async (req: any, res: any) => {
 
         ldapRes.on('searchEntry', (entry) => {
           try {
-            const attrs = {};
-            entry.pojo.attributes.forEach(attr => { attrs[attr.type] = attr.values[0]; });
+            const attrs: any = {};
+            entry.pojo.attributes.forEach((attr: any) => { attrs[attr.type] = attr.values[0]; });
             const uid = attrs.uid || attrs.cn;
             if (uid && uid !== 'read-only') {
               users.push({

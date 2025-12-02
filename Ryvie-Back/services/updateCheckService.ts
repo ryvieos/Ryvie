@@ -238,7 +238,7 @@ function getAppManifest(appDir) {
     
     const content = fs.readFileSync(manifestPath, 'utf8');
     const lines = content.split('\n');
-    const manifest = {};
+    const manifest: any = {};
     
     for (const line of lines) {
       if (line.includes('repository:')) {

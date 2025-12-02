@@ -1,3 +1,4 @@
+export {};
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
 const { createClient } = require('redis');

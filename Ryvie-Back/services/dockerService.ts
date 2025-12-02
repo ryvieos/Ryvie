@@ -1,8 +1,12 @@
+export {};
 const Docker = require('dockerode');
 const os = require('os');
 const appManager = require('./appManagerService');
 
 const docker = new Docker();
+
+// Container name mapping for display
+const containerMapping: Record<string, string> = {};
 
 
 
@@ -16,9 +20,9 @@ function extractAppName(containerName) {
   return null;
 }
 
-async function getAllContainers() {
+async function getAllContainers(): Promise<any[]> {
   return new Promise((resolve, reject) => {
-    docker.listContainers({ all: true }, (err, containers) => {
+    docker.listContainers({ all: true }, (err: any, containers: any[]) => {
       if (err) return reject(err);
       resolve(containers);
     });
@@ -52,7 +56,7 @@ async function getAppStatus() {
   // Fallback: ancien système si pas de manifests
   console.log('[dockerService] Utilisation de l\'ancien système (sans manifests)');
   const containers = await getAllContainers();
-  const apps = {};
+  const apps: Record<string, any> = {};
 
   containers.forEach((container) => {
     const containerName = container.Names[0].replace('/', '');
