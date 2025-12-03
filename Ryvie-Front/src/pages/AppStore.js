@@ -56,7 +56,7 @@ const AppStore = () => {
   const [catalogHealth, setCatalogHealth] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isInstalling, setIsInstalling] = useState(null);
+  const [installingApps, setInstallingApps] = useState(new Set());
   const [enlargedImage, setEnlargedImage] = useState(null);
   const [featuredApps, setFeaturedApps] = useState([]);
   const featuredRef = useRef(null);
@@ -111,9 +111,9 @@ const AppStore = () => {
   useEffect(() => {
     window.parent.postMessage({
       type: 'APPSTORE_INSTALL_STATUS',
-      installing: isInstalling !== null
+      installing: installingApps.size > 0
     }, window.location.origin); // Sécurisé : uniquement notre domaine
-  }, [isInstalling]);
+  }, [installingApps]);
 
   // Déboucer la recherche pour fluidifier la saisie
   useEffect(() => {
@@ -431,7 +431,7 @@ const AppStore = () => {
     addLog(`🚀 Démarrage de l'installation/mise à jour de ${appName} (${appId})`, 'info');
     addLog(`👤 Utilisateur: ${sessionInfo.user} (${sessionInfo.userRole})`, 'info');
     
-    setIsInstalling(appId);
+    setInstallingApps(prev => new Set(prev).add(appId));
     setLogsVisible(false); // Masquer automatiquement les logs lors de l'installation
 
     const accessMode = getCurrentAccessMode() || 'private';
@@ -470,7 +470,11 @@ const AppStore = () => {
           eventSource.close();
           
           // Nettoyer l'état d'installation
-          setIsInstalling(null);
+          setInstallingApps(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(appId);
+            return newSet;
+          });
           
           // Rafraîchir la liste des apps et notifier Home
           setTimeout(async () => {
@@ -500,7 +504,11 @@ const AppStore = () => {
       delete activeEventSources.current[appId];
       
       // Nettoyer l'état en cas d'erreur SSE
-      setIsInstalling(null);
+      setInstallingApps(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(appId);
+        return newSet;
+      });
       setInstallProgress(prev => {
         const newProgress = { ...prev };
         delete newProgress[appId];
@@ -581,7 +589,11 @@ try {
     showToast('Erreur lors de l\'installation/mise à jour', 'error');
     
     // En cas d'erreur, nettoyer immédiatement
-    setIsInstalling(null);
+    setInstallingApps(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(appId);
+      return newSet;
+    });
     if (eventSource) {
       eventSource.close();
     }
@@ -662,8 +674,9 @@ try {
     const updateAvailable = updateFlag || versionStatus === 'update-available';
 
     // Déterminer le label en fonction de l'état
+    const isCurrentlyInstalling = installingApps.has(app.id);
     let label;
-    if (isInstalling === app.id) {
+    if (isCurrentlyInstalling) {
       label = 'Installation...';
     } else if (updateAvailable) {
       label = 'Mettre à jour';
@@ -677,7 +690,7 @@ try {
       installed,
       updateAvailable,
       label,
-      disabled: (installed && !updateAvailable) || (isInstalling === app.id)
+      disabled: (installed && !updateAvailable) || isCurrentlyInstalling
     };
   };
 
