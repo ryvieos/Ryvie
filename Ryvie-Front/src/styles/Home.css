@@ -186,6 +186,19 @@
   background: rgba(59, 130, 246, 0.12);
 }
 
+.context-menu-item-danger {
+  color: #dc2626;
+}
+
+.context-menu-item-danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+  color: #991b1b;
+}
+
+.context-menu-item-danger:active {
+  background: rgba(220, 38, 38, 0.12);
+}
+
 .context-menu-icon {
   display: inline-flex;
   align-items: center;
@@ -205,6 +218,10 @@
 .context-menu-icon-stop svg rect,
 .context-menu-icon-start svg polygon {
   fill: currentColor;
+}
+
+.context-menu-item-danger .context-menu-icon {
+  color: #dc2626; /* red-600 */
 }
 
 .context-menu-separator {
@@ -370,15 +387,23 @@
 .taskbar-circle {
   width: 60px;
   height: 60px;
-  background-color: transparent; /* Nous rendons le fond transparent */
+  background-color: #ffffff; /* Fond blanc pour toutes les icônes de la taskbar */
   border-radius: 50%;
-  box-shadow: 0px 5px 5px rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.4);
   cursor: pointer;
   transition: transform 0.3s;
   overflow: hidden; /* Pour que l'image ne dépasse pas du cercle */
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.taskbar-circle.taskbar-circle--white img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.20);
 }
 
 .taskbar-circle img {

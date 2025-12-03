@@ -16,6 +16,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import '../styles/Transitions.css';
 import '../styles/AppStore.css';
+import { getSessionInfo } from '../utils/sessionManager';
 
 const AppStore = () => {
   // Améliore le rendu de description: paragraphes + liens cliquables
@@ -55,7 +56,7 @@ const AppStore = () => {
   const [catalogHealth, setCatalogHealth] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [isInstalling, setIsInstalling] = useState(null);
   const [enlargedImage, setEnlargedImage] = useState(null);
   const [featuredApps, setFeaturedApps] = useState([]);
   const featuredRef = useRef(null);
@@ -63,6 +64,26 @@ const AppStore = () => {
   const [featuredPage, setFeaturedPage] = useState(0);
   const previewRef = useRef(null);
   const [previewHovered, setPreviewHovered] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [logs, setLogs] = useState([]);
+  const [logsVisible, setLogsVisible] = useState(false);
+  const [installProgress, setInstallProgress] = useState({});
+
+  // Ajouter un log avec timestamp
+  const addLog = (message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs(prev => [...prev, { message, type, timestamp }]);
+  };
+
+  // Effacer les logs
+  const clearLogs = () => {
+    setLogs([]);
+  };
+
+  // Basculer la visibilité des logs
+  const toggleLogs = () => {
+    setLogsVisible(prev => !prev);
+  };
 
   // Convertit une couleur hex en rgb
   const hexToRgb = (hex) => {
@@ -85,6 +106,14 @@ const AppStore = () => {
       setInitialLoading(false);
     })();
   }, []);
+
+  // Notifier Home du statut d'installation
+  useEffect(() => {
+    window.parent.postMessage({
+      type: 'APPSTORE_INSTALL_STATUS',
+      installing: isInstalling !== null
+    }, window.location.origin); // Sécurisé : uniquement notre domaine
+  }, [isInstalling]);
 
   // Déboucer la recherche pour fluidifier la saisie
   useEffect(() => {
@@ -257,10 +286,13 @@ const AppStore = () => {
 /**
  * Récupère la liste des applications depuis l'API AppStore.
  * Actualise l'état global et gère l'affichage d'erreur si besoin.
+ * @param {boolean} silent - Si true, ne bloque pas l'interface pendant le chargement
  */
-  const fetchApps = async () => {
+  const fetchApps = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       const response = await axios.get(`${serverUrl}/api/appstore/apps`);
@@ -269,9 +301,13 @@ const AppStore = () => {
       }
     } catch (error) {
       console.error('Erreur lors du chargement des apps:', error);
-      showToast('Erreur lors du chargement du catalogue', 'error');
+      if (!silent) {
+        showToast('Erreur lors du chargement du catalogue', 'error');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -345,6 +381,219 @@ const AppStore = () => {
   };
 
 /**
+ * Installe ou met à jour une app depuis l'App Store
+ */
+  const installApp = async (appId, appName) => {
+  let eventSource; // Déclaré ici pour être accessible dans finally
+  
+  try {
+    // Vérifier l'authentification avant de commencer
+    const sessionInfo = getSessionInfo();
+    addLog(`🔍 Vérification de la session: ${sessionInfo.isActive ? 'ACTIVE' : 'INACTIVE'}`, 'info');
+    addLog(`🎫 Token présent: ${sessionInfo.token ? 'OUI' : 'NON'}`, 'info');
+    
+    if (!sessionInfo?.isActive || !sessionInfo?.token) {
+      addLog(`❌ Erreur: Utilisateur non connecté`, 'error');
+      showToast('Vous devez être connecté pour installer des applications', 'error');
+      return;
+    }
+
+    // Vérifier que le token est valide
+    try {
+      const tokenParts = sessionInfo.token.split('.');
+      if (tokenParts.length !== 3) {
+        throw new Error('Token mal formé (pas 3 parties)');
+      }
+      const payload = JSON.parse(atob(tokenParts[1]));
+      const now = Math.floor(Date.now() / 1000);
+      
+      if (payload.exp && payload.exp < now) {
+        throw new Error('Token expiré');
+      }
+      
+      addLog(`✅ Token valide, expiration: ${new Date(payload.exp * 1000).toLocaleString()}`, 'success');
+    } catch (tokenError) {
+      addLog(`❌ Erreur de validation du token: ${tokenError.message}`, 'error');
+      showToast('Votre session a expiré. Veuillez vous reconnecter.', 'error');
+      return;
+    }
+
+    setInstallProgress(prev => ({ ...prev, [appId]: { progress: 5, message: 'Initialisation...', stage: 'init' } }));
+
+    // // Vérifier les permissions (rôles autorisés pour gérer les apps)
+    // const allowedRoles = ['Admin', 'Manager', 'SuperAdmin'];
+    // if (!allowedRoles.includes(sessionInfo.userRole)) {
+    //   addLog(`❌ Erreur: Permissions insuffisantes (rôle: ${sessionInfo.userRole})`, 'error');
+    //   showToast('Vous n\'avez pas les permissions pour installer des applications', 'error');
+    //   return;
+    // }
+
+    addLog(`🚀 Démarrage de l'installation/mise à jour de ${appName} (${appId})`, 'info');
+    addLog(`👤 Utilisateur: ${sessionInfo.user} (${sessionInfo.userRole})`, 'info');
+    
+    setIsInstalling(appId);
+    setLogsVisible(false); // Masquer automatiquement les logs lors de l'installation
+
+    const accessMode = getCurrentAccessMode() || 'private';
+    const serverUrl = getServerUrl(accessMode);
+    const requestUrl = `${serverUrl}/api/appstore/apps/${appId}/install`;
+
+    addLog(`📡 Connexion au serveur: ${accessMode} mode`, 'info');
+    addLog(`🔗 URL API: ${requestUrl}`, 'info');
+
+    // Établir la connexion SSE pour recevoir les mises à jour de progression
+    const progressUrl = `${serverUrl}/api/appstore/progress/${appId}`;
+    addLog(`📊 Connexion aux mises à jour de progression: ${progressUrl}`, 'info');
+    
+    eventSource = new EventSource(progressUrl);
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setInstallProgress(prev => ({ 
+          ...prev, 
+          [appId]: { 
+            progress: data.progress, 
+            message: data.message,
+            stage: data.stage 
+          } 
+        }));
+        addLog(data.message, 'info');
+        
+        // Si l'installation est terminée (100%), afficher la notification de succès
+        if (data.progress >= 100) {
+          addLog(`✅ Installation de ${appName} terminée avec succès !`, 'success');
+          addLog(`🏁 Processus terminé pour ${appName}`, 'info');
+          showToast(`${appName} installé avec succès !`, 'success');
+          
+          // Fermer la connexion SSE
+          eventSource.close();
+          
+          // Nettoyer l'état d'installation
+          setIsInstalling(null);
+          
+          // Rafraîchir la liste des apps et notifier Home
+          setTimeout(async () => {
+            await fetchApps(true);
+            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, window.location.origin);
+            
+            // Nettoyer la progression et les logs après un délai
+            setTimeout(() => {
+              setInstallProgress(prev => {
+                const newProgress = { ...prev };
+                delete newProgress[appId];
+                return newProgress;
+              });
+              clearLogs();
+            }, 50000);
+          }, 1000);
+        }
+      } catch (error) {
+        console.error('Erreur lors du parsing des données de progression:', error);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('Erreur SSE:', error);
+      addLog('❌ Erreur de connexion aux mises à jour de progression', 'error');
+      eventSource.close();
+      delete activeEventSources.current[appId];
+      
+      // Nettoyer l'état en cas d'erreur SSE
+      setIsInstalling(null);
+      setInstallProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[appId];
+        return newProgress;
+      });
+    };
+
+    let response;
+    // Version améliorée avec options de débogage
+
+try {
+  addLog('📤 Envoi de la requête au serveur...', 'info');
+  
+  // Option 1: Essayer avec un body vide au lieu de null
+  response = await axios.post(requestUrl, {}, { 
+    timeout: 300000,
+    headers: {
+      'Content-Type': 'application/json',
+      // Ajoutez ici d'autres headers si nécessaires (auth, etc.)
+    }
+  });
+  
+  addLog(`📨 Réponse reçue du serveur (status: ${response.status})`, 'info');
+  const responsePayload = typeof response.data === 'object'
+    ? JSON.stringify(response.data, null, 2)
+    : String(response.data || '');
+  const truncatedPayload = responsePayload.length > 500 ? `${responsePayload.slice(0, 500)}…` : responsePayload;
+  addLog(`🧾 Corps de réponse: ${truncatedPayload || '⌀'}`, 'info');
+  
+} catch (requestError) {
+  if (axios.isAxiosError(requestError)) {
+    const { response: errorResponse, config } = requestError;
+    const status = errorResponse?.status ?? 'N/A';
+    const statusText = errorResponse?.statusText ?? 'inconnu';
+    addLog(`❌ Requête axios échouée (status: ${status} - ${statusText})`, 'error');
+    
+    if (config) {
+      addLog(`📑 Requête envoyée: ${config.method?.toUpperCase()} ${config.url}`, 'error');
+      addLog(`📋 Body envoyé: ${JSON.stringify(config.data)}`, 'error');
+    }
+    
+    if (errorResponse?.data) {
+      const errorPayload = typeof errorResponse.data === 'object'
+        ? JSON.stringify(errorResponse.data, null, 2)
+        : String(errorResponse.data);
+      const truncatedError = errorPayload.length > 500 ? `${errorPayload.slice(0, 500)}…` : errorPayload;
+      addLog(`🧨 Corps d'erreur: ${truncatedError}`, 'error');
+    }
+    
+    if (errorResponse?.headers) {
+      const headersPreview = JSON.stringify(errorResponse.headers, null, 2);
+      const truncatedHeaders = headersPreview.length > 500 ? `${headersPreview.slice(0, 500)}…` : headersPreview;
+      addLog(`📬 En-têtes de réponse: ${truncatedHeaders}`, 'error');
+    }
+  } else {
+    addLog(`❌ Erreur non Axios lors de la requête: ${requestError.message}`, 'error');
+  }
+
+  console.error('[AppStore] Erreur lors de la requête d\'installation:', requestError);
+  throw requestError;
+}
+
+    if (response.data.success) {
+      // Le serveur a lancé l'installation en arrière-plan
+      addLog(`🚀 Installation de ${appName} lancée en arrière-plan`, 'info');
+      addLog(`📊 Suivez la progression ci-dessous...`, 'info');
+      showToast(`Installation de ${appName} en cours...`, 'info');
+      
+      // La vraie fin de l'installation sera signalée par le SSE à 100%
+      // Pas besoin de rafraîchir ici, le SSE le fera automatiquement
+    } else {
+      addLog(`❌ Échec du lancement: ${response.data.message || 'Erreur inconnue'}`, 'error');
+      showToast(response.data.message || 'Erreur lors du lancement de l\'installation', 'error');
+    }
+  } catch (error) {
+    addLog(`💥 Erreur lors de l'installation/mise à jour de ${appName}: ${error.message}`, 'error');
+    console.error(`Erreur lors de l'installation/mise à jour de ${appName}:`, error);
+    showToast('Erreur lors de l\'installation/mise à jour', 'error');
+    
+    // En cas d'erreur, nettoyer immédiatement
+    setIsInstalling(null);
+    if (eventSource) {
+      eventSource.close();
+    }
+    setInstallProgress(prev => {
+      const newProgress = { ...prev };
+      delete newProgress[appId];
+      return newProgress;
+    });
+  }
+};
+
+/**
  * Affiche un toast temporaire pour informer l'utilisateur.
  */
   const showToast = (message, type = 'success') => {
@@ -412,11 +661,23 @@ const AppStore = () => {
     const versionStatus = installed ? compareVersions(installedVersion, app?.version) : null;
     const updateAvailable = updateFlag || versionStatus === 'update-available';
 
+    // Déterminer le label en fonction de l'état
+    let label;
+    if (isInstalling === app.id) {
+      label = 'Installation...';
+    } else if (updateAvailable) {
+      label = 'Mettre à jour';
+    } else if (installed) {
+      label = 'À jour';
+    } else {
+      label = 'Installer';
+    }
+
     return {
       installed,
       updateAvailable,
-      label: updateAvailable ? 'Mettre à jour' : (installed ? 'À jour' : 'Installer'),
-      disabled: installed && !updateAvailable
+      label,
+      disabled: (installed && !updateAvailable) || (isInstalling === app.id)
     };
   };
 
@@ -515,21 +776,34 @@ const AppStore = () => {
                         }
 
                         setSelectedApp(app);
-                        if (label === 'Installer') {
-                          // TODO: branch vers routine d'installation lorsqu'elle sera câblée
-                        } else if (label === 'Mettre à jour') {
-                          // TODO: branch vers routine de mise à jour lorsqu'elle sera câblée
+                        if (label === 'Installer' || label === 'Mettre à jour') {
+                          installApp(app.id, app.name);
                         }
                       };
 
                       return (
-                        <button
-                          className="featured-install-btn"
-                          disabled={disabled}
-                          onClick={handleClick}
-                        >
-                          {label}
-                        </button>
+                        <div className="featured-install-section">
+                          <button
+                            className="featured-install-btn"
+                            disabled={disabled}
+                            onClick={handleClick}
+                          >
+                            {label}
+                          </button>
+                          {installProgress[app.id] && (
+                            <div className="install-progress-container">
+                              <div className="install-progress-bar">
+                                <div 
+                                  className="install-progress-fill"
+                                  style={{ width: `${installProgress[app.id].progress || 0}%` }}
+                                />
+                              </div>
+                              <span className="install-progress-text">
+                                {installProgress[app.id].progress || 0}% - {installProgress[app.id].message || 'En cours...'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       );
                   })()}
                   </div>
@@ -662,16 +936,34 @@ const AppStore = () => {
                       }
 
                       // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
+                      if (label === 'Installer' || label === 'Mettre à jour') {
+                        installApp(app.id, app.name);
+                      }
                     };
 
                     return (
-                      <button
-                        className="app-get-button"
-                        disabled={disabled}
-                        onClick={handleClick}
-                      >
-                        {label}
-                      </button>
+                      <div className="app-install-section">
+                        <button
+                          className="app-get-button"
+                          disabled={disabled}
+                          onClick={handleClick}
+                        >
+                          {label}
+                        </button>
+                        {installProgress[app.id] && (
+                          <div className="install-progress-container">
+                            <div className="install-progress-bar">
+                              <div 
+                                className="install-progress-fill"
+                                style={{ width: `${installProgress[app.id].progress || 0}%` }}
+                              />
+                            </div>
+                            <span className="install-progress-text">
+                              {installProgress[app.id].progress || 0}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     );
                   })()}
                 </div>
@@ -721,16 +1013,34 @@ const AppStore = () => {
                     }
 
                     // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
+                    if (label === 'Installer' || label === 'Mettre à jour') {
+                      installApp(selectedApp.id, selectedApp.name);
+                    }
                   };
 
                   return (
-                    <button
-                      className="btn-primary btn-install-header"
-                      disabled={disabled}
-                      onClick={handleClick}
-                    >
-                      <FontAwesomeIcon icon={faDownload} /> {label}
-                    </button>
+                    <div className="modal-install-section">
+                      <button
+                        className="btn-primary btn-install-header"
+                        disabled={disabled}
+                        onClick={handleClick}
+                      >
+                        <FontAwesomeIcon icon={faDownload} /> {label}
+                      </button>
+                      {installProgress[selectedApp.id] && (
+                        <div className="install-progress-container modal-progress">
+                          <div className="install-progress-bar">
+                            <div 
+                              className="install-progress-fill"
+                              style={{ width: `${installProgress[selectedApp.id].progress || 0}%` }}
+                            />
+                          </div>
+                          <span className="install-progress-text">
+                            {installProgress[selectedApp.id].progress || 0}% - {installProgress[selectedApp.id].message || 'En cours...'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   );
                 })()}
               </div>
@@ -848,6 +1158,59 @@ const AppStore = () => {
         <FontAwesomeIcon icon={faSync} spin={isUpdating} />
       </button>
 
+      {/* Bouton pour afficher/masquer les logs - TEMPORAIRE: toujours visible */}
+      <button 
+        className="floating-logs-btn"
+        onClick={toggleLogs}
+        title={logsVisible ? "Masquer les logs" : "Afficher les logs"}
+        style={{
+          position: 'fixed',
+          bottom: '32px',
+          right: '104px',
+          width: '56px',
+          height: '56px',
+          borderRadius: '50%',
+          background: '#f59e0b',
+          color: 'white',
+          border: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '20px',
+          cursor: 'pointer',
+          zIndex: 1085
+        }}
+      >
+        <FontAwesomeIcon icon={faInfoCircle} />
+        {logs.length > 0 && (
+          <span className="logs-badge">{logs.length}</span>
+        )}
+      </button>
+
+      {/* Logs d'installation */}
+      {logs.length > 0 && logsVisible && (
+        <div className="logs-panel">
+          <div className="logs-header">
+            <h3>Logs d'installation</h3>
+            <button 
+              className="logs-clear-btn"
+              onClick={clearLogs}
+              title="Effacer les logs"
+            >
+              <FontAwesomeIcon icon={faTimes} />
+            </button>
+          </div>
+          <div className="logs-content">
+            {logs.map((log, index) => (
+              <div key={index} className={`log-entry log-${log.type}`}>
+                <span className="log-time">[{log.timestamp}]</span>
+                <span className="log-message">{log.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Toast notifications */}
       {toast.show && (
         <div className={`toast toast-${toast.type}`}>
@@ -862,6 +1225,267 @@ const AppStore = () => {
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+
+        .logs-panel {
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          width: 400px;
+          max-height: 300px;
+          background: rgba(17, 24, 39, 0.95);
+          border: 1px solid #374151;
+          border-radius: 8px;
+          backdrop-filter: blur(10px);
+          z-index: 1000;
+          display: flex;
+          flex-direction: column;
+          animation: slideInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes slideInUp {
+          from {
+            transform: translateY(20px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+
+        .logs-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 12px 16px;
+          border-bottom: 1px solid #374151;
+        }
+
+        .logs-header h3 {
+          margin: 0;
+          color: #e5e7eb;
+          font-size: 14px;
+          font-weight: 600;
+        }
+
+        .logs-clear-btn {
+          background: none;
+          border: none;
+          color: #9ca3af;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          transition: color 0.2s;
+        }
+
+        .logs-clear-btn:hover {
+          color: #ef4444;
+        }
+
+        .logs-content {
+          flex: 1;
+          overflow-y: auto;
+          padding: 8px;
+          max-height: 240px;
+        }
+
+        .log-entry {
+          display: flex;
+          gap: 8px;
+          padding: 4px 0;
+          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
+        .log-time {
+          color: #6b7280;
+          flex-shrink: 0;
+        }
+
+        .log-message {
+          color: #d1d5db;
+          word-break: break-word;
+        }
+
+        .log-success .log-message { color: #10b981; }
+        .log-error .log-message { color: #ef4444; }
+        .log-info .log-message { color: #3b82f6; }
+        .log-warning .log-message { color: #f59e0b; }
+
+        .install-progress-container {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 8px;
+          margin-bottom: 8px;
+        }
+
+        .install-progress-container.card {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin-top: 12px;
+          margin-bottom: 8px;
+          width: 100%;
+        }
+
+        .install-progress-container.card .install-progress-details {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .install-progress-container.card .install-progress-text {
+          flex: 1;
+          text-align: left;
+          font-size: 11px;
+          color: #9ca3af;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .install-progress-container.card .install-progress-percent {
+          font-size: 12px;
+          font-weight: 700;
+          color: #3b82f6;
+          min-width: 40px;
+          text-align: right;
+        }
+
+        .install-progress-container.featured {
+          margin-top: 12px;
+          margin-bottom: 12px;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+          width: 100%;
+          max-width: 300px;
+        }
+
+        .install-progress-container.featured .install-progress-bar {
+          width: 100%;
+        }
+
+        .install-progress-container.featured .install-progress-details {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+        }
+
+        .install-progress-container.featured .install-progress-text {
+          flex: 1;
+          text-align: left;
+          min-width: 0;
+          color: rgba(255, 255, 255, 0.95);
+          font-size: 12px;
+          font-weight: 500;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .install-progress-container.featured .install-progress-percent {
+          font-size: 13px;
+          font-weight: 700;
+          color: rgba(255, 255, 255, 1);
+          min-width: 45px;
+          text-align: right;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .install-progress-bar {
+          flex: 1;
+          height: 6px;
+          background: rgba(75, 85, 99, 0.3);
+          border-radius: 3px;
+          overflow: hidden;
+        }
+
+        .install-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+          border-radius: 3px;
+          transition: width 0.3s ease;
+          animation: progressPulse 2s ease-in-out infinite;
+        }
+
+        .install-progress-text {
+          font-size: 12px;
+          font-weight: 600;
+          color: #3b82f6;
+          min-width: 35px;
+          text-align: right;
+        }
+
+        @keyframes progressPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.8; }
+        }
+
+        /* Section de progression dans la modale */
+        .modal-progress-section {
+          padding: 16px 24px;
+          background: rgba(59, 130, 246, 0.05);
+          border-top: 1px solid rgba(59, 130, 246, 0.1);
+          border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+        }
+
+        .install-progress-container.modal {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin: 0;
+        }
+
+        .install-progress-details {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .install-progress-details .install-progress-text {
+          flex: 1;
+          text-align: left;
+          color: #e5e7eb;
+          font-size: 13px;
+          font-weight: 500;
+          min-width: 0;
+        }
+
+        .install-progress-percent {
+          font-size: 13px;
+          font-weight: 700;
+          color: #3b82f6;
+          min-width: 45px;
+          text-align: right;
+        }
+
+        .modal-progress-section .install-progress-bar {
+          height: 8px;
+          background: rgba(75, 85, 99, 0.3);
+        }
+
+        .modal-progress-section .install-progress-fill {
+          background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+        }
+
+        /* Responsive pour le panneau de logs */
+        @media (max-width: 768px) {
+          .logs-panel {
+            bottom: 10px;
+            right: 10px;
+            left: 10px;
+            width: auto;
+            max-height: 250px;
+          }
         }
       `}</style>
     </div>

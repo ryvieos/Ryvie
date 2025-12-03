@@ -3,7 +3,7 @@
 Plateforme tout-en-un (backend Node.js + frontend React/Electron) pour piloter un parc d'applications Ryvie. L'interface « launcher » reproduit une grille de type iOS avec météo, widgets et gestion dynamique des apps via manifests.
 
 ## Architecture
-- **Backend** (`Back-end-view/`) : API Express, Socket.IO, authentification LDAP + JWT, persistance des préférences utilisateurs dans `/data/config/`.
+- **Backend** (`Ryvie-Back/`) : API Express, Socket.IO, authentification LDAP + JWT, persistance des préférences utilisateurs dans `/data/config/`.
 - **Frontend** (`Ryvie-Front/`) : React 18 + Electron, grille responsive gérée par `GridLauncher`, consommation des manifests exposés par l'API.
 - **Données** (`/data/`) :
   - `/data/apps/` : dossiers sources des apps (docker-compose, configs…)
@@ -20,7 +20,7 @@ Plateforme tout-en-un (backend Node.js + frontend React/Electron) pour piloter u
 1. **Installer les dépendances**
    - Backend :
      ```bash
-     cd Back-end-view
+     cd Ryvie-Back
      npm install
      ```
    - Frontend :
@@ -33,11 +33,11 @@ Plateforme tout-en-un (backend Node.js + frontend React/Electron) pour piloter u
    - Monter `/data/apps/` avec vos apps Docker.
    - Lancer `node generate-manifests.js` (ou démarrer le backend) pour générer `/data/config/manifests/` et `Ryvie-Front/src/config/app-ports.json`. Les manifests orphelins sont supprimés automatiquement.
 4. **Lancer les services**
-   - Backend : `npm start` dans `Back-end-view/` (écoute par défaut sur `http://localhost:3002`).
+   - Backend : `npm start` dans `Ryvie-Back/` (écoute par défaut sur `http://localhost:3002`).
    - Frontend : `npm start` dans `Ryvie-Front/` (dev-server + fenêtre Electron, accessible aussi via navigateur sur `http://localhost:3000`).
 
 ## Configuration backend
-Fichier : `Back-end-view/.env`
+Fichier : `Ryvie-Back/.env`
 
 ```env
 # Réseau API
@@ -90,7 +90,7 @@ REDIS_URL=redis://127.0.0.1:6379
 ## Dépannage
 - **Manifests manquants** : relancer `node generate-manifests.js` ou redémarrer le backend. Vérifier que le dossier existe dans `/data/apps/` avec un `docker-compose.yml` valide.
 - **App fantôme** : supprimer le dossier dans `/data/apps/`, relancer le générateur. Le manifest est maintenant supprimé automatiquement, puis le backend nettoie les préférences.
-- **Connexion impossible** : vérifier la configuration LDAP et `JWT_SECRET`. Les logs du backend (`Back-end-view/index.js`) détaillent les erreurs de bind LDAP ou JWT.
+- **Connexion impossible** : vérifier la configuration LDAP et `JWT_SECRET`. Les logs du backend (`Ryvie-Back/index.ts`) détaillent les erreurs de bind LDAP ou JWT.
 - **Socket / statut apps** : le socket partagé est géré via `Ryvie-Front/src/contexts/SocketContext.js`. Si vous observez des déconnexions, assurez-vous que le backend est accessible en WebSocket (`/socket.io`).
 - **Grille qui ne s'affiche pas** : vérifier que `appsConfig` contient vos apps (`localStorage.appsConfig_cache`). Un `Ctrl+F5` force un rechargement complet.
 
@@ -100,7 +100,7 @@ REDIS_URL=redis://127.0.0.1:6379
 - Pensez à limiter les tentatives de login et surveiller les journaux d'authentification.
 
 ## Structure du dépôt
-- `Back-end-view/` : API Node.js, routes (dont `routes/userPreferences.js`, `routes/apps.js`), services Docker/Socket, synchronisation netbird/fonds.
+- `Ryvie-Back/` : API Node.js, routes (dont `routes/userPreferences.ts`, `routes/apps.ts`), services Docker/Socket, synchronisation netbird/fonds.
 - `Ryvie-Front/` : application React/Electron (pages `Home.js`, `Settings.js`, composants `GridLauncher.js`, widgets…).
 - `generate-manifests.js` : outil CLI pour générer et nettoyer les manifests.
 - `data/` (externe au dépôt git) : monté en volume sur la machine de prod (apps, manifests, préférences, backgrounds, netbird).

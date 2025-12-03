@@ -47,9 +47,9 @@ export const getMinWidthForFullGrid = () => {
 
 // Import explicite des icônes critiques de la taskbar (évite les soucis de bundling cross-plateformes)
 import taskSettings from '../icons/task-settings.svg';
-import taskAppStore from '../icons/task-AppStore.svg';
-import taskTransfer from '../icons/task-transfer.svg';
-import taskUser from '../icons/task-user.svg';
+import taskAppStore from '../icons/task-AppStore.png';
+import taskTransfer from '../icons/task-transfer.png';
+import taskUser from '../icons/task-user.png';
 
 // Fonction pour importer toutes les images du dossier icons
 const importAll = (r) => {
@@ -65,9 +65,9 @@ const images = importAll(require.context('../icons', false, /\.(png|jpe?g|svg)$/
 
 // Surcharger avec des imports explicites (assure la bonne résolution des URLs)
 images['task-settings.svg'] = (taskSettings && taskSettings.default) ? taskSettings.default : taskSettings;
-images['task-AppStore.svg'] = (taskAppStore && taskAppStore.default) ? taskAppStore.default : taskAppStore;
-images['task-transfer.svg'] = (taskTransfer && taskTransfer.default) ? taskTransfer.default : taskTransfer;
-images['task-user.svg'] = (taskUser && taskUser.default) ? taskUser.default : taskUser;
+images['task-AppStore.png'] = (taskAppStore && taskAppStore.default) ? taskAppStore.default : taskAppStore;
+images['task-transfer.png'] = (taskTransfer && taskTransfer.default) ? taskTransfer.default : taskTransfer;
+images['task-user.png'] = (taskUser && taskUser.default) ? taskUser.default : taskUser;
 
 // ==================== CONFIGURATION APPLICATIONS ====================
 
@@ -91,7 +91,14 @@ const extractAppName = (filename) => {
  */
 const generateTaskbarConfig = () => {
   const config = {};
-  const taskIcons = Object.keys(images).filter(icon => icon.startsWith('task-'));
+  const taskIcons = Object.keys(images).filter(icon => {
+    if (!icon.startsWith('task-')) return false;
+    // Pour AppStore, n'utiliser que la variante PNG dans la taskbar
+    if (icon === 'task-AppStore.svg') return false;
+    // Pour Transfer, n'utiliser que la variante PNG dans la taskbar
+    if (icon === 'task-transfer.svg') return false;
+    return true;
+  });
   
   taskIcons.forEach(iconFile => {
     const appName = extractAppName(iconFile);

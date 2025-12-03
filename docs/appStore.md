@@ -8,9 +8,9 @@ Le système App Store de Ryvie permet de gérer un catalogue d'applications disp
 
 ### Services impliqués
 
-1. **[appStoreService.js](cci:7://file:///opt/Ryvie/Back-end-view/services/appStoreService.js:0:0-0:0)** - Service principal de gestion du catalogue
-2. **[updateService.js](cci:7://file:///opt/Ryvie/Back-end-view/services/updateService.js:0:0-0:0)** - Gestion des mises à jour du catalogue
-3. **[updateCheckService.js](cci:7://file:///opt/Ryvie/Back-end-view/services/updateCheckService.js:0:0-0:0)** - Vérification de nouvelles versions disponibles
+1. **[appStoreService.ts](cci:7://file:///opt/Ryvie/Ryvie-Back/services/appStoreService.ts:0:0-0:0)** - Service principal de gestion du catalogue
+2. **[updateService.ts](cci:7://file:///opt/Ryvie/Ryvie-Back/services/updateService.ts:0:0-0:0)** - Gestion des mises à jour du catalogue
+3. **[updateCheckService.ts](cci:7://file:///opt/Ryvie/Ryvie-Back/services/updateCheckService.ts:0:0-0:0)** - Vérification de nouvelles versions disponibles
 
 ### Flux de données
 GitHub Release (ryvie-apps) 
@@ -198,8 +198,8 @@ Le cache local reste inchangé
 Tests manuels
 Test d'initialisation
 bash
-cd /opt/Ryvie/Back-end-view
-node -e "require('./services/appStoreService').initialize().then(()=>process.exit(0)).catch(err=>{console.error(err);process.exit(1);});"
+cd /opt/Ryvie/Ryvie-Back
+node -e "require('./dist/services/appStoreService').initialize().then(()=>process.exit(0)).catch(err=>{console.error(err);process.exit(1);});"
 Test de mise à jour forcée
 bash
 # 1. Effacer le cache

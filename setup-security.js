@@ -22,7 +22,7 @@ function generateJWTSecret() {
 }
 
 // Check if .env file exists
-const envPath = path.join(__dirname, 'Back-end-view', '.env');
+const envPath = path.join(__dirname, 'Ryvie-Back', '.env');
 const envExists = fs.existsSync(envPath);
 
 console.log('📋 Security Configuration Checklist:');
@@ -42,7 +42,7 @@ console.log('   ✅ Add these to your .env file\n');
 
 // 2. Check dependencies
 console.log('2. 📦 Required Dependencies');
-const backendPackageJson = path.join(__dirname, 'Back-end-view', 'package.json');
+const backendPackageJson = path.join(__dirname, 'Ryvie-Back', 'package.json');
 if (fs.existsSync(backendPackageJson)) {
   const pkg = JSON.parse(fs.readFileSync(backendPackageJson, 'utf8'));
   const requiredDeps = ['express-rate-limit', 'helmet', 'bcrypt'];
@@ -51,7 +51,7 @@ if (fs.existsSync(backendPackageJson)) {
   if (missing.length > 0) {
     console.log('   ❌ Missing dependencies:');
     missing.forEach(dep => console.log(`      - ${dep}`));
-    console.log(`   Run: cd Back-end-view && npm install ${missing.join(' ')}`);
+    console.log(`   Run: cd Ryvie-Back && npm install ${missing.join(' ')}`);
   } else {
     console.log('   ✅ All security dependencies installed');
   }
@@ -75,7 +75,7 @@ if (envExists) {
   }
 } else {
   console.log('   ❌ .env file not found');
-  console.log('   Create .env file in Back-end-view/ directory');
+  console.log('   Create .env file in Ryvie-Back/ directory');
 }
 console.log('');
 
@@ -119,7 +119,7 @@ console.log('');
 
 // Generate sample .env additions
 console.log('8. 📝 Sample .env Configuration');
-console.log('   Add these lines to your Back-end-view/.env file:');
+console.log('   Add these lines to your Ryvie-Back/.env file:');
 console.log('   =====================================');
 console.log(`   ENCRYPTION_KEY=${encryptionKey}`);
 console.log(`   JWT_ENCRYPTION_KEY=${jwtEncryptionKey}`);

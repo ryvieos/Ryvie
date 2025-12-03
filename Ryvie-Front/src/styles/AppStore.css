@@ -102,6 +102,58 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
+/* Bouton floating pour afficher/masquer les logs */
+.floating-logs-btn {
+  position: fixed;
+  bottom: 32px;
+  right: 104px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4), 0 2px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1085;
+  position: relative;
+}
+
+.floating-logs-btn:hover {
+  background: #d97706;
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.5), 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.floating-logs-btn:active {
+  transform: scale(0.95);
+}
+
+/* Badge de compteur de logs */
+.logs-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  min-width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 6px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  border: 2px solid white;
+}
+
 /* Section Featured Apps */
 .featured-section {
   margin-bottom: 32px;
@@ -1135,6 +1187,86 @@
   }
 }
 
+/* Barre de progression d'installation */
+.install-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.install-progress-container.featured {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+}
+
+.install-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.featured .install-progress-bar {
+  background: rgba(255, 255, 255, 0.25);
+  height: 4px;
+}
+
+.install-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #7c3aed);
+  border-radius: 9999px;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.featured .install-progress-fill {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7));
+}
+
+/* Animation de brillance sur la barre */
+.install-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.install-progress-text {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.featured .install-progress-text {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .appstore-container {
@@ -1174,4 +1306,140 @@
     right: 16px;
     bottom: 16px;
   }
+
+  /* Boutons flottants sur mobile */
+  .floating-refresh-btn {
+    bottom: 20px;
+    right: 20px;
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
+
+  .floating-logs-btn {
+    bottom: 20px;
+    right: 80px;
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
+
+  .logs-badge {
+    min-width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+}
+
+/* Barres de progression d'installation */
+.app-install-section,
+.featured-install-section,
+.modal-install-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.install-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.install-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.install-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.install-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.install-progress-text {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Barre de progression dans la modale */
+.modal-progress {
+  margin-top: 12px;
+}
+
+.modal-progress .install-progress-bar {
+  height: 10px;
+}
+
+.modal-progress .install-progress-text {
+  font-size: 13px;
+  color: #4b5563;
+}
+
+/* Barre de progression dans les cartes en vedette */
+.featured-install-section {
+  align-items: flex-end;
+}
+
+.featured-install-section .install-progress-container {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 8px 12px;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.featured-install-section .install-progress-text {
+  font-size: 12px;
+  color: #374151;
 }

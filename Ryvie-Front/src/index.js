@@ -11,7 +11,7 @@ import StorageSettings from './pages/StorageSettings';
 import Welcome from './pages/Welcome';
 import Userlogin from './pages/Connexion';
 import ServerRestarting from './pages/ServerRestarting';
-import { initializeSession, isSessionActive } from './utils/sessionManager';
+import { initializeSession, isSessionActive, endSession } from './utils/sessionManager';
 import { isElectron } from './utils/platformUtils';
 import { handleAuthError } from './services/authService';
 import faviconUrl from './icons/ryvielogo0.png';
@@ -20,7 +20,13 @@ import { CachedRoutes } from './components/CachedRoutes';
 
 // Composant de redirection conditionnelle (Web et Electron)
 const ProtectedRoute = ({ children }) => {
-  return isSessionActive() ? children : <Navigate to="/login" replace />;
+  const sessionActive = isSessionActive();
+  
+  // Ne pas nettoyer automatiquement la session ici pour éviter les boucles
+  // Le nettoyage se fait uniquement lors d'erreurs d'authentification (401)
+  // ou lors d'une déconnexion explicite
+  
+  return sessionActive ? children : <Navigate to="/login" replace />;
 };
 
 const App = () => {

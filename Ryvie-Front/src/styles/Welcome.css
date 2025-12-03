@@ -34,6 +34,11 @@
   animation: backgroundFadeIn 2s ease-out forwards;
 }
 
+.welcome-body.preloading::before {
+  animation: continuousZoomBackground 15s linear infinite !important;
+  opacity: 0.7 !important;
+}
+
 @keyframes backgroundFadeIn {
   0% {
     opacity: 0;
@@ -42,6 +47,19 @@
   100% {
     opacity: 0.7;
     transform: scale(1);
+  }
+}
+
+@keyframes continuousZoomBackground {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+    filter: blur(5px);
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0.85;
+    filter: blur(8px);
   }
 }
 
@@ -59,12 +77,25 @@
   animation: backgroundZoom 3.5s cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
+.welcome-body.preloading::after {
+  animation: continuousZoomIn 15s linear infinite !important;
+}
+
 @keyframes backgroundZoom {
   0% {
     transform: scale(1.1);
   }
   100% {
     transform: scale(1);
+  }
+}
+
+@keyframes continuousZoomIn {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.6);
   }
 }
 
@@ -90,6 +121,83 @@
   transform-origin: center center;
   will-change: transform, opacity;
   animation: scaleIn 0.4s ease-out forwards;
+}
+
+.welcome-overlay.preloading {
+  pointer-events: none;
+}
+
+.welcome-overlay.preloading .welcome-buttons-container,
+.welcome-overlay.preloading .welcome-container {
+  opacity: 0.3;
+  filter: blur(3px);
+  transition: all 0.3s ease-out;
+}
+
+/* Spinner overlay central */
+.preload-spinner-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  animation: fadeInSpinner 0.3s ease-out forwards;
+}
+
+@keyframes fadeInSpinner {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.preload-spinner {
+  width: 80px;
+  height: 80px;
+  /* Cercle de chargement aux couleurs Ryvie (bleu clair -> bleu vif) */
+  border: 5px solid rgba(0, 160, 255, 0.18);
+  border-top: 5px solid #0094FF;
+  border-radius: 50%;
+  animation: spinLarge 1s linear infinite;
+  box-shadow: 0 0 30px rgba(0, 148, 255, 0.35);
+}
+
+@keyframes spinLarge {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.preload-status {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: center;
+  /* Cartouche légèrement teintée Ryvie pour s'accorder au fond bleu */
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 5px 20px rgba(0, 148, 255, 0.25);
+  backdrop-filter: blur(10px);
+  letter-spacing: 0.3px;
+  min-width: 280px;
+  animation: pulseBlue 2s ease-in-out infinite;
+}
+
+@keyframes pulseBlue {
+  0%, 100% {
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    box-shadow: 0 8px 30px rgba(71, 118, 230, 0.5);
+  }
 }
 
 @keyframes scaleIn {
@@ -446,3 +554,5 @@
   box-shadow: 0 5px 15px rgba(71, 118, 230, 0.25);
   border: 1px solid rgba(71, 118, 230, 0.3);
 }
+
+/* Anciennes classes de transition supprimées - non utilisées */

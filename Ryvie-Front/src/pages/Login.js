@@ -174,15 +174,13 @@ const Login = () => {
     
     // Rediriger vers l'URL correspondante
     const frontendUrl = urlsConfig.getFrontendUrl(newMode);
-    const currentPath = window.location.pathname; // Conserver le chemin actuel
-    const newUrl = `${frontendUrl}${currentPath}`;
+    const currentHash = window.location.hash || '#/login';
+    const newUrl = `${frontendUrl}${currentHash}`;
     
     console.log(`[Login] Redirection vers ${newMode}: ${newUrl}`);
     
-    // Redirection immédiate
-    setTimeout(() => {
-      window.location.href = newUrl;
-    }, 100);
+    // Redirection dans le même onglet (replace évite d'ajouter à l'historique)
+    window.location.replace(newUrl);
   };
 
   return (
