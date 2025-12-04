@@ -53,11 +53,13 @@ const AppStore = () => {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedApp, setSelectedApp] = useState(null);
+  const [isModalClosing, setIsModalClosing] = useState(false);
   const [catalogHealth, setCatalogHealth] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [installingApps, setInstallingApps] = useState(new Set());
   const [enlargedImage, setEnlargedImage] = useState(null);
+  const [closingImage, setClosingImage] = useState(false);
   const [featuredApps, setFeaturedApps] = useState([]);
   const featuredRef = useRef(null);
   const [featuredHovered, setFeaturedHovered] = useState(false);
@@ -663,6 +665,17 @@ try {
   };
 
   const evaluateAppStatus = (app) => {
+    if (!app) {
+      return {
+        installed: false,
+        updateAvailable: false,
+        label: 'Installer',
+        disabled: false,
+        isInstalling: false,
+      };
+    }
+
+    const appId = app.id;
     const installedVersion = app?.installedVersion;
     const installed = typeof installedVersion === 'string'
       ? installedVersion.trim() !== ''
@@ -674,7 +687,7 @@ try {
     const updateAvailable = updateFlag || versionStatus === 'update-available';
 
     // Déterminer le label en fonction de l'état
-    const isCurrentlyInstalling = installingApps.has(app.id);
+    const isCurrentlyInstalling = appId ? installingApps.has(appId) : false;
     let label;
     if (isCurrentlyInstalling) {
       label = 'Installation...';
@@ -690,7 +703,8 @@ try {
       installed,
       updateAvailable,
       label,
-      disabled: (installed && !updateAvailable) || isCurrentlyInstalling
+      disabled: (installed && !updateAvailable) || isCurrentlyInstalling,
+      isInstalling: isCurrentlyInstalling,
     };
   };
 
@@ -702,6 +716,15 @@ try {
       </div>
     );
   }
+
+  const closeAppModal = () => {
+    if (!selectedApp) return;
+    setIsModalClosing(true);
+    setTimeout(() => {
+      setSelectedApp(null);
+      setIsModalClosing(false);
+    }, 350); // correspond à 0.35s d'animation CSS
+  };
 
   if (loading) {
     return (
@@ -779,7 +802,8 @@ try {
                       </div>
                     </div>
                     {(() => {
-                      const { label, disabled } = evaluateAppStatus(app);
+                      const { label, disabled, isInstalling } = evaluateAppStatus(app);
+                      const progress = (installProgress[app.id]?.progress || 0) / 100;
 
                       const handleClick = (event) => {
                         event.stopPropagation();
@@ -797,11 +821,12 @@ try {
                       return (
                         <div className="featured-install-section">
                           <button
-                            className="featured-install-btn"
+                            className={`featured-install-btn ${isInstalling ? 'installing' : ''}`}
                             disabled={disabled}
                             onClick={handleClick}
+                            style={isInstalling ? { ['--progress']: progress } : undefined}
                           >
-                            {label}
+                            <span>{label}</span>
                           </button>
                           {installProgress[app.id] && (
                             <div className="install-progress-container">
@@ -811,9 +836,6 @@ try {
                                   style={{ width: `${installProgress[app.id].progress || 0}%` }}
                                 />
                               </div>
-                              <span className="install-progress-text">
-                                {installProgress[app.id].progress || 0}% - {installProgress[app.id].message || 'En cours...'}
-                              </span>
                             </div>
                           )}
                         </div>
@@ -939,7 +961,8 @@ try {
                     )}
                   </div>
                   {(() => {
-                    const { label, disabled } = evaluateAppStatus(app);
+                    const { label, disabled, isInstalling } = evaluateAppStatus(app);
+                    const progress = (installProgress[app.id]?.progress || 0) / 100;
 
                     const handleClick = (event) => {
                       event.stopPropagation();
@@ -957,11 +980,12 @@ try {
                     return (
                       <div className="app-install-section">
                         <button
-                          className="app-get-button"
+                          className={`app-get-button ${isInstalling ? 'installing' : ''}`}
                           disabled={disabled}
                           onClick={handleClick}
+                          style={isInstalling ? { ['--progress']: progress } : undefined}
                         >
-                          {label}
+                          <span>{label}</span>
                         </button>
                         {installProgress[app.id] && (
                           <div className="install-progress-container">
@@ -971,9 +995,6 @@ try {
                                 style={{ width: `${installProgress[app.id].progress || 0}%` }}
                               />
                             </div>
-                            <span className="install-progress-text">
-                              {installProgress[app.id].progress || 0}%
-                            </span>
                           </div>
                         )}
                       </div>
@@ -988,11 +1009,17 @@ try {
 
       {/* Modal détails application */}
       {selectedApp && (
-        <div className="modal-overlay" onClick={() => setSelectedApp(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div 
+          className={`modal-overlay ${isModalClosing ? 'modal-overlay-closing' : ''}`}
+          onClick={closeAppModal}
+        >
+          <div 
+            className={`modal-content ${isModalClosing ? 'modal-content-closing' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <button 
               className="modal-close"
-              onClick={() => setSelectedApp(null)}
+              onClick={closeAppModal}
             >
               <FontAwesomeIcon icon={faTimes} />
             </button>
@@ -1016,7 +1043,10 @@ try {
               </div>
               <div className="modal-header-actions">
                 {(() => {
-                  const { label, disabled } = evaluateAppStatus(selectedApp);
+                  if (!selectedApp) return null;
+
+                  const { label, disabled, isInstalling } = evaluateAppStatus(selectedApp);
+                  const progress = (installProgress[selectedApp.id]?.progress || 0) / 100;
 
                   const handleClick = (event) => {
                     event.stopPropagation();
@@ -1027,30 +1057,30 @@ try {
 
                     // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                     if (label === 'Installer' || label === 'Mettre à jour') {
-                      installApp(selectedApp.id, selectedApp.name);
+                      if (selectedApp) {
+                        installApp(selectedApp.id, selectedApp.name);
+                      }
                     }
                   };
 
                   return (
                     <div className="modal-install-section">
                       <button
-                        className="btn-primary btn-install-header"
+                        className={`btn-primary btn-install-header ${isInstalling ? 'installing' : ''}`}
                         disabled={disabled}
                         onClick={handleClick}
+                        style={isInstalling && selectedApp ? { ['--progress']: progress } : undefined}
                       >
-                        <FontAwesomeIcon icon={faDownload} /> {label}
+                        <span><FontAwesomeIcon icon={faDownload} /> {label}</span>
                       </button>
-                      {installProgress[selectedApp.id] && (
+                      {selectedApp && installProgress[selectedApp.id] && (
                         <div className="install-progress-container modal-progress">
                           <div className="install-progress-bar">
                             <div 
                               className="install-progress-fill"
-                              style={{ width: `${installProgress[selectedApp.id].progress || 0}%` }}
+                              style={{ width: `${(installProgress[selectedApp.id]?.progress || 0)}%` }}
                             />
                           </div>
-                          <span className="install-progress-text">
-                            {installProgress[selectedApp.id].progress || 0}% - {installProgress[selectedApp.id].message || 'En cours...'}
-                          </span>
                         </div>
                       )}
                     </div>
@@ -1144,11 +1174,29 @@ try {
 
       {/* Image agrandie */}
       {enlargedImage && (
-        <div className="image-overlay" onClick={() => setEnlargedImage(null)}>
-          <div className="image-overlay-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`image-overlay ${closingImage ? 'image-overlay-closing' : ''}`}
+          onClick={() => {
+            setClosingImage(true);
+            setTimeout(() => {
+              setEnlargedImage(null);
+              setClosingImage(false);
+            }, 200);
+          }}
+        >
+          <div
+            className="image-overlay-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button 
               className="image-close"
-              onClick={() => setEnlargedImage(null)}
+              onClick={() => {
+                setClosingImage(true);
+                setTimeout(() => {
+                  setEnlargedImage(null);
+                  setClosingImage(false);
+                }, 200);
+              }}
             >
               <FontAwesomeIcon icon={faTimes} />
             </button>

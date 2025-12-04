@@ -336,6 +336,22 @@
   }
 }
 
+@keyframes modalCloseSlideDown {
+  from {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(20px) scale(0.95);
+    opacity: 0;
+  }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 /* --- Section header (kicker/title/meta) --- */
 .section-header {
   display: grid;
@@ -668,6 +684,34 @@
   letter-spacing: -0.01em;
 }
 
+.app-get-button.installing,
+.featured-install-btn.installing,
+.btn-install-header.installing {
+  position: relative;
+  overflow: hidden;
+}
+
+.app-get-button.installing::before,
+.featured-install-btn.installing::before,
+.btn-install-header.installing::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Bleu plus marqué pour bien voir le remplissage */
+  background: rgba(37, 99, 235, 0.7);
+  transform-origin: left center;
+  transform: scaleX(var(--progress, 0));
+  transition: transform 0.25s ease-out;
+}
+
+.app-get-button.installing span,
+.featured-install-btn.installing span,
+.btn-install-header.installing span {
+  position: relative;
+  z-index: 1;
+  color: #ffffff;
+}
+
 .app-get-button:hover {
   background: #e5e7eb;
   transform: scale(1.05);
@@ -726,24 +770,24 @@
   font-size: 14px;
 }
 
-/* Modal */
-.modal-overlay {
+/* Modal AppStore */
+.appstore-container .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   z-index: 1000;
-  padding: 24px;
-  animation: fadeIn 0.2s;
+  padding: 0px 0px;
+  animation: fadeIn 0.25s ease-out;
 }
 
-.modal-content {
+.appstore-container .modal-content {
   background: white;
   border-radius: 28px;
-  max-width: 1100px;
-  width: 100%;
+  max-width: 1200px;
+  width: 56vw;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
@@ -752,6 +796,17 @@
   border: none;
   /* Force l'arrondi visible même avec la scrollbar */
   clip-path: inset(0 round 12px);
+  margin-top: 16px;
+}
+
+.modal-overlay-closing {
+  animation: fadeOut 0.35s ease-in forwards;
+}
+
+.modal-content-closing {
+  animation: modalCloseSlideDown 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  /* debug temporaire */
+  box-shadow: 0 0 0 4px red;
 }
 
 .modal-close {
@@ -979,6 +1034,10 @@
   z-index: 3000;
   padding: 32px;
   animation: fadeIn 0.2s;
+}
+
+.image-overlay-closing {
+  animation: fadeOut 0.18s forwards;
 }
 
 .image-overlay-content {

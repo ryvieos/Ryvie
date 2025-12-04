@@ -705,11 +705,13 @@ const Home = () => {
   
   // Fonction pour rafraîchir les icônes du bureau après installation/désinstallation
   const refreshDesktopIcons = React.useCallback(async () => {
-    if (!accessMode) return;
+    // Être plus robuste: si accessMode n'est pas encore initialisé,
+    // retomber sur la détection actuelle.
+    const mode = accessMode || getCurrentAccessMode() || 'private';
     
     try {
-      console.log('[Home] 🔄 Rafraîchissement des icônes du bureau...');
-      const config = await generateAppConfigFromManifests(accessMode);
+      console.log('[Home] 🔄 Rafraîchissement des icônes du bureau...', { mode });
+      const config = await generateAppConfigFromManifests(mode);
       
       if (Object.keys(config).length > 0) {
         console.log('[Home] ✅ Config rechargée:', Object.keys(config).length, 'apps');
@@ -780,7 +782,7 @@ const Home = () => {
             
             // Sauvegarder aussi dans le backend
             try {
-              const serverUrl = getServerUrl(accessMode);
+              const serverUrl = getServerUrl(mode);
               const appsList = Object.entries(cleanedLayout)
                 .filter(([id, pos]) => id && config[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
                 .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))

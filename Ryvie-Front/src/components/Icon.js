@@ -34,6 +34,7 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
   const [imgSrc, setImgSrc] = React.useState(src);
   const [imgError, setImgError] = React.useState(false);
   const [pendingAction, setPendingAction] = React.useState(null);
+  const [isUninstalling, setIsUninstalling] = React.useState(false);
   const isProcessingMenuActionRef = React.useRef(false);
   
   React.useEffect(() => {
@@ -73,8 +74,12 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
 
     let backgroundColor = '#dc3545';
     let animation = 'none';
-    
-    if (pendingAction === 'stopping') {
+
+    // Désinstallation en cours: badge rouge avec pulsation
+    if (isUninstalling) {
+      backgroundColor = '#dc3545';
+      animation = 'pulse 1.5s ease-in-out infinite';
+    } else if (pendingAction === 'stopping') {
       const currentStatus = appStatusData?.status;
       if (currentStatus === 'stopped') {
         backgroundColor = '#dc3545';
@@ -218,7 +223,9 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     } else if (action === 'start' || action === 'restart') {
       setPendingAction('starting');
     } else if (action === 'uninstall') {
-      setPendingAction('stopping'); // Utiliser stopping pour la désinstallation
+      // On garde le badge en mode "arrêt" mais on ne touche pas à appStatus global
+      setPendingAction('stopping');
+      setIsUninstalling(true);
     }
     
     // Mise à jour optimiste du statut (avant l'appel API)
@@ -240,13 +247,6 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
             status: 'starting',
             progress: 50
           };
-        } else if (action === 'uninstall') {
-          console.log(`[Icon] 🗑️  ${appName} - Mise à jour optimiste: stopped (désinstallation en cours)`);
-          newStatus[appKey] = {
-            ...newStatus[appKey],
-            status: 'stopped',
-            progress: 0
-          };
         }
         
         return newStatus;
@@ -266,30 +266,27 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
         console.log('[Icon] Réponse complète:', response);
         console.log('[Icon] Réponse data:', response.data);
         console.log('[Icon] Success flag:', response.data?.success);
-        
-        // Nettoyer le cache localStorage avant de recharger
-        console.log('[Icon] 🧹 Nettoyage du cache localStorage...');
-        try {
-          // Vider tous les caches liés aux apps
-          const keysToRemove = [];
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.includes('appsConfig') || key.includes('launcher_') || key.includes('iconImages'))) {
-              keysToRemove.push(key);
-            }
-          }
-          keysToRemove.forEach(key => {
-            console.log(`[Icon] 🗑️ Suppression du cache: ${key}`);
-            localStorage.removeItem(key);
-          });
-        } catch (e) {
-          console.warn('[Icon] ⚠️ Erreur lors du nettoyage du cache:', e);
-        }
-        
-        // Afficher le message et recharger
+
+        // Informer l'utilisateur du succès immédiatement.
         alert(`${appName} a été désinstallé avec succès.`);
-        console.log('[Icon] 🔄 Rechargement de la page (F5)...');
-        window.location.reload();
+
+        // Une fois qu'il a cliqué sur OK, demander à Home.js de rafraîchir la grille
+        // (ce qui retire l'app du layout et sauvegarde les positions actuelles).
+        try {
+          if (typeof refreshDesktopIcons === 'function') {
+            console.log('[Icon] 🔄 Appel de refreshDesktopIcons après désinstallation');
+            await refreshDesktopIcons();
+          } else {
+            console.log('[Icon] ℹ️ refreshDesktopIcons non fourni, aucun rafraîchissement spécifique');
+          }
+        } catch (e) {
+          console.warn('[Icon] ⚠️ Erreur lors de refreshDesktopIcons après désinstallation:', e);
+        }
+
+        // L'icône va être retirée de la grille après refreshDesktopIcons.
+        // On peut remettre le flag local au cas où le composant reste monté.
+        setIsUninstalling(false);
+
         return;
       }
       
@@ -336,7 +333,8 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
       
       // Réinitialiser l'action en cours
       setPendingAction(null);
-      
+      setIsUninstalling(false);
+
       // Restaurer le statut précédent en cas d'erreur
       if (setAppStatus && appStatusData) {
         console.log(`[Icon] 🔙 Restauration du statut précédent pour ${appName}`);
@@ -366,7 +364,7 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
         <div className="icon-container">
           <div
             ref={ref}
-            className="icon"
+            className={`icon ${isUninstalling ? 'icon-uninstalling' : ''}`}
             style={{
               cursor: isClickable ? 'pointer' : 'not-allowed',
               position: 'relative',

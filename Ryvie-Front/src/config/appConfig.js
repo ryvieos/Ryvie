@@ -6,7 +6,7 @@
 
 import axios from '../utils/setupAxios';
 import urlsConfig from './urls';
-const { getServerUrl } = urlsConfig;
+const { getServerUrl, registerAppPort } = urlsConfig;
 
 // ==================== CONFIGURATION GRILLE ====================
 
@@ -166,6 +166,11 @@ const generateAppConfigFromManifests = async (accessMode) => {
       
       // Ajouter un timestamp pour éviter le cache du navigateur
       const iconUrl = `${serverUrl}/api/apps/${app.id}/icon?t=${Date.now()}`;
+
+      // Enregistrer dynamiquement le port principal pour getAppUrl
+      if (app.mainPort && Number.isInteger(app.mainPort)) {
+        try { registerAppPort(app.id, app.mainPort); } catch (_) {}
+      }
       
       config[iconId] = {
         id: app.id, // ⚠️ OBLIGATOIRE pour les actions start/stop/restart

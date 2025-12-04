@@ -32,6 +32,32 @@ const resolvePort = (appId, fallback) => {
   return Number.isInteger(p) ? p : fallback;
 };
 
+/**
+ * Enregistre ou met à jour dynamiquement le port d'une application côté front.
+ * Utilisé après chargement des manifests pour que getAppUrl fonctionne
+ * immédiatement après installation, sans redémarrer le frontend.
+ * @param {string} appId - Identifiant logique de l'app (ex: 'linkwarden')
+ * @param {number} port - Port HTTP exposé de l'app
+ */
+const registerAppPort = (appId, port) => {
+  if (!appId || !Number.isInteger(port)) return;
+  try {
+    const id = String(appId).toLowerCase();
+    appPorts[id] = port;
+    // Mettre aussi à jour BASE_URLS.APPS si déjà généré
+    if (BASE_URLS && BASE_URLS.APPS) {
+      const domains = netbirdData?.domains || {};
+      const domainsId = id;
+      BASE_URLS.APPS[id.toUpperCase()] = {
+        PUBLIC: domains[domainsId] ? `https://${domains[domainsId]}` : '',
+        PRIVATE: privateUrl('ryvie.local', port)
+      };
+    }
+  } catch (e) {
+    console.warn('[urls] registerAppPort failed for', appId, port, e?.message);
+  }
+};
+
 const privateUrl = (host, port) => {
   const scheme = port === 443 ? 'https' : 'http';
   return `${scheme}://${host}:${port}`;
@@ -354,5 +380,6 @@ export default {
   // Nouvelles fonctions utilitaires
   getCurrentLocation,
   isOnNetbirdTunnel,
-  buildAppUrl
+  buildAppUrl,
+  registerAppPort
 };
