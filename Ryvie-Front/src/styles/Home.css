@@ -734,8 +734,8 @@
 /* Bouton de déconnexion en bas à gauche */
 .logout-fab {
   position: fixed;
-  bottom: 60px;
-  left: 20px;
+  bottom: clamp(16px, 1vh, 60px);
+  left: clamp(12px, 3vw, 20px);
   z-index: 1100;
   display: inline-flex;
   align-items: center;
@@ -777,8 +777,8 @@
 /* User chip above logout button */
 .user-chip {
   position: fixed;
-  bottom: 110px; /* rapproché du bouton et remonté */
-  left: 20px;
+  bottom: calc(clamp(16px, 1vh, 60px) + 50px); /* aligné au-dessus du bouton, avec marge responsive */
+  left: clamp(12px, 3vw, 20px);
   z-index: 1099; /* Just below logout button */
   display: inline-flex;
   align-items: center;
@@ -799,11 +799,6 @@
   top: 20px;
 }
 
-/* Adjust logout button position */
-.logout-fab {
-  bottom: 60px;
-  left: 20px;
-}
 
 .user-chip .avatar {
   width: 30px;
@@ -850,7 +845,7 @@
 /* Style pour le panneau de configuration */
 .settings-panel {
   position: fixed;
-  bottom: 20px;
+  bottom: 10px;
   right: 20px;
   z-index: 1000;
 }

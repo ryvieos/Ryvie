@@ -150,13 +150,13 @@ body.dark-mode .setting-value {
   color: #b0b0b0 !important;
 }
 
-/* Inputs & Selects */
-body.dark-mode input[type="text"],
-body.dark-mode input[type="email"],
-body.dark-mode input[type="password"],
-body.dark-mode input[type="number"],
-body.dark-mode textarea,
-body.dark-mode select {
+/* Inputs & Selects (scopés à la page Settings pour ne pas impacter le login) */
+body.dark-mode .settings-container input[type="text"],
+body.dark-mode .settings-container input[type="email"],
+body.dark-mode .settings-container input[type="password"],
+body.dark-mode .settings-container input[type="number"],
+body.dark-mode .settings-container textarea,
+body.dark-mode .settings-container select {
   background: #2a2a2a !important;
   color: #e0e0e0 !important;
   border-color: #444444 !important;
