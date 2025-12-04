@@ -248,6 +248,60 @@
   /* Masquer les scrollbars tout en gardant le scroll fonctionnel */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE / Edge */
+  /* Mode clair par défaut : fond opaque et texte sombre pour une bonne lisibilit6.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.4 */
+  background: rgba(249, 250, 251, 1);
+  color: #111827;
+}
+
+/* Mode clair : styles par d6.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.4 */
+.storage-detail-header {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.storage-detail-title {
+  color: #0b1220;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.storage-detail-subtitle {
+  color: #5b6472;
+  font-size: 0.98rem;
+}
+
+.storage-detail-body {
+  background: transparent;
+}
+
+.storage-detail-legend span {
+  color: #111827;
+  font-size: 0.95rem;
+}
+
+.storage-detail-separator {
+  background: #e5e7eb;
+}
+
+.storage-detail-apps {
+  border-top: 1px solid #e5e7eb;
+}
+
+.storage-detail-apps-list {
+  color: #111827;
+  font-size: 0.95rem;
+}
+
+.storage-detail-app-row {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+.storage-detail-app-row:hover {
+  background: #f3f4f6;
+}
+
+.storage-detail-app-row span {
+  color: #111827;
 }
 
 /* Mode sombre pour la modale de stockage détaillé */

@@ -1798,25 +1798,40 @@ const Settings = () => {
           </div>
         ) : (
           <div className="docker-apps-grid">
-            {applications.map(app => (
-              <div 
-                key={app.id} 
-                className={`docker-app-card ${selectedApp && selectedApp.id === app.id ? 'active' : ''}`}
-                onClick={() => handleAppSelect(app)}
-              >
-                <div className="docker-app-header">
-                  <h3>{app.name}</h3>
-                  <span className={`docker-status-badge ${
-                    app.status === 'running' && app.progress === 100 ? 'running' : 
-                    app.status === 'starting' || app.status === 'partial' ? 'starting' : 
-                    'stopped'
-                  }`}>
-                    {app.status === 'running' && app.progress === 100 ? 'En cours' : 
-                     app.status === 'starting' ? 'Démarrage...' :
-                     app.status === 'partial' ? 'Partiel' :
-                     'Arrêté'}
-                  </span>
-                </div>
+            {applications.map(app => {
+              // URL standard de l'icône exposée par le backend
+              const serverUrl = getServerUrl(accessMode);
+              const iconUrl = `${serverUrl}/api/apps/${app.id}/icon`;
+
+              return (
+                <div 
+                  key={app.id} 
+                  className={`docker-app-card ${selectedApp && selectedApp.id === app.id ? 'active' : ''}`}
+                  onClick={() => handleAppSelect(app)}
+                >
+                  <div className="docker-app-header">
+                    <div className="docker-app-main">
+                      {iconUrl && (
+                        <img
+                          src={iconUrl}
+                          alt={app.name}
+                          className="docker-app-logo"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      )}
+                      <h3>{app.name}</h3>
+                    </div>
+                    <span className={`docker-status-badge ${
+                      app.status === 'running' && app.progress === 100 ? 'running' : 
+                      app.status === 'starting' || app.status === 'partial' ? 'starting' : 
+                      'stopped'
+                    }`}>
+                      {app.status === 'running' && app.progress === 100 ? 'En cours' : 
+                       app.status === 'starting' ? 'Démarrage...' :
+                       app.status === 'partial' ? 'Partiel' :
+                       'Arrêté'}
+                    </span>
+                  </div>
                 {appActionStatus.show && appActionStatus.appId === app.id && (
                   <div className={`docker-action-status ${appActionStatus.success ? 'success' : 'error'}`}>
                     {appActionStatus.message}
@@ -1824,25 +1839,27 @@ const Settings = () => {
                 )}
                 {isAdmin && (
                   <div className="docker-app-controls">
-                    <button
-                      className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
-                      }}
-                    >
-                      {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
-                    </button>
-                    <button
-                      className="docker-action-btn restart"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAppAction(app.id, 'restart')
-                      }}
-                      disabled={!(app.status === 'running' && app.progress > 0)}
-                    >
-                      Redémarrer
-                    </button>
+                    <div className="docker-app-actions-inline">
+                      <button
+                        className={`docker-action-btn ${app.status === 'running' && app.progress > 0 ? 'stop' : 'start'}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
+                        }}
+                      >
+                        {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
+                      </button>
+                      <button
+                        className="docker-action-btn restart"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAppAction(app.id, 'restart')
+                        }}
+                        disabled={!(app.status === 'running' && app.progress > 0)}
+                      >
+                        Redémarrer
+                      </button>
+                    </div>
                     <button
                       className="docker-action-btn uninstall"
                       onClick={(e) => {
@@ -1851,7 +1868,7 @@ const Settings = () => {
                       }}
                       title="Désinstaller l'application"
                     >
-                      🗑️ Désinstaller
+                      🗑️
                     </button>
                     <div className="docker-autostart-control" onClick={(e) => e.stopPropagation()}>
                       <label className="switch">
@@ -1867,7 +1884,8 @@ const Settings = () => {
                   </div>
                 )}
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </section>
