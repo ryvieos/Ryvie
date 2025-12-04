@@ -3195,7 +3195,7 @@ const Settings = () => {
                 </div>
                 
                 {/* Séparateur */}
-                <div style={{ height: '1px', background: '#e0e0e0', margin: '8px 0' }} />
+                <div className="storage-detail-separator" style={{ height: '1px', margin: '8px 0' }} />
                 
                 {/* Disponible pour écriture */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.45s both' }}>
@@ -3216,31 +3216,27 @@ const Settings = () => {
             </div>
 
             {/* Liste des applications */}
-            <div style={{
-              padding: '0 24px 24px',
-              borderTop: '1px solid #f0f0f0'
+            <div className="storage-detail-apps" style={{
+              padding: '0 24px 24px'
             }}>
               <h3 style={{ margin: '16px 0 12px', fontSize: '18px', fontWeight: '600' }}>
                 Applications ({storageDetail.apps.length})
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div className="storage-detail-apps-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {storageDetail.apps.map((app, idx) => {
                   const serverUrl = getServerUrl(accessMode);
                   return (
                     <div
                       key={app.id}
+                      className="storage-detail-app-row"
                       style={{
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         padding: '12px',
-                        background: '#f9f9f9',
                         borderRadius: '8px',
-                        transition: 'background 0.2s',
                         animation: `slideInLeft 0.4s ease-out ${idx * 0.05}s both`
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = '#f9f9f9'}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         {app.icon && (
@@ -3257,7 +3253,7 @@ const Settings = () => {
                         )}
                         <span style={{ fontSize: '15px', fontWeight: '500' }}>{app.name}</span>
                       </div>
-                      <span style={{ fontSize: '15px', fontWeight: '600', color: '#666' }}>
+                      <span style={{ fontSize: '15px', fontWeight: '600' }}>
                         {app.sizeFormatted}
                       </span>
                     </div>
@@ -3279,10 +3275,10 @@ const Settings = () => {
             <FontAwesomeIcon icon={faServer} />
             Zone Dangereuse
           </h2>
-          <div className="settings-card" style={{ border: '2px solid #ffebee', background: '#fff' }}>
+          <div className="settings-card">
             <div style={{ padding: '20px' }}>
               <h3 style={{ marginTop: 0, color: '#d32f2f' }}>Redémarrer le Système</h3>
-              <p className="setting-description" style={{ marginBottom: '20px', color: '#666' }}>
+              <p className="setting-description" style={{ marginBottom: '20px' }}>
                 Cette action effectuera un redémarrage complet du système (reboot). Tous les services seront interrompus pendant quelques minutes.
               </p>
               <button
