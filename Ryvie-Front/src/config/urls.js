@@ -193,6 +193,7 @@ const getUrl = (urlConfig, accessMode) => {
 /**
  * Fonction pour obtenir l'URL du serveur.
  * Nouvelle logique basée sur l'URL courante:
+ * - Si on est sur ryvie.local sans port (via Caddy) → URL relative (same-origin)
  * - Si on est sur backendHost (tunnel Netbird) ET 'status' a un domaine → https://<domaine>
  * - Sinon → http(s)://<hostname_courant>:<port_server>
  * @param {string} accessMode - Mode d'accès (ignoré, gardé pour compatibilité)
@@ -200,7 +201,12 @@ const getUrl = (urlConfig, accessMode) => {
  */
 const getServerUrl = (accessMode) => {
   const domains = netbirdData?.domains || {};
-  const { protocol } = getCurrentLocation();
+  const { hostname, protocol, port } = getCurrentLocation();
+
+  // Si on accède via ryvie.local sur le port 80 (Caddy), utiliser same-origin
+  if (hostname === 'ryvie.local' && (port === '80' || port === '')) {
+    return ''; // URL relative pour same-origin
+  }
 
   // En contexte public (HTTPS) et si un domaine Netbird "status" est défini,
   // toujours utiliser ce domaine comme URL publique du backend.
@@ -331,7 +337,7 @@ const getAutoUrl = (type, name) => {
 // Exporter les fonctions et constantes (ES modules)
 /**
  * Obtient l'URL du frontend en fonction du mode d'accès
- * - Mode 'private' : utilise l'URL courante (hostname:3000)
+ * - Mode 'private' : utilise ryvie.local (sans port, via Caddy same-origin)
  * - Mode 'public' : 
  *   - Si domains.app existe dans netbird-data.json → https://<domains.app>
  *   - Sinon → http://<backendHost>:3000
@@ -340,8 +346,8 @@ const getAutoUrl = (type, name) => {
  */
 function getFrontendUrl(mode = 'public') {
   if (mode === 'private') {
-    // En mode privé, toujours utiliser ryvie.local
-    return `http://ryvie.local:${LOCAL_PORTS.FRONTEND}`;
+    // En mode privé, utiliser ryvie.local sans port (Caddy reverse proxy sur port 80)
+    return `http://ryvie.local`;
   }
   
   // Mode public : vérifier netbird-data.json

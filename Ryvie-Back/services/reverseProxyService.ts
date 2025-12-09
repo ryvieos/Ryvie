@@ -33,10 +33,10 @@ services:
 `;
 
 /**
- * Génère le contenu du Caddyfile avec l'IP de l'hôte
+ * Génère le contenu du Caddyfile avec host.docker.internal (same-origin setup)
+ * Utilise host.docker.internal car Caddy tourne dans Docker et doit accéder à l'hôte
  */
 function generateCaddyfileContent() {
-  const hostIP = getLocalIP();
   return `{
   auto_https off
 }
@@ -50,12 +50,29 @@ https://ryvie.local {
 http://ryvie.local {
   encode gzip
 
-  # 1) Connecteur OnlyOffice sous le même host (NE PAS retirer le préfixe)
-  @onlyoffice path /plugins/onlyoffice*
-  reverse_proxy @onlyoffice ${hostIP}:5000
+  # 1) Socket.IO (WebSocket support)
+  @socketio path /socket.io/*
+  reverse_proxy @socketio host.docker.internal:3002 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+  }
 
-  # 2) Tout le reste vers le frontend (webpack dev)
-  reverse_proxy ${hostIP}:3000
+  # 2) API Backend (routes /api/* et /status)
+  @api path /api/* /status
+  reverse_proxy @api host.docker.internal:3002 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+  }
+
+  # 3) Connecteur OnlyOffice sous le même host (NE PAS retirer le préfixe)
+  @onlyoffice path /plugins/onlyoffice*
+  reverse_proxy @onlyoffice host.docker.internal:5000
+
+  # 4) Tout le reste vers le frontend (webpack dev)
+  reverse_proxy host.docker.internal:3000 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+  }
 }
 `;
 }
@@ -146,14 +163,21 @@ async function checkComposeFile() {
 }
 
 /**
- * Extrait l'IP du Caddyfile actuel
+ * Vérifie si le Caddyfile utilise localhost ou une IP
  */
-function extractIPFromCaddyfile(content) {
-  // Chercher toutes les occurrences de reverse_proxy avec IP
-  const matches = content.matchAll(/reverse_proxy(?:\s+@\w+)?\s+(\d+\.\d+\.\d+\.\d+):(\d+)/g);
-  const ips = [...matches].map(m => m[1]);
-  // Retourner la dernière IP trouvée (celle du frontend)
-  return ips.length > 0 ? ips[ips.length - 1] : null;
+function checkCaddyfileHost(content) {
+  const usesLocalhost = content.includes('reverse_proxy') && content.includes('localhost:');
+  const usesIP = /reverse_proxy(?:\s+@\w+)?\s+(\d+\.\d+\.\d+\.\d+):/.test(content);
+  
+  if (usesLocalhost) {
+    return { type: 'localhost', value: 'localhost' };
+  } else if (usesIP) {
+    const matches = content.matchAll(/reverse_proxy(?:\s+@\w+)?\s+(\d+\.\d+\.\d+\.\d+):(\d+)/g);
+    const ips = [...matches].map(m => m[1]);
+    return { type: 'ip', value: ips.length > 0 ? ips[ips.length - 1] : null };
+  }
+  
+  return { type: 'unknown', value: null };
 }
 
 /**
@@ -168,13 +192,15 @@ async function checkCaddyfile() {
       content.includes('auto_https off'),
       content.includes('ryvie.local'),
       content.includes('reverse_proxy') && content.includes(':3000'),
+      content.includes('@api') && content.includes(':3002'),
+      content.includes('@socketio') && content.includes(':3002'),
       content.includes('@onlyoffice') && content.includes(':5000')
     ];
     
     const isValid = checks.every(check => check);
     
-    // Extraire l'IP actuelle
-    const currentIP = extractIPFromCaddyfile(content);
+    // Vérifier le type d'hôte utilisé (localhost ou IP)
+    const hostInfo = checkCaddyfileHost(content);
     
     // Vérifier si la redirection HTTPS est présente (recommandé mais pas obligatoire)
     const hasHttpsRedirect = content.includes('https://ryvie.local') && content.includes('redir');
@@ -186,7 +212,7 @@ async function checkCaddyfile() {
       console.warn('[reverseProxyService] ⚠️  Caddyfile existe mais configuration incomplète');
     }
     
-    return { exists: true, valid: isValid, content, currentIP, hasHttpsRedirect };
+    return { exists: true, valid: isValid, content, hostInfo, hasHttpsRedirect };
   } catch (error: any) {
     if (error.code === 'ENOENT') {
       console.warn('[reverseProxyService] ⚠️  Caddyfile non trouvé:', EXPECTED_CONFIG.caddyfile);
@@ -274,17 +300,16 @@ async function startCaddy() {
 }
 
 /**
- * Met à jour le Caddyfile avec la nouvelle IP
+ * Met à jour le Caddyfile (maintenant utilise localhost)
  */
 async function updateCaddyfileIP() {
   try {
-    const newIP = getLocalIP();
     const caddyfileContent = generateCaddyfileContent();
     
     await fs.writeFile(EXPECTED_CONFIG.caddyfile, caddyfileContent);
-    console.log('[reverseProxyService] ✅ Caddyfile mis à jour avec IP:', newIP);
+    console.log('[reverseProxyService] ✅ Caddyfile mis à jour avec localhost');
     
-    return { success: true, newIP };
+    return { success: true, usingLocalhost: true };
   } catch (error: any) {
     console.error('[reverseProxyService] ❌ Erreur lors de la mise à jour du Caddyfile:', error.message);
     return { success: false, error: error.message };
@@ -391,27 +416,20 @@ async function ensureCaddyRunning() {
     
     console.log('[reverseProxyService] ✅ Fichiers de configuration OK');
     
-    // 2. Vérifier si l'IP a changé
-    const currentHostIP = getLocalIP();
-    const caddyfileIP = caddyfileCheck.currentIP;
-    
-    if (caddyfileIP && caddyfileIP !== currentHostIP) {
-      console.log(`[reverseProxyService] 🔄 Changement d'IP détecté: ${caddyfileIP} → ${currentHostIP}`);
+    // 2. Vérifier si le Caddyfile utilise encore une IP au lieu de localhost
+    const hostInfo = caddyfileCheck.hostInfo;
+    if (hostInfo && hostInfo.type === 'ip') {
+      console.log(`[reverseProxyService] 🔄 Migration détectée: IP (${hostInfo.value}) → localhost`);
       
-      // Mettre à jour le Caddyfile
-      const updateResult = await updateCaddyfileIP();
-      if (!updateResult.success) {
-        return {
-          success: false,
-          error: 'Échec de la mise à jour du Caddyfile',
-          details: updateResult
-        };
-      }
+      // Mettre à jour le Caddyfile pour utiliser localhost
+      const caddyfileContent = generateCaddyfileContent();
+      await fs.writeFile(EXPECTED_CONFIG.caddyfile, caddyfileContent);
+      console.log('[reverseProxyService] ✅ Caddyfile mis à jour pour utiliser localhost');
       
-      // Vérifier si Caddy est en cours d'exécution
+      // Vérifier si Caddy est en cours d'exécution et le redémarrer
       const containerStatus = await checkCaddyContainer();
       if (containerStatus.running) {
-        console.log('[reverseProxyService] 🔄 Redémarrage de Caddy pour appliquer la nouvelle IP...');
+        console.log('[reverseProxyService] 🔄 Redémarrage de Caddy pour appliquer localhost...');
         const restartResult = await restartCaddy();
         
         if (!restartResult.success) {
@@ -434,13 +452,13 @@ async function ensureCaddyRunning() {
           };
         }
         
-        console.log('[reverseProxyService] ✅ Caddy redémarré avec nouvelle IP:', currentHostIP);
+        console.log('[reverseProxyService] ✅ Caddy redémarré avec localhost');
         return {
           success: true,
-          ipChanged: true,
+          migrated: true,
           restarted: true,
-          oldIP: caddyfileIP,
-          newIP: currentHostIP,
+          oldHost: hostInfo.value,
+          newHost: 'localhost',
           container: newStatus
         };
       }
@@ -454,7 +472,7 @@ async function ensureCaddyRunning() {
       return {
         success: true,
         alreadyRunning: true,
-        currentIP: currentHostIP,
+        usingLocalhost: true,
         container: containerStatus
       };
     }

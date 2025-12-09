@@ -89,21 +89,29 @@ app.use(helmet({
 }));
 
 // CORS configuration with Private Network Access support
-// Required for Chrome to allow requests from http://ryvie.local:3000 to http://ryvie.local:3002
-app.use(cors({
-  origin: true, // Allow all origins
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-}));
-
-// Handle Private Network Access preflight requests (Chrome security feature)
-// This header is required when accessing local network resources from a web page
+// Required for Chrome/Edge to allow requests from http://172.55.100.228:3000 to http://172.55.100.228:3002
 app.use((req: any, res: any, next: any) => {
-  // Add Private Network Access header for preflight responses
+  const origin = req.headers.origin;
+  
+  // Allow the request origin
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle Private Network Access preflight requests (Chrome/Edge security feature)
   if (req.headers['access-control-request-private-network']) {
     res.setHeader('Access-Control-Allow-Private-Network', 'true');
   }
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
   next();
 });
 

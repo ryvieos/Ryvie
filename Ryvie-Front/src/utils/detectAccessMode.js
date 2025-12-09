@@ -22,6 +22,7 @@ function detectModeFromUrl() {
   if (typeof window === 'undefined') return 'private';
   
   const hostname = window.location.hostname;
+  const port = window.location.port;
   const backendHost = netbirdData?.received?.backendHost;
   const domains = netbirdData?.domains || {};
   
@@ -44,8 +45,15 @@ function detectModeFromUrl() {
     return 'public';
   }
   
-  // Sinon c'est le mode privé (ryvie.local, localhost, etc.)
-  console.log(`[AccessMode] Hostname ${hostname} → mode PRIVATE`);
+  // IMPORTANT: Si on accède via ryvie.local sur port 80 (Caddy), c'est du same-origin
+  // On garde le mode private mais les URLs seront relatives (gérées dans urls.js)
+  if (hostname === 'ryvie.local' && (port === '80' || port === '')) {
+    console.log(`[AccessMode] Hostname ${hostname}:${port || '80'} (Caddy same-origin) → mode PRIVATE`);
+    return 'private';
+  }
+  
+  // Sinon c'est le mode privé (ryvie.local:3000, localhost, etc.)
+  console.log(`[AccessMode] Hostname ${hostname}:${port} → mode PRIVATE`);
   return 'private';
 }
 const listeners = new Set(); // callbacks (mode) => void
