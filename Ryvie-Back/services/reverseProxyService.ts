@@ -5,6 +5,7 @@ const path = require('path');
 const Docker = require('dockerode');
 const { getLocalIP } = require('../utils/network');
 const { REVERSE_PROXY_DIR } = require('../config/paths');
+const os = require('os');
 
 const execPromise = util.promisify(exec);
 const docker = new Docker();
@@ -13,6 +14,10 @@ const EXPECTED_CONFIG = {
   caddyfile: path.join(REVERSE_PROXY_DIR, 'Caddyfile'),
   containerName: 'caddy'
 };
+
+// Configuration Ryvie-rDrive
+const RYVIE_RDRIVE_ENV_PATH = '/data/apps/Ryvie-rDrive/tdrive/.env';
+const RYVIE_RDRIVE_COMPOSE_PATH = '/data/apps/Ryvie-rDrive/tdrive/docker-compose.yml';
 
 // Templates de configuration
 const DOCKER_COMPOSE_TEMPLATE = `version: "3.8"
@@ -31,6 +36,225 @@ services:
       - /data/config/reverse-proxy/data:/data
       - /data/config/reverse-proxy/config:/config
 `;
+
+/**
+ * Détecte l'adresse IP privée locale (172.x.x.x ou 10.x.x.x)
+ * Exclut les interfaces Docker (br-*, docker0, veth*)
+ */
+function getPrivateLocalIP() {
+  const networkInterfaces = os.networkInterfaces();
+  
+  // Fonction pour vérifier si c'est une interface Docker
+  const isDockerInterface = (interfaceName: string) => {
+    return interfaceName.startsWith('br-') || 
+           interfaceName.startsWith('docker') || 
+           interfaceName.startsWith('veth');
+  };
+  
+  // Chercher d'abord une adresse 172.x.x.x (hors Docker)
+  for (const interfaceName in networkInterfaces) {
+    // Ignorer les interfaces Docker
+    if (isDockerInterface(interfaceName)) continue;
+    
+    const addresses = networkInterfaces[interfaceName];
+    for (const addressInfo of addresses) {
+      if (addressInfo.family === 'IPv4' && !addressInfo.internal) {
+        const ip = addressInfo.address;
+        // Vérifier si c'est une adresse privée 172.16.0.0 - 172.31.255.255
+        if (ip.startsWith('172.')) {
+          const secondOctet = parseInt(ip.split('.')[1]);
+          if (secondOctet >= 16 && secondOctet <= 31) {
+            return ip;
+          }
+        }
+        // Accepter aussi les adresses 172.x.x.x hors plage Docker standard (172.16-31)
+        // Par exemple 172.55.x.x
+        if (ip.startsWith('172.')) {
+          const secondOctet = parseInt(ip.split('.')[1]);
+          // Exclure les plages Docker communes: 172.17-27
+          if (secondOctet < 16 || secondOctet > 31) {
+            return ip;
+          }
+        }
+      }
+    }
+  }
+  
+  // Sinon chercher une adresse 10.x.x.x (hors Docker)
+  for (const interfaceName in networkInterfaces) {
+    if (isDockerInterface(interfaceName)) continue;
+    
+    const addresses = networkInterfaces[interfaceName];
+    for (const addressInfo of addresses) {
+      if (addressInfo.family === 'IPv4' && !addressInfo.internal) {
+        const ip = addressInfo.address;
+        if (ip.startsWith('10.')) {
+          return ip;
+        }
+      }
+    }
+  }
+  
+  // Par défaut, retourner l'IP locale standard
+  return getLocalIP();
+}
+
+/**
+ * Lit le fichier .env de Ryvie-rDrive et retourne son contenu
+ */
+async function readRyvieDriveEnv() {
+  try {
+    const content = await fs.readFile(RYVIE_RDRIVE_ENV_PATH, 'utf8');
+    return { success: true, content };
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      console.log('[reverseProxyService] ℹ️  Fichier .env Ryvie-rDrive non trouvé');
+      return { success: false, notFound: true };
+    }
+    console.error('[reverseProxyService] ❌ Erreur lecture .env Ryvie-rDrive:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Parse le fichier .env et extrait la valeur de REACT_APP_FRONTEND_URL_PRIVATE
+ */
+function parseEnvPrivateIP(envContent: string) {
+  const match = envContent.match(/^REACT_APP_FRONTEND_URL_PRIVATE=(.*)$/m);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Met à jour ou ajoute REACT_APP_FRONTEND_URL_PRIVATE dans le .env
+ */
+function updateEnvPrivateIP(envContent: string, newIP: string) {
+  const privateIPLine = `REACT_APP_FRONTEND_URL_PRIVATE=${newIP}`;
+  
+  // Vérifier si la ligne existe déjà
+  if (envContent.includes('REACT_APP_FRONTEND_URL_PRIVATE=')) {
+    // Remplacer la ligne existante
+    return envContent.replace(
+      /^REACT_APP_FRONTEND_URL_PRIVATE=.*$/m,
+      privateIPLine
+    );
+  } else {
+    // Ajouter la ligne à la fin
+    return envContent.trim() + '\n' + privateIPLine + '\n';
+  }
+}
+
+/**
+ * Écrit le fichier .env de Ryvie-rDrive
+ */
+async function writeRyvieDriveEnv(content: string) {
+  try {
+    await fs.writeFile(RYVIE_RDRIVE_ENV_PATH, content, 'utf8');
+    return { success: true };
+  } catch (error: any) {
+    console.error('[reverseProxyService] ❌ Erreur écriture .env Ryvie-rDrive:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Redémarre le docker-compose de Ryvie-rDrive (non-bloquant)
+ */
+async function restartRyvieDrive() {
+  try {
+    console.log('[reverseProxyService] 🔄 Redémarrage de Ryvie-rDrive en arrière-plan...');
+    
+    // Lancer la commande en arrière-plan sans attendre
+    exec(
+      'docker compose up -d',
+      { cwd: path.dirname(RYVIE_RDRIVE_COMPOSE_PATH) },
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error('[reverseProxyService] ❌ Erreur redémarrage Ryvie-rDrive:', error.message);
+        } else {
+          console.log('[reverseProxyService] ✅ Ryvie-rDrive redémarré');
+        }
+      }
+    );
+    
+    // Retourner immédiatement
+    return { success: true, async: true };
+  } catch (error: any) {
+    console.error('[reverseProxyService] ❌ Erreur redémarrage Ryvie-rDrive:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Vérifie et met à jour l'adresse privée dans le .env de Ryvie-rDrive
+ */
+async function ensurePrivateIPInRyvieDrive() {
+  try {
+    console.log('[reverseProxyService] 🔍 Vérification adresse privée Ryvie-rDrive...');
+    
+    // Détecter l'adresse privée actuelle
+    const currentPrivateIP = getPrivateLocalIP();
+    console.log('[reverseProxyService] 📍 Adresse privée détectée:', currentPrivateIP);
+    
+    // Lire le fichier .env
+    const envResult = await readRyvieDriveEnv();
+    if (!envResult.success) {
+      if (envResult.notFound) {
+        console.log('[reverseProxyService] ⚠️  .env Ryvie-rDrive non trouvé, création ignorée');
+      }
+      return { success: false, reason: 'env_not_found' };
+    }
+    
+    // Parser l'IP privée existante
+    const existingPrivateIP = parseEnvPrivateIP(envResult.content!);
+    console.log('[reverseProxyService] 📍 Adresse privée dans .env:', existingPrivateIP || 'non définie');
+    
+    // Vérifier si mise à jour nécessaire
+    if (existingPrivateIP === currentPrivateIP) {
+      console.log('[reverseProxyService] ✅ Adresse privée déjà à jour');
+      return { success: true, updated: false, ip: currentPrivateIP };
+    }
+    
+    // Mettre à jour le .env
+    console.log('[reverseProxyService] 🔄 Mise à jour adresse privée:', currentPrivateIP);
+    const updatedContent = updateEnvPrivateIP(envResult.content!, currentPrivateIP);
+    
+    const writeResult = await writeRyvieDriveEnv(updatedContent);
+    if (!writeResult.success) {
+      return { success: false, reason: 'write_failed', error: writeResult.error };
+    }
+    
+    console.log('[reverseProxyService] ✅ Adresse privée mise à jour dans .env');
+    
+    // Vérifier si docker-compose.yml existe
+    try {
+      await fs.access(RYVIE_RDRIVE_COMPOSE_PATH);
+      
+      // Redémarrer Ryvie-rDrive (asynchrone)
+      const restartResult = await restartRyvieDrive();
+      
+      return { 
+        success: true, 
+        updated: true, 
+        ip: currentPrivateIP,
+        oldIP: existingPrivateIP,
+        restarted: restartResult.success,
+        async: restartResult.async
+      };
+    } catch (error: any) {
+      console.log('[reverseProxyService] ℹ️  docker-compose.yml Ryvie-rDrive non trouvé, redémarrage ignoré');
+      return { 
+        success: true, 
+        updated: true, 
+        ip: currentPrivateIP,
+        oldIP: existingPrivateIP,
+        restarted: false
+      };
+    }
+  } catch (error: any) {
+    console.error('[reverseProxyService] ❌ Erreur lors de la gestion de l\'adresse privée:', error.message);
+    return { success: false, error: error.message };
+  }
+}
 
 /**
  * Génère le contenu du Caddyfile avec host.docker.internal (same-origin setup)
@@ -64,11 +288,7 @@ http://ryvie.local {
     header_up X-Real-IP {remote_host}
   }
 
-  # 3) Connecteur OnlyOffice sous le même host (NE PAS retirer le préfixe)
-  @onlyoffice path /plugins/onlyoffice*
-  reverse_proxy @onlyoffice host.docker.internal:5000
-
-  # 4) Tout le reste vers le frontend (webpack dev)
+  # 3) Tout le reste vers le frontend (webpack dev)
   reverse_proxy host.docker.internal:3000 {
     header_up Host {host}
     header_up X-Real-IP {remote_host}
@@ -187,17 +407,24 @@ async function checkCaddyfile() {
   try {
     const content = await fs.readFile(EXPECTED_CONFIG.caddyfile, 'utf8');
     
-    // Vérifications basiques
+    // Générer le contenu attendu
+    const expectedContent = generateCaddyfileContent();
+    
+    // Comparer le contenu exact (en normalisant les espaces/retours à la ligne)
+    const normalizeContent = (str: string) => str.trim().replace(/\r\n/g, '\n');
+    const isIdentical = normalizeContent(content) === normalizeContent(expectedContent);
+    
+    // Vérifications basiques (fallback si pas identique)
     const checks = [
       content.includes('auto_https off'),
       content.includes('ryvie.local'),
       content.includes('reverse_proxy') && content.includes(':3000'),
       content.includes('@api') && content.includes(':3002'),
       content.includes('@socketio') && content.includes(':3002'),
-      content.includes('@onlyoffice') && content.includes(':5000')
+      content.includes('host.docker.internal')
     ];
     
-    const isValid = checks.every(check => check);
+    const hasBasicElements = checks.every(check => check);
     
     // Vérifier le type d'hôte utilisé (localhost ou IP)
     const hostInfo = checkCaddyfileHost(content);
@@ -208,15 +435,27 @@ async function checkCaddyfile() {
       console.warn('[reverseProxyService] ⚠️  Redirection HTTPS→HTTP non configurée (Chrome peut forcer HTTPS)');
     }
     
+    // Le fichier est valide s'il est identique OU s'il a tous les éléments de base
+    const isValid = isIdentical || hasBasicElements;
+    
     if (!isValid) {
       console.warn('[reverseProxyService] ⚠️  Caddyfile existe mais configuration incomplète');
+    } else if (!isIdentical && hasBasicElements) {
+      console.warn('[reverseProxyService] ⚠️  Caddyfile diffère du template mais contient les éléments essentiels');
     }
     
-    return { exists: true, valid: isValid, content, hostInfo, hasHttpsRedirect };
+    return { 
+      exists: true, 
+      valid: isValid, 
+      identical: isIdentical,
+      content, 
+      hostInfo, 
+      hasHttpsRedirect 
+    };
   } catch (error: any) {
     if (error.code === 'ENOENT') {
       console.warn('[reverseProxyService] ⚠️  Caddyfile non trouvé:', EXPECTED_CONFIG.caddyfile);
-      return { exists: false, valid: false };
+      return { exists: false, valid: false, identical: false };
     }
     throw error;
   }
@@ -353,7 +592,16 @@ async function ensureCaddyRunning() {
   try {
     console.log('[reverseProxyService] 🔍 Vérification du reverse proxy Caddy...');
     
-    // 0. Créer les fichiers de configuration s'ils n'existent pas
+    // 0. Vérifier et mettre à jour l'adresse privée dans Ryvie-rDrive
+    const privateIPResult = await ensurePrivateIPInRyvieDrive();
+    if (privateIPResult.success && privateIPResult.updated) {
+      console.log('[reverseProxyService] ✅ Adresse privée Ryvie-rDrive mise à jour:', privateIPResult.ip);
+      if (privateIPResult.restarted && privateIPResult.async) {
+        console.log('[reverseProxyService] 🔄 Ryvie-rDrive en cours de redémarrage (arrière-plan)');
+      }
+    }
+    
+    // 1. Créer les fichiers de configuration s'ils n'existent pas
     const configResult = await ensureConfigFiles();
     if (!configResult.success) {
       return {
@@ -382,8 +630,17 @@ async function ensureCaddyRunning() {
       };
     }
     
-    if (!caddyfileCheck.exists || !caddyfileCheck.valid) {
-      console.warn('[reverseProxyService] ⚠️  Caddyfile manquant ou invalide, régénération...');
+    // Vérifier si le Caddyfile doit être régénéré
+    const shouldRegenerate = !caddyfileCheck.exists || !caddyfileCheck.valid || !caddyfileCheck.identical;
+    
+    if (shouldRegenerate) {
+      if (!caddyfileCheck.exists) {
+        console.warn('[reverseProxyService] ⚠️  Caddyfile manquant, création...');
+      } else if (!caddyfileCheck.valid) {
+        console.warn('[reverseProxyService] ⚠️  Caddyfile invalide, régénération...');
+      } else if (!caddyfileCheck.identical) {
+        console.warn('[reverseProxyService] ⚠️  Caddyfile diffère du template, mise à jour...');
+      }
       
       // Supprimer l'ancien Caddyfile s'il existe
       try {
@@ -558,5 +815,7 @@ export = {
   startCaddy,
   stopCaddy,
   restartCaddy,
-  updateCaddyfileIP
+  updateCaddyfileIP,
+  ensurePrivateIPInRyvieDrive,
+  getPrivateLocalIP
 };

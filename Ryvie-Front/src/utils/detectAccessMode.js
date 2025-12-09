@@ -39,8 +39,8 @@ function detectModeFromUrl() {
     return 'public';
   }
   
-  // Si le hostname contient .ryvie.ovh, c'est le mode public
-  if (hostname.endsWith('.ryvie.ovh')) {
+
+  if (hostname.endsWith('.ryvie.fr')) {
     console.log(`[AccessMode] Hostname ${hostname} contient .ryvie.ovh → mode PUBLIC`);
     return 'public';
   }
