@@ -4,7 +4,7 @@
  */
 
 import urlsConfig from '../config/urls';
-const { getServerUrl, netbirdData } = urlsConfig;
+const { getServerUrl, netbirdData, setLocalIP } = urlsConfig;
 import { io } from 'socket.io-client';
 import { isElectron } from './platformUtils';
 
@@ -137,6 +137,18 @@ export async function detectAccessMode(timeout = 2000) {
 
     if (response.ok) {
       console.log('[AccessMode] Serveur local accessible - Mode PRIVATE');
+      
+      // Récupérer l'IP locale depuis la réponse du serveur
+      try {
+        const data = await response.json();
+        if (data.ip) {
+          setLocalIP(data.ip);
+          console.log('[AccessMode] IP locale récupérée:', data.ip);
+        }
+      } catch (e) {
+        console.warn('[AccessMode] Impossible de parser la réponse /status:', e);
+      }
+      
       setAccessMode('private');
       return 'private';
     }

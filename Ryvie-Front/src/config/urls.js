@@ -27,6 +27,9 @@ const LOCAL_PORTS = {
 const netbirdData = { ...netbirdDataRaw };
 const appPorts = { ...appPortsRaw };
 
+// Cache de l'IP locale du serveur
+let cachedLocalIP = null;
+
 const resolvePort = (appId, fallback) => {
   const p = appPorts?.[appId];
   return Number.isInteger(p) ? p : fallback;
@@ -89,9 +92,29 @@ const isOnNetbirdTunnel = () => {
 };
 
 /**
+ * Définit l'IP locale du serveur (appelé après récupération depuis le backend)
+ * @param {string} ip - IP locale du serveur
+ */
+const setLocalIP = (ip) => {
+  if (ip && typeof ip === 'string') {
+    cachedLocalIP = ip;
+    console.log('[urls] IP locale mise en cache:', ip);
+  }
+};
+
+/**
+ * Récupère l'IP locale du serveur depuis le cache
+ * @returns {string|null} - IP locale ou null si non définie
+ */
+const getLocalIP = () => {
+  return cachedLocalIP;
+};
+
+/**
  * Construit l'URL d'une app en fonction de l'URL courante et des données Netbird
  * Nouvelle logique:
  * - Si on est sur backendHost ET l'app a un domaine dans netbird-data.json → https://<domaine>
+ * - En mode local (HTTP), utiliser l'IP locale du serveur au lieu du hostname
  * - Sinon → http(s)://<hostname_courant>:<port_app>
  * @param {string} appId - ID de l'app (ex: 'rdrive', 'rtransfer')
  * @param {number} port - Port de l'app
@@ -114,6 +137,12 @@ const buildAppUrl = (appId, port) => {
   }
 
   const scheme = protocol === 'https:' ? 'https' : 'http';
+  
+  // En mode local (HTTP), utiliser l'IP locale du serveur si disponible
+  if (scheme === 'http' && cachedLocalIP) {
+    return `${scheme}://${cachedLocalIP}:${port}`;
+  }
+  
   return `${scheme}://${hostname}:${port}`;
 };
 
@@ -387,5 +416,7 @@ export default {
   getCurrentLocation,
   isOnNetbirdTunnel,
   buildAppUrl,
-  registerAppPort
+  registerAppPort,
+  setLocalIP,
+  getLocalIP
 };

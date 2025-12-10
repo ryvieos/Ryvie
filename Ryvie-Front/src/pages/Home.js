@@ -11,7 +11,7 @@ import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../u
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
 import { endSession, getCurrentUser, getCurrentUserRole, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
 import urlsConfig from '../config/urls';
-const { getServerUrl, getAppUrl } = urlsConfig;
+const { getServerUrl, getAppUrl, setLocalIP } = urlsConfig;
 import { 
   generateAppConfigFromManifests,
   generateDefaultAppsList,
@@ -956,6 +956,31 @@ const Home = () => {
       setUserRole(getCurrentUserRole() || 'User');
     } catch (_) {}
   }, []);
+  
+  // Récupérer l'IP locale du serveur au démarrage (mode privé uniquement)
+  useEffect(() => {
+    if (!accessMode) return;
+    
+    const fetchLocalIP = async () => {
+      // Uniquement en mode privé
+      if (accessMode !== 'private') return;
+      
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        console.log('[Home] Récupération de l\'IP locale depuis le serveur...');
+        const response = await axios.get(`${serverUrl}/status`);
+        
+        if (response.data?.ip) {
+          setLocalIP(response.data.ip);
+          console.log('[Home] IP locale récupérée et mise en cache:', response.data.ip);
+        }
+      } catch (error) {
+        console.warn('[Home] Impossible de récupérer l\'IP locale:', error.message);
+      }
+    };
+    
+    fetchLocalIP();
+  }, [accessMode]);
   
   // Charger la config depuis les manifests quand le mode d'accès est défini
   useEffect(() => {
