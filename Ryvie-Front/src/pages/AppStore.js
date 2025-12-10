@@ -119,6 +119,21 @@ const AppStore = () => {
     
     addLog(`⏹️ Installation de ${appName} annulée par l'utilisateur`, 'warning');
     showToast(`Installation de ${appName} annulée`, 'info');
+    
+    // Notifier Home que l'installation a été annulée
+    window.parent.postMessage({ 
+      type: 'APPSTORE_INSTALL_STATUS', 
+      installing: false, 
+      appName: appName,
+      appId: appId,
+      cancelled: true
+    }, '*');
+    
+    // Rafraîchir le bureau pour supprimer l'app (le backend aura supprimé le manifest)
+    addLog(`🔄 Rafraîchissement du bureau pour supprimer ${appName}`, 'info');
+    setTimeout(() => {
+      window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+    }, 1000);
   };
 
   // Basculer la visibilité des logs
@@ -153,7 +168,7 @@ const AppStore = () => {
     window.parent.postMessage({
       type: 'APPSTORE_INSTALL_STATUS',
       installing: installingApps.size > 0
-    }, window.location.origin); // Sécurisé : uniquement notre domaine
+    }, '*');
   }, [installingApps]);
 
   // Déboucer la recherche pour fluidifier la saisie
@@ -473,6 +488,15 @@ const AppStore = () => {
     addLog(`👤 Utilisateur: ${sessionInfo.user} (${sessionInfo.userRole})`, 'info');
     
     setInstallingApps(prev => new Set(prev).add(appId));
+    
+    // Notifier Home qu'une installation commence avec le nom de l'app
+    window.parent.postMessage({ 
+      type: 'APPSTORE_INSTALL_STATUS', 
+      installing: true, 
+      appName: appName,
+      appId: appId,
+      progress: 0
+    }, '*');
     setLogsVisible(false); // Masquer automatiquement les logs lors de l'installation
 
     const accessMode = getCurrentAccessMode() || 'private';
@@ -502,6 +526,14 @@ const AppStore = () => {
         }));
         addLog(data.message, 'info');
         
+        // Envoyer la progression à Home pour l'indicateur
+        window.parent.postMessage({ 
+          type: 'APPSTORE_INSTALL_PROGRESS', 
+          appName: appName,
+          appId: appId,
+          progress: data.progress
+        }, '*');
+        
         // Si l'installation est terminée (100%), afficher la notification de succès
         if (data.progress >= 100) {
           addLog(`✅ Installation de ${appName} terminée avec succès !`, 'success');
@@ -518,10 +550,19 @@ const AppStore = () => {
             return newSet;
           });
           
+          // Notifier Home que l'installation est terminée
+          window.parent.postMessage({ 
+            type: 'APPSTORE_INSTALL_STATUS', 
+            installing: false, 
+            appName: appName,
+            appId: appId,
+            progress: 100
+          }, '*');
+          
           // Rafraîchir la liste des apps et notifier Home
           setTimeout(async () => {
             await fetchApps(true);
-            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, window.location.origin);
+            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
             
             // Nettoyer la progression et les logs après un délai
             setTimeout(() => {
@@ -556,6 +597,22 @@ const AppStore = () => {
         delete newProgress[appId];
         return newProgress;
       });
+      
+      // Notifier Home que l'installation a échoué
+      window.parent.postMessage({ 
+        type: 'APPSTORE_INSTALL_STATUS', 
+        installing: false, 
+        appName: appName,
+        appId: appId,
+        error: true
+      }, '*');
+      
+      // Rafraîchir le bureau pour supprimer l'app si elle avait été ajoutée
+      // (le backend aura supprimé le manifest en cas d'échec)
+      addLog(`🔄 Rafraîchissement du bureau pour supprimer ${appName} (installation échouée)`, 'warning');
+      setTimeout(() => {
+        window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+      }, 1000);
     };
 
     let response;
@@ -619,8 +676,10 @@ try {
       addLog(`📊 Suivez la progression ci-dessous...`, 'info');
       showToast(`Installation de ${appName} en cours...`, 'info');
       
+      // Le backend ne crée le manifest qu'à la fin de l'installation
+      // L'app apparaîtra sur le bureau quand l'installation sera terminée (progress >= 100)
+      
       // La vraie fin de l'installation sera signalée par le SSE à 100%
-      // Pas besoin de rafraîchir ici, le SSE le fera automatiquement
     } else {
       addLog(`❌ Échec du lancement: ${response.data.message || 'Erreur inconnue'}`, 'error');
       showToast(response.data.message || 'Erreur lors du lancement de l\'installation', 'error');

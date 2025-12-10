@@ -18,6 +18,7 @@ import {
   images 
 } from '../config/appConfig';
 import GridLauncher from '../components/GridLauncher';
+import InstallIndicator from '../components/InstallIndicator';
  
 
 // Fonction pour importer toutes les images du dossier weather_icons
@@ -583,6 +584,8 @@ const Home = () => {
   const [overlayTitle, setOverlayTitle] = useState('App Store');
   const [appStoreMounted, setAppStoreMounted] = useState(false);
   const [appStoreInstalling, setAppStoreInstalling] = useState(false);
+  // Map des installations en cours: { appId: { appName, progress } }
+  const [installingApps, setInstallingApps] = useState({});
   const [pendingUnmount, setPendingUnmount] = useState(false);
 
   const [mounted, setMounted] = useState(false);
@@ -729,6 +732,7 @@ const Home = () => {
         StorageManager.setItem('iconImages_cache', newIconImages);
         
         // Nettoyer le layout et les anchors pour supprimer les apps désinstallées
+        // ET détecter les nouvelles apps à ajouter
         if (launcherLayout && Object.keys(launcherLayout).length > 0) {
           const cleanedLayout = {};
           Object.keys(launcherLayout).forEach(id => {
@@ -752,11 +756,25 @@ const Home = () => {
             });
           }
           
-          const layoutChanged = Object.keys(cleanedLayout).length !== Object.keys(launcherLayout).length;
+          // Détecter les nouvelles apps (présentes dans config mais pas dans le layout)
+          const newApps = Object.keys(config).filter(id => 
+            id.startsWith('app-') && !cleanedLayout[id]
+          );
+          
+          if (newApps.length > 0) {
+            console.log(`[Home] 🆕 Nouvelles apps détectées:`, newApps);
+            // Les nouvelles apps seront automatiquement placées par useGridLayout
+            // car elles seront dans la liste des apps mais pas dans le layout
+          }
+          
+          const layoutChanged = Object.keys(cleanedLayout).length !== Object.keys(launcherLayout).length || newApps.length > 0;
           const anchorsChanged = launcherAnchors && Object.keys(cleanedAnchors).length !== Object.keys(launcherAnchors).length;
           
           if (layoutChanged || anchorsChanged) {
-            console.log('[Home] 📝 Mise à jour du layout/anchors après nettoyage');
+            console.log('[Home] 📝 Mise à jour du layout/anchors après rafraîchissement');
+            console.log('[Home] Layout avant:', Object.keys(launcherLayout || {}));
+            console.log('[Home] Layout après:', Object.keys(cleanedLayout));
+            
             setLauncherLayout(cleanedLayout);
             if (anchorsChanged) {
               setLauncherAnchors(cleanedAnchors);
@@ -774,6 +792,7 @@ const Home = () => {
                     launcher.anchors = cleanedAnchors;
                   }
                   localStorage.setItem(`launcher_${currentUser}`, JSON.stringify(launcher));
+                  console.log('[Home] 💾 Layout sauvegardé dans localStorage');
                 }
               }
             } catch (e) {
@@ -814,6 +833,21 @@ const Home = () => {
         }
         
         console.log('[Home] ✅ Icônes du bureau rafraîchies');
+        
+        // Récupérer les statuts des apps depuis l'API pour mettre à jour les badges
+        try {
+          const serverUrl = getServerUrl(mode);
+          const response = await axios.get(`${serverUrl}/api/apps`);
+          const apps = response.data.map(app => ({
+            ...app,
+            port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
+            autostart: false
+          }));
+          setApplications(apps);
+          console.log('[Home] ✅ Statuts des apps actualisés:', apps.length, 'apps');
+        } catch (appsError) {
+          console.warn('[Home] ⚠️ Impossible de récupérer les statuts des apps:', appsError.message);
+        }
       }
     } catch (error) {
       console.error('[Home] ❌ Erreur lors du rafraîchissement des icônes:', error);
@@ -890,17 +924,66 @@ const Home = () => {
         console.log('[Home] Réception du message REFRESH_DESKTOP_ICONS');
         refreshDesktopIcons();
       } else if (event.data && event.data.type === 'APPSTORE_INSTALL_STATUS') {
-        console.log('[Home] Réception du statut d\'installation:', event.data.installing);
-        setAppStoreInstalling(event.data.installing);
+        const { installing, appName, appId, progress } = event.data;
+        console.log('[Home] Réception du statut d\'installation:', installing, appName, appId);
+        setAppStoreInstalling(installing);
+        
+        if (installing && appId && appName) {
+          // Ajouter ou mettre à jour l'installation
+          setInstallingApps(prev => ({
+            ...prev,
+            [appId]: { appName, progress: progress || 0 }
+          }));
+        } else if (!installing && appId) {
+          // Installation terminée, supprimer après un délai
+          setTimeout(() => {
+            setInstallingApps(prev => {
+              const newApps = { ...prev };
+              delete newApps[appId];
+              return newApps;
+            });
+          }, 500);
+          
+          // Rafraîchir les icônes du bureau pour afficher la nouvelle app
+          console.log('[Home] Installation terminée, rafraîchissement des icônes');
+          refreshDesktopIcons();
+        }
         
         // Si on attendait la fin d'une installation pour démonter
-        if (pendingUnmount && !event.data.installing) {
-          console.log('[Home] Installation terminée, démontage de l\'AppStore');
-          setTimeout(() => {
-            setAppStoreMounted(false);
-            setOverlayUrl('');
-            setPendingUnmount(false);
-          }, 1000); // Petit délai pour laisser voir la fin
+        if (pendingUnmount && !installing) {
+          // Vérifier s'il reste des installations en cours
+          setInstallingApps(prev => {
+            const remaining = Object.keys(prev).filter(id => id !== appId);
+            if (remaining.length === 0) {
+              console.log('[Home] Toutes les installations terminées, démontage de l\'AppStore');
+              setTimeout(() => {
+                setAppStoreMounted(false);
+                setOverlayUrl('');
+                setPendingUnmount(false);
+              }, 1000);
+            }
+            return prev;
+          });
+        }
+      } else if (event.data && event.data.type === 'APPSTORE_INSTALL_PROGRESS') {
+        // Mise à jour de la progression uniquement
+        const { appId, appName, progress } = event.data;
+        if (appId) {
+          setInstallingApps(prev => {
+            if (prev[appId]) {
+              return {
+                ...prev,
+                [appId]: { ...prev[appId], progress: progress || 0 }
+              };
+            } else if (appName) {
+              // Nouvelle app pas encore enregistrée
+              return {
+                ...prev,
+                [appId]: { appName, progress: progress || 0 }
+              };
+            }
+            return prev;
+          });
         }
       }
     };
@@ -2090,6 +2173,11 @@ const Home = () => {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Indicateur d'installation moderne - supporte plusieurs installations */}
+      {Object.keys(installingApps).length > 0 && (
+        <InstallIndicator installations={installingApps} />
       )}
     </div>
   );

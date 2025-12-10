@@ -1,0 +1,329 @@
+/* Conteneur pour les indicateurs empilés */
+.install-indicators-container {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.install-indicators-container > * {
+  pointer-events: auto;
+}
+
+/* Indicateur d'installation moderne - Style clair en haut à droite */
+.install-indicator {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+  
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.98));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  
+  border-radius: 16px;
+  padding: 14px 32px 14px 20px;
+  
+  box-shadow: 
+    0 10px 40px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  
+  animation: slideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transition: top 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.install-indicator-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.install-indicator-icon {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Spinner animé */
+.install-spinner {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.spinner-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+
+.spinner-ring:nth-child(1) {
+  border-top-color: #3b82f6;
+  animation: spin 1.2s linear infinite;
+}
+
+.spinner-ring:nth-child(2) {
+  border-right-color: #8b5cf6;
+  animation: spin 1.5s linear infinite reverse;
+  width: 80%;
+  height: 80%;
+  top: 10%;
+  left: 10%;
+}
+
+.spinner-ring:nth-child(3) {
+  border-bottom-color: #10b981;
+  animation: spin 1s linear infinite;
+  width: 60%;
+  height: 60%;
+  top: 20%;
+  left: 20%;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Icône de téléchargement */
+.download-icon {
+  width: 18px;
+  height: 18px;
+  color: #3b82f6;
+  animation: bounce 1s ease-in-out infinite;
+}
+
+.download-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+
+/* Informations */
+.install-indicator-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.install-indicator-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.install-indicator-app {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+/* Barre de progression */
+.install-indicator-progress-container {
+  width: 100%;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.install-indicator-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #10b981);
+  background-size: 200% 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease-out;
+  animation: shimmer 2s linear infinite;
+  min-width: 5%;
+}
+
+.install-indicator-percent {
+  font-size: 11px;
+  font-weight: 600;
+  color: #3b82f6;
+  margin-top: 2px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Bouton pour masquer */
+.install-indicator-hide {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.install-indicator-hide svg {
+  width: 12px;
+  height: 12px;
+  color: #94a3b8;
+}
+
+.install-indicator-hide:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.install-indicator-hide:hover svg {
+  color: #64748b;
+}
+
+/* État minimisé */
+.install-indicator-minimized {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+  
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.98));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  
+  border: none;
+  border-radius: 24px;
+  padding: 8px 14px;
+  
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  
+  cursor: pointer;
+  transition: all 0.2s ease, top 0.3s ease;
+  animation: slideIn 0.3s ease forwards;
+}
+
+.install-indicator-minimized:hover {
+  transform: scale(1.05);
+  box-shadow: 
+    0 6px 24px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.minimized-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(59, 130, 246, 0.2);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+.minimized-app {
+  font-size: 12px;
+  font-weight: 500;
+  color: #1e293b;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.minimized-progress {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+/* Effet de pulse autour */
+.install-indicator-pulse {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 16px;
+  pointer-events: none;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+}
+
+/* Animation de sortie */
+.install-indicator.closing {
+  animation: slideOut 0.3s ease-in forwards;
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .install-indicator {
+    top: 16px;
+    left: 16px;
+    right: 16px;
+  }
+  
+  .install-indicator-info {
+    min-width: auto;
+    flex: 1;
+  }
+  
+  .install-indicator-app {
+    max-width: none;
+  }
+}
