@@ -40,12 +40,17 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
 
       // Purger les positions des items supprimés pour libérer les cases
       const validIds = new Set(items.map(i => i.id));
+      const removedItems = [];
       Object.keys(newLayout).forEach(id => {
         if (!validIds.has(id)) {
+          removedItems.push(id);
           delete newLayout[id];
           hasChanges = true;
         }
       });
+      if (removedItems.length > 0) {
+        console.log('[useGridLayout] 🗑️ Items supprimés du layout:', removedItems);
+      }
       // Purger également les ancres obsolètes
       setAnchors(prevAnchors => {
         const next = { ...prevAnchors };
@@ -72,9 +77,14 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
       if (itemsOverflowing.length > 0) {
         console.log('[useGridLayout] ⚠️ Items dépassant détectés:', itemsOverflowing);
       }
+      
+      // Log pour confirmer qu'on ne réorganise PAS lors d'une simple suppression
+      if (removedItems.length > 0 && !needsReorganization) {
+        console.log('[useGridLayout] ✅ Suppression sans réorganisation - positions préservées');
+      }
 
       if (needsReorganization) {
-        console.log('[useGridLayout] 🔄 Réorganisation intelligente, cols:', cols);
+        console.log('[useGridLayout] 🔄 Réorganisation intelligente, cols:', cols, 'raison:', colsChanged ? 'colonnes changées' : 'items dépassent');
 
         // Utiliser les ancres existantes sans les modifier (pour préserver la position d'origine)
         // Créer des ancres UNIQUEMENT pour les nouveaux items
@@ -183,13 +193,16 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
         console.log('[useGridLayout] ✅ Réorganisation terminée, ancres préservées');
       }
 
-      // Ajouter les nouveaux items
+      // Ajouter les nouveaux items (apps/widgets nouvellement installés)
       items.forEach(item => {
         if (!newLayout[item.id]) {
+          console.log(`[useGridLayout] 🆕 Nouvel item détecté: ${item.id} (${item.w}x${item.h})`);
+          console.log(`[useGridLayout] 📊 Layout actuel avant placement:`, Object.keys(newLayout).map(id => `${id}@(${newLayout[id].col},${newLayout[id].row})`));
           const pos = findFreePosition(newLayout, item.w || 1, item.h || 1, cols);
           if (pos) {
             newLayout[item.id] = pos;
             hasChanges = true;
+            console.log(`[useGridLayout] ✅ ${item.id} placé à (${pos.col}, ${pos.row})`);
             
             // Créer une ancre pour le nouvel item basée sur sa position
             setAnchors(prevAnchors => {
@@ -197,11 +210,13 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
                 const newAnchors = { ...prevAnchors };
                 const anchorIndex = pos.row * BASE_COLS + pos.col;
                 newAnchors[item.id] = anchorIndex;
-                console.log(`[useGridLayout] Ancre créée pour ${item.id}: ${anchorIndex} (pos: ${pos.col},${pos.row})`);
+                console.log(`[useGridLayout] 🔗 Ancre créée pour ${item.id}: ${anchorIndex} (pos: ${pos.col},${pos.row})`);
                 return newAnchors;
               }
               return prevAnchors;
             });
+          } else {
+            console.error(`[useGridLayout] ❌ Impossible de placer ${item.id} - aucune position libre`);
           }
         }
       });
@@ -214,23 +229,28 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
   const findFreePosition = (currentLayout, width, height, maxCols) => {
     const occupiedCells = new Set();
     
-    // Marquer toutes les cellules occupées
-    Object.values(currentLayout).forEach(pos => {
+    // Marquer toutes les cellules occupées en parcourant TOUS les items du layout
+    Object.entries(currentLayout).forEach(([id, pos]) => {
+      if (!pos) return; // Ignorer les positions nulles/undefined
       const w = pos.w || 1;
       const h = pos.h || 1;
+      // Marquer chaque cellule occupée par cet item
       for (let r = pos.row; r < pos.row + h; r++) {
         for (let c = pos.col; c < pos.col + w; c++) {
           occupiedCells.add(`${r},${c}`);
         }
       }
+      console.log(`[useGridLayout] 🔒 ${id} occupe (${pos.col},${pos.row}) taille ${w}x${h}`);
     });
+    
+    console.log(`[useGridLayout] 🔍 Recherche position libre pour ${width}x${height}, ${occupiedCells.size} cellules occupées`);
 
-    // Chercher une position libre
+    // Chercher une position libre en scannant ligne par ligne
     for (let row = 0; row < 100; row++) {
       for (let col = 0; col <= maxCols - width; col++) {
         let isFree = true;
         
-        // Vérifier si toutes les cellules nécessaires sont libres
+        // Vérifier si TOUTES les cellules nécessaires sont libres
         for (let r = row; r < row + height; r++) {
           for (let c = col; c < col + width; c++) {
             if (occupiedCells.has(`${r},${c}`)) {
@@ -242,11 +262,13 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
         }
 
         if (isFree) {
+          console.log(`[useGridLayout] 📍 Position libre trouvée: (${col}, ${row}) pour ${width}x${height}`);
           return { col, row, w: width, h: height };
         }
       }
     }
 
+    console.warn(`[useGridLayout] ⚠️ Aucune position libre trouvée pour ${width}x${height}`);
     return null;
   };
 

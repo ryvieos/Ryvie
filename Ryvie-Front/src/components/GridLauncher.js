@@ -186,8 +186,10 @@ const GridLauncher = ({
     return () => clearTimeout(timer);
   }, [layout, onLayoutChange]);
 
-  // Détecter l'ajout/suppression de widgets et marquer comme changement manuel
+  // Détecter l'ajout/suppression de widgets et apps, et marquer comme changement manuel
   const prevWidgetsCountRef = useRef(null);
+  const prevAppsCountRef = useRef(null);
+  
   useEffect(() => {
     // Initialiser au premier rendu
     if (prevWidgetsCountRef.current === null) {
@@ -202,6 +204,26 @@ const GridLauncher = ({
       prevWidgetsCountRef.current = widgets.length;
     }
   }, [widgets.length, layout]);
+  
+  useEffect(() => {
+    // Initialiser au premier rendu
+    if (prevAppsCountRef.current === null) {
+      prevAppsCountRef.current = apps.length;
+      return;
+    }
+    
+    // Une app a été ajoutée (PAS supprimée - la suppression ne doit pas déclencher de sauvegarde)
+    // Seul l'ajout d'apps doit déclencher une sauvegarde automatique
+    if (apps.length > prevAppsCountRef.current && initialNotificationSent.current && layout && Object.keys(layout).length > 0) {
+      console.log('[GridLauncher] 🆕 Nouvelles apps ajoutées (avant:', prevAppsCountRef.current, 'après:', apps.length, '), marquage pour sauvegarde');
+      pendingManualSaveRef.current = true;
+      prevAppsCountRef.current = apps.length;
+    } else if (apps.length < prevAppsCountRef.current) {
+      // App supprimée - juste mettre à jour le compteur sans déclencher de sauvegarde
+      console.log('[GridLauncher] 🗑️ Apps supprimées (avant:', prevAppsCountRef.current, 'après:', apps.length, '), PAS de sauvegarde automatique');
+      prevAppsCountRef.current = apps.length;
+    }
+  }, [apps.length, layout]);
 
   // Sauvegarder après un changement manuel (drag & drop OU ajout/suppression widget)
   useEffect(() => {

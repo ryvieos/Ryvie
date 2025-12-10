@@ -39,21 +39,29 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     if (accessMode) return; // Déjà défini
     
+    let interval = null;
+    let timeout = null;
+    
     const checkAccessMode = () => {
       const mode = getCurrentAccessMode();
       if (mode) {
         console.log('[SocketContext] Mode d\'accès détecté:', mode);
         setAccessMode(mode);
+        // Nettoyer immédiatement après détection
+        if (interval) clearInterval(interval);
+        if (timeout) clearTimeout(timeout);
       }
     };
     
     // Vérifier toutes les 100ms pendant 2 secondes max
-    const interval = setInterval(checkAccessMode, 100);
-    const timeout = setTimeout(() => clearInterval(interval), 2000);
+    interval = setInterval(checkAccessMode, 100);
+    timeout = setTimeout(() => {
+      if (interval) clearInterval(interval);
+    }, 2000);
     
     return () => {
-      clearInterval(interval);
-      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+      if (timeout) clearTimeout(timeout);
     };
   }, [accessMode]);
 

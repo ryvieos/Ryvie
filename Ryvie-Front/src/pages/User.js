@@ -565,9 +565,16 @@ const User = () => {
   if (loading) {
     return (
       <div className="user-body">
-        <div className="loading-container">
-          <div className="spinner"></div>
-          <p>Chargement des utilisateurs...</p>
+        <div className="user-container">
+          <div className="loading-container">
+            <div className="loading-icon">👥</div>
+            <div className="loading-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <p>Chargement des utilisateurs...</p>
+          </div>
         </div>
       </div>
     );
@@ -576,10 +583,15 @@ const User = () => {
   if (error) {
     return (
       <div className="user-body">
-        <div className="error-container">
-          <div className="error-icon">⚠️</div>
-          <p>{error}</p>
-          <button className="retry-button" onClick={fetchUsers}>Réessayer</button>
+        <div className="user-container">
+          <div className="error-container">
+            <div className="error-icon">⚠️</div>
+            <h3>Une erreur est survenue</h3>
+            <p>{error}</p>
+            <button className="retry-button" onClick={fetchUsers}>
+              🔄 Réessayer
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -592,16 +604,18 @@ const User = () => {
         <div ref={topBarRef} className="top-bar">
           <div className="back-btn-container">
             <button className="back-btn" onClick={() => navigate('/home')}>
-              ← Retour au Home
+              ← Retour
             </button>
           </div>
           <div className="top-bar-content">
-            <h1>Gestion des utilisateurs</h1>
-            <p>Gérez les utilisateurs et leurs permissions</p>
+            <h1>👥 Gestion des utilisateurs</h1>
+            <p>Gérez les comptes et les permissions de votre équipe</p>
           </div>
           {isAdmin && (
             <div className="add-user-btn">
-              <button type="button" onClick={openAddUserForm}>Ajouter un utilisateur</button>
+              <button type="button" onClick={openAddUserForm}>
+                <span>➕</span> Nouvel utilisateur
+              </button>
             </div>
           )}
         </div>
@@ -839,92 +853,92 @@ const User = () => {
           </div>
         )}
 
-        {/* Tableau des utilisateurs */}
+        {/* Grille des utilisateurs en cartes */}
         <div ref={userListRef} className="table-container">
-          <table className={`user-table ${isAdmin ? 'admin' : 'no-admin'}`}>
-            {/* Set explicit column widths for consistent alignment */}
-            {isAdmin ? (
-              <colgroup>
-                <col style={{ width: 'auto' }} />
-                <col style={{ width: '40%' }} />
-                <col style={{ width: '160px' }} />
-                <col style={{ width: '320px' }} />
-              </colgroup>
-            ) : (
-              <colgroup>
-                <col style={{ width: '35%' }} />
-                <col style={{ width: '45%' }} />
-                <col style={{ width: '20%' }} />
-              </colgroup>
-            )}
-            <thead>
-              <tr>
-                <th>Nom</th>
-                <th>Email</th>
-                <th>Rôle</th>
-                {isAdmin && <th>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td title={user.name}>{user.name}</td>
-                  <td title={user.email}>{user.email}</td>
-                  <td>
-                    <select
-                      value={user.role}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      className={`role-select ${user.role.toLowerCase()}`}
-                      disabled={true} // Disable direct role change, use edit form instead
-                    >
-                      <option value="User">User</option>
-                      <option value="Admin">Admin</option>
-                      <option value="Guest">Guest</option>
-                    </select>
-                  </td>
+          {users.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">👥</div>
+              <h3>Aucun utilisateur</h3>
+              <p>Il n'y a pas encore d'utilisateurs enregistrés.</p>
+            </div>
+          ) : (
+            users.map((user, index) => {
+              const isCurrentUser = 
+                String(getCurrentUser() || '').trim().toLowerCase() ===
+                  String(user.uid || '').trim().toLowerCase() ||
+                String(getCurrentUser() || '').trim().toLowerCase() ===
+                  String(user.name || '').trim().toLowerCase();
+              
+              // Obtenir les initiales pour l'avatar
+              const getInitials = (name) => {
+                if (!name) return '?';
+                const parts = name.split(' ');
+                if (parts.length >= 2) {
+                  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                }
+                return name.substring(0, 2).toUpperCase();
+              };
+
+              // Icône du rôle
+              const getRoleIcon = (role) => {
+                switch ((role || '').toLowerCase()) {
+                  case 'admin': return '👑';
+                  case 'guest': return '👤';
+                  default: return '✨';
+                }
+              };
+
+              return (
+                <div 
+                  key={user.id} 
+                  className="user-card"
+                  style={{ animationDelay: `${index * 0.05}s` }}
+                >
+                  <div className="user-card-header">
+                    <div className="user-avatar">
+                      {getInitials(user.name)}
+                    </div>
+                    <div className="user-info">
+                      <h3 className="user-name" title={user.name}>
+                        {user.name}
+                        {isCurrentUser && ' (vous)'}
+                      </h3>
+                      <p className="user-email" title={user.email}>{user.email}</p>
+                    </div>
+                  </div>
+                  
+                  <div className={`role-badge ${(user.role || 'user').toLowerCase()}`}>
+                    <span className="role-badge-icon">{getRoleIcon(user.role)}</span>
+                    {user.role || 'User'}
+                  </div>
+
                   {isAdmin && (
-                    <td className="actions-cell">
+                    <div className="user-card-actions">
                       <button 
                         type="button"
                         className="action-button edit-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditUserForm(user);
-                        }}
-                        title="Modifier"
+                        onClick={() => openEditUserForm(user)}
+                        title="Modifier cet utilisateur"
                       >
                         <span className="action-icon">✏️</span>
+                        Modifier
                       </button>
                       <button 
                         type="button"
                         className="action-button delete-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          confirmDeleteUser(user);
-                        }}
-                        disabled={
-                          String(getCurrentUser() || '').trim().toLowerCase() ===
-                            String(user.uid || '').trim().toLowerCase() ||
-                          String(getCurrentUser() || '').trim().toLowerCase() ===
-                            String(user.name || '').trim().toLowerCase()
-                        }
-                        title={
-                          String(getCurrentUser() || '').trim().toLowerCase() ===
-                            String(user.uid || '').trim().toLowerCase() ||
-                          String(getCurrentUser() || '').trim().toLowerCase() ===
-                            String(user.name || '').trim().toLowerCase()
-                            ? "Vous ne pouvez pas supprimer votre propre compte"
-                            : "Supprimer"
-                        }
+                        onClick={() => confirmDeleteUser(user)}
+                        disabled={isCurrentUser}
+                        title={isCurrentUser ? "Vous ne pouvez pas supprimer votre propre compte" : "Supprimer cet utilisateur"}
                       >
                         <span className="action-icon">🗑️</span>
+                        Supprimer
                       </button>
-                    </td>
+                    </div>
                   )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

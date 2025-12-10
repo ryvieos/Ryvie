@@ -248,6 +248,112 @@
   /* Masquer les scrollbars tout en gardant le scroll fonctionnel */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE / Edge */
+  /* Mode clair par défaut : fond opaque et texte sombre pour une bonne lisibilit6.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.4 */
+  background: rgba(249, 250, 251, 1);
+  color: #111827;
+}
+
+/* Mode clair : styles par d6.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.46.4 */
+.storage-detail-header {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.storage-detail-title {
+  color: #0b1220;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.storage-detail-subtitle {
+  color: #5b6472;
+  font-size: 0.98rem;
+}
+
+.storage-detail-body {
+  background: transparent;
+}
+
+.storage-detail-legend span {
+  color: #111827;
+  font-size: 0.95rem;
+}
+
+.storage-detail-separator {
+  background: #e5e7eb;
+}
+
+.storage-detail-apps {
+  border-top: 1px solid #e5e7eb;
+}
+
+.storage-detail-apps-list {
+  color: #111827;
+  font-size: 0.95rem;
+}
+
+.storage-detail-app-row {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+.storage-detail-app-row:hover {
+  background: #f3f4f6;
+}
+
+.storage-detail-app-row span {
+  color: #111827;
+}
+
+/* Mode sombre pour la modale de stockage détaillé */
+body.dark-mode .storage-detail-modal {
+  background: #111827 !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .storage-detail-header {
+  border-bottom: 1px solid #e5e7eb !important; /* ligne claire sous le titre */
+}
+
+body.dark-mode .storage-detail-title {
+  color: #f9fafb !important;
+}
+
+body.dark-mode .storage-detail-subtitle {
+  color: #9ca3af !important;
+}
+
+body.dark-mode .storage-detail-body {
+  background: transparent;
+}
+
+body.dark-mode .storage-detail-legend span {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .storage-detail-separator {
+  background: #e5e7eb !important; /* ligne claire en dark mode */
+}
+
+body.dark-mode .storage-detail-apps {
+  border-top: 1px solid #e5e7eb !important; /* même couleur que le séparateur */
+}
+
+body.dark-mode .storage-detail-apps-list {
+  color: #e5e7eb !important;
+}
+
+body.dark-mode .storage-detail-app-row {
+  background: #111827 !important;
+  border: 1px solid #1f2937 !important;
+}
+
+body.dark-mode .storage-detail-app-row:hover {
+  background: #020617 !important;
+}
+
+/* Chiffres (tailles) des applications en blanc en mode sombre */
+body.dark-mode .storage-detail-app-row span {
+  color: #f9fafb !important;
 }
 
 .storage-detail-modal::-webkit-scrollbar {

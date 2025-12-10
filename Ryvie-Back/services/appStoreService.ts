@@ -809,7 +809,8 @@ async function updateAppFromStore(appId) {
     // Nettoyer les containers arrêtés de cette app avant de lancer (évite les conflits de namespaces)
     console.log('[Update] 🧹 Nettoyage des anciens containers...');
     try {
-      execSync(`docker compose -f ${composeFile} down 2>/dev/null || true`, { 
+      // Utiliser -p pour spécifier le nom du projet (basé sur appId)
+      execSync(`docker compose -p ${appId} -f ${composeFile} down 2>/dev/null || true`, { 
         cwd: appDir, 
         stdio: 'pipe'
       });
@@ -824,7 +825,8 @@ async function updateAppFromStore(appId) {
     console.log(`[Update] 📄 Fichier compose: ${composeFile}`);
     
     try {
-      execSync(`docker compose -f ${composeFile} up -d`, { 
+      // Utiliser -p pour spécifier le nom du projet (basé sur appId)
+      execSync(`docker compose -p ${appId} -f ${composeFile} up -d`, { 
         cwd: appDir, 
         stdio: 'inherit'
       });

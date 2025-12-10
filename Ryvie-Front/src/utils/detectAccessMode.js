@@ -4,7 +4,7 @@
  */
 
 import urlsConfig from '../config/urls';
-const { getServerUrl, netbirdData } = urlsConfig;
+const { getServerUrl, netbirdData, setLocalIP } = urlsConfig;
 import { io } from 'socket.io-client';
 import { isElectron } from './platformUtils';
 
@@ -22,6 +22,7 @@ function detectModeFromUrl() {
   if (typeof window === 'undefined') return 'private';
   
   const hostname = window.location.hostname;
+  const port = window.location.port;
   const backendHost = netbirdData?.received?.backendHost;
   const domains = netbirdData?.domains || {};
   
@@ -38,14 +39,21 @@ function detectModeFromUrl() {
     return 'public';
   }
   
-  // Si le hostname contient .ryvie.ovh, c'est le mode public
-  if (hostname.endsWith('.ryvie.ovh')) {
+
+  if (hostname.endsWith('.ryvie.fr')) {
     console.log(`[AccessMode] Hostname ${hostname} contient .ryvie.ovh → mode PUBLIC`);
     return 'public';
   }
   
-  // Sinon c'est le mode privé (ryvie.local, localhost, etc.)
-  console.log(`[AccessMode] Hostname ${hostname} → mode PRIVATE`);
+  // IMPORTANT: Si on accède via ryvie.local sur port 80 (Caddy), c'est du same-origin
+  // On garde le mode private mais les URLs seront relatives (gérées dans urls.js)
+  if (hostname === 'ryvie.local' && (port === '80' || port === '')) {
+    console.log(`[AccessMode] Hostname ${hostname}:${port || '80'} (Caddy same-origin) → mode PRIVATE`);
+    return 'private';
+  }
+  
+  // Sinon c'est le mode privé (ryvie.local:3000, localhost, etc.)
+  console.log(`[AccessMode] Hostname ${hostname}:${port} → mode PRIVATE`);
   return 'private';
 }
 const listeners = new Set(); // callbacks (mode) => void
@@ -129,6 +137,18 @@ export async function detectAccessMode(timeout = 2000) {
 
     if (response.ok) {
       console.log('[AccessMode] Serveur local accessible - Mode PRIVATE');
+      
+      // Récupérer l'IP locale depuis la réponse du serveur
+      try {
+        const data = await response.json();
+        if (data.ip) {
+          setLocalIP(data.ip);
+          console.log('[AccessMode] IP locale récupérée:', data.ip);
+        }
+      } catch (e) {
+        console.warn('[AccessMode] Impossible de parser la réponse /status:', e);
+      }
+      
       setAccessMode('private');
       return 'private';
     }

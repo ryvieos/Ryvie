@@ -27,9 +27,38 @@ const LOCAL_PORTS = {
 const netbirdData = { ...netbirdDataRaw };
 const appPorts = { ...appPortsRaw };
 
+// Cache de l'IP locale du serveur
+let cachedLocalIP = null;
+
 const resolvePort = (appId, fallback) => {
   const p = appPorts?.[appId];
   return Number.isInteger(p) ? p : fallback;
+};
+
+/**
+ * Enregistre ou met à jour dynamiquement le port d'une application côté front.
+ * Utilisé après chargement des manifests pour que getAppUrl fonctionne
+ * immédiatement après installation, sans redémarrer le frontend.
+ * @param {string} appId - Identifiant logique de l'app (ex: 'linkwarden')
+ * @param {number} port - Port HTTP exposé de l'app
+ */
+const registerAppPort = (appId, port) => {
+  if (!appId || !Number.isInteger(port)) return;
+  try {
+    const id = String(appId).toLowerCase();
+    appPorts[id] = port;
+    // Mettre aussi à jour BASE_URLS.APPS si déjà généré
+    if (BASE_URLS && BASE_URLS.APPS) {
+      const domains = netbirdData?.domains || {};
+      const domainsId = id;
+      BASE_URLS.APPS[id.toUpperCase()] = {
+        PUBLIC: domains[domainsId] ? `https://${domains[domainsId]}` : '',
+        PRIVATE: privateUrl('ryvie.local', port)
+      };
+    }
+  } catch (e) {
+    console.warn('[urls] registerAppPort failed for', appId, port, e?.message);
+  }
 };
 
 const privateUrl = (host, port) => {
@@ -63,9 +92,29 @@ const isOnNetbirdTunnel = () => {
 };
 
 /**
+ * Définit l'IP locale du serveur (appelé après récupération depuis le backend)
+ * @param {string} ip - IP locale du serveur
+ */
+const setLocalIP = (ip) => {
+  if (ip && typeof ip === 'string') {
+    cachedLocalIP = ip;
+    console.log('[urls] IP locale mise en cache:', ip);
+  }
+};
+
+/**
+ * Récupère l'IP locale du serveur depuis le cache
+ * @returns {string|null} - IP locale ou null si non définie
+ */
+const getLocalIP = () => {
+  return cachedLocalIP;
+};
+
+/**
  * Construit l'URL d'une app en fonction de l'URL courante et des données Netbird
  * Nouvelle logique:
  * - Si on est sur backendHost ET l'app a un domaine dans netbird-data.json → https://<domaine>
+ * - En mode local (HTTP), utiliser l'IP locale du serveur au lieu du hostname
  * - Sinon → http(s)://<hostname_courant>:<port_app>
  * @param {string} appId - ID de l'app (ex: 'rdrive', 'rtransfer')
  * @param {number} port - Port de l'app
@@ -88,6 +137,12 @@ const buildAppUrl = (appId, port) => {
   }
 
   const scheme = protocol === 'https:' ? 'https' : 'http';
+  
+  // En mode local (HTTP), utiliser l'IP locale du serveur si disponible
+  if (scheme === 'http' && cachedLocalIP) {
+    return `${scheme}://${cachedLocalIP}:${port}`;
+  }
+  
   return `${scheme}://${hostname}:${port}`;
 };
 
@@ -167,6 +222,7 @@ const getUrl = (urlConfig, accessMode) => {
 /**
  * Fonction pour obtenir l'URL du serveur.
  * Nouvelle logique basée sur l'URL courante:
+ * - Si on est sur ryvie.local sans port (via Caddy) → URL relative (same-origin)
  * - Si on est sur backendHost (tunnel Netbird) ET 'status' a un domaine → https://<domaine>
  * - Sinon → http(s)://<hostname_courant>:<port_server>
  * @param {string} accessMode - Mode d'accès (ignoré, gardé pour compatibilité)
@@ -174,7 +230,12 @@ const getUrl = (urlConfig, accessMode) => {
  */
 const getServerUrl = (accessMode) => {
   const domains = netbirdData?.domains || {};
-  const { protocol } = getCurrentLocation();
+  const { hostname, protocol, port } = getCurrentLocation();
+
+  // Si on accède via ryvie.local sur le port 80 (Caddy), utiliser same-origin
+  if (hostname === 'ryvie.local' && (port === '80' || port === '')) {
+    return ''; // URL relative pour same-origin
+  }
 
   // En contexte public (HTTPS) et si un domaine Netbird "status" est défini,
   // toujours utiliser ce domaine comme URL publique du backend.
@@ -305,7 +366,7 @@ const getAutoUrl = (type, name) => {
 // Exporter les fonctions et constantes (ES modules)
 /**
  * Obtient l'URL du frontend en fonction du mode d'accès
- * - Mode 'private' : utilise l'URL courante (hostname:3000)
+ * - Mode 'private' : utilise ryvie.local (sans port, via Caddy same-origin)
  * - Mode 'public' : 
  *   - Si domains.app existe dans netbird-data.json → https://<domains.app>
  *   - Sinon → http://<backendHost>:3000
@@ -314,8 +375,8 @@ const getAutoUrl = (type, name) => {
  */
 function getFrontendUrl(mode = 'public') {
   if (mode === 'private') {
-    // En mode privé, toujours utiliser ryvie.local
-    return `http://ryvie.local:${LOCAL_PORTS.FRONTEND}`;
+    // En mode privé, utiliser ryvie.local sans port (Caddy reverse proxy sur port 80)
+    return `http://ryvie.local`;
   }
   
   // Mode public : vérifier netbird-data.json
@@ -354,5 +415,8 @@ export default {
   // Nouvelles fonctions utilitaires
   getCurrentLocation,
   isOnNetbirdTunnel,
-  buildAppUrl
+  buildAppUrl,
+  registerAppPort,
+  setLocalIP,
+  getLocalIP
 };

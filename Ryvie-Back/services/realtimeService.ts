@@ -10,6 +10,7 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
   // Active containers cache
   let activeContainers = [];
   let statusPollingInterval = null;
+  let dockerEventStream = null;
 
   const broadcastAppStatus = () => getAppStatus()
     .then(apps => {
@@ -77,6 +78,7 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
       return;
     }
 
+    dockerEventStream = stream;
     let buffer = '';
 
     stream.on('data', (chunk) => {
@@ -138,7 +140,19 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
   // Public API for server startup coordination
   return {
     initializeActiveContainers: () => initializeActiveContainers().then(() => activeContainers),
-    stopPolling: () => stopStatusPolling()
+    stopPolling: () => stopStatusPolling(),
+    cleanup: () => {
+      stopStatusPolling();
+      if (dockerEventStream) {
+        try {
+          dockerEventStream.destroy();
+          dockerEventStream = null;
+          console.log('[realtime] Docker event stream fermé');
+        } catch (e) {
+          console.error('[realtime] Erreur lors de la fermeture du stream Docker:', e);
+        }
+      }
+    }
   };
 }
 
