@@ -243,7 +243,6 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
             className="storage-detail-modal"
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: '#fff',
               borderRadius: '16px',
               maxWidth: '600px',
               width: '100%',
@@ -254,16 +253,15 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
             }}
           >
             {/* Header */}
-            <div style={{
-              padding: '24px 24px 16px',
-              borderBottom: '1px solid #f0f0f0'
+            <div className="storage-detail-header" style={{
+              padding: '24px 24px 16px'
             }}>
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}>
-                <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '600' }}>Stockage</h2>
+                <h2 className="storage-detail-title" style={{ margin: 0, fontSize: '24px', fontWeight: '600' }}>Stockage</h2>
                 <button
                   onClick={handleCloseModal}
                   style={{
@@ -284,7 +282,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                 </button>
               </div>
               {storageDetail && (
-                <div style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
+                <div className="storage-detail-subtitle" style={{ marginTop: '8px', fontSize: '14px' }}>
                   {storageDetail.summary.usedFormatted} utilisés sur {storageDetail.summary.totalFormatted}
                 </div>
               )}
@@ -312,7 +310,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
             ) : storageDetail ? (
               <div style={{ animation: 'fadeIn 0.5s ease-out' }}>
                 {/* Barre de visualisation */}
-                <div style={{ padding: '24px' }}>
+                <div className="storage-detail-body" style={{ padding: '24px' }}>
                   <div style={{
                     height: '40px',
                     borderRadius: '8px',
@@ -344,7 +342,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                   </div>
 
                   {/* Légende */}
-                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div className="storage-detail-legend" style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.3s both' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{
@@ -389,7 +387,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                     </div>
                     
                     {/* Séparateur */}
-                    <div style={{ height: '1px', background: '#e0e0e0', margin: '8px 0' }} />
+                    <div className="storage-detail-separator" style={{ height: '1px', margin: '8px 0' }} />
                     
                     {/* Disponible pour écriture */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: 'slideInLeft 0.4s ease-out 0.45s both' }}>
@@ -410,31 +408,27 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                 </div>
 
                 {/* Liste des applications */}
-                <div style={{
-                  padding: '0 24px 24px',
-                  borderTop: '1px solid #f0f0f0'
+                <div className="storage-detail-apps" style={{
+                  padding: '0 24px 24px'
                 }}>
                   <h3 style={{ margin: '16px 0 12px', fontSize: '18px', fontWeight: '600' }}>
                     Applications ({storageDetail.apps.length})
                   </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div className="storage-detail-apps-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {storageDetail.apps.map((app, idx) => {
                       const serverUrl = getServerUrl(accessMode);
                       return (
                         <div
                           key={app.id}
+                          className="storage-detail-app-row"
                           style={{
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             padding: '12px',
-                            background: '#f9f9f9',
                             borderRadius: '8px',
-                            transition: 'background 0.2s',
                             animation: `slideInLeft 0.4s ease-out ${idx * 0.05}s both`
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#f9f9f9'}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             {app.icon && (
@@ -451,7 +445,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                             )}
                             <span style={{ fontSize: '15px', fontWeight: '500', fontFamily: 'system-ui, -apple-system, sans-serif' }}>{app.name}</span>
                           </div>
-                          <span style={{ fontSize: '15px', fontWeight: '600', color: '#666' }}>
+                          <span style={{ fontSize: '15px', fontWeight: '600' }}>
                             {app.sizeFormatted}
                           </span>
                         </div>

@@ -11,13 +11,14 @@ import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../u
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
 import { endSession, getCurrentUser, getCurrentUserRole, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
 import urlsConfig from '../config/urls';
-const { getServerUrl, getAppUrl } = urlsConfig;
+const { getServerUrl, getAppUrl, setLocalIP } = urlsConfig;
 import { 
   generateAppConfigFromManifests,
   generateDefaultAppsList,
   images 
 } from '../config/appConfig';
 import GridLauncher from '../components/GridLauncher';
+import InstallIndicator from '../components/InstallIndicator';
  
 
 // Fonction pour importer toutes les images du dossier weather_icons
@@ -583,6 +584,8 @@ const Home = () => {
   const [overlayTitle, setOverlayTitle] = useState('App Store');
   const [appStoreMounted, setAppStoreMounted] = useState(false);
   const [appStoreInstalling, setAppStoreInstalling] = useState(false);
+  // Map des installations en cours: { appId: { appName, progress } }
+  const [installingApps, setInstallingApps] = useState({});
   const [pendingUnmount, setPendingUnmount] = useState(false);
 
   const [mounted, setMounted] = useState(false);
@@ -705,11 +708,13 @@ const Home = () => {
   
   // Fonction pour rafraîchir les icônes du bureau après installation/désinstallation
   const refreshDesktopIcons = React.useCallback(async () => {
-    if (!accessMode) return;
+    // Être plus robuste: si accessMode n'est pas encore initialisé,
+    // retomber sur la détection actuelle.
+    const mode = accessMode || getCurrentAccessMode() || 'private';
     
     try {
-      console.log('[Home] 🔄 Rafraîchissement des icônes du bureau...');
-      const config = await generateAppConfigFromManifests(accessMode);
+      console.log('[Home] 🔄 Rafraîchissement des icônes du bureau...', { mode });
+      const config = await generateAppConfigFromManifests(mode);
       
       if (Object.keys(config).length > 0) {
         console.log('[Home] ✅ Config rechargée:', Object.keys(config).length, 'apps');
@@ -727,6 +732,7 @@ const Home = () => {
         StorageManager.setItem('iconImages_cache', newIconImages);
         
         // Nettoyer le layout et les anchors pour supprimer les apps désinstallées
+        // ET détecter les nouvelles apps à ajouter
         if (launcherLayout && Object.keys(launcherLayout).length > 0) {
           const cleanedLayout = {};
           Object.keys(launcherLayout).forEach(id => {
@@ -750,11 +756,25 @@ const Home = () => {
             });
           }
           
-          const layoutChanged = Object.keys(cleanedLayout).length !== Object.keys(launcherLayout).length;
+          // Détecter les nouvelles apps (présentes dans config mais pas dans le layout)
+          const newApps = Object.keys(config).filter(id => 
+            id.startsWith('app-') && !cleanedLayout[id]
+          );
+          
+          if (newApps.length > 0) {
+            console.log(`[Home] 🆕 Nouvelles apps détectées:`, newApps);
+            // Les nouvelles apps seront automatiquement placées par useGridLayout
+            // car elles seront dans la liste des apps mais pas dans le layout
+          }
+          
+          const layoutChanged = Object.keys(cleanedLayout).length !== Object.keys(launcherLayout).length || newApps.length > 0;
           const anchorsChanged = launcherAnchors && Object.keys(cleanedAnchors).length !== Object.keys(launcherAnchors).length;
           
           if (layoutChanged || anchorsChanged) {
-            console.log('[Home] 📝 Mise à jour du layout/anchors après nettoyage');
+            console.log('[Home] 📝 Mise à jour du layout/anchors après rafraîchissement');
+            console.log('[Home] Layout avant:', Object.keys(launcherLayout || {}));
+            console.log('[Home] Layout après:', Object.keys(cleanedLayout));
+            
             setLauncherLayout(cleanedLayout);
             if (anchorsChanged) {
               setLauncherAnchors(cleanedAnchors);
@@ -772,6 +792,7 @@ const Home = () => {
                     launcher.anchors = cleanedAnchors;
                   }
                   localStorage.setItem(`launcher_${currentUser}`, JSON.stringify(launcher));
+                  console.log('[Home] 💾 Layout sauvegardé dans localStorage');
                 }
               }
             } catch (e) {
@@ -780,7 +801,7 @@ const Home = () => {
             
             // Sauvegarder aussi dans le backend
             try {
-              const serverUrl = getServerUrl(accessMode);
+              const serverUrl = getServerUrl(mode);
               const appsList = Object.entries(cleanedLayout)
                 .filter(([id, pos]) => id && config[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
                 .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
@@ -812,6 +833,21 @@ const Home = () => {
         }
         
         console.log('[Home] ✅ Icônes du bureau rafraîchies');
+        
+        // Récupérer les statuts des apps depuis l'API pour mettre à jour les badges
+        try {
+          const serverUrl = getServerUrl(mode);
+          const response = await axios.get(`${serverUrl}/api/apps`);
+          const apps = response.data.map(app => ({
+            ...app,
+            port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
+            autostart: false
+          }));
+          setApplications(apps);
+          console.log('[Home] ✅ Statuts des apps actualisés:', apps.length, 'apps');
+        } catch (appsError) {
+          console.warn('[Home] ⚠️ Impossible de récupérer les statuts des apps:', appsError.message);
+        }
       }
     } catch (error) {
       console.error('[Home] ❌ Erreur lors du rafraîchissement des icônes:', error);
@@ -888,17 +924,66 @@ const Home = () => {
         console.log('[Home] Réception du message REFRESH_DESKTOP_ICONS');
         refreshDesktopIcons();
       } else if (event.data && event.data.type === 'APPSTORE_INSTALL_STATUS') {
-        console.log('[Home] Réception du statut d\'installation:', event.data.installing);
-        setAppStoreInstalling(event.data.installing);
+        const { installing, appName, appId, progress } = event.data;
+        console.log('[Home] Réception du statut d\'installation:', installing, appName, appId);
+        setAppStoreInstalling(installing);
+        
+        if (installing && appId && appName) {
+          // Ajouter ou mettre à jour l'installation
+          setInstallingApps(prev => ({
+            ...prev,
+            [appId]: { appName, progress: progress || 0 }
+          }));
+        } else if (!installing && appId) {
+          // Installation terminée, supprimer après un délai
+          setTimeout(() => {
+            setInstallingApps(prev => {
+              const newApps = { ...prev };
+              delete newApps[appId];
+              return newApps;
+            });
+          }, 500);
+          
+          // Rafraîchir les icônes du bureau pour afficher la nouvelle app
+          console.log('[Home] Installation terminée, rafraîchissement des icônes');
+          refreshDesktopIcons();
+        }
         
         // Si on attendait la fin d'une installation pour démonter
-        if (pendingUnmount && !event.data.installing) {
-          console.log('[Home] Installation terminée, démontage de l\'AppStore');
-          setTimeout(() => {
-            setAppStoreMounted(false);
-            setOverlayUrl('');
-            setPendingUnmount(false);
-          }, 1000); // Petit délai pour laisser voir la fin
+        if (pendingUnmount && !installing) {
+          // Vérifier s'il reste des installations en cours
+          setInstallingApps(prev => {
+            const remaining = Object.keys(prev).filter(id => id !== appId);
+            if (remaining.length === 0) {
+              console.log('[Home] Toutes les installations terminées, démontage de l\'AppStore');
+              setTimeout(() => {
+                setAppStoreMounted(false);
+                setOverlayUrl('');
+                setPendingUnmount(false);
+              }, 1000);
+            }
+            return prev;
+          });
+        }
+      } else if (event.data && event.data.type === 'APPSTORE_INSTALL_PROGRESS') {
+        // Mise à jour de la progression uniquement
+        const { appId, appName, progress } = event.data;
+        if (appId) {
+          setInstallingApps(prev => {
+            if (prev[appId]) {
+              return {
+                ...prev,
+                [appId]: { ...prev[appId], progress: progress || 0 }
+              };
+            } else if (appName) {
+              // Nouvelle app pas encore enregistrée
+              return {
+                ...prev,
+                [appId]: { appName, progress: progress || 0 }
+              };
+            }
+            return prev;
+          });
         }
       }
     };
@@ -955,42 +1040,58 @@ const Home = () => {
     } catch (_) {}
   }, []);
   
-  // Charger la config depuis les manifests quand le mode d'accès est défini
+  // Charger l'IP locale ET la config depuis les manifests en parallèle (optimisation)
   useEffect(() => {
     if (!accessMode) return;
     
-    const loadConfigFromManifests = async () => {
-      try {
-        console.log('[Home] Chargement de la config depuis les manifests...');
-        const config = await generateAppConfigFromManifests(accessMode);
-        
-        if (Object.keys(config).length > 0) {
-          console.log('[Home] Config chargée depuis manifests:', Object.keys(config).length, 'apps');
-          setAppsConfig(config);
-          // Sauvegarder dans le cache
-          StorageManager.setItem('appsConfig_cache', config);
-          
-          // Extraire et mettre à jour les icônes
-          const newIconImages = { ...images }; // Commencer avec les icônes par défaut
-          Object.keys(config).forEach(iconId => {
-            if (config[iconId].icon) {
-              newIconImages[iconId] = config[iconId].icon;
-            }
-          });
-          setIconImages(newIconImages);
-          StorageManager.setItem('iconImages_cache', newIconImages);
-          console.log('[Home] Icônes mises à jour:', Object.keys(newIconImages).length);
-          
-          // Apps chargées depuis les manifests
-        } else {
-          console.log('[Home] Aucune app trouvée dans les manifests, utilisation de la config par défaut');
-        }
-      } catch (error) {
-        console.error('[Home] Erreur lors du chargement de la config depuis manifests:', error);
+    const loadInitialData = async () => {
+      const serverUrl = getServerUrl(accessMode);
+      
+      // Lancer les deux requêtes en parallèle pour réduire le temps de chargement
+      const promises = [];
+      
+      // 1. Récupérer l'IP locale (mode privé uniquement)
+      if (accessMode === 'private') {
+        promises.push(
+          axios.get(`${serverUrl}/status`)
+            .then(response => {
+              if (response.data?.ip) {
+                setLocalIP(response.data.ip);
+                console.log('[Home] IP locale récupérée:', response.data.ip);
+              }
+            })
+            .catch(err => console.warn('[Home] IP locale non disponible:', err.message))
+        );
       }
+      
+      // 2. Charger la config depuis les manifests
+      promises.push(
+        generateAppConfigFromManifests(accessMode)
+          .then(config => {
+            if (Object.keys(config).length > 0) {
+              console.log('[Home] Config chargée:', Object.keys(config).length, 'apps');
+              setAppsConfig(config);
+              StorageManager.setItem('appsConfig_cache', config);
+              
+              // Mettre à jour les icônes
+              const newIconImages = { ...images };
+              Object.keys(config).forEach(iconId => {
+                if (config[iconId].icon) {
+                  newIconImages[iconId] = config[iconId].icon;
+                }
+              });
+              setIconImages(newIconImages);
+              StorageManager.setItem('iconImages_cache', newIconImages);
+            }
+          })
+          .catch(err => console.error('[Home] Erreur config manifests:', err))
+      );
+      
+      // Attendre toutes les requêtes en parallèle
+      await Promise.allSettled(promises);
     };
     
-    loadConfigFromManifests();
+    loadInitialData();
   }, [accessMode]);
 
   // Handler: sauvegarder layout/anchors du launcher pour l'utilisateur
@@ -1075,43 +1176,54 @@ const Home = () => {
     setWidgets(prev => prev.filter(w => w.id !== widgetId));
   }, []);
   
-  // Mettre à jour les statuts quand appsConfig change
+  // Référence pour appsConfig (évite les re-renders en cascade)
+  const appsConfigRef = React.useRef(appsConfig);
+  React.useEffect(() => { appsConfigRef.current = appsConfig; }, [appsConfig]);
+  
+  // Mettre à jour les statuts quand applications change (optimisé)
   useEffect(() => {
-    if (!applications || applications.length === 0 || Object.keys(appsConfig).length === 0) {
-      return;
-    }
+    if (!applications || applications.length === 0) return;
     
-    console.log('[Home] Mise à jour des statuts avec appsConfig chargé');
-    const newAppStatus = {};
+    const currentConfig = appsConfigRef.current;
+    if (Object.keys(currentConfig).length === 0) return;
     
-    applications.forEach(app => {
-      const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
-        const match = config.name?.toLowerCase() === app.name?.toLowerCase() || 
-                     iconId.includes(app.name?.toLowerCase()) ||
-                     (config.id && config.id === app.id);
-        return match;
+    // Utiliser requestIdleCallback pour ne pas bloquer le rendu
+    const updateStatus = () => {
+      const newAppStatus = {};
+      
+      applications.forEach(app => {
+        const configEntry = Object.entries(currentConfig).find(([iconId, config]) => {
+          return config.name?.toLowerCase() === app.name?.toLowerCase() || 
+                 iconId.includes(app.name?.toLowerCase()) ||
+                 (config.id && config.id === app.id);
+        });
+        
+        if (configEntry) {
+          const [iconId] = configEntry;
+          newAppStatus[iconId] = {
+            status: app.status,
+            progress: app.progress,
+            containersTotal: app.containersTotal,
+            containersRunning: app.containersRunning,
+            containersHealthy: app.containersHealthy,
+            containersStarting: app.containersStarting,
+            containersUnhealthy: app.containersUnhealthy,
+            containersStopped: app.containersStopped
+          };
+        }
       });
       
-      if (configEntry) {
-        const [iconId] = configEntry;
-        newAppStatus[iconId] = {
-          status: app.status,
-          progress: app.progress,
-          containersTotal: app.containersTotal,
-          containersRunning: app.containersRunning,
-          containersHealthy: app.containersHealthy,
-          containersStarting: app.containersStarting,
-          containersUnhealthy: app.containersUnhealthy,
-          containersStopped: app.containersStopped
-        };
-      }
-    });
+      setAppStatus(newAppStatus);
+      StorageManager.setItem('appStatus_cache', newAppStatus);
+    };
     
-    console.log('[Home] Statuts mis à jour:', newAppStatus);
-    setAppStatus(newAppStatus);
-    // Sauvegarder dans le cache
-    StorageManager.setItem('appStatus_cache', newAppStatus);
-  }, [appsConfig, applications]);
+    // Utiliser requestIdleCallback si disponible, sinon setTimeout
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(updateStatus, { timeout: 100 });
+    } else {
+      setTimeout(updateStatus, 0);
+    }
+  }, [applications]);
   
   useEffect(() => {
     if (!accessMode) {
@@ -2061,6 +2173,11 @@ const Home = () => {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Indicateur d'installation moderne - supporte plusieurs installations */}
+      {Object.keys(installingApps).length > 0 && (
+        <InstallIndicator installations={installingApps} />
       )}
     </div>
   );

@@ -34,7 +34,9 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
   const [imgSrc, setImgSrc] = React.useState(src);
   const [imgError, setImgError] = React.useState(false);
   const [pendingAction, setPendingAction] = React.useState(null);
+  const [isUninstalling, setIsUninstalling] = React.useState(false);
   const isProcessingMenuActionRef = React.useRef(false);
+  const [confirmModal, setConfirmModal] = React.useState({ show: false, type: '', title: '', message: '', onConfirm: null });
   
   React.useEffect(() => {
     setImgSrc(src);
@@ -73,8 +75,12 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
 
     let backgroundColor = '#dc3545';
     let animation = 'none';
-    
-    if (pendingAction === 'stopping') {
+
+    // Désinstallation en cours: badge rouge avec pulsation
+    if (isUninstalling) {
+      backgroundColor = '#dc3545';
+      animation = 'pulse 1.5s ease-in-out infinite';
+    } else if (pendingAction === 'stopping') {
       const currentStatus = appStatusData?.status;
       if (currentStatus === 'stopped') {
         backgroundColor = '#dc3545';
@@ -172,6 +178,155 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     setActiveContextMenu({ iconId: id, x, y });
   };
 
+  // Fonction pour exécuter la désinstallation (appelée après confirmation)
+  const executeUninstall = async (appId, appName, appKey) => {
+    setPendingAction('stopping');
+    setIsUninstalling(true);
+    
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      const uninstallUrl = `${serverUrl}/api/appstore/apps/${appId}/uninstall`;
+      console.log(`[Icon] 📡 DELETE ${uninstallUrl}`);
+      const response = await axios.delete(uninstallUrl, { timeout: 120000 });
+      console.log(`[Icon] ✅ Désinstallation de ${appName} terminée`);
+
+      // Afficher modal de succès
+      setConfirmModal({
+        show: true,
+        type: 'success',
+        title: 'Désinstallation réussie',
+        message: `${appName} a été désinstallé avec succès.`,
+        onConfirm: async () => {
+          setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null });
+          if (typeof refreshDesktopIcons === 'function') {
+            await refreshDesktopIcons();
+          }
+        }
+      });
+
+      setIsUninstalling(false);
+    } catch (error) {
+      console.error(`[Icon] ❌ Erreur lors de la désinstallation de ${appName}:`, error);
+      setIsUninstalling(false);
+      setPendingAction(null);
+      
+      const errorMsg = error.response?.data?.message || error.message;
+      setConfirmModal({
+        show: true,
+        type: 'error',
+        title: 'Erreur',
+        message: `Erreur lors de la désinstallation de ${appName}: ${errorMsg}`,
+        onConfirm: () => setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null })
+      });
+    }
+  };
+
+  // Ref pour empêcher la réouverture immédiate après fermeture
+  const modalClosingRef = React.useRef(false);
+
+  // Fermer la modal
+  const closeModal = React.useCallback(() => {
+    modalClosingRef.current = true;
+    setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null });
+    // Réinitialiser après un court délai
+    setTimeout(() => {
+      modalClosingRef.current = false;
+    }, 500);
+  }, []);
+
+  // Gérer le clic sur l'overlay
+  const handleOverlayClick = React.useCallback((e) => {
+    // S'assurer que le clic est bien sur l'overlay et pas sur la modal
+    if (e.target === e.currentTarget) {
+      e.nativeEvent.stopImmediatePropagation();
+      e.stopPropagation();
+      e.preventDefault();
+      closeModal();
+    }
+  }, [closeModal]);
+
+  // Bloquer tous les événements de l'overlay
+  const blockAllEvents = React.useCallback((e) => {
+    if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
+      e.nativeEvent.stopImmediatePropagation();
+    }
+    e.stopPropagation();
+    e.preventDefault();
+  }, []);
+
+  // Composant modal de confirmation (rendu via portal)
+  const ConfirmModalPortal = () => {
+    if (!confirmModal.show) return null;
+    
+    const isError = confirmModal.type === 'error';
+    const isSuccess = confirmModal.type === 'success';
+    const isDanger = confirmModal.type === 'danger';
+    
+    // Empêcher tous les événements de se propager
+    const stopAllEvents = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    
+    return ReactDOM.createPortal(
+      <div 
+        className="confirm-modal-overlay" 
+        onClick={handleOverlayClick}
+        onMouseDown={blockAllEvents}
+        onMouseUp={blockAllEvents}
+        onMouseMove={blockAllEvents}
+        onDragStart={blockAllEvents}
+        onDrag={blockAllEvents}
+        onDragEnd={blockAllEvents}
+        onPointerDown={blockAllEvents}
+        onPointerMove={blockAllEvents}
+        onPointerUp={blockAllEvents}
+      >
+        <div 
+          className={`confirm-modal ${confirmModal.type}`} 
+          onClick={stopAllEvents}
+          onMouseDown={stopAllEvents}
+          onMouseUp={stopAllEvents}
+          onMouseMove={stopAllEvents}
+        >
+          <div className="confirm-modal-icon">
+            {isError && '❌'}
+            {isSuccess && '✅'}
+            {isDanger && '⚠️'}
+          </div>
+          <h3 className="confirm-modal-title">{confirmModal.title}</h3>
+          <p className="confirm-modal-message">{confirmModal.message}</p>
+          <div className="confirm-modal-buttons">
+            {(isError || isSuccess) ? (
+              <button 
+                className="confirm-modal-btn confirm-modal-btn-primary" 
+                onClick={(e) => { e.stopPropagation(); confirmModal.onConfirm(); }}
+              >
+                OK
+              </button>
+            ) : (
+              <>
+                <button 
+                  className="confirm-modal-btn confirm-modal-btn-cancel" 
+                  onClick={(e) => { e.stopPropagation(); closeModal(); }}
+                >
+                  Annuler
+                </button>
+                <button 
+                  className="confirm-modal-btn confirm-modal-btn-danger" 
+                  onClick={(e) => { e.stopPropagation(); confirmModal.onConfirm(); }}
+                >
+                  Désinstaller
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
   const handleAppAction = async (action) => {
     console.log(`[Icon] 🔴 handleAppAction appelé avec action: ${action}, iconId: ${id}`);
     console.log(`[Icon] 📍 accessMode:`, accessMode);
@@ -201,15 +356,21 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     const appName = appConfig.name || id;
     const appKey = id; // La clé utilisée dans appStatus
     
-    console.log(`[Icon] 🔄 Action "${action}" sur ${appName} (ID: ${appId})`);
-    
-    // Confirmation pour la désinstallation
+    // Confirmation pour la désinstallation via modal moderne
     if (action === 'uninstall') {
-      const confirmMsg = `Êtes-vous sûr de vouloir désinstaller "${appName}" ?\n\nCette action supprimera :\n- Les containers Docker\n- Les données de l'application\n- Les fichiers de configuration\n\nCette action est irréversible.`;
-      if (!window.confirm(confirmMsg)) {
-        console.log(`[Icon] Désinstallation de ${appName} annulée par l'utilisateur`);
-        return;
-      }
+      // Empêcher les clics multiples ou réouverture après fermeture
+      if (confirmModal.show || modalClosingRef.current) return;
+      setConfirmModal({
+        show: true,
+        type: 'danger',
+        title: `Désinstaller ${appName} ?`,
+        message: `Toutes les données seront supprimées définitivement.`,
+        onConfirm: () => {
+          setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null });
+          executeUninstall(appId, appName, appKey);
+        }
+      });
+      return;
     }
     
     // Définir l'action en cours (pour l'affichage du badge)
@@ -218,7 +379,9 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     } else if (action === 'start' || action === 'restart') {
       setPendingAction('starting');
     } else if (action === 'uninstall') {
-      setPendingAction('stopping'); // Utiliser stopping pour la désinstallation
+      // On garde le badge en mode "arrêt" mais on ne touche pas à appStatus global
+      setPendingAction('stopping');
+      setIsUninstalling(true);
     }
     
     // Mise à jour optimiste du statut (avant l'appel API)
@@ -240,13 +403,6 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
             status: 'starting',
             progress: 50
           };
-        } else if (action === 'uninstall') {
-          console.log(`[Icon] 🗑️  ${appName} - Mise à jour optimiste: stopped (désinstallation en cours)`);
-          newStatus[appKey] = {
-            ...newStatus[appKey],
-            status: 'stopped',
-            progress: 0
-          };
         }
         
         return newStatus;
@@ -256,42 +412,6 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     // Appel API vers le backend
     try {
       const serverUrl = getServerUrl(accessMode);
-      
-      // Gestion spéciale de la désinstallation
-      if (action === 'uninstall') {
-        const uninstallUrl = `${serverUrl}/api/appstore/apps/${appId}/uninstall`;
-        console.log(`[Icon] 📡 DELETE ${uninstallUrl}`);
-        const response = await axios.delete(uninstallUrl, { timeout: 120000 });
-        console.log(`[Icon] ✅ Désinstallation de ${appName} terminée`);
-        console.log('[Icon] Réponse complète:', response);
-        console.log('[Icon] Réponse data:', response.data);
-        console.log('[Icon] Success flag:', response.data?.success);
-        
-        // Nettoyer le cache localStorage avant de recharger
-        console.log('[Icon] 🧹 Nettoyage du cache localStorage...');
-        try {
-          // Vider tous les caches liés aux apps
-          const keysToRemove = [];
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.includes('appsConfig') || key.includes('launcher_') || key.includes('iconImages'))) {
-              keysToRemove.push(key);
-            }
-          }
-          keysToRemove.forEach(key => {
-            console.log(`[Icon] 🗑️ Suppression du cache: ${key}`);
-            localStorage.removeItem(key);
-          });
-        } catch (e) {
-          console.warn('[Icon] ⚠️ Erreur lors du nettoyage du cache:', e);
-        }
-        
-        // Afficher le message et recharger
-        alert(`${appName} a été désinstallé avec succès.`);
-        console.log('[Icon] 🔄 Rechargement de la page (F5)...');
-        window.location.reload();
-        return;
-      }
       
       // Gestion spéciale du restart: tenter /restart, sinon fallback stop+start
       if (action === 'restart') {
@@ -336,7 +456,8 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
       
       // Réinitialiser l'action en cours
       setPendingAction(null);
-      
+      setIsUninstalling(false);
+
       // Restaurer le statut précédent en cas d'erreur
       if (setAppStatus && appStatusData) {
         console.log(`[Icon] 🔙 Restauration du statut précédent pour ${appName}`);
@@ -362,11 +483,14 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
 
   return (
     <>
+      {/* Modal de confirmation */}
+      <ConfirmModalPortal />
+      
       {!imgError && (
         <div className="icon-container">
           <div
             ref={ref}
-            className="icon"
+            className={`icon ${isUninstalling ? 'icon-uninstalling' : ''}`}
             style={{
               cursor: isClickable ? 'pointer' : 'not-allowed',
               position: 'relative',

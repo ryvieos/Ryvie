@@ -53,17 +53,20 @@ const AppStore = () => {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedApp, setSelectedApp] = useState(null);
+  const [isModalClosing, setIsModalClosing] = useState(false);
   const [catalogHealth, setCatalogHealth] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isInstalling, setIsInstalling] = useState(null);
+  const [installingApps, setInstallingApps] = useState(new Set());
   const [enlargedImage, setEnlargedImage] = useState(null);
+  const [closingImage, setClosingImage] = useState(false);
   const [featuredApps, setFeaturedApps] = useState([]);
   const featuredRef = useRef(null);
   const [featuredHovered, setFeaturedHovered] = useState(false);
   const [featuredPage, setFeaturedPage] = useState(0);
   const previewRef = useRef(null);
   const [previewHovered, setPreviewHovered] = useState(false);
+  const activeEventSources = useRef({}); // Stocke les EventSources actifs pour pouvoir les annuler
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(false);
@@ -78,6 +81,59 @@ const AppStore = () => {
   // Effacer les logs
   const clearLogs = () => {
     setLogs([]);
+  };
+
+  // Annuler une installation en cours
+  const cancelInstall = async (appId, appName) => {
+    const eventSource = activeEventSources.current[appId];
+    if (eventSource) {
+      eventSource.close();
+      delete activeEventSources.current[appId];
+    }
+    
+    // Envoyer une requête au backend pour arrêter réellement l'installation
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const cancelUrl = `${serverUrl}/api/appstore/apps/${appId}/cancel`;
+      
+      addLog(`🛑 Envoi de la demande d'annulation au serveur...`, 'info');
+      await axios.post(cancelUrl, {}, { timeout: 10000 });
+      addLog(`✅ Annulation confirmée par le serveur`, 'success');
+    } catch (error) {
+      console.error('[AppStore] Erreur lors de l\'annulation:', error);
+      addLog(`⚠️ Impossible de contacter le serveur pour l'annulation`, 'warning');
+    }
+    
+    // Nettoyer les états
+    setInstallingApps(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(appId);
+      return newSet;
+    });
+    setInstallProgress(prev => {
+      const newProgress = { ...prev };
+      delete newProgress[appId];
+      return newProgress;
+    });
+    
+    addLog(`⏹️ Installation de ${appName} annulée par l'utilisateur`, 'warning');
+    showToast(`Installation de ${appName} annulée`, 'info');
+    
+    // Notifier Home que l'installation a été annulée
+    window.parent.postMessage({ 
+      type: 'APPSTORE_INSTALL_STATUS', 
+      installing: false, 
+      appName: appName,
+      appId: appId,
+      cancelled: true
+    }, '*');
+    
+    // Rafraîchir le bureau pour supprimer l'app (le backend aura supprimé le manifest)
+    addLog(`🔄 Rafraîchissement du bureau pour supprimer ${appName}`, 'info');
+    setTimeout(() => {
+      window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+    }, 1000);
   };
 
   // Basculer la visibilité des logs
@@ -111,9 +167,9 @@ const AppStore = () => {
   useEffect(() => {
     window.parent.postMessage({
       type: 'APPSTORE_INSTALL_STATUS',
-      installing: isInstalling !== null
-    }, window.location.origin); // Sécurisé : uniquement notre domaine
-  }, [isInstalling]);
+      installing: installingApps.size > 0
+    }, '*');
+  }, [installingApps]);
 
   // Déboucer la recherche pour fluidifier la saisie
   useEffect(() => {
@@ -431,7 +487,16 @@ const AppStore = () => {
     addLog(`🚀 Démarrage de l'installation/mise à jour de ${appName} (${appId})`, 'info');
     addLog(`👤 Utilisateur: ${sessionInfo.user} (${sessionInfo.userRole})`, 'info');
     
-    setIsInstalling(appId);
+    setInstallingApps(prev => new Set(prev).add(appId));
+    
+    // Notifier Home qu'une installation commence avec le nom de l'app
+    window.parent.postMessage({ 
+      type: 'APPSTORE_INSTALL_STATUS', 
+      installing: true, 
+      appName: appName,
+      appId: appId,
+      progress: 0
+    }, '*');
     setLogsVisible(false); // Masquer automatiquement les logs lors de l'installation
 
     const accessMode = getCurrentAccessMode() || 'private';
@@ -446,6 +511,7 @@ const AppStore = () => {
     addLog(`📊 Connexion aux mises à jour de progression: ${progressUrl}`, 'info');
     
     eventSource = new EventSource(progressUrl);
+    activeEventSources.current[appId] = eventSource; // Stocker pour pouvoir annuler
     
     eventSource.onmessage = (event) => {
       try {
@@ -460,6 +526,14 @@ const AppStore = () => {
         }));
         addLog(data.message, 'info');
         
+        // Envoyer la progression à Home pour l'indicateur
+        window.parent.postMessage({ 
+          type: 'APPSTORE_INSTALL_PROGRESS', 
+          appName: appName,
+          appId: appId,
+          progress: data.progress
+        }, '*');
+        
         // Si l'installation est terminée (100%), afficher la notification de succès
         if (data.progress >= 100) {
           addLog(`✅ Installation de ${appName} terminée avec succès !`, 'success');
@@ -470,12 +544,25 @@ const AppStore = () => {
           eventSource.close();
           
           // Nettoyer l'état d'installation
-          setIsInstalling(null);
+          setInstallingApps(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(appId);
+            return newSet;
+          });
+          
+          // Notifier Home que l'installation est terminée
+          window.parent.postMessage({ 
+            type: 'APPSTORE_INSTALL_STATUS', 
+            installing: false, 
+            appName: appName,
+            appId: appId,
+            progress: 100
+          }, '*');
           
           // Rafraîchir la liste des apps et notifier Home
           setTimeout(async () => {
             await fetchApps(true);
-            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, window.location.origin);
+            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
             
             // Nettoyer la progression et les logs après un délai
             setTimeout(() => {
@@ -500,12 +587,32 @@ const AppStore = () => {
       delete activeEventSources.current[appId];
       
       // Nettoyer l'état en cas d'erreur SSE
-      setIsInstalling(null);
+      setInstallingApps(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(appId);
+        return newSet;
+      });
       setInstallProgress(prev => {
         const newProgress = { ...prev };
         delete newProgress[appId];
         return newProgress;
       });
+      
+      // Notifier Home que l'installation a échoué
+      window.parent.postMessage({ 
+        type: 'APPSTORE_INSTALL_STATUS', 
+        installing: false, 
+        appName: appName,
+        appId: appId,
+        error: true
+      }, '*');
+      
+      // Rafraîchir le bureau pour supprimer l'app si elle avait été ajoutée
+      // (le backend aura supprimé le manifest en cas d'échec)
+      addLog(`🔄 Rafraîchissement du bureau pour supprimer ${appName} (installation échouée)`, 'warning');
+      setTimeout(() => {
+        window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+      }, 1000);
     };
 
     let response;
@@ -569,8 +676,10 @@ try {
       addLog(`📊 Suivez la progression ci-dessous...`, 'info');
       showToast(`Installation de ${appName} en cours...`, 'info');
       
+      // Le backend ne crée le manifest qu'à la fin de l'installation
+      // L'app apparaîtra sur le bureau quand l'installation sera terminée (progress >= 100)
+      
       // La vraie fin de l'installation sera signalée par le SSE à 100%
-      // Pas besoin de rafraîchir ici, le SSE le fera automatiquement
     } else {
       addLog(`❌ Échec du lancement: ${response.data.message || 'Erreur inconnue'}`, 'error');
       showToast(response.data.message || 'Erreur lors du lancement de l\'installation', 'error');
@@ -581,7 +690,11 @@ try {
     showToast('Erreur lors de l\'installation/mise à jour', 'error');
     
     // En cas d'erreur, nettoyer immédiatement
-    setIsInstalling(null);
+    setInstallingApps(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(appId);
+      return newSet;
+    });
     if (eventSource) {
       eventSource.close();
     }
@@ -651,6 +764,17 @@ try {
   };
 
   const evaluateAppStatus = (app) => {
+    if (!app) {
+      return {
+        installed: false,
+        updateAvailable: false,
+        label: 'Installer',
+        disabled: false,
+        isInstalling: false,
+      };
+    }
+
+    const appId = app.id;
     const installedVersion = app?.installedVersion;
     const installed = typeof installedVersion === 'string'
       ? installedVersion.trim() !== ''
@@ -662,8 +786,9 @@ try {
     const updateAvailable = updateFlag || versionStatus === 'update-available';
 
     // Déterminer le label en fonction de l'état
+    const isCurrentlyInstalling = appId ? installingApps.has(appId) : false;
     let label;
-    if (isInstalling === app.id) {
+    if (isCurrentlyInstalling) {
       label = 'Installation...';
     } else if (updateAvailable) {
       label = 'Mettre à jour';
@@ -677,18 +802,33 @@ try {
       installed,
       updateAvailable,
       label,
-      disabled: (installed && !updateAvailable) || (isInstalling === app.id)
+      disabled: (installed && !updateAvailable) || isCurrentlyInstalling,
+      isInstalling: isCurrentlyInstalling,
     };
   };
 
   if (initialLoading) {
     return (
       <div className="appstore-container appstore-loading">
-        <div className="spinner"></div>
+        <div className="loading-icon">🛍️</div>
+        <div className="loading-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
         <p>Chargement du catalogue...</p>
       </div>
     );
   }
+
+  const closeAppModal = () => {
+    if (!selectedApp) return;
+    setIsModalClosing(true);
+    setTimeout(() => {
+      setSelectedApp(null);
+      setIsModalClosing(false);
+    }, 350); // correspond à 0.35s d'animation CSS
+  };
 
   if (loading) {
     return (
@@ -766,7 +906,8 @@ try {
                       </div>
                     </div>
                     {(() => {
-                      const { label, disabled } = evaluateAppStatus(app);
+                      const { label, disabled, isInstalling } = evaluateAppStatus(app);
+                      const progress = (installProgress[app.id]?.progress || 0) / 100;
 
                       const handleClick = (event) => {
                         event.stopPropagation();
@@ -784,11 +925,12 @@ try {
                       return (
                         <div className="featured-install-section">
                           <button
-                            className="featured-install-btn"
+                            className={`featured-install-btn ${isInstalling ? 'installing' : ''}`}
                             disabled={disabled}
                             onClick={handleClick}
+                            style={isInstalling ? { ['--progress']: progress } : undefined}
                           >
-                            {label}
+                            <span>{label}</span>
                           </button>
                           {installProgress[app.id] && (
                             <div className="install-progress-container">
@@ -798,9 +940,6 @@ try {
                                   style={{ width: `${installProgress[app.id].progress || 0}%` }}
                                 />
                               </div>
-                              <span className="install-progress-text">
-                                {installProgress[app.id].progress || 0}% - {installProgress[app.id].message || 'En cours...'}
-                              </span>
                             </div>
                           )}
                         </div>
@@ -926,7 +1065,8 @@ try {
                     )}
                   </div>
                   {(() => {
-                    const { label, disabled } = evaluateAppStatus(app);
+                    const { label, disabled, isInstalling } = evaluateAppStatus(app);
+                    const progress = (installProgress[app.id]?.progress || 0) / 100;
 
                     const handleClick = (event) => {
                       event.stopPropagation();
@@ -943,13 +1083,25 @@ try {
 
                     return (
                       <div className="app-install-section">
-                        <button
-                          className="app-get-button"
-                          disabled={disabled}
-                          onClick={handleClick}
-                        >
-                          {label}
-                        </button>
+                        <div className="install-btn-row">
+                          <button
+                            className={`app-get-button ${isInstalling ? 'installing' : ''}`}
+                            disabled={disabled}
+                            onClick={handleClick}
+                            style={isInstalling ? { ['--progress']: progress } : undefined}
+                          >
+                            <span>{label}</span>
+                          </button>
+                          {isInstalling && (
+                            <button 
+                              className="cancel-install-btn"
+                              onClick={(e) => { e.stopPropagation(); cancelInstall(app.id, app.name); }}
+                              title="Annuler l'installation"
+                            >
+                              <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                          )}
+                        </div>
                         {installProgress[app.id] && (
                           <div className="install-progress-container">
                             <div className="install-progress-bar">
@@ -958,9 +1110,6 @@ try {
                                 style={{ width: `${installProgress[app.id].progress || 0}%` }}
                               />
                             </div>
-                            <span className="install-progress-text">
-                              {installProgress[app.id].progress || 0}%
-                            </span>
                           </div>
                         )}
                       </div>
@@ -975,11 +1124,17 @@ try {
 
       {/* Modal détails application */}
       {selectedApp && (
-        <div className="modal-overlay" onClick={() => setSelectedApp(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div 
+          className={`modal-overlay ${isModalClosing ? 'modal-overlay-closing' : ''}`}
+          onClick={closeAppModal}
+        >
+          <div 
+            className={`modal-content ${isModalClosing ? 'modal-content-closing' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <button 
               className="modal-close"
-              onClick={() => setSelectedApp(null)}
+              onClick={closeAppModal}
             >
               <FontAwesomeIcon icon={faTimes} />
             </button>
@@ -1003,7 +1158,10 @@ try {
               </div>
               <div className="modal-header-actions">
                 {(() => {
-                  const { label, disabled } = evaluateAppStatus(selectedApp);
+                  if (!selectedApp) return null;
+
+                  const { label, disabled, isInstalling } = evaluateAppStatus(selectedApp);
+                  const progress = (installProgress[selectedApp.id]?.progress || 0) / 100;
 
                   const handleClick = (event) => {
                     event.stopPropagation();
@@ -1014,30 +1172,30 @@ try {
 
                     // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                     if (label === 'Installer' || label === 'Mettre à jour') {
-                      installApp(selectedApp.id, selectedApp.name);
+                      if (selectedApp) {
+                        installApp(selectedApp.id, selectedApp.name);
+                      }
                     }
                   };
 
                   return (
                     <div className="modal-install-section">
                       <button
-                        className="btn-primary btn-install-header"
+                        className={`btn-primary btn-install-header ${isInstalling ? 'installing' : ''}`}
                         disabled={disabled}
                         onClick={handleClick}
+                        style={isInstalling && selectedApp ? { ['--progress']: progress } : undefined}
                       >
-                        <FontAwesomeIcon icon={faDownload} /> {label}
+                        <span><FontAwesomeIcon icon={faDownload} /> {label}</span>
                       </button>
-                      {installProgress[selectedApp.id] && (
+                      {selectedApp && installProgress[selectedApp.id] && (
                         <div className="install-progress-container modal-progress">
                           <div className="install-progress-bar">
                             <div 
                               className="install-progress-fill"
-                              style={{ width: `${installProgress[selectedApp.id].progress || 0}%` }}
+                              style={{ width: `${(installProgress[selectedApp.id]?.progress || 0)}%` }}
                             />
                           </div>
-                          <span className="install-progress-text">
-                            {installProgress[selectedApp.id].progress || 0}% - {installProgress[selectedApp.id].message || 'En cours...'}
-                          </span>
                         </div>
                       )}
                     </div>
@@ -1131,11 +1289,29 @@ try {
 
       {/* Image agrandie */}
       {enlargedImage && (
-        <div className="image-overlay" onClick={() => setEnlargedImage(null)}>
-          <div className="image-overlay-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`image-overlay ${closingImage ? 'image-overlay-closing' : ''}`}
+          onClick={() => {
+            setClosingImage(true);
+            setTimeout(() => {
+              setEnlargedImage(null);
+              setClosingImage(false);
+            }, 200);
+          }}
+        >
+          <div
+            className="image-overlay-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button 
               className="image-close"
-              onClick={() => setEnlargedImage(null)}
+              onClick={() => {
+                setClosingImage(true);
+                setTimeout(() => {
+                  setEnlargedImage(null);
+                  setClosingImage(false);
+                }, 200);
+              }}
             >
               <FontAwesomeIcon icon={faTimes} />
             </button>

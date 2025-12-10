@@ -2,8 +2,9 @@
 
 .widget-add-button {
   position: fixed;
-  bottom: 80px;
-  right: 24px;
+  /* Marge responsive en bas à droite */
+  bottom: clamp(16px, 4vh, 40px);
+  right: clamp(16px, 3vw, 44px);
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -157,7 +158,7 @@
 /* Responsive */
 @media (max-width: 768px) {
   .widget-add-button {
-    bottom: 70px;
+    bottom: clamp(12px, 5vh, 32px);
     right: 16px;
     width: 48px;
     height: 48px;

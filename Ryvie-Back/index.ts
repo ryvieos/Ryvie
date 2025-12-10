@@ -60,7 +60,7 @@ const userPreferencesRouter = require('./routes/userPreferences');
 const appStoreRouter = require('./routes/appStore');
 const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
-const { getLocalIP } = require('./utils/network');
+const { getLocalIP, getPrivateIP, waitForWifiInterface, listNetworkInterfaces } = require('./utils/network');
 const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
 const { syncNetbirdConfig } = require('./utils/syncNetbirdConfig');
 
@@ -89,21 +89,29 @@ app.use(helmet({
 }));
 
 // CORS configuration with Private Network Access support
-// Required for Chrome to allow requests from http://ryvie.local:3000 to http://ryvie.local:3002
-app.use(cors({
-  origin: true, // Allow all origins
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-}));
-
-// Handle Private Network Access preflight requests (Chrome security feature)
-// This header is required when accessing local network resources from a web page
+// Required for Chrome/Edge to allow requests from http://172.55.100.228:3000 to http://172.55.100.228:3002
 app.use((req: any, res: any, next: any) => {
-  // Add Private Network Access header for preflight responses
+  const origin = req.headers.origin;
+  
+  // Allow the request origin
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle Private Network Access preflight requests (Chrome/Edge security feature)
   if (req.headers['access-control-request-private-network']) {
     res.setHeader('Access-Control-Allow-Private-Network', 'true');
   }
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
   next();
 });
 
@@ -219,6 +227,18 @@ try {
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
+    // Attendre qu'une interface réseau soit disponible (max 30 secondes)
+    console.log('📶 Attente d\'une interface réseau valide...');
+    listNetworkInterfaces(); // Debug: afficher les interfaces disponibles
+    const networkIP = await waitForWifiInterface(30000, 1000);
+    console.log(`✅ Interface réseau prête: ${networkIP}`);
+    
+    // Afficher aussi l'IP privée si disponible (VPN/Netbird)
+    const privateIP = getPrivateIP();
+    if (privateIP !== networkIP) {
+      console.log(`🔒 IP privée (VPN): ${privateIP}`);
+    }
+    
     // Vérifier et démarrer le reverse proxy Caddy si nécessaire
     console.log('🔍 Vérification du reverse proxy Caddy...');
     try {

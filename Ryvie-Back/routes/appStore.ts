@@ -5,6 +5,9 @@ const { getApps, getAppById, clearCache, getStoreHealth, updateAppFromStore, uni
 const { checkStoreCatalogUpdate } = require('../services/updateCheckService');
 const { updateStoreCatalog } = require('../services/updateService');
 
+// Map pour stocker les workers actifs (appId -> worker process)
+const activeWorkers = new Map();
+
 /**
  * GET /api/appstore/apps - Liste toutes les apps disponibles
  */
@@ -199,6 +202,9 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
       stdio: 'inherit'
     });
     
+    // Stocker le worker actif pour pouvoir l'annuler plus tard
+    activeWorkers.set(appId, worker);
+    
     worker.on('message', (message) => {
       if (message.type === 'log') {
         console.log(`[Worker ${appId}]`, message.message);
@@ -209,6 +215,9 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     });
     
     worker.on('exit', (code) => {
+      // Retirer le worker de la map quand il se termine
+      activeWorkers.delete(appId);
+      
       if (code === 0) {
         console.log(`[appStore] ✅ Installation de ${appId} terminée avec succès`);
       } else {
@@ -218,10 +227,63 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     
     worker.on('error', (error) => {
       console.error(`[appStore] ❌ Erreur du worker pour ${appId}:`, error);
+      activeWorkers.delete(appId);
     });
     
   } catch (error: any) {
     console.error(`[appStore] Erreur lors du lancement de l'installation de ${req.params.id}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/appstore/apps/:id/cancel - Annule une installation en cours
+ */
+router.post('/appstore/apps/:id/cancel', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
+  try {
+    const appId = req.params.id;
+    console.log(`[appStore] 🛑 Demande d'annulation de l'installation de ${appId}...`);
+    
+    // Vérifier si un worker est actif pour cette app
+    const worker = activeWorkers.get(appId);
+    
+    if (!worker) {
+      console.log(`[appStore] ⚠️ Aucune installation en cours pour ${appId}`);
+      return res.json({
+        success: true,
+        message: `Aucune installation en cours pour ${appId}`,
+        appId: appId
+      });
+    }
+    
+    // Tuer le processus worker
+    console.log(`[appStore] 🔪 Arrêt du worker pour ${appId}...`);
+    worker.kill('SIGTERM');
+    
+    // Retirer de la map
+    activeWorkers.delete(appId);
+    
+    // Envoyer un événement de progression pour informer le frontend
+    progressEmitter.emit('progress', {
+      appId: appId,
+      progress: 0,
+      message: 'Installation annulée par l\'utilisateur',
+      stage: 'cancelled'
+    });
+    
+    console.log(`[appStore] ✅ Installation de ${appId} annulée avec succès`);
+    
+    res.json({
+      success: true,
+      message: `Installation de ${appId} annulée avec succès`,
+      appId: appId
+    });
+    
+  } catch (error: any) {
+    console.error(`[appStore] Erreur lors de l'annulation de ${req.params.id}:`, error);
     res.status(500).json({
       success: false,
       error: error.message
