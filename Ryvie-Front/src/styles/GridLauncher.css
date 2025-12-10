@@ -424,3 +424,20 @@
   outline: 2px solid rgba(100, 180, 255, 0.8);
   outline-offset: 2px;
 }
+
+/* ==================== OPTIMISATIONS PERFORMANCES ==================== */
+
+/* Réduire les animations si l'utilisateur préfère */
+@media (prefers-reduced-motion: reduce) {
+  .grid-tile,
+  .weather-widget,
+  .weather-card,
+  .grid-slot {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .weather-widget:hover .weather-card {
+    transform: none;
+  }
+}

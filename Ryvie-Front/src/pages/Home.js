@@ -957,67 +957,58 @@ const Home = () => {
     } catch (_) {}
   }, []);
   
-  // Récupérer l'IP locale du serveur au démarrage (mode privé uniquement)
+  // Charger l'IP locale ET la config depuis les manifests en parallèle (optimisation)
   useEffect(() => {
     if (!accessMode) return;
     
-    const fetchLocalIP = async () => {
-      // Uniquement en mode privé
-      if (accessMode !== 'private') return;
+    const loadInitialData = async () => {
+      const serverUrl = getServerUrl(accessMode);
       
-      try {
-        const serverUrl = getServerUrl(accessMode);
-        console.log('[Home] Récupération de l\'IP locale depuis le serveur...');
-        const response = await axios.get(`${serverUrl}/status`);
-        
-        if (response.data?.ip) {
-          setLocalIP(response.data.ip);
-          console.log('[Home] IP locale récupérée et mise en cache:', response.data.ip);
-        }
-      } catch (error) {
-        console.warn('[Home] Impossible de récupérer l\'IP locale:', error.message);
+      // Lancer les deux requêtes en parallèle pour réduire le temps de chargement
+      const promises = [];
+      
+      // 1. Récupérer l'IP locale (mode privé uniquement)
+      if (accessMode === 'private') {
+        promises.push(
+          axios.get(`${serverUrl}/status`)
+            .then(response => {
+              if (response.data?.ip) {
+                setLocalIP(response.data.ip);
+                console.log('[Home] IP locale récupérée:', response.data.ip);
+              }
+            })
+            .catch(err => console.warn('[Home] IP locale non disponible:', err.message))
+        );
       }
-    };
-    
-    fetchLocalIP();
-  }, [accessMode]);
-  
-  // Charger la config depuis les manifests quand le mode d'accès est défini
-  useEffect(() => {
-    if (!accessMode) return;
-    
-    const loadConfigFromManifests = async () => {
-      try {
-        console.log('[Home] Chargement de la config depuis les manifests...');
-        const config = await generateAppConfigFromManifests(accessMode);
-        
-        if (Object.keys(config).length > 0) {
-          console.log('[Home] Config chargée depuis manifests:', Object.keys(config).length, 'apps');
-          setAppsConfig(config);
-          // Sauvegarder dans le cache
-          StorageManager.setItem('appsConfig_cache', config);
-          
-          // Extraire et mettre à jour les icônes
-          const newIconImages = { ...images }; // Commencer avec les icônes par défaut
-          Object.keys(config).forEach(iconId => {
-            if (config[iconId].icon) {
-              newIconImages[iconId] = config[iconId].icon;
+      
+      // 2. Charger la config depuis les manifests
+      promises.push(
+        generateAppConfigFromManifests(accessMode)
+          .then(config => {
+            if (Object.keys(config).length > 0) {
+              console.log('[Home] Config chargée:', Object.keys(config).length, 'apps');
+              setAppsConfig(config);
+              StorageManager.setItem('appsConfig_cache', config);
+              
+              // Mettre à jour les icônes
+              const newIconImages = { ...images };
+              Object.keys(config).forEach(iconId => {
+                if (config[iconId].icon) {
+                  newIconImages[iconId] = config[iconId].icon;
+                }
+              });
+              setIconImages(newIconImages);
+              StorageManager.setItem('iconImages_cache', newIconImages);
             }
-          });
-          setIconImages(newIconImages);
-          StorageManager.setItem('iconImages_cache', newIconImages);
-          console.log('[Home] Icônes mises à jour:', Object.keys(newIconImages).length);
-          
-          // Apps chargées depuis les manifests
-        } else {
-          console.log('[Home] Aucune app trouvée dans les manifests, utilisation de la config par défaut');
-        }
-      } catch (error) {
-        console.error('[Home] Erreur lors du chargement de la config depuis manifests:', error);
-      }
+          })
+          .catch(err => console.error('[Home] Erreur config manifests:', err))
+      );
+      
+      // Attendre toutes les requêtes en parallèle
+      await Promise.allSettled(promises);
     };
     
-    loadConfigFromManifests();
+    loadInitialData();
   }, [accessMode]);
 
   // Handler: sauvegarder layout/anchors du launcher pour l'utilisateur
@@ -1102,43 +1093,54 @@ const Home = () => {
     setWidgets(prev => prev.filter(w => w.id !== widgetId));
   }, []);
   
-  // Mettre à jour les statuts quand appsConfig change
+  // Référence pour appsConfig (évite les re-renders en cascade)
+  const appsConfigRef = React.useRef(appsConfig);
+  React.useEffect(() => { appsConfigRef.current = appsConfig; }, [appsConfig]);
+  
+  // Mettre à jour les statuts quand applications change (optimisé)
   useEffect(() => {
-    if (!applications || applications.length === 0 || Object.keys(appsConfig).length === 0) {
-      return;
-    }
+    if (!applications || applications.length === 0) return;
     
-    console.log('[Home] Mise à jour des statuts avec appsConfig chargé');
-    const newAppStatus = {};
+    const currentConfig = appsConfigRef.current;
+    if (Object.keys(currentConfig).length === 0) return;
     
-    applications.forEach(app => {
-      const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
-        const match = config.name?.toLowerCase() === app.name?.toLowerCase() || 
-                     iconId.includes(app.name?.toLowerCase()) ||
-                     (config.id && config.id === app.id);
-        return match;
+    // Utiliser requestIdleCallback pour ne pas bloquer le rendu
+    const updateStatus = () => {
+      const newAppStatus = {};
+      
+      applications.forEach(app => {
+        const configEntry = Object.entries(currentConfig).find(([iconId, config]) => {
+          return config.name?.toLowerCase() === app.name?.toLowerCase() || 
+                 iconId.includes(app.name?.toLowerCase()) ||
+                 (config.id && config.id === app.id);
+        });
+        
+        if (configEntry) {
+          const [iconId] = configEntry;
+          newAppStatus[iconId] = {
+            status: app.status,
+            progress: app.progress,
+            containersTotal: app.containersTotal,
+            containersRunning: app.containersRunning,
+            containersHealthy: app.containersHealthy,
+            containersStarting: app.containersStarting,
+            containersUnhealthy: app.containersUnhealthy,
+            containersStopped: app.containersStopped
+          };
+        }
       });
       
-      if (configEntry) {
-        const [iconId] = configEntry;
-        newAppStatus[iconId] = {
-          status: app.status,
-          progress: app.progress,
-          containersTotal: app.containersTotal,
-          containersRunning: app.containersRunning,
-          containersHealthy: app.containersHealthy,
-          containersStarting: app.containersStarting,
-          containersUnhealthy: app.containersUnhealthy,
-          containersStopped: app.containersStopped
-        };
-      }
-    });
+      setAppStatus(newAppStatus);
+      StorageManager.setItem('appStatus_cache', newAppStatus);
+    };
     
-    console.log('[Home] Statuts mis à jour:', newAppStatus);
-    setAppStatus(newAppStatus);
-    // Sauvegarder dans le cache
-    StorageManager.setItem('appStatus_cache', newAppStatus);
-  }, [appsConfig, applications]);
+    // Utiliser requestIdleCallback si disponible, sinon setTimeout
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(updateStatus, { timeout: 100 });
+    } else {
+      setTimeout(updateStatus, 0);
+    }
+  }, [applications]);
   
   useEffect(() => {
     if (!accessMode) {
