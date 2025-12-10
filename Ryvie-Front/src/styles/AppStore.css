@@ -1605,3 +1605,36 @@
   top: calc(100% + 4px); /* juste sous le bouton */
   width: 120px;
 }
+
+/* Bouton d'annulation d'installation */
+.install-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative; /* permet de positionner la croix dans ce bloc */
+}
+
+.cancel-install-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: #fee2e2;
+  color: #dc2626;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  position: absolute;
+  top: -10px;          /* au-dessus de la ligne du bouton */
+  right: -10px;        /* légèrement décalé vers la droite */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.cancel-install-btn:hover {
+  background: #fecaca;
+  transform: scale(1.08);
+}

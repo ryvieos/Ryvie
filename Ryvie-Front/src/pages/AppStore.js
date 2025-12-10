@@ -66,6 +66,7 @@ const AppStore = () => {
   const [featuredPage, setFeaturedPage] = useState(0);
   const previewRef = useRef(null);
   const [previewHovered, setPreviewHovered] = useState(false);
+  const activeEventSources = useRef({}); // Stocke les EventSources actifs pour pouvoir les annuler
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(false);
@@ -80,6 +81,44 @@ const AppStore = () => {
   // Effacer les logs
   const clearLogs = () => {
     setLogs([]);
+  };
+
+  // Annuler une installation en cours
+  const cancelInstall = async (appId, appName) => {
+    const eventSource = activeEventSources.current[appId];
+    if (eventSource) {
+      eventSource.close();
+      delete activeEventSources.current[appId];
+    }
+    
+    // Envoyer une requête au backend pour arrêter réellement l'installation
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const cancelUrl = `${serverUrl}/api/appstore/apps/${appId}/cancel`;
+      
+      addLog(`🛑 Envoi de la demande d'annulation au serveur...`, 'info');
+      await axios.post(cancelUrl, {}, { timeout: 10000 });
+      addLog(`✅ Annulation confirmée par le serveur`, 'success');
+    } catch (error) {
+      console.error('[AppStore] Erreur lors de l\'annulation:', error);
+      addLog(`⚠️ Impossible de contacter le serveur pour l'annulation`, 'warning');
+    }
+    
+    // Nettoyer les états
+    setInstallingApps(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(appId);
+      return newSet;
+    });
+    setInstallProgress(prev => {
+      const newProgress = { ...prev };
+      delete newProgress[appId];
+      return newProgress;
+    });
+    
+    addLog(`⏹️ Installation de ${appName} annulée par l'utilisateur`, 'warning');
+    showToast(`Installation de ${appName} annulée`, 'info');
   };
 
   // Basculer la visibilité des logs
@@ -448,6 +487,7 @@ const AppStore = () => {
     addLog(`📊 Connexion aux mises à jour de progression: ${progressUrl}`, 'info');
     
     eventSource = new EventSource(progressUrl);
+    activeEventSources.current[appId] = eventSource; // Stocker pour pouvoir annuler
     
     eventSource.onmessage = (event) => {
       try {
@@ -984,14 +1024,25 @@ try {
 
                     return (
                       <div className="app-install-section">
-                        <button
-                          className={`app-get-button ${isInstalling ? 'installing' : ''}`}
-                          disabled={disabled}
-                          onClick={handleClick}
-                          style={isInstalling ? { ['--progress']: progress } : undefined}
-                        >
-                          <span>{label}</span>
-                        </button>
+                        <div className="install-btn-row">
+                          <button
+                            className={`app-get-button ${isInstalling ? 'installing' : ''}`}
+                            disabled={disabled}
+                            onClick={handleClick}
+                            style={isInstalling ? { ['--progress']: progress } : undefined}
+                          >
+                            <span>{label}</span>
+                          </button>
+                          {isInstalling && (
+                            <button 
+                              className="cancel-install-btn"
+                              onClick={(e) => { e.stopPropagation(); cancelInstall(app.id, app.name); }}
+                              title="Annuler l'installation"
+                            >
+                              <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                          )}
+                        </div>
                         {installProgress[app.id] && (
                           <div className="install-progress-container">
                             <div className="install-progress-bar">
