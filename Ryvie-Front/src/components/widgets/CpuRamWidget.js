@@ -16,6 +16,11 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
   const [displayed, setDisplayed] = useState({ cpu: 0, ram: 0 });
   const cpuAnimRef = useRef(null);
   const ramAnimRef = useRef(null);
+  
+  // Historique des valeurs pour moyenne mobile (CasaOS-style)
+  const cpuHistoryRef = useRef([]);
+  const ramHistoryRef = useRef([]);
+  const HISTORY_SIZE = 6; // 6 échantillons = 1 minute (10s * 6)
 
   useEffect(() => {
     const fetchSystemStats = async () => {
@@ -71,12 +76,51 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     return () => clearInterval(interval);
   }, [accessMode]);
 
-  // Apply exponential moving average to smooth spikes
+  // Moyenne mobile pour ignorer les pics courts (CasaOS-style)
   useEffect(() => {
-    const ALPHA = 0.4; // moderate smoothing - reactive but stable
+    // Ajouter les nouvelles valeurs à l'historique
+    cpuHistoryRef.current.push(data.cpu);
+    ramHistoryRef.current.push(data.ram);
+    
+    // Garder seulement les N derniers échantillons
+    if (cpuHistoryRef.current.length > HISTORY_SIZE) {
+      cpuHistoryRef.current.shift();
+    }
+    if (ramHistoryRef.current.length > HISTORY_SIZE) {
+      ramHistoryRef.current.shift();
+    }
+    
+    // Fonction pour calculer la moyenne en ignorant les outliers extrêmes
+    const calculateSmartAverage = (values) => {
+      if (values.length === 0) return 0;
+      if (values.length <= 2) return values.reduce((sum, val) => sum + val, 0) / values.length;
+      
+      // Trier pour trouver la médiane et ignorer les valeurs extrêmes
+      const sorted = [...values].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      
+      // Filtrer les valeurs qui sont trop éloignées de la médiane (>30% d'écart)
+      const threshold = median * 0.3;
+      const filtered = values.filter(val => Math.abs(val - median) <= threshold);
+      
+      // Si on a filtré trop de valeurs, utiliser toutes les valeurs
+      if (filtered.length < values.length / 2) {
+        return values.reduce((sum, val) => sum + val, 0) / values.length;
+      }
+      
+      // Calculer la moyenne des valeurs filtrées
+      return filtered.reduce((sum, val) => sum + val, 0) / filtered.length;
+    };
+    
+    // Calculer la moyenne intelligente
+    const cpuAvg = calculateSmartAverage(cpuHistoryRef.current);
+    const ramAvg = calculateSmartAverage(ramHistoryRef.current);
+    
+    // Appliquer un lissage exponentiel léger sur la moyenne pour des transitions douces
+    const ALPHA = 0.3; // Lissage plus doux qu'avant
     setSmoothed((prev) => ({
-      cpu: prev.cpu === 0 ? data.cpu : ALPHA * data.cpu + (1 - ALPHA) * prev.cpu,
-      ram: prev.ram === 0 ? data.ram : ALPHA * data.ram + (1 - ALPHA) * prev.ram,
+      cpu: prev.cpu === 0 ? cpuAvg : ALPHA * cpuAvg + (1 - ALPHA) * prev.cpu,
+      ram: prev.ram === 0 ? ramAvg : ALPHA * ramAvg + (1 - ALPHA) * prev.ram,
     }));
   }, [data.cpu, data.ram]);
 

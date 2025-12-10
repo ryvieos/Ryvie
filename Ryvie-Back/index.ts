@@ -301,3 +301,26 @@ async function startServer() {
 }
 
 startServer();
+
+// Graceful shutdown handlers
+process.on('SIGTERM', () => {
+  console.log('SIGTERM reçu, arrêt gracieux...');
+  if (realtime && realtime.cleanup) {
+    realtime.cleanup();
+  }
+  httpServer.close(() => {
+    console.log('Serveur HTTP fermé');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT reçu, arrêt gracieux...');
+  if (realtime && realtime.cleanup) {
+    realtime.cleanup();
+  }
+  httpServer.close(() => {
+    console.log('Serveur HTTP fermé');
+    process.exit(0);
+  });
+});
