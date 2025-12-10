@@ -1,6 +1,16 @@
 /* AppStore.css - Styles pour la page App Store */
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes wave { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-10px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .appstore-container {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   padding: 32px;
 
   margin: 0 auto;
@@ -1501,4 +1511,97 @@
 .featured-install-section .install-progress-text {
   font-size: 12px;
   color: #374151;
+}
+
+/* ==================== LOADING SCREEN ==================== */
+.appstore-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 20px;
+  animation: fadeIn 0.4s ease-out;
+  background: #ffffff;
+}
+
+.loading-icon {
+  font-size: 3.5rem;
+  animation: float 2s ease-in-out infinite;
+}
+
+.loading-dots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.loading-dots span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #2196F3;
+  animation: wave 1.4s ease-in-out infinite;
+}
+
+.loading-dots span:nth-child(1) { animation-delay: 0s; }
+.loading-dots span:nth-child(2) { animation-delay: 0.1s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.2s; }
+
+.appstore-loading .spinner {
+  display: none;
+}
+
+.appstore-loading p {
+  color: #64748b;
+  font-size: 1rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+}
+/* Correction alignement installation sur les cartes */
+.app-install-section {
+  align-items: flex-end;
+  width: auto;
+  min-width: 110px;
+}
+
+.app-install-section .install-progress-container {
+  width: 120px;
+}
+
+/* Correction: garder le bouton d'installation parfaitement stable en hauteur */
+.app-get-button {
+  height: 32px;                /* hauteur fixe */
+  line-height: 32px;           /* garde le texte centré verticalement */
+  padding: 0 20px;             /* uniquement horizontal pour ne pas changer la hauteur */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-get-button.installing {
+  height: 32px;                /* même hauteur qu'avant l'installation */
+  line-height: 32px;
+}
+
+/* La zone installation sur la carte reste compacte et centrée verticalement */
+.app-install-section {
+  align-items: center;
+}
+
+/* Alignement strict du bouton d'installation sur les cartes */
+.app-install-section {
+  position: relative;
+  align-items: center;
+  justify-content: flex-end;
+  width: auto;
+  min-width: 110px;
+}
+
+/* La barre de progression est dessinée sous le bouton sans modifier la hauteur du footer */
+.app-install-section .install-progress-container {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px); /* juste sous le bouton */
+  width: 120px;
 }
