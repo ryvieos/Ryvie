@@ -11,6 +11,7 @@
     "electron": "wait-on http://localhost:3000 && electron .",
     "build": "webpack --mode production",
     "build:web": "webpack --mode production --config webpack.config.js",
+    "serve": "serve -s dist -p 3000",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -25,7 +26,9 @@
     "electron": "^32.1.2",
     "electron-builder": "^24.6.0",
     "electron-reload": "^2.0.0-alpha.1",
+    "html-webpack-plugin": "^5.6.5",
     "react-refresh": "^0.14.2",
+    "serve": "^14.2.5",
     "style-loader": "^4.0.0",
     "wait-on": "^8.0.1",
     "webpack": "^5.95.0",
