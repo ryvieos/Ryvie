@@ -60,7 +60,7 @@ const userPreferencesRouter = require('./routes/userPreferences');
 const appStoreRouter = require('./routes/appStore');
 const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
-const { getLocalIP } = require('./utils/network');
+const { getLocalIP, getPrivateIP, waitForWifiInterface, listNetworkInterfaces } = require('./utils/network');
 const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
 const { syncNetbirdConfig } = require('./utils/syncNetbirdConfig');
 
@@ -227,6 +227,18 @@ try {
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
+    // Attendre qu'une interface réseau soit disponible (max 30 secondes)
+    console.log('📶 Attente d\'une interface réseau valide...');
+    listNetworkInterfaces(); // Debug: afficher les interfaces disponibles
+    const networkIP = await waitForWifiInterface(30000, 1000);
+    console.log(`✅ Interface réseau prête: ${networkIP}`);
+    
+    // Afficher aussi l'IP privée si disponible (VPN/Netbird)
+    const privateIP = getPrivateIP();
+    if (privateIP !== networkIP) {
+      console.log(`🔒 IP privée (VPN): ${privateIP}`);
+    }
+    
     // Vérifier et démarrer le reverse proxy Caddy si nécessaire
     console.log('🔍 Vérification du reverse proxy Caddy...');
     try {

@@ -3,9 +3,8 @@ const util = require('util');
 const fs = require('fs').promises;
 const path = require('path');
 const Docker = require('dockerode');
-const { getLocalIP } = require('../utils/network');
+const { getLocalIP, getPrivateIP } = require('../utils/network');
 const { REVERSE_PROXY_DIR } = require('../config/paths');
-const os = require('os');
 
 const execPromise = util.promisify(exec);
 const docker = new Docker();
@@ -37,67 +36,6 @@ services:
       - /data/config/reverse-proxy/config:/config
 `;
 
-/**
- * Détecte l'adresse IP privée locale (172.x.x.x ou 10.x.x.x)
- * Exclut les interfaces Docker (br-*, docker0, veth*)
- */
-function getPrivateLocalIP() {
-  const networkInterfaces = os.networkInterfaces();
-  
-  // Fonction pour vérifier si c'est une interface Docker
-  const isDockerInterface = (interfaceName: string) => {
-    return interfaceName.startsWith('br-') || 
-           interfaceName.startsWith('docker') || 
-           interfaceName.startsWith('veth');
-  };
-  
-  // Chercher d'abord une adresse 172.x.x.x (hors Docker)
-  for (const interfaceName in networkInterfaces) {
-    // Ignorer les interfaces Docker
-    if (isDockerInterface(interfaceName)) continue;
-    
-    const addresses = networkInterfaces[interfaceName];
-    for (const addressInfo of addresses) {
-      if (addressInfo.family === 'IPv4' && !addressInfo.internal) {
-        const ip = addressInfo.address;
-        // Vérifier si c'est une adresse privée 172.16.0.0 - 172.31.255.255
-        if (ip.startsWith('172.')) {
-          const secondOctet = parseInt(ip.split('.')[1]);
-          if (secondOctet >= 16 && secondOctet <= 31) {
-            return ip;
-          }
-        }
-        // Accepter aussi les adresses 172.x.x.x hors plage Docker standard (172.16-31)
-        // Par exemple 172.55.x.x
-        if (ip.startsWith('172.')) {
-          const secondOctet = parseInt(ip.split('.')[1]);
-          // Exclure les plages Docker communes: 172.17-27
-          if (secondOctet < 16 || secondOctet > 31) {
-            return ip;
-          }
-        }
-      }
-    }
-  }
-  
-  // Sinon chercher une adresse 10.x.x.x (hors Docker)
-  for (const interfaceName in networkInterfaces) {
-    if (isDockerInterface(interfaceName)) continue;
-    
-    const addresses = networkInterfaces[interfaceName];
-    for (const addressInfo of addresses) {
-      if (addressInfo.family === 'IPv4' && !addressInfo.internal) {
-        const ip = addressInfo.address;
-        if (ip.startsWith('10.')) {
-          return ip;
-        }
-      }
-    }
-  }
-  
-  // Par défaut, retourner l'IP locale standard
-  return getLocalIP();
-}
 
 /**
  * Lit le fichier .env de Ryvie-rDrive et retourne son contenu
@@ -192,7 +130,7 @@ async function ensurePrivateIPInRyvieDrive() {
     console.log('[reverseProxyService] 🔍 Vérification adresse privée Ryvie-rDrive...');
     
     // Détecter l'adresse privée actuelle
-    const currentPrivateIP = getPrivateLocalIP();
+    const currentPrivateIP = getPrivateIP();
     console.log('[reverseProxyService] 📍 Adresse privée détectée:', currentPrivateIP);
     
     // Lire le fichier .env
@@ -817,5 +755,5 @@ export = {
   restartCaddy,
   updateCaddyfileIP,
   ensurePrivateIPInRyvieDrive,
-  getPrivateLocalIP
+  getPrivateIP
 };
