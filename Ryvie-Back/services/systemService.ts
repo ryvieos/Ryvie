@@ -83,17 +83,20 @@ async function restartServer() {
   try {
     console.log('[systemService] Redémarrage du système demandé');
     
-    // Redémarrer le système complet
-    // Utiliser sudo reboot pour redémarrer la machine
+    // Redémarrer le système complet après un délai de 5 secondes
+    // Cela permet au serveur de répondre correctement à la requête HTTP
+    // et de s'assurer que la réponse est bien envoyée au client
+    // avant que le système ne commence à s'arrêter
     setTimeout(async () => {
       try {
+        console.log('[systemService] Exécution de sudo reboot...');
         await execPromise('sudo reboot');
       } catch (error: any) {
         console.error('[systemService] Erreur lors du reboot:', error);
       }
-    }, 1000);
+    }, 5000);
     
-    return { success: true, message: 'Le serveur va redémarrer dans quelques secondes...' };
+    return { success: true, message: 'Le serveur va redémarrer dans 5 secondes...' };
   } catch (error: any) {
     console.error('[systemService] Erreur lors du redémarrage:', error);
     throw error;
