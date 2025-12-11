@@ -15,6 +15,57 @@ if (!fs.existsSync(PREFERENCES_DIR)) {
 }
 
 /**
+ * Trouve une position libre dans la grille pour un item de taille width x height
+ * @param layout - Layout actuel {itemId: {col, row, w, h}}
+ * @param width - Largeur de l'item
+ * @param height - Hauteur de l'item
+ * @param maxCols - Nombre de colonnes max (défaut: 12)
+ * @returns {col, row, w, h} ou null si aucune position libre
+ */
+function findFreePosition(layout: any, width: number = 1, height: number = 1, maxCols: number = 12) {
+  const occupiedCells = new Set<string>();
+  
+  // Marquer toutes les cellules occupées
+  for (const [id, pos] of Object.entries(layout)) {
+    if (!pos || typeof pos !== 'object') continue;
+    const p = pos as any;
+    const w = p.w || 1;
+    const h = p.h || 1;
+    const col = p.col || 0;
+    const row = p.row || 0;
+    
+    for (let r = row; r < row + h; r++) {
+      for (let c = col; c < col + w; c++) {
+        occupiedCells.add(`${r},${c}`);
+      }
+    }
+  }
+  
+  // Chercher une position libre ligne par ligne
+  for (let row = 0; row < 100; row++) {
+    for (let col = 0; col <= maxCols - width; col++) {
+      let isFree = true;
+      
+      for (let r = row; r < row + height && isFree; r++) {
+        for (let c = col; c < col + width && isFree; c++) {
+          if (occupiedCells.has(`${r},${c}`)) {
+            isFree = false;
+          }
+        }
+      }
+      
+      if (isFree) {
+        console.log(`[findFreePosition] Position libre trouvée: (${col}, ${row}) pour ${width}x${height}`);
+        return { col, row, w: width, h: height };
+      }
+    }
+  }
+  
+  console.warn(`[findFreePosition] Aucune position libre trouvée pour ${width}x${height}`);
+  return null;
+}
+
+/**
  * Récupère la liste des ids d'apps installées (depuis /data/config/manifests)
  * Retourne un tableau d'ids formatés 'app-<id>'
  */
@@ -248,28 +299,48 @@ router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
       if (missing.length > 0) {
         const layout = preferences.launcher.layout || {};
         const anchors = preferences.launcher.anchors || {};
-        // Trouver le max col et max anchor existants pour démarrer à la suite
-        let col = 2;
-        let anchor = 22;
-        // si des apps existent déjà, prendre la plus grande colonne sur la row 2 et l'anchor max
-        for (const [id, pos] of Object.entries(layout)) {
-          if (!pos) continue;
-          if (typeof (pos as any).col === 'number') col = Math.max(col, (pos as any).col + 1);
-        }
+        
+        // Trouver le max anchor existant pour démarrer à la suite
+        let maxAnchor = 0;
         for (const a of Object.values(anchors)) {
-          if (typeof a === 'number') anchor = Math.max(anchor, (a as number) + 1);
+          if (typeof a === 'number') maxAnchor = Math.max(maxAnchor, (a as number));
         }
-        const row = 2;
+        
+        console.log(`[userPreferences] 🆕 Placement de ${missing.length} nouvelle(s) app(s):`, missing);
+        console.log(`[userPreferences] 📊 Layout existant:`, Object.keys(layout).map(id => {
+          const pos = layout[id] as any;
+          return `${id}@(${pos?.col},${pos?.row})`;
+        }).join(', '));
+        
+        // Placer chaque nouvelle app dans une position libre
         missing.forEach((appId) => {
-          if (!layout[appId]) layout[appId] = { col, row, w: 1, h: 1 };
-          if (typeof anchors[appId] !== 'number') anchors[appId] = anchor;
-          col += 1;
-          anchor += 1;
+          if (!layout[appId]) {
+            // Trouver une position libre pour cette app (1x1)
+            const pos = findFreePosition(layout, 1, 1, 12);
+            if (pos) {
+              layout[appId] = pos;
+              console.log(`[userPreferences] ✅ ${appId} placé à (${pos.col}, ${pos.row})`);
+            } else {
+              // Fallback: placer à (0, 0) si aucune position libre trouvée
+              layout[appId] = { col: 0, row: 0, w: 1, h: 1 };
+              console.warn(`[userPreferences] ⚠️ ${appId} placé à (0,0) par défaut (aucune position libre)`);
+            }
+          }
+          
+          // Créer une ancre basée sur la position
+          if (typeof anchors[appId] !== 'number') {
+            const pos = layout[appId] as any;
+            const BASE_COLS = 12; // Grille de référence
+            const anchorIndex = (pos.row || 0) * BASE_COLS + (pos.col || 0);
+            anchors[appId] = anchorIndex;
+            console.log(`[userPreferences] 🔗 Ancre créée pour ${appId}: ${anchorIndex}`);
+          }
         });
+        
         preferences.launcher.layout = layout;
         preferences.launcher.anchors = anchors;
         preferences.launcher.apps = [...existingApps, ...missing];
-        console.log(`[userPreferences] Réconciliation: ${missing.length} app(s) ajoutée(s):`, missing);
+        console.log(`[userPreferences] 💾 Réconciliation terminée: ${missing.length} app(s) ajoutée(s)`);
         saveUserPreferences(username, preferences);
       }
 

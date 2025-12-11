@@ -1,8 +1,11 @@
 const path = require('path');
 const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+const isDevelopment = process.env.NODE_ENV !== 'production';
 
 module.exports = {
-  mode: 'development',
+  mode: isDevelopment ? 'development' : 'production',
   entry: './src/index.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -17,7 +20,7 @@ module.exports = {
         use: {
           loader: 'babel-loader',
           options: {
-            plugins: [require.resolve('react-refresh/babel')], // Ajout de React Refresh
+            plugins: isDevelopment ? [require.resolve('react-refresh/babel')] : [], // React Refresh seulement en dev
           },
         },
       },
@@ -87,6 +90,11 @@ module.exports = {
       : undefined,
   },  
   plugins: [
-    new ReactRefreshWebpackPlugin(), // Ajout de React Refresh Plugin
-  ],
+    isDevelopment && new ReactRefreshWebpackPlugin(), // React Refresh seulement en dev
+    new HtmlWebpackPlugin({
+      template: './public/index.html', // Template HTML source
+      filename: 'index.html', // Fichier de sortie
+      inject: 'body', // Injecter les scripts dans le body
+    }),
+  ].filter(Boolean), // Filtrer les plugins null/undefined
 };

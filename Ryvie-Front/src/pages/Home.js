@@ -614,45 +614,11 @@ const Home = () => {
   const [bgFadeKey, setBgFadeKey] = useState(0);    // clé pour relancer l'animation
   const [disconnectedSince, setDisconnectedSince] = useState(null); // Timestamp de début de déconnexion
   const launcherSaveRef = React.useRef(null); // debounce save
-  const [launcherLayout, setLauncherLayout] = useState(() => {
-    // Charger depuis le cache localStorage au montage
-    try {
-      const currentUser = getCurrentUser();
-      if (currentUser) {
-        const cached = localStorage.getItem(`launcher_${currentUser}`);
-        if (cached) {
-          const launcher = JSON.parse(cached);
-          return launcher.layout || null;
-        }
-      }
-    } catch {}
-    return null;
-  }); // Layout chargé depuis le backend
-  const [launcherAnchors, setLauncherAnchors] = useState(() => {
-    // Charger depuis le cache localStorage au montage
-    try {
-      const currentUser = getCurrentUser();
-      if (currentUser) {
-        const cached = localStorage.getItem(`launcher_${currentUser}`);
-        if (cached) {
-          const launcher = JSON.parse(cached);
-          return launcher.anchors || null;
-        }
-      }
-    } catch {}
-    return null;
-  }); // Ancres chargées depuis le backend
-  const [launcherLoadedFromBackend, setLauncherLoadedFromBackend] = useState(() => {
-    // Si on a un cache, considérer comme "chargé" pour affichage immédiat
-    try {
-      const currentUser = getCurrentUser();
-      if (currentUser) {
-        const cached = localStorage.getItem(`launcher_${currentUser}`);
-        return !!cached;
-      }
-    } catch {}
-    return false;
-  }); // Indique si les données ont été chargées
+  // NE PAS charger depuis localStorage au montage - attendre le backend (source de vérité)
+  // Le localStorage sera mis à jour après le chargement du backend
+  const [launcherLayout, setLauncherLayout] = useState(null); // Layout chargé depuis le backend
+  const [launcherAnchors, setLauncherAnchors] = useState(null); // Ancres chargées depuis le backend
+  const [launcherLoadedFromBackend, setLauncherLoadedFromBackend] = useState(false); // Indique si les données ont été chargées
   const launcherInitialLoadDone = React.useRef(false); // Flag pour savoir si le chargement initial est terminé
   const [widgets, setWidgets] = useState(() => {
     // Charger depuis le cache localStorage au montage
@@ -762,12 +728,54 @@ const Home = () => {
           );
           
           if (newApps.length > 0) {
-            console.log(`[Home] 🆕 Nouvelles apps détectées:`, newApps);
-            // Les nouvelles apps seront automatiquement placées par useGridLayout
-            // car elles seront dans la liste des apps mais pas dans le layout
+            console.log(`[Home] 🆕 Nouvelles apps détectées (seront placées par le backend):`, newApps);
+            // Le backend s'occupe de placer les nouvelles apps via la réconciliation
+            // On recharge les préférences pour récupérer les positions calculées par le backend
+            // Le délai permet au backend de terminer la réconciliation
+            const reloadPreferences = () => {
+              console.log('[Home] 🔄 Rechargement des préférences pour récupérer les positions du backend...');
+              const serverUrl = getServerUrl(mode);
+              axios.get(`${serverUrl}/api/user/preferences`, {
+                headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+              }).then(res => {
+                if (res.data?.launcher) {
+                  const backendLayout = res.data.launcher.layout || {};
+                  const backendAnchors = res.data.launcher.anchors || {};
+                  
+                  // Vérifier que toutes les nouvelles apps ont une position
+                  const missingPositions = newApps.filter(appId => !backendLayout[appId]);
+                  if (missingPositions.length > 0) {
+                    console.log('[Home] ⏳ Certaines apps n\'ont pas encore de position, nouvelle tentative dans 1s:', missingPositions);
+                    setTimeout(reloadPreferences, 1000);
+                    return;
+                  }
+                  
+                  setLauncherLayout(backendLayout);
+                  setLauncherAnchors(backendAnchors);
+                  console.log('[Home] ✅ Layout mis à jour depuis le backend:', Object.keys(backendLayout).length, 'items');
+                  
+                  // Mettre à jour le localStorage
+                  try {
+                    const currentUser = getCurrentUser();
+                    if (currentUser) {
+                      const cached = localStorage.getItem(`launcher_${currentUser}`);
+                      const launcher = cached ? JSON.parse(cached) : {};
+                      launcher.layout = backendLayout;
+                      launcher.anchors = backendAnchors;
+                      localStorage.setItem(`launcher_${currentUser}`, JSON.stringify(launcher));
+                    }
+                  } catch (e) {}
+                }
+              }).catch(err => {
+                console.error('[Home] ❌ Erreur rechargement préférences:', err);
+              });
+            };
+            
+            // Premier appel après un court délai
+            setTimeout(reloadPreferences, 500);
           }
           
-          const layoutChanged = Object.keys(cleanedLayout).length !== Object.keys(launcherLayout).length || newApps.length > 0;
+          const layoutChanged = Object.keys(cleanedLayout).length !== Object.keys(launcherLayout).length;
           const anchorsChanged = launcherAnchors && Object.keys(cleanedAnchors).length !== Object.keys(launcherAnchors).length;
           
           if (layoutChanged || anchorsChanged) {
@@ -1716,6 +1724,21 @@ const Home = () => {
               widgetIdCounter.current = savedWidgets.length; // Initialiser le compteur
             }
             
+            // Mettre à jour le localStorage avec les données du backend (source de vérité)
+            try {
+              const currentUser = getCurrentUser();
+              if (currentUser) {
+                localStorage.setItem(`launcher_${currentUser}`, JSON.stringify({
+                  layout: layout || {},
+                  anchors: anchors || {},
+                  widgets: savedWidgets || []
+                }));
+                console.log('[Home] 💾 Layout du backend sauvegardé dans localStorage');
+              }
+            } catch (e) {
+              console.warn('[Home] ⚠️ Erreur sauvegarde localStorage:', e);
+            }
+            
             setLauncherLoadedFromBackend(true); // Marquer comme chargé
             // Marquer le chargement initial comme terminé après un délai pour laisser la grille se positionner
             setTimeout(() => {
@@ -1768,8 +1791,6 @@ const Home = () => {
       const urlWithParams = new URL(url);
       if (currentUser) {
         urlWithParams.searchParams.set('ryvie_user', currentUser);
-        urlWithParams.searchParams.set('ryvie_logout', 'true');
-        urlWithParams.searchParams.set('ryvie_clear_session', 'true');
       }
       urlWithParams.searchParams.set('t', Date.now().toString());
       window.open(urlWithParams.toString(), '_blank');

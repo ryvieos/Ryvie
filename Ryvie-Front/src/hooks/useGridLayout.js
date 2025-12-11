@@ -193,33 +193,15 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
         console.log('[useGridLayout] ✅ Réorganisation terminée, ancres préservées');
       }
 
-      // Ajouter les nouveaux items (apps/widgets nouvellement installés)
-      items.forEach(item => {
-        if (!newLayout[item.id]) {
-          console.log(`[useGridLayout] 🆕 Nouvel item détecté: ${item.id} (${item.w}x${item.h})`);
-          console.log(`[useGridLayout] 📊 Layout actuel avant placement:`, Object.keys(newLayout).map(id => `${id}@(${newLayout[id].col},${newLayout[id].row})`));
-          const pos = findFreePosition(newLayout, item.w || 1, item.h || 1, cols);
-          if (pos) {
-            newLayout[item.id] = pos;
-            hasChanges = true;
-            console.log(`[useGridLayout] ✅ ${item.id} placé à (${pos.col}, ${pos.row})`);
-            
-            // Créer une ancre pour le nouvel item basée sur sa position
-            setAnchors(prevAnchors => {
-              if (prevAnchors[item.id] == null) {
-                const newAnchors = { ...prevAnchors };
-                const anchorIndex = pos.row * BASE_COLS + pos.col;
-                newAnchors[item.id] = anchorIndex;
-                console.log(`[useGridLayout] 🔗 Ancre créée pour ${item.id}: ${anchorIndex} (pos: ${pos.col},${pos.row})`);
-                return newAnchors;
-              }
-              return prevAnchors;
-            });
-          } else {
-            console.error(`[useGridLayout] ❌ Impossible de placer ${item.id} - aucune position libre`);
-          }
-        }
-      });
+      // Les nouveaux items (apps/widgets nouvellement installés) sont placés par le BACKEND
+      // Le frontend ne fait qu'afficher les positions reçues via initialLayout
+      // Si un item n'a pas de position, c'est que le backend n'a pas encore calculé sa position
+      // → Home.js va recharger les préférences depuis le backend pour récupérer la position
+      const itemsWithoutPosition = items.filter(item => !newLayout[item.id]);
+      if (itemsWithoutPosition.length > 0) {
+        console.log(`[useGridLayout] ⏳ Items en attente de position du backend:`, itemsWithoutPosition.map(i => i.id).join(', '));
+        // NE PAS calculer de position ici - le backend s'en charge
+      }
 
       return hasChanges ? newLayout : prev;
     });
