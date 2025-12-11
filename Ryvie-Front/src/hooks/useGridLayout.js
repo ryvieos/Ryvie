@@ -152,33 +152,40 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
           const h = it.h || 1;
           const anchor = anchors[it.id] ?? newAnchors[it.id] ?? 0;
           
-          // Calculer la position d'origine basée sur l'ancre (grille de référence BASE_COLS)
-          let targetRow = Math.floor(anchor / BASE_COLS);
-          let targetCol = anchor % BASE_COLS;
+          // Calculer la position d'origine depuis l'ancre
+          // L'ancre est : row * BASE_COLS + col (voir moveItem)
+          const anchorRow = Math.floor(anchor / BASE_COLS);
+          const anchorCol = anchor % BASE_COLS;
           
-          // Si on a le nombre de colonnes maximum (ou proche), essayer de placer exactement à la position d'origine
+          // Stratégie : toujours essayer de placer à la position d'ancre d'abord
+          // Seulement si ça ne rentre pas dans la grille actuelle, ajuster
+          let targetCol = anchorCol;
+          let targetRow = anchorRow;
+          
+          // Si l'item dépasse la grille actuelle, le décaler
+          if (targetCol + w > cols) {
+            // Décaler vers la gauche pour qu'il rentre
+            targetCol = Math.max(0, cols - w);
+            console.log(`[useGridLayout] ⚠️ ${it.id} ancre col ${anchorCol} ajustée à ${targetCol} (cols=${cols})`);
+          }
+          
+          // Essayer de placer à la position cible
           let pos;
-          if (cols >= BASE_COLS && targetCol + w <= cols && canPlace(targetCol, targetRow, w, h)) {
-            // Position d'origine disponible !
+          if (canPlace(targetCol, targetRow, w, h)) {
             pos = { col: targetCol, row: targetRow };
-            console.log(`[useGridLayout] 🎯 ${it.id} replacé à sa position d'origine (${targetCol}, ${targetRow})`);
+            if (targetCol === anchorCol && targetRow === anchorRow) {
+              console.log(`[useGridLayout] 🎯 ${it.id} placé à position d'ancre exacte (${targetCol}, ${targetRow})`);
+            } else {
+              console.log(`[useGridLayout] 📍 ${it.id} placé à position ajustée (${targetCol}, ${targetRow}) depuis ancre (${anchorCol}, ${anchorRow})`);
+            }
           } else {
-            // Sinon, chercher la meilleure position disponible
-            // Pour une réorganisation fluide, chercher à partir de la ligne courante
-            const searchStartRow = cols < BASE_COLS ? Math.max(0, Math.floor(targetRow * 0.7)) : 0;
-            pos = findNextFreePosition(w, h, searchStartRow);
+            // Position occupée, chercher la prochaine position libre
+            pos = findNextFreePosition(w, h, targetRow);
+            console.log(`[useGridLayout] 🔄 ${it.id} position occupée, placé à (${pos.col}, ${pos.row})`);
           }
           
           tempLayout[it.id] = { col: pos.col, row: pos.row, w, h };
           mark(pos.col, pos.row, w, h);
-          
-          // Mettre à jour la ligne courante pour optimiser le placement suivant
-          if (pos.row >= currentRow) {
-            // Si on a placé un item sur une nouvelle ligne, on avance
-            if (pos.col + w >= cols - 1) {
-              currentRow = pos.row + h;
-            }
-          }
           
           console.log(`[useGridLayout] ✅ ${it.id} placé à (${pos.col}, ${pos.row})`);
         });
