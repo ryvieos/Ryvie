@@ -126,9 +126,14 @@ const buildAppUrl = (appId, port) => {
   const domains = netbirdData?.domains || {};
   const appDomain = domains[appId];
 
-  // Si on est sur ryvie.local (Caddy), utiliser l'URL de base sans port
-  // Caddy gère le routing vers les apps via des règles spécifiques
+  // Si on est sur ryvie.local (Caddy) ET qu'on a l'IP locale, utiliser IP:port pour ouvrir l'app directement
+  // Sinon utiliser ryvie.local (Caddy gère le routing)
   if (hostname === 'ryvie.local') {
+    if (cachedLocalIP && port) {
+      console.log(`[buildAppUrl] ${appId} → http://${cachedLocalIP}:${port}`);
+      return `http://${cachedLocalIP}:${port}`;
+    }
+    console.log(`[buildAppUrl] ${appId} → http://ryvie.local (IP locale non disponible: ${cachedLocalIP})`);
     return 'http://ryvie.local';
   }
 

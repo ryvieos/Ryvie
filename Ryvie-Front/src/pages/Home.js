@@ -1768,8 +1768,6 @@ const Home = () => {
       const urlWithParams = new URL(url);
       if (currentUser) {
         urlWithParams.searchParams.set('ryvie_user', currentUser);
-        urlWithParams.searchParams.set('ryvie_logout', 'true');
-        urlWithParams.searchParams.set('ryvie_clear_session', 'true');
       }
       urlWithParams.searchParams.set('t', Date.now().toString());
       window.open(urlWithParams.toString(), '_blank');
