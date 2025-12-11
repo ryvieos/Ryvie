@@ -152,7 +152,8 @@ const Welcome = () => {
     // Add a delay to the server detection to make it more visible
     const checkServer = async () => {
       try {
-        const response = await axios.get('http://ryvie.local:3002/api/server-status');
+        const serverUrl = getServerUrl('private'); // Utiliser la fonction centralisée
+        const response = await axios.get(`${serverUrl}/api/server-status`);
         if (response.data.status === 'online') {
           // Add a deliberate delay to show the loading animation
           setTimeout(() => {
