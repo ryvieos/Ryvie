@@ -184,13 +184,29 @@ function saveUserPreferences(username, preferences) {
 
 /**
  * Génère un layout et des anchors par défaut à partir des apps installées
+ * Layout par défaut avec widgets weather, cpu-ram et storage
  */
 async function generateDefaultLauncher() {
-  const layout = {
-    weather: { col: 2, row: 0, w: 3, h: 2 }
+  const maxCols = 12;
+  
+  // Widgets par défaut avec IDs corrects pour le frontend
+  const defaultWidgets = [
+    { id: 'widget-cpu-ram-0', type: 'cpu-ram' },
+    { id: 'widget-storage-1', type: 'storage' }
+  ];
+  
+  // Layout par défaut: weather + cpu-ram + storage sur la ligne 1, apps sur la ligne 3
+  const layout: any = {
+    weather: { col: 3, row: 1, w: 3, h: 2 },
+    'widget-cpu-ram-0': { col: 6, row: 1, w: 2, h: 2 },
+    'widget-storage-1': { col: 6, row: 3, w: 2, h: 2 }
   };
-  const anchors = {
-    weather: 2
+  
+  // Ancres calculées: row * maxCols + col
+  const anchors: any = {
+    weather: 1 * maxCols + 3, // 15
+    'widget-cpu-ram-0': 1 * maxCols + 6, // 18
+    'widget-storage-1': 3 * maxCols + 6 // 42
   };
   
   try {
@@ -199,9 +215,9 @@ async function generateDefaultLauncher() {
     const path = require('path');
     const manifestsDir = MANIFESTS_DIR;
     
-    const apps = [];
+    const apps: string[] = [];
     if (fs.existsSync(manifestsDir)) {
-      const appFolders = fs.readdirSync(manifestsDir).filter(f => {
+      const appFolders = fs.readdirSync(manifestsDir).filter((f: string) => {
         const stat = fs.statSync(path.join(manifestsDir, f));
         return stat.isDirectory();
       });
@@ -228,24 +244,23 @@ async function generateDefaultLauncher() {
       console.warn('[generateDefaultLauncher] Répertoire manifests non trouvé:', manifestsDir);
     }
     
-    // Placer les apps en ligne à partir de col=2, row=2
+    // Placer les apps en grille à partir de col=2, row=3 (sous les widgets)
     let col = 2;
-    const row = 2;
-    let anchor = 22;
+    const row = 3;
     
     apps.forEach(appId => {
       layout[appId] = { col, row, w: 1, h: 1 };
+      const anchor = row * maxCols + col;
       anchors[appId] = anchor;
       col += 1;
-      anchor += 1;
     });
     
-    console.log('[generateDefaultLauncher] Généré avec', apps.length, 'apps:', apps);
+    console.log('[generateDefaultLauncher] Généré avec', apps.length, 'apps et', defaultWidgets.length, 'widgets:', apps);
     
     return {
       anchors,
       layout,
-      widgets: [],
+      widgets: defaultWidgets,
       apps
     };
   } catch (error: any) {
@@ -253,7 +268,7 @@ async function generateDefaultLauncher() {
     return {
       anchors,
       layout,
-      widgets: [],
+      widgets: defaultWidgets,
       apps: []
     };
   }
@@ -267,26 +282,26 @@ router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
     let preferences = loadUserPreferences(username);
     
     if (!preferences) {
-      // Créer des préférences par défaut si elles n'existent pas
+      // Créer des préférences par défaut avec le launcher par défaut complet
+      const defaultLauncher = await generateDefaultLauncher();
       preferences = {
         zones: {},
         theme: 'default',
         language: 'fr',
-        launcher: {
-          anchors: {},
-          layout: {},
-          widgets: [],
-          apps: []
-        }
+        launcher: defaultLauncher,
+        backgroundImage: 'preset-default.png'
       };
-      // Sauvegarder ces préférences par défaut
-      console.log('[userPreferences] Création du fichier de préférences par défaut pour:', username);
+      console.log('[userPreferences] Création du fichier de préférences par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps et', defaultLauncher.widgets.length, 'widgets');
       saveUserPreferences(username, preferences);
     } else if (!preferences.launcher || !preferences.launcher.apps || preferences.launcher.apps.length === 0) {
       // Si le fichier existe mais n'a pas de section launcher OU si apps est vide, générer les valeurs par défaut
       const defaultLauncher = await generateDefaultLauncher();
       preferences.launcher = defaultLauncher;
-      console.log('[userPreferences] Génération du launcher par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps');
+      // Ajouter le fond d'écran par défaut si absent
+      if (!preferences.backgroundImage) {
+        preferences.backgroundImage = 'preset-default.png';
+      }
+      console.log('[userPreferences] Génération du launcher par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps et', defaultLauncher.widgets.length, 'widgets');
       saveUserPreferences(username, preferences);
     }
 

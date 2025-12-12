@@ -152,7 +152,7 @@ const FirstTimeSetup = () => {
       <div className="login-card">
         <div className="login-header">
           <h1>Ryvie</h1>
-          <p>Configuration initiale - Créer le premier utilisateur administrateur</p>
+          <p>Configuration initiale - Création du premier utilisateur</p>
         </div>
         
         {message && (

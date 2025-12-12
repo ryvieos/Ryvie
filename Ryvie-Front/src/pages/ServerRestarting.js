@@ -28,40 +28,48 @@ const ServerRestarting = () => {
     return () => clearInterval(dotsInterval);
   }, []);
 
-  // Démarre les vérifications après 30s, puis toutes les 5s
+  // Démarre les vérifications après 60s (au lieu de 30s), puis toutes les 5s
   useEffect(() => {
     let checkInterval = null;
     const tryCheck = async () => {
       // Tester l'URL du serveur basée sur l'URL courante
-      const paths = ['/api/status', '/status'];
+      // Tester plusieurs endpoints pour s'assurer que le serveur est vraiment prêt
+      const paths = ['/api/status', '/api/server-info', '/status'];
       if (!serverUrl) return false;
+      
+      let successCount = 0;
       for (const p of paths) {
         try {
           const resp = await axios.get(`${serverUrl}${p}`, { timeout: 5000 });
           if (resp.status === 200) {
-            return true;
+            successCount++;
           }
-        } catch (_) {}
+        } catch (_) {
+          // Ignorer les erreurs, on compte juste les succès
+        }
       }
-      return false;
+      
+      // Le serveur est considéré prêt si au moins 2 endpoints répondent
+      return successCount >= 2;
     };
 
     const initialDelay = setTimeout(() => {
-      setStatusMessage('Vérification de la disponibilité');
+      setStatusMessage('Vérification de la disponibilité du serveur');
       checkInterval = setInterval(async () => {
         setCheckCount(c => c + 1);
         const ok = await tryCheck();
         if (ok) {
-          setStatusMessage('Serveur disponible ! Redirection...');
+          setStatusMessage('Serveur disponible ! Redirection vers la connexion...');
           clearInterval(checkInterval);
-          setTimeout(() => { window.location.href = '/#/home'; }, 800);
+          // Rediriger vers la page de connexion puisque l'utilisateur a été déconnecté
+          setTimeout(() => { window.location.href = '/#/login'; }, 1000);
         }
       }, 5000);
-    }, 30000);
+    }, 60000); // Attendre 60 secondes avant de commencer les vérifications
 
     const stopAfter = setTimeout(() => {
       if (checkInterval) clearInterval(checkInterval);
-      setStatusMessage('Le serveur met plus de temps que prévu.');
+      setStatusMessage('Le serveur met plus de temps que prévu. Vous pouvez essayer de vous reconnecter manuellement.');
     }, 600000);
 
     return () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GRID_CONFIG } from '../config/appConfig';
 
 /**
@@ -11,6 +11,12 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
   const [prevCols, setPrevCols] = useState(cols);
   const [anchors, setAnchors] = useState(initialAnchors || {});
   const BASE_COLS = GRID_CONFIG.BASE_COLS; // grille logique de référence pour les indices d'ancrage
+  
+  // Référence stable aux ancres originales du backend (ne change que quand initialAnchors change)
+  // Utilisée pour repositionner correctement les items lors des changements de colonnes
+  const referenceAnchorsRef = useRef(initialAnchors || {});
+  // Flag pour savoir si on a déjà synchronisé les ancres au premier chargement
+  const initialSyncDoneRef = useRef(false);
 
   // Mettre à jour le layout et les ancres quand ils changent depuis le parent
   useEffect(() => {
@@ -22,8 +28,34 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
   useEffect(() => {
     if (initialAnchors) {
       setAnchors(initialAnchors);
+      // Mettre à jour les ancres de référence seulement quand le parent envoie de nouvelles ancres
+      referenceAnchorsRef.current = { ...initialAnchors };
+      console.log('[useGridLayout] 📌 Ancres de référence mises à jour:', Object.keys(initialAnchors).length, 'items');
     }
   }, [initialAnchors]);
+
+  // Synchronisation initiale : recalculer les ancres depuis le layout pour garantir la cohérence
+  // Cela "simule" un drag & drop initial pour aligner ancres et positions
+  useEffect(() => {
+    if (initialSyncDoneRef.current) return;
+    if (!initialLayout || Object.keys(initialLayout).length === 0) return;
+    
+    // Recalculer les ancres depuis le layout actuel pour garantir la cohérence
+    const syncedAnchors = {};
+    Object.entries(initialLayout).forEach(([itemId, pos]) => {
+      if (pos && typeof pos.col === 'number' && typeof pos.row === 'number') {
+        const anchorIndex = pos.row * BASE_COLS + pos.col;
+        syncedAnchors[itemId] = anchorIndex;
+      }
+    });
+    
+    if (Object.keys(syncedAnchors).length > 0) {
+      console.log('[useGridLayout] 🔄 Synchronisation initiale des ancres depuis le layout:', Object.keys(syncedAnchors).length, 'items');
+      referenceAnchorsRef.current = { ...syncedAnchors };
+      setAnchors(prev => ({ ...prev, ...syncedAnchors }));
+      initialSyncDoneRef.current = true;
+    }
+  }, [initialLayout, BASE_COLS]);
 
   // Initialiser les positions pour les nouveaux items et réorganiser intelligemment quand cols change
   useEffect(() => {
@@ -86,28 +118,32 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
       if (needsReorganization) {
         console.log('[useGridLayout] 🔄 Réorganisation intelligente, cols:', cols, 'raison:', colsChanged ? 'colonnes changées' : 'items dépassent');
 
-        // Utiliser les ancres existantes sans les modifier (pour préserver la position d'origine)
-        // Créer des ancres UNIQUEMENT pour les nouveaux items
+        // IMPORTANT: Utiliser les ancres de RÉFÉRENCE (du backend) pour le repositionnement
+        // Cela garantit que les items reviennent à leur position d'origine quand on agrandit
+        const refAnchors = referenceAnchorsRef.current || {};
+        
+        // Créer des ancres UNIQUEMENT pour les nouveaux items (pas dans la référence)
         const newAnchors = {};
-        let nextAnchor = Object.values(anchors).length > 0 ? Math.max(...Object.values(anchors)) + 1 : 0;
+        let nextAnchor = Object.values(refAnchors).length > 0 ? Math.max(...Object.values(refAnchors)) + 1 : 0;
         
         items.forEach(it => {
-          if (anchors[it.id] == null) {
+          if (refAnchors[it.id] == null && anchors[it.id] == null) {
             // Nouvel item sans ancre
             newAnchors[it.id] = nextAnchor;
             nextAnchor += (it.w || 1) * (it.h || 1) === 4 ? 4 : 1;
           }
         });
         
-        // Sauvegarder les nouvelles ancres si il y en a
+        // Sauvegarder les nouvelles ancres dans le state ET la référence
         if (Object.keys(newAnchors).length > 0) {
           setAnchors(prev => ({ ...prev, ...newAnchors }));
+          referenceAnchorsRef.current = { ...referenceAnchorsRef.current, ...newAnchors };
         }
 
-        // Trier par ancre pour préserver l'ordre relatif (utiliser les ancres existantes)
+        // Trier par ancre pour préserver l'ordre relatif (utiliser les ancres de RÉFÉRENCE)
         const ordered = [...items].sort((a, b) => {
-          const anchorA = anchors[a.id] ?? newAnchors[a.id] ?? 0;
-          const anchorB = anchors[b.id] ?? newAnchors[b.id] ?? 0;
+          const anchorA = refAnchors[a.id] ?? anchors[a.id] ?? newAnchors[a.id] ?? 0;
+          const anchorB = refAnchors[b.id] ?? anchors[b.id] ?? newAnchors[b.id] ?? 0;
           return anchorA - anchorB;
         });
 
@@ -150,35 +186,43 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
         ordered.forEach(it => {
           const w = it.w || 1;
           const h = it.h || 1;
-          const anchor = anchors[it.id] ?? newAnchors[it.id] ?? 0;
+          // IMPORTANT: Utiliser les ancres de RÉFÉRENCE pour calculer la position d'origine
+          const anchor = refAnchors[it.id] ?? anchors[it.id] ?? newAnchors[it.id] ?? 0;
           
-          // Calculer la position d'origine basée sur l'ancre (grille de référence BASE_COLS)
-          let targetRow = Math.floor(anchor / BASE_COLS);
-          let targetCol = anchor % BASE_COLS;
+          // Calculer la position d'origine depuis l'ancre
+          // L'ancre est : row * BASE_COLS + col (voir moveItem)
+          const anchorRow = Math.floor(anchor / BASE_COLS);
+          const anchorCol = anchor % BASE_COLS;
           
-          // Si on a le nombre de colonnes maximum (ou proche), essayer de placer exactement à la position d'origine
+          // Stratégie : toujours essayer de placer à la position d'ancre d'abord
+          // Seulement si ça ne rentre pas dans la grille actuelle, ajuster
+          let targetCol = anchorCol;
+          let targetRow = anchorRow;
+          
+          // Si l'item dépasse la grille actuelle, le décaler
+          if (targetCol + w > cols) {
+            // Décaler vers la gauche pour qu'il rentre
+            targetCol = Math.max(0, cols - w);
+            console.log(`[useGridLayout] ⚠️ ${it.id} ancre col ${anchorCol} ajustée à ${targetCol} (cols=${cols})`);
+          }
+          
+          // Essayer de placer à la position cible
           let pos;
-          if (cols >= BASE_COLS && targetCol + w <= cols && canPlace(targetCol, targetRow, w, h)) {
-            // Position d'origine disponible !
+          if (canPlace(targetCol, targetRow, w, h)) {
             pos = { col: targetCol, row: targetRow };
-            console.log(`[useGridLayout] 🎯 ${it.id} replacé à sa position d'origine (${targetCol}, ${targetRow})`);
+            if (targetCol === anchorCol && targetRow === anchorRow) {
+              console.log(`[useGridLayout] 🎯 ${it.id} placé à position d'ancre exacte (${targetCol}, ${targetRow})`);
+            } else {
+              console.log(`[useGridLayout] 📍 ${it.id} placé à position ajustée (${targetCol}, ${targetRow}) depuis ancre (${anchorCol}, ${anchorRow})`);
+            }
           } else {
-            // Sinon, chercher la meilleure position disponible
-            // Pour une réorganisation fluide, chercher à partir de la ligne courante
-            const searchStartRow = cols < BASE_COLS ? Math.max(0, Math.floor(targetRow * 0.7)) : 0;
-            pos = findNextFreePosition(w, h, searchStartRow);
+            // Position occupée, chercher la prochaine position libre
+            pos = findNextFreePosition(w, h, targetRow);
+            console.log(`[useGridLayout] 🔄 ${it.id} position occupée, placé à (${pos.col}, ${pos.row})`);
           }
           
           tempLayout[it.id] = { col: pos.col, row: pos.row, w, h };
           mark(pos.col, pos.row, w, h);
-          
-          // Mettre à jour la ligne courante pour optimiser le placement suivant
-          if (pos.row >= currentRow) {
-            // Si on a placé un item sur une nouvelle ligne, on avance
-            if (pos.col + w >= cols - 1) {
-              currentRow = pos.row + h;
-            }
-          }
           
           console.log(`[useGridLayout] ✅ ${it.id} placé à (${pos.col}, ${pos.row})`);
         });
@@ -297,12 +341,17 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
       };
 
       // Mettre à jour l'ancre pour cet item selon la grille de référence BASE_COLS
+      const anchorIndex = row * BASE_COLS + col; // top-left comme référence
+      
       setAnchors(prev => {
         const newAnchors = { ...prev };
-        const anchorIndex = row * BASE_COLS + col; // top-left comme référence
         newAnchors[itemId] = anchorIndex;
         return newAnchors;
       });
+      
+      // IMPORTANT: Mettre à jour aussi les ancres de référence lors d'un drag manuel
+      // pour que la nouvelle position devienne la position "officielle"
+      referenceAnchorsRef.current = { ...referenceAnchorsRef.current, [itemId]: anchorIndex };
 
       return newLayout;
     });
@@ -324,6 +373,8 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
       const tmp = next[a];
       next[a] = next[b];
       next[b] = tmp;
+      // Mettre à jour aussi les ancres de référence lors d'un swap manuel
+      referenceAnchorsRef.current = { ...referenceAnchorsRef.current, [a]: next[a], [b]: next[b] };
       return next;
     });
   }, []);

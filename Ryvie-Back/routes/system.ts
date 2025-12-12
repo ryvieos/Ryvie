@@ -299,8 +299,19 @@ router.post('/server-restart', verifyToken, async (req: any, res: any) => {
     }
     
     console.log(`[System] Redémarrage du serveur demandé par ${req.user.username}`);
-    const result = await restartServer();
-    res.json(result);
+    
+    // Envoyer la réponse IMMÉDIATEMENT avant de démarrer le reboot
+    res.json({ success: true, message: 'Le serveur va redémarrer dans quelques secondes...' });
+    
+    // Lancer le redémarrage APRÈS avoir envoyé la réponse
+    // Utiliser setImmediate pour s'assurer que la réponse est bien envoyée
+    setImmediate(async () => {
+      try {
+        await restartServer();
+      } catch (error: any) {
+        console.error('Erreur lors du redémarrage du serveur:', error);
+      }
+    });
   } catch (error: any) {
     console.error('Erreur lors du redémarrage du serveur:', error);
     res.status(500).json({ error: 'Erreur serveur lors du redémarrage' });

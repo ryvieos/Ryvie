@@ -635,25 +635,29 @@ const Home = () => {
     return [];
   }); // Liste des widgets ajoutés par l'utilisateur
   const widgetIdCounter = React.useRef(0); // Compteur pour générer des IDs uniques
-  // Ancres par défaut si l'utilisateur n'a rien en backend
+  // Ancres par défaut si l'utilisateur n'a rien en backend (alignées avec le backend)
   const DEFAULT_ANCHORS = React.useMemo(() => ({
-    weather: 2,
-    'app-rtransfer': 22,
-    'app-rdrop': 25,
-    'app-rdrive': 23,
-    'app-rpictures': 24
+    weather: 15, // row 1 * 12 + col 3
+    'widget-cpu-ram-0': 18, // row 1 * 12 + col 6
+    'widget-storage-1': 42, // row 3 * 12 + col 6
+    'app-rdrive': 38, // row 3 * 12 + col 2
+    'app-rdrop': 39,
+    'app-rtransfer': 40,
+    'app-rpictures': 41
   }), []);
   // Générer dynamiquement un layout/apps/ancres par défaut à partir des apps disponibles
   const computeDefaults = React.useCallback((appIds = []) => {
-    // Positionner la météo fixe comme demandé
+    // Layout par défaut avec widgets weather, cpu-ram et storage
     const layout = {
-      weather: { col: 2, row: 0, w: 3, h: 2 }
+      weather: { col: 3, row: 1, w: 3, h: 2 },
+      'widget-cpu-ram-0': { col: 6, row: 1, w: 2, h: 2 },
+      'widget-storage-1': { col: 6, row: 3, w: 2, h: 2 }
     };
     const anchors = { ...DEFAULT_ANCHORS };
-    // Placer les apps connues en ligne à partir de col=2, row=2
+    // Placer les apps connues en ligne à partir de col=2, row=3 (sous les widgets)
     let col = 2;
-    const row = 2;
-    let anchor = 22; // suit le même schéma que les demandes précédentes
+    const row = 3;
+    let anchor = row * 12 + col; // 38
     const ordered = [];
     // Utiliser toutes les apps connues (triées par id)
     const sourceIds = Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-')).sort();

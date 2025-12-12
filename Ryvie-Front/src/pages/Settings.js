@@ -9,7 +9,7 @@ import urlsConfig from '../config/urls';
 const { getServerUrl, getFrontendUrl } = urlsConfig;
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../utils/detectAccessMode';
 import { useSocket } from '../contexts/SocketContext';
-import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
+import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo, endSession } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
 
 const Settings = () => {
@@ -1364,7 +1364,7 @@ const Settings = () => {
   const handleServerRestart = async () => {
     const confirmed = await showConfirm(
       '⚠️ Redémarrage du Système',
-      'Êtes-vous sûr de vouloir redémarrer complètement le serveur ? Cette action va redémarrer le système entier et interrompre tous les services pendant quelques minutes.'
+      'Êtes-vous sûr de vouloir redémarrer complètement le serveur ? Cette action va redémarrer le système entier et interrompre tous les services pendant quelques minutes. Vous serez déconnecté.'
     );
     
     if (!confirmed) return;
@@ -1372,16 +1372,43 @@ const Settings = () => {
     try {
       const serverUrl = getServerUrl(accessMode);
       
-      // Envoyer la commande de redémarrage
-      await axios.post(`${serverUrl}/api/server-restart`);
+      // Envoyer la commande de redémarrage avec un timeout court
+      await axios.post(`${serverUrl}/api/server-restart`, {}, { timeout: 10000 });
       
-      // Rediriger immédiatement vers la page de redémarrage
-      navigate('/server-restarting');
+      console.log('[Settings] Commande de redémarrage envoyée avec succès');
     } catch (error) {
-      console.error('[Settings] Erreur lors du redémarrage du serveur:', error);
-      const errorMessage = error.response?.data?.error || 'Erreur lors du redémarrage du serveur';
-      showToast(errorMessage, 'error');
+      // Si on reçoit une erreur réseau (ECONNABORTED, Network Error, etc.),
+      // c'est probablement parce que le serveur a commencé à s'arrêter
+      // Dans ce cas, on continue quand même vers la page de redémarrage
+      console.log('[Settings] Erreur lors de la requête (normal si le serveur s\'arrête):', error.message);
+      
+      // Si c'est une vraie erreur d'autorisation (403), on affiche l'erreur
+      if (error.response?.status === 403) {
+        const errorMessage = error.response?.data?.error || 'Accès refusé';
+        showToast(errorMessage, 'error');
+        return;
+      }
+      
+      // Pour toutes les autres erreurs (timeout, network error, etc.),
+      // on considère que le redémarrage est en cours
     }
+    
+    // Déconnecter le socket si connecté (comme dans handleLogout de Home.js)
+    try {
+      if (socket) {
+        console.log('[Settings] Déconnexion du socket...');
+        socket.disconnect();
+      }
+    } catch (e) {
+      console.warn('[Settings] Erreur lors de la déconnexion du socket:', e);
+    }
+    
+    // Déconnecter l'utilisateur avant de rediriger
+    console.log('[Settings] Déconnexion de l\'utilisateur avant le redémarrage...');
+    endSession();
+    
+    // Rediriger vers la page de redémarrage
+    navigate('/server-restarting');
   };
 
   const formatSize = (size) => {

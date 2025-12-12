@@ -407,11 +407,11 @@ function main() {
     console.log('🔍 Scan automatique de tous les dossiers dans /data/apps/...\n');
     const scannedApps = scanAppsDirectories();
     if (scannedApps.length === 0) {
-        console.log('❌ Aucune app trouvée dans /data/apps/');
-        console.log('💡 Assurez-vous que vos apps sont dans des dossiers avec un docker-compose.yml');
-        return;
+        console.log('⚠️  Aucune app trouvée dans /data/apps/');
+        console.log('💡 Création des fichiers de configuration vides...\n');
+    } else {
+        console.log(`\n✅ ${scannedApps.length} app(s) détectée(s)\n`);
     }
-    console.log(`\n✅ ${scannedApps.length} app(s) détectée(s)\n`);
     // Nettoyer les manifests orphelins (apps supprimées de /data/apps/)
     try {
         const existingManifests = fs.readdirSync(MANIFESTS_DIR, { withFileTypes: true })
