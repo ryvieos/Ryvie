@@ -17,12 +17,11 @@ coverage/
 .idea/
 *.local
 package-lock.json
-Ryvie-Front/dist/
+# Ryvie-Front/dist/  # Commenté pour permettre bundle.js
 Ryvie-Front/build/
 Ryvie-Front/node_modules/
 Ryvie-Back/node_modules/
 Ryvie-Front/src/config/netbird-data.json
-Ryvie-Front/src/config/app-ports.json
 Ryvie-Front/src/config/all-ports.json
 Ryvie-Front/src/config/apps-versions.json
 Ryvie-Back/Ryvie-Front/src/config/netbird-data.json
