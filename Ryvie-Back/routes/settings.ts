@@ -24,7 +24,7 @@ function loadSettings() {
       // Créer le dossier si nécessaire et le fichier avec valeurs par défaut + id
       const defaults = {
         id: (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex')),
-        tokenExpirationMinutes: 15
+        tokenExpirationMinutes: 60
       };
       saveSettings(defaults);
       return defaults;
@@ -36,7 +36,7 @@ function loadSettings() {
   // Paramètres par défaut
   return {
     id: (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex')),
-    tokenExpirationMinutes: 15
+    tokenExpirationMinutes: 60
   };
 }
 
@@ -59,7 +59,7 @@ function saveSettings(settings) {
 router.get('/settings/token-expiration', verifyToken, (req: any, res: any) => {
   try {
     const settings = loadSettings();
-    res.json({ minutes: settings.tokenExpirationMinutes || 15 });
+    res.json({ minutes: settings.tokenExpirationMinutes || 60 });
   } catch (error: any) {
     console.error('[settings] Erreur GET token-expiration:', error);
     res.status(500).json({ error: 'Erreur serveur' });

@@ -5,6 +5,7 @@ const { verifyToken, isAdmin } = require('../middleware/auth');
 const ldapConfig = require('../config/ldap');
 const { getRole, parseDnParts, escapeRdnValue } = require('../services/ldapService');
 const { startApp } = require('../services/dockerService');
+const { listInstalledApps } = require('../services/appManagerService');
 
 // GET /api/admin/users/sync-ldap
 router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req: any, res: any) => {
@@ -217,10 +218,9 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                               }
 
                               console.log(`[add-user] Groupe ${role} créé et utilisateur ajouté: ${uid}`);
-                              triggerLdapSync()
+                              syncLdapWithApps()
                                 .catch(() => {})
                                 .finally(() => {
-                                  try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                                   return res.json({
                                     message: `Utilisateur "${uid}" ajouté avec succès en tant que ${role}`,
                                     user: { cn, sn, uid, mail, role },
@@ -251,10 +251,9 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                                 return res.status(500).json({ error: 'Utilisateur créé, mais échec d\'ajout au groupe' });
                               }
 
-                              triggerLdapSync()
+                              syncLdapWithApps()
                                 .catch(() => {})
                                 .finally(() => {
-                                  try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                                   return res.json({
                                     message: `Utilisateur "${uid}" ajouté avec succès en tant que ${role}`,
                                     user: { cn, sn, uid, mail, role },
@@ -394,10 +393,9 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
                                   }
 
                                   // Trigger sync and start container, then respond
-                                  triggerLdapSync()
+                                  syncLdapWithApps()
                                     .catch(() => {})
                                     .finally(() => {
-                                      try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                                       return res.json({ message: `Utilisateur "${uid}" supprimé avec succès` });
                                     });
                                 });
@@ -439,6 +437,56 @@ async function triggerLdapSync() {
     req.on('timeout', () => { req.destroy(); resolve({ statusCode: 504, error: 'Request timeout' }); });
     req.end();
   });
+}
+
+// Helper function to sync LDAP with installed apps (rpictures and rdrive)
+async function syncLdapWithApps() {
+  try {
+    console.log('[syncLdapWithApps] Vérification des applications installées...');
+    
+    // Récupérer la liste des applications installées
+    const installedApps = await listInstalledApps();
+    const appIds = installedApps.map(app => app.id);
+    
+    console.log('[syncLdapWithApps] Applications installées:', appIds);
+    
+    // Vérifier si rpictures est installé
+    const hasRpictures = appIds.includes('rpictures');
+    
+    // Vérifier si rdrive est installé
+    const hasRdrive = appIds.includes('rdrive');
+    
+    // Synchroniser rpictures si installé
+    if (hasRpictures) {
+      console.log('[syncLdapWithApps] Synchronisation LDAP avec rpictures...');
+      try {
+        await triggerLdapSync();
+        console.log('[syncLdapWithApps] ✅ Synchronisation rpictures réussie');
+      } catch (error: any) {
+        console.error('[syncLdapWithApps] ❌ Erreur synchronisation rpictures:', error.message);
+      }
+    } else {
+      console.log('[syncLdapWithApps] rpictures non installé, synchronisation ignorée');
+    }
+    
+    // Redémarrer le conteneur rdrive si installé
+    if (hasRdrive) {
+      console.log('[syncLdapWithApps] Redémarrage du conteneur rdrive...');
+      try {
+        await startApp('app-rdrive-node-create-user');
+        console.log('[syncLdapWithApps] ✅ Redémarrage rdrive réussi');
+      } catch (error: any) {
+        console.error('[syncLdapWithApps] ❌ Erreur redémarrage rdrive:', error.message);
+      }
+    } else {
+      console.log('[syncLdapWithApps] rdrive non installé, redémarrage ignoré');
+    }
+    
+    return { success: true, hasRpictures, hasRdrive };
+  } catch (error: any) {
+    console.error('[syncLdapWithApps] Erreur lors de la synchronisation:', error.message);
+    return { success: false, error: error.message };
+  }
 }
 
 // PUT /api/update-user — update attributes, password, and role membership
@@ -631,10 +679,9 @@ router.put('/update-user', verifyToken, isAdmin, async (req: any, res: any) => {
                             console.error('Erreur mise à jour groupe :', err);
                             return res.status(500).json({ error: 'Profil mis à jour, mais erreur de mise à jour du groupe', details: err.message });
                           }
-                          triggerLdapSync()
+                          syncLdapWithApps()
                             .catch(() => {})
                             .finally(() => {
-                              try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                               res.json({ message: `Utilisateur "${targetUid}" mis à jour avec succès`, user: { name, email, role, uid: targetUid } });
                             });
                         });
