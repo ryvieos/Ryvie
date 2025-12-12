@@ -187,11 +187,16 @@ function saveUserPreferences(username, preferences) {
  */
 async function generateDefaultLauncher() {
   const layout = {
-    weather: { col: 2, row: 0, w: 3, h: 2 }
+    weather: { col: 2, row: 0, w: 3, h: 2 },
+    cpuram: { col: 5, row: 0, w: 2, h: 2 },
+    storage: { col: 7, row: 0, w: 2, h: 2 }
   };
   const anchors = {
-    weather: 2
+    weather: 2,
+    cpuram: 5,
+    storage: 7
   };
+  const widgets = ['weather', 'cpuram', 'storage'];
   
   try {
     // Charger les apps depuis les manifests
@@ -228,24 +233,31 @@ async function generateDefaultLauncher() {
       console.warn('[generateDefaultLauncher] Répertoire manifests non trouvé:', manifestsDir);
     }
     
-    // Placer les apps en ligne à partir de col=2, row=2
+    // Placer les apps en grille à partir de col=2, row=2
     let col = 2;
-    const row = 2;
-    let anchor = 22;
+    let row = 2;
+    const maxCols = 12;
+    const startCol = 2;
     
     apps.forEach(appId => {
       layout[appId] = { col, row, w: 1, h: 1 };
+      const anchor = row * maxCols + col;
       anchors[appId] = anchor;
+      
       col += 1;
-      anchor += 1;
+      // Passer à la ligne suivante si on dépasse la largeur de la grille
+      if (col >= maxCols) {
+        col = startCol;
+        row += 1;
+      }
     });
     
-    console.log('[generateDefaultLauncher] Généré avec', apps.length, 'apps:', apps);
+    console.log('[generateDefaultLauncher] Généré avec', apps.length, 'apps et', widgets.length, 'widgets:', apps);
     
     return {
       anchors,
       layout,
-      widgets: [],
+      widgets,
       apps
     };
   } catch (error: any) {
@@ -253,7 +265,7 @@ async function generateDefaultLauncher() {
     return {
       anchors,
       layout,
-      widgets: [],
+      widgets,
       apps: []
     };
   }
