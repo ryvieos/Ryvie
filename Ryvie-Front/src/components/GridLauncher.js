@@ -395,7 +395,7 @@ const GridLauncher = ({
             style={{
               gridColumn: `${layout['weather'].col + 1} / span 3`,
               gridRow: `${layout['weather'].row + 1} / span 2`,
-              alignSelf: 'start',
+              alignSelf: 'center',
               animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${Math.max(0, (layout['weather'].col || 0)) * 180}ms forwards`
             }}
             onPointerDown={(e) => handlers.onPointerDown(e, 'weather', { w: 3, h: 2 })}
