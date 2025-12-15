@@ -80,20 +80,13 @@ async function verifyFileIntegrity(filePath, expectedSHA256) {
 }
 
 /**
- * Met à jour Ryvie via GitHub Releases (téléchargement artefact + vérification + hook)
+ * Met à jour Ryvie via script externe indépendant
  */
 async function updateRyvie() {
-  let snapshotPath = null;
-  let stagingDir = null;
-  
   try {
     console.log('[Update] Début de la mise à jour de Ryvie...');
     
-    // 0. Récupérer la version actuelle
-    const currentVersion = getCurrentRyvieVersion();
-    console.log(`[Update] Version actuelle: ${currentVersion}`);
-    
-    // 1. Récupérer la dernière release depuis GitHub
+    // 1. Récupérer la dernière release depuis GitHub pour connaître la version cible
     console.log('[Update] 📥 Récupération de la dernière release...');
     const headers: any = {
       'Accept': 'application/vnd.github.v3+json',
@@ -114,6 +107,10 @@ async function updateRyvie() {
     
     console.log(`[Update] Dernière version disponible: ${targetVersion}`);
     
+    // 2. Vérifier si déjà à jour
+    const currentVersion = getCurrentRyvieVersion();
+    console.log(`[Update] Version actuelle: ${currentVersion}`);
+    
     if (currentVersion === targetVersion) {
       return {
         success: true,
@@ -122,159 +119,52 @@ async function updateRyvie() {
       };
     }
     
-    // 2. Utiliser l'asset auto-généré "Source code (tar.gz)"
-    const tarballUrl = release.tarball_url;
-    console.log(`[Update] URL du tarball: ${tarballUrl}`);
-    
-    // 3. Créer le dossier temporaire
-    if (fs.existsSync(TEMP_DIR)) {
-      execSync(`rm -rf "${TEMP_DIR}"`, { stdio: 'inherit' });
-    }
-    fs.mkdirSync(TEMP_DIR, { recursive: true });
-    
-    // 4. Créer un snapshot avant la mise à jour
-    console.log('[Update] 📸 Création du snapshot de sécurité...');
+    // 3. Détecter le mode actuel (dev ou prod)
+    let mode = 'prod';
     try {
-      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
-      console.log(snapshotOutput);
-      
-      const match = snapshotOutput.match(/SNAPSHOT_PATH=(.+)/);
-      if (match) {
-        snapshotPath = match[1].trim();
-        console.log(`[Update] Snapshot créé: ${snapshotPath}`);
+      const pm2List = execSync('pm2 list', { encoding: 'utf8' });
+      if (pm2List.includes('ryvie-backend-dev')) {
+        mode = 'dev';
       }
-    } catch (snapError: any) {
-      console.error('[Update] ⚠️ Impossible de créer le snapshot:', snapError.message);
-      console.log('[Update] Continuation sans snapshot...');
+    } catch (_) {
+      mode = 'prod';
     }
     
-    // 5. Télécharger le tarball (Source code auto-généré)
-    const tarballPath = path.join(TEMP_DIR, `${targetVersion}.tar.gz`);
-    console.log(`[Update] 📥 Téléchargement de la release ${targetVersion}...`);
-    await downloadFile(tarballUrl, tarballPath);
-    console.log('[Update] ✅ Téléchargement terminé');
+    console.log(`[Update] Mode détecté: ${mode}`);
     
-    // 6. Extraire dans le dossier staging
-    stagingDir = path.join(TEMP_DIR, 'extracted');
-    fs.mkdirSync(stagingDir, { recursive: true });
+    // 4. Lancer le script externe en arrière-plan détaché
+    const updateScript = path.join(RYVIE_DIR, 'scripts/update-and-restart.sh');
     
-    console.log(`[Update] 📦 Extraction dans ${stagingDir}...`);
-    execSync(`tar -xzf "${tarballPath}" -C "${stagingDir}" --strip-components=1`, { stdio: 'inherit' });
-    console.log('[Update] ✅ Extraction terminée');
-    
-    // 7. Copier les configs locales vers le staging
-    console.log('[Update] 📋 Copie des configurations locales...');
-    
-    // Copier Front/src/config/
-    const frontConfigSrc = path.join(RYVIE_DIR, 'Ryvie-Front/src/config');
-    const frontConfigDest = path.join(stagingDir, 'Ryvie-Front/src/config');
-    if (fs.existsSync(frontConfigSrc)) {
-      if (fs.existsSync(frontConfigDest)) {
-        execSync(`rm -rf "${frontConfigDest}"`, { stdio: 'inherit' });
-      }
-      execSync(`cp -r "${frontConfigSrc}" "${frontConfigDest}"`, { stdio: 'inherit' });
-      console.log('[Update] ✅ Front/src/config copié');
+    if (!fs.existsSync(updateScript)) {
+      throw new Error('Script update-and-restart.sh introuvable');
     }
     
-    // Copier Back/.env
-    const backEnvSrc = path.join(RYVIE_DIR, 'Ryvie-Back/.env');
-    const backEnvDest = path.join(stagingDir, 'Ryvie-Back/.env');
-    if (fs.existsSync(backEnvSrc)) {
-      execSync(`cp "${backEnvSrc}" "${backEnvDest}"`, { stdio: 'inherit' });
-      console.log('[Update] ✅ Back/.env copié');
-    }
+    console.log(`[Update] 🚀 Lancement du script externe d'update...`);
+    console.log(`[Update] Commande: ${updateScript} ${targetVersion} --mode ${mode}`);
     
-    // 8. Remplacer le contenu de /opt/Ryvie par le staging
-    console.log('[Update] 🔄 Application de la nouvelle version...');
-    
-    // Sauvegarder les fichiers critiques qui ne doivent pas être écrasés
-    const filesToPreserve = [
-      'Ryvie-Front/src/config',
-      'Ryvie-Back/.env',
-      'Ryvie-Back/node_modules',
-      'Ryvie-Front/node_modules',
-      'scripts',
-      '.git'
-    ];
-    
-    // Copier tout le staging vers /opt/Ryvie (en excluant les fichiers préservés déjà copiés)
+    // Lancer en background détaché avec nohup
+    // Le script gère: snapshot, download, extract, apply, restart, rollback si erreur
     execSync(
-      `rsync -av --exclude='.git' --exclude='node_modules' --exclude='.update-staging' "${stagingDir}/" "${RYVIE_DIR}/"`,
-      { stdio: 'inherit' }
+      `nohup "${updateScript}" "${targetVersion}" --mode ${mode} > /dev/null 2>&1 &`,
+      { 
+        cwd: RYVIE_DIR,
+        detached: true,
+        stdio: 'ignore'
+      }
     );
     
-    console.log('[Update] ✅ Nouvelle version appliquée');
-    
-    // 9. Lancer prod.sh pour rebuild et redémarrer
-    console.log('[Update] 🔧 Lancement de prod.sh (build + restart)...');
-    const prodScript = path.join(RYVIE_DIR, 'scripts/prod.sh');
-    
-    if (!fs.existsSync(prodScript)) {
-      throw new Error('Script prod.sh introuvable');
-    }
-    
-    execSync(`"${prodScript}"`, { cwd: RYVIE_DIR, stdio: 'inherit' });
-    console.log('[Update] ✅ Build et redémarrage terminés');
-    
-    // 10. Nettoyer le dossier temporaire
-    try {
-      execSync(`rm -rf "${TEMP_DIR}"`, { stdio: 'inherit' });
-      console.log('[Update] 🧹 Dossier temporaire nettoyé');
-    } catch (cleanError: any) {
-      console.warn('[Update] ⚠️ Impossible de nettoyer le dossier temporaire:', cleanError.message);
-    }
-    
-    console.log('[Update] ✅ Mise à jour terminée avec succès');
+    console.log('[Update] ✅ Script externe lancé');
+    console.log('[Update] Le backend va redémarrer dans quelques secondes...');
     
     return {
       success: true,
-      message: `Ryvie mis à jour vers ${targetVersion}. Redémarrage en cours...`,
+      message: `Mise à jour vers ${targetVersion} en cours. Le système va redémarrer...`,
       needsRestart: true,
-      snapshotPath,
       version: targetVersion
     };
     
   } catch (error: any) {
-    console.error('[Update] ❌ Erreur lors de la mise à jour de Ryvie:', error.message);
-    
-    // Nettoyer le dossier temporaire si présent
-    if (fs.existsSync(TEMP_DIR)) {
-      try {
-        execSync(`rm -rf "${TEMP_DIR}"`, { stdio: 'inherit' });
-      } catch (cleanError: any) {
-        console.warn('[Update] ⚠️ Impossible de nettoyer le dossier temporaire:', cleanError.message);
-      }
-    }
-    
-    // Rollback si un snapshot existe
-    if (snapshotPath) {
-      console.error('[Update] 🔄 Rollback en cours...');
-      try {
-        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
-        console.log(rollbackOutput);
-        console.log('[Update] ✅ Rollback terminé');
-        
-        // Supprimer le snapshot après rollback réussi
-        try {
-          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
-          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
-          console.log('[Update] 🧹 Snapshot supprimé après rollback');
-        } catch (delError: any) {
-          console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
-        }
-        
-        return {
-          success: false,
-          message: `Erreur: ${error.message}. Rollback effectué avec succès.`
-        };
-      } catch (rollbackError: any) {
-        console.error('[Update] ❌ Erreur lors du rollback:', rollbackError.message);
-        return {
-          success: false,
-          message: `Erreur: ${error.message}. Rollback échoué: ${rollbackError.message}`
-        };
-      }
-    }
+    console.error('[Update] ❌ Erreur lors du lancement de la mise à jour:', error.message);
     
     return {
       success: false,
