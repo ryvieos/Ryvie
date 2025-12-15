@@ -16,6 +16,7 @@ const {
   allowlistToken,
 } = require('../services/authService');
 const { startApp } = require('../services/dockerService');
+const { listInstalledApps } = require('../services/appManagerService');
 
 const router = express.Router();
 
@@ -151,6 +152,56 @@ function triggerLdapSync() {
     req.on('timeout', () => { req.destroy(); resolve(false); });
     req.end();
   });
+}
+
+// Helper function to sync LDAP with installed apps (rpictures and rdrive)
+async function syncLdapWithApps() {
+  try {
+    console.log('[syncLdapWithApps] Vérification des applications installées...');
+    
+    // Récupérer la liste des applications installées
+    const installedApps = await listInstalledApps();
+    const appIds = installedApps.map(app => app.id);
+    
+    console.log('[syncLdapWithApps] Applications installées:', appIds);
+    
+    // Vérifier si rpictures est installé
+    const hasRpictures = appIds.includes('rpictures');
+    
+    // Vérifier si rdrive est installé
+    const hasRdrive = appIds.includes('rdrive');
+    
+    // Synchroniser rpictures si installé
+    if (hasRpictures) {
+      console.log('[syncLdapWithApps] Synchronisation LDAP avec rpictures...');
+      try {
+        await triggerLdapSync();
+        console.log('[syncLdapWithApps] ✅ Synchronisation rpictures réussie');
+      } catch (error: any) {
+        console.error('[syncLdapWithApps] ❌ Erreur synchronisation rpictures:', error.message);
+      }
+    } else {
+      console.log('[syncLdapWithApps] rpictures non installé, synchronisation ignorée');
+    }
+    
+    // Redémarrer le conteneur rdrive si installé
+    if (hasRdrive) {
+      console.log('[syncLdapWithApps] Redémarrage du conteneur rdrive...');
+      try {
+        await startApp('app-rdrive-node-create-user');
+        console.log('[syncLdapWithApps] ✅ Redémarrage rdrive réussi');
+      } catch (error: any) {
+        console.error('[syncLdapWithApps] ❌ Erreur redémarrage rdrive:', error.message);
+      }
+    } else {
+      console.log('[syncLdapWithApps] rdrive non installé, redémarrage ignoré');
+    }
+    
+    return { success: true, hasRpictures, hasRdrive };
+  } catch (error: any) {
+    console.error('[syncLdapWithApps] Erreur lors de la synchronisation:', error.message);
+    return { success: false, error: error.message };
+  }
 }
 
 // GET /api/ldap/check-first-time - Vérifier si c'est la première connexion
@@ -307,10 +358,9 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
                     }
 
                     console.log(`[create-first-user] Groupe admins créé et utilisateur ajouté: ${uid}`);
-                    triggerLdapSync()
+                    syncLdapWithApps()
                       .catch(() => {})
                       .finally(() => {
-                        try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                         return res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
                       });
                   });
@@ -341,10 +391,9 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
                       }
 
                       console.log(`[create-first-user] Premier utilisateur admin créé: ${uid}`);
-                      triggerLdapSync()
+                      syncLdapWithApps()
                         .catch(() => {})
                         .finally(() => {
-                          try { startApp('app-rdrive-node-create-user').catch(() => {}); } catch (_: any) {}
                           return res.json({ message: 'Premier utilisateur admin créé avec succès', uid, role: 'Admin' });
                         });
                     }

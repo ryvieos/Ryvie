@@ -94,14 +94,6 @@ const FirstTimeSetup = () => {
         setMessage('Premier utilisateur admin créé avec succès ! Redirection vers la page de connexion...');
         setMessageType('success');
         
-        // Synchroniser LDAP avec les applications
-        try {
-          await axios.get(`${serverUrl}/api/ldap/sync`);
-          console.log('[FirstTimeSetup] Synchronisation LDAP effectuée');
-        } catch (syncError) {
-          console.error('[FirstTimeSetup] Erreur lors de la synchronisation LDAP:', syncError);
-        }
-        
         setTimeout(() => {
           navigate('/login');
         }, 2000);
@@ -152,7 +144,7 @@ const FirstTimeSetup = () => {
       <div className="login-card">
         <div className="login-header">
           <h1>Ryvie</h1>
-          <p>Configuration initiale - Créer le premier utilisateur administrateur</p>
+          <p>Configuration initiale - Création du premier utilisateur</p>
         </div>
         
         {message && (

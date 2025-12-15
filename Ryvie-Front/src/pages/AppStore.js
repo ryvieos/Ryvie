@@ -524,7 +524,7 @@ const AppStore = () => {
             stage: data.stage 
           } 
         }));
-        addLog(data.message, 'info');
+        addLog(data.message, data.stage === 'error' ? 'error' : 'info');
         
         // Envoyer la progression à Home pour l'indicateur
         window.parent.postMessage({ 
@@ -534,14 +534,53 @@ const AppStore = () => {
           progress: data.progress
         }, '*');
         
+        // Si une erreur est survenue (rollback, etc.)
+        if (data.stage === 'error') {
+          addLog(`❌ Erreur lors de l'installation/mise à jour de ${appName}`, 'error');
+          showToast(`Erreur: ${data.message}`, 'error');
+          
+          // Fermer la connexion SSE
+          eventSource.close();
+          delete activeEventSources.current[appId];
+          
+          // Nettoyer l'état d'installation
+          setInstallingApps(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(appId);
+            return newSet;
+          });
+          
+          // Nettoyer la progression
+          setInstallProgress(prev => {
+            const newProgress = { ...prev };
+            delete newProgress[appId];
+            return newProgress;
+          });
+          
+          // Notifier Home que l'installation a échoué
+          window.parent.postMessage({ 
+            type: 'APPSTORE_INSTALL_STATUS', 
+            installing: false, 
+            appName: appName,
+            appId: appId,
+            error: true
+          }, '*');
+          
+          // Rafraîchir la liste des apps pour mettre à jour l'état
+          setTimeout(async () => {
+            await fetchApps(true);
+            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+          }, 1000);
+        }
         // Si l'installation est terminée (100%), afficher la notification de succès
-        if (data.progress >= 100) {
+        else if (data.progress >= 100) {
           addLog(`✅ Installation de ${appName} terminée avec succès !`, 'success');
           addLog(`🏁 Processus terminé pour ${appName}`, 'info');
           showToast(`${appName} installé avec succès !`, 'success');
           
           // Fermer la connexion SSE
           eventSource.close();
+          delete activeEventSources.current[appId];
           
           // Nettoyer l'état d'installation
           setInstallingApps(prev => {

@@ -113,6 +113,7 @@ const getLocalIP = () => {
 /**
  * Construit l'URL d'une app en fonction de l'URL courante et des données Netbird
  * Nouvelle logique:
+ * - Si on est sur ryvie.local (Caddy) → http://ryvie.local (sans port, Caddy gère le routing)
  * - Si on est sur backendHost ET l'app a un domaine dans netbird-data.json → https://<domaine>
  * - En mode local (HTTP), utiliser l'IP locale du serveur au lieu du hostname
  * - Sinon → http(s)://<hostname_courant>:<port_app>
@@ -124,6 +125,17 @@ const buildAppUrl = (appId, port) => {
   const { hostname, protocol } = getCurrentLocation();
   const domains = netbirdData?.domains || {};
   const appDomain = domains[appId];
+
+  // Si on est sur ryvie.local (Caddy) ET qu'on a l'IP locale, utiliser IP:port pour ouvrir l'app directement
+  // Sinon utiliser ryvie.local (Caddy gère le routing)
+  if (hostname === 'ryvie.local') {
+    if (cachedLocalIP && port) {
+      console.log(`[buildAppUrl] ${appId} → http://${cachedLocalIP}:${port}`);
+      return `http://${cachedLocalIP}:${port}`;
+    }
+    console.log(`[buildAppUrl] ${appId} → http://ryvie.local (IP locale non disponible: ${cachedLocalIP})`);
+    return 'http://ryvie.local';
+  }
 
   // En contexte HTTPS, si un domaine Netbird est défini pour cette application,
   // toujours utiliser ce domaine public (accès via reverse proxy/domaine).
@@ -222,7 +234,7 @@ const getUrl = (urlConfig, accessMode) => {
 /**
  * Fonction pour obtenir l'URL du serveur.
  * Nouvelle logique basée sur l'URL courante:
- * - Si on est sur ryvie.local sans port (via Caddy) → URL relative (same-origin)
+ * - Si on est sur ryvie.local (via Caddy) → http://ryvie.local (sans port, Caddy gère le routing)
  * - Si on est sur backendHost (tunnel Netbird) ET 'status' a un domaine → https://<domaine>
  * - Sinon → http(s)://<hostname_courant>:<port_server>
  * @param {string} accessMode - Mode d'accès (ignoré, gardé pour compatibilité)
@@ -232,9 +244,9 @@ const getServerUrl = (accessMode) => {
   const domains = netbirdData?.domains || {};
   const { hostname, protocol, port } = getCurrentLocation();
 
-  // Si on accède via ryvie.local sur le port 80 (Caddy), utiliser same-origin
-  if (hostname === 'ryvie.local' && (port === '80' || port === '')) {
-    return ''; // URL relative pour same-origin
+  // Si on accède via ryvie.local (Caddy reverse proxy), utiliser l'URL de base sans port
+  if (hostname === 'ryvie.local') {
+    return 'http://ryvie.local'; // Caddy route automatiquement /api/* vers le backend
   }
 
   // En contexte public (HTTPS) et si un domaine Netbird "status" est défini,

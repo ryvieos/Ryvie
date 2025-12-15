@@ -15,6 +15,57 @@ if (!fs.existsSync(PREFERENCES_DIR)) {
 }
 
 /**
+ * Trouve une position libre dans la grille pour un item de taille width x height
+ * @param layout - Layout actuel {itemId: {col, row, w, h}}
+ * @param width - Largeur de l'item
+ * @param height - Hauteur de l'item
+ * @param maxCols - Nombre de colonnes max (défaut: 12)
+ * @returns {col, row, w, h} ou null si aucune position libre
+ */
+function findFreePosition(layout: any, width: number = 1, height: number = 1, maxCols: number = 12) {
+  const occupiedCells = new Set<string>();
+  
+  // Marquer toutes les cellules occupées
+  for (const [id, pos] of Object.entries(layout)) {
+    if (!pos || typeof pos !== 'object') continue;
+    const p = pos as any;
+    const w = p.w || 1;
+    const h = p.h || 1;
+    const col = p.col || 0;
+    const row = p.row || 0;
+    
+    for (let r = row; r < row + h; r++) {
+      for (let c = col; c < col + w; c++) {
+        occupiedCells.add(`${r},${c}`);
+      }
+    }
+  }
+  
+  // Chercher une position libre ligne par ligne
+  for (let row = 0; row < 100; row++) {
+    for (let col = 0; col <= maxCols - width; col++) {
+      let isFree = true;
+      
+      for (let r = row; r < row + height && isFree; r++) {
+        for (let c = col; c < col + width && isFree; c++) {
+          if (occupiedCells.has(`${r},${c}`)) {
+            isFree = false;
+          }
+        }
+      }
+      
+      if (isFree) {
+        console.log(`[findFreePosition] Position libre trouvée: (${col}, ${row}) pour ${width}x${height}`);
+        return { col, row, w: width, h: height };
+      }
+    }
+  }
+  
+  console.warn(`[findFreePosition] Aucune position libre trouvée pour ${width}x${height}`);
+  return null;
+}
+
+/**
  * Récupère la liste des ids d'apps installées (depuis /data/config/manifests)
  * Retourne un tableau d'ids formatés 'app-<id>'
  */
@@ -133,13 +184,29 @@ function saveUserPreferences(username, preferences) {
 
 /**
  * Génère un layout et des anchors par défaut à partir des apps installées
+ * Layout par défaut avec widgets weather, cpu-ram et storage
  */
 async function generateDefaultLauncher() {
-  const layout = {
-    weather: { col: 2, row: 0, w: 3, h: 2 }
+  const maxCols = 12;
+  
+  // Widgets par défaut avec IDs corrects pour le frontend
+  const defaultWidgets = [
+    { id: 'widget-cpu-ram-0', type: 'cpu-ram' },
+    { id: 'widget-storage-1', type: 'storage' }
+  ];
+  
+  // Layout par défaut: weather + cpu-ram + storage sur la ligne 1, apps sur la ligne 3
+  const layout: any = {
+    weather: { col: 3, row: 1, w: 3, h: 2 },
+    'widget-cpu-ram-0': { col: 6, row: 1, w: 2, h: 2 },
+    'widget-storage-1': { col: 6, row: 3, w: 2, h: 2 }
   };
-  const anchors = {
-    weather: 2
+  
+  // Ancres calculées: row * maxCols + col
+  const anchors: any = {
+    weather: 1 * maxCols + 3, // 15
+    'widget-cpu-ram-0': 1 * maxCols + 6, // 18
+    'widget-storage-1': 3 * maxCols + 6 // 42
   };
   
   try {
@@ -148,9 +215,9 @@ async function generateDefaultLauncher() {
     const path = require('path');
     const manifestsDir = MANIFESTS_DIR;
     
-    const apps = [];
+    const apps: string[] = [];
     if (fs.existsSync(manifestsDir)) {
-      const appFolders = fs.readdirSync(manifestsDir).filter(f => {
+      const appFolders = fs.readdirSync(manifestsDir).filter((f: string) => {
         const stat = fs.statSync(path.join(manifestsDir, f));
         return stat.isDirectory();
       });
@@ -177,24 +244,23 @@ async function generateDefaultLauncher() {
       console.warn('[generateDefaultLauncher] Répertoire manifests non trouvé:', manifestsDir);
     }
     
-    // Placer les apps en ligne à partir de col=2, row=2
+    // Placer les apps en grille à partir de col=2, row=3 (sous les widgets)
     let col = 2;
-    const row = 2;
-    let anchor = 22;
+    const row = 3;
     
     apps.forEach(appId => {
       layout[appId] = { col, row, w: 1, h: 1 };
+      const anchor = row * maxCols + col;
       anchors[appId] = anchor;
       col += 1;
-      anchor += 1;
     });
     
-    console.log('[generateDefaultLauncher] Généré avec', apps.length, 'apps:', apps);
+    console.log('[generateDefaultLauncher] Généré avec', apps.length, 'apps et', defaultWidgets.length, 'widgets:', apps);
     
     return {
       anchors,
       layout,
-      widgets: [],
+      widgets: defaultWidgets,
       apps
     };
   } catch (error: any) {
@@ -202,7 +268,7 @@ async function generateDefaultLauncher() {
     return {
       anchors,
       layout,
-      widgets: [],
+      widgets: defaultWidgets,
       apps: []
     };
   }
@@ -216,26 +282,26 @@ router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
     let preferences = loadUserPreferences(username);
     
     if (!preferences) {
-      // Créer des préférences par défaut si elles n'existent pas
+      // Créer des préférences par défaut avec le launcher par défaut complet
+      const defaultLauncher = await generateDefaultLauncher();
       preferences = {
         zones: {},
         theme: 'default',
         language: 'fr',
-        launcher: {
-          anchors: {},
-          layout: {},
-          widgets: [],
-          apps: []
-        }
+        launcher: defaultLauncher,
+        backgroundImage: 'preset-default.png'
       };
-      // Sauvegarder ces préférences par défaut
-      console.log('[userPreferences] Création du fichier de préférences par défaut pour:', username);
+      console.log('[userPreferences] Création du fichier de préférences par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps et', defaultLauncher.widgets.length, 'widgets');
       saveUserPreferences(username, preferences);
     } else if (!preferences.launcher || !preferences.launcher.apps || preferences.launcher.apps.length === 0) {
       // Si le fichier existe mais n'a pas de section launcher OU si apps est vide, générer les valeurs par défaut
       const defaultLauncher = await generateDefaultLauncher();
       preferences.launcher = defaultLauncher;
-      console.log('[userPreferences] Génération du launcher par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps');
+      // Ajouter le fond d'écran par défaut si absent
+      if (!preferences.backgroundImage) {
+        preferences.backgroundImage = 'preset-default.png';
+      }
+      console.log('[userPreferences] Génération du launcher par défaut pour:', username, 'avec', defaultLauncher.apps.length, 'apps et', defaultLauncher.widgets.length, 'widgets');
       saveUserPreferences(username, preferences);
     }
 
@@ -248,28 +314,48 @@ router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
       if (missing.length > 0) {
         const layout = preferences.launcher.layout || {};
         const anchors = preferences.launcher.anchors || {};
-        // Trouver le max col et max anchor existants pour démarrer à la suite
-        let col = 2;
-        let anchor = 22;
-        // si des apps existent déjà, prendre la plus grande colonne sur la row 2 et l'anchor max
-        for (const [id, pos] of Object.entries(layout)) {
-          if (!pos) continue;
-          if (typeof (pos as any).col === 'number') col = Math.max(col, (pos as any).col + 1);
-        }
+        
+        // Trouver le max anchor existant pour démarrer à la suite
+        let maxAnchor = 0;
         for (const a of Object.values(anchors)) {
-          if (typeof a === 'number') anchor = Math.max(anchor, (a as number) + 1);
+          if (typeof a === 'number') maxAnchor = Math.max(maxAnchor, (a as number));
         }
-        const row = 2;
+        
+        console.log(`[userPreferences] 🆕 Placement de ${missing.length} nouvelle(s) app(s):`, missing);
+        console.log(`[userPreferences] 📊 Layout existant:`, Object.keys(layout).map(id => {
+          const pos = layout[id] as any;
+          return `${id}@(${pos?.col},${pos?.row})`;
+        }).join(', '));
+        
+        // Placer chaque nouvelle app dans une position libre
         missing.forEach((appId) => {
-          if (!layout[appId]) layout[appId] = { col, row, w: 1, h: 1 };
-          if (typeof anchors[appId] !== 'number') anchors[appId] = anchor;
-          col += 1;
-          anchor += 1;
+          if (!layout[appId]) {
+            // Trouver une position libre pour cette app (1x1)
+            const pos = findFreePosition(layout, 1, 1, 12);
+            if (pos) {
+              layout[appId] = pos;
+              console.log(`[userPreferences] ✅ ${appId} placé à (${pos.col}, ${pos.row})`);
+            } else {
+              // Fallback: placer à (0, 0) si aucune position libre trouvée
+              layout[appId] = { col: 0, row: 0, w: 1, h: 1 };
+              console.warn(`[userPreferences] ⚠️ ${appId} placé à (0,0) par défaut (aucune position libre)`);
+            }
+          }
+          
+          // Créer une ancre basée sur la position
+          if (typeof anchors[appId] !== 'number') {
+            const pos = layout[appId] as any;
+            const BASE_COLS = 12; // Grille de référence
+            const anchorIndex = (pos.row || 0) * BASE_COLS + (pos.col || 0);
+            anchors[appId] = anchorIndex;
+            console.log(`[userPreferences] 🔗 Ancre créée pour ${appId}: ${anchorIndex}`);
+          }
         });
+        
         preferences.launcher.layout = layout;
         preferences.launcher.anchors = anchors;
         preferences.launcher.apps = [...existingApps, ...missing];
-        console.log(`[userPreferences] Réconciliation: ${missing.length} app(s) ajoutée(s):`, missing);
+        console.log(`[userPreferences] 💾 Réconciliation terminée: ${missing.length} app(s) ajoutée(s)`);
         saveUserPreferences(username, preferences);
       }
 

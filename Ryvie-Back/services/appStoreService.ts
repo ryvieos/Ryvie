@@ -4,6 +4,7 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const { EventEmitter } = require('events');
+const yaml = require('js-yaml');
 const { STORE_CATALOG, RYVIE_DIR, MANIFESTS_DIR, APPS_DIR } = require('../config/paths');
 
 // Configuration
@@ -297,6 +298,92 @@ async function saveMetadata() {
   } catch (error: any) {
     console.error('[appStore] Erreur lors de la sauvegarde des métadonnées:', error.message);
   }
+}
+
+/**
+ * Parse un fichier docker-compose.yml et extrait tous les bind-mounts relatifs
+ * @param {string} composePath - Chemin absolu vers le fichier docker-compose.yml
+ * @returns {Promise<string[]>} - Liste des chemins relatifs de bind-mounts (ex: ['./data', './config'])
+ */
+async function parseBindMounts(composePath) {
+  try {
+    const composeContent = await fs.readFile(composePath, 'utf8');
+    const composeData = yaml.load(composeContent);
+    
+    const bindMounts = new Set();
+    
+    // Parcourir tous les services
+    if (composeData.services) {
+      for (const serviceName in composeData.services) {
+        const service = composeData.services[serviceName];
+        
+        if (service.volumes && Array.isArray(service.volumes)) {
+          for (const volume of service.volumes) {
+            // Les volumes peuvent être des strings ou des objets
+            let volumeStr = '';
+            if (typeof volume === 'string') {
+              volumeStr = volume;
+            } else if (volume.source) {
+              volumeStr = volume.source;
+            }
+            
+            // Détecter les bind-mounts relatifs (commence par ./ ou ../)
+            if (volumeStr.startsWith('./') || volumeStr.startsWith('../')) {
+              // Extraire la partie avant le ':' (le chemin host)
+              const hostPath = volumeStr.split(':')[0];
+              bindMounts.add(hostPath);
+            }
+          }
+        }
+      }
+    }
+    
+    return Array.from(bindMounts);
+  } catch (error: any) {
+    console.error(`[parseBindMounts] Erreur lors du parsing de ${composePath}:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Crée et configure les permissions des dossiers bind-mount
+ * @param {string} appDir - Répertoire de l'application
+ * @param {string[]} bindMounts - Liste des chemins relatifs à créer
+ */
+async function prepareBindMountDirectories(appDir, bindMounts) {
+  if (!bindMounts || bindMounts.length === 0) {
+    console.log('[prepareBindMounts] Aucun bind-mount relatif détecté');
+    return;
+  }
+  
+  console.log(`[prepareBindMounts] Préparation de ${bindMounts.length} dossier(s) bind-mount...`);
+  
+  for (const relativePath of bindMounts) {
+    try {
+      const fullPath = path.join(appDir, relativePath);
+      
+      // Vérifier si le dossier existe déjà
+      try {
+        await fs.access(fullPath);
+        console.log(`[prepareBindMounts] ✓ ${relativePath} existe déjà`);
+      } catch {
+        // Le dossier n'existe pas, le créer
+        console.log(`[prepareBindMounts] 📁 Création de ${relativePath}...`);
+        await fs.mkdir(fullPath, { recursive: true });
+      }
+      
+      // Appliquer les permissions ryvie:ryvie
+      console.log(`[prepareBindMounts] 🔐 Application des permissions sur ${relativePath}...`);
+      execSync(`chown -R ryvie:ryvie "${fullPath}"`, { stdio: 'pipe' });
+      console.log(`[prepareBindMounts] ✅ ${relativePath} prêt`);
+      
+    } catch (error: any) {
+      console.error(`[prepareBindMounts] ⚠️ Erreur pour ${relativePath}:`, error.message);
+      // On continue même en cas d'erreur sur un dossier
+    }
+  }
+  
+  console.log('[prepareBindMounts] ✅ Tous les bind-mounts sont prêts');
 }
 
 /**
@@ -804,6 +891,12 @@ async function updateAppFromStore(appId) {
       console.log('[Update] ⚠️ Aucun fichier .env (peut être normal pour certaines apps)');
     }
 
+    // Préparer les dossiers bind-mount AVANT docker compose up
+    sendProgressUpdate(appId, 70, 'Préparation des dossiers de données...', 'installation');
+    const composePath = path.join(appDir, composeFile);
+    const bindMounts = await parseBindMounts(composePath);
+    await prepareBindMountDirectories(appDir, bindMounts);
+    
     sendProgressUpdate(appId, 75, 'Lancement des containers...', 'installation');
     
     // Nettoyer les containers arrêtés de cette app avant de lancer (évite les conflits de namespaces)

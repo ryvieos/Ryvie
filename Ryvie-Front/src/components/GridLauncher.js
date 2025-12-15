@@ -324,12 +324,22 @@ const GridLauncher = ({
     // Construire un set des cases occupées (pour afficher un slot visible uniquement sous les apps)
     const occupied = new Set();
     // Apps 1x1
+    let maxOccupiedRow = rows - 1;
     apps.forEach((appId) => {
       const pos = layout[appId];
-      if (pos) occupied.add(`${pos.row},${pos.col}`);
+      if (pos) {
+        occupied.add(`${pos.row},${pos.col}`);
+        // Tracker la ligne max occupée pour s'assurer de rendre les slots jusqu'à cette ligne
+        if (pos.row > maxOccupiedRow) maxOccupiedRow = pos.row;
+      }
     });
+    // Widgets (pas de fond visible derrière les widgets, ils ont leur propre style)
+    // Note: on n'ajoute PAS les widgets au set occupied car ils gèrent leur propre fond
     
-    for (let row = 0; row < rows; row++) {
+    // S'assurer de rendre les slots jusqu'à la ligne max occupée (pour le fond des apps en scroll)
+    const effectiveRows = Math.max(rows, maxOccupiedRow + 1);
+    
+    for (let row = 0; row < effectiveRows; row++) {
       for (let col = 0; col < cols; col++) {
         // Vérifier si ce slot doit être highlighted
         let isHighlighted = false;
