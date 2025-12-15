@@ -88,17 +88,17 @@ async function getLatestGitHubReleaseForBranch(owner, repo, branch) {
 }
 
 /**
- * Récupère la version actuelle de Ryvie depuis Git
+ * Récupère la version actuelle de Ryvie depuis package.json
  */
 function getCurrentRyvieVersion() {
   try {
-    const tag = execSync('git describe --tags --abbrev=0', {
-      cwd: RYVIE_DIR,
-      encoding: 'utf8'
-    }).trim();
-    return tag;
+    const packageJsonPath = path.join(RYVIE_DIR, 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    const version = packageJson.version || null;
+    // Ajouter le préfixe 'v' si absent pour cohérence avec les tags GitHub
+    return version ? (version.startsWith('v') ? version : `v${version}`) : null;
   } catch (error: any) {
-    console.log('[updateCheck] Impossible de récupérer le tag Git actuel pour Ryvie');
+    console.log('[updateCheck] Impossible de lire la version depuis package.json');
     return null;
   }
 }
