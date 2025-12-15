@@ -195,15 +195,9 @@ function getRemoteLatestTag(dir) {
  */
 async function checkRyvieUpdate() {
   const currentBranch = getCurrentBranch(RYVIE_DIR);
-  
-  // Fetch tags pour s'assurer d'avoir les derniers tags distants
-  try {
-    execSync('git fetch --tags origin', { cwd: RYVIE_DIR, stdio: 'pipe' });
-  } catch (e: any) {
-    console.log('[updateCheck] Impossible de fetch les tags pour Ryvie:', e.message);
-  }
-  
-  const localTag = getLocalLatestTag(RYVIE_DIR);
+
+  // Version locale: source de vérité = package.json (pas git)
+  const currentVersion = getCurrentRyvieVersion();
   const remoteTag = getRemoteLatestTag(RYVIE_DIR);
 
   // Fallback GitHub API si pas de remote tag récupéré (ex: pas de remote, erreurs réseau)
@@ -213,13 +207,13 @@ async function checkRyvieUpdate() {
     latestVersion = fromRelease || await getLatestGitHubTag('maisonnavejul', 'Ryvie');
   }
 
-  const status = compareVersions(localTag, latestVersion);
+  const status = compareVersions(currentVersion, latestVersion);
   
   return {
     name: 'Ryvie',
     repo: 'maisonnavejul/Ryvie',
     branch: currentBranch,
-    currentVersion: localTag,
+    currentVersion,
     latestVersion,
     updateAvailable: status === 'update-available',
     status
