@@ -1,4 +1,4 @@
-# Ryvie - v0.1.15
+# Ryvie - v0.1.16
 
 Plateforme tout-en-un (backend Node.js + frontend React/Electron) pour piloter un parc d'applications Ryvie. L'interface « launcher » reproduit une grille de type iOS avec météo, widgets et gestion dynamique des apps via manifests.
 
