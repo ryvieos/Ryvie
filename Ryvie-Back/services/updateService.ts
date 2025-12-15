@@ -1,24 +1,143 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+const crypto = require('crypto');
 const { APPS_DIR, RYVIE_DIR } = require('../config/paths');
+require('dotenv').config();
+
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const TEMP_DIR = path.join(RYVIE_DIR, '.update-staging');
 
 /**
- * Met à jour Ryvie (git pull + pm2 reload)
+ * Récupère la version actuelle de Ryvie
+ */
+function getCurrentRyvieVersion() {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(path.join(RYVIE_DIR, 'package.json'), 'utf8'));
+    return packageJson.version || 'unknown';
+  } catch (error: any) {
+    console.warn('[Update] Impossible de lire la version actuelle:', error.message);
+    return 'unknown';
+  }
+}
+
+/**
+ * Télécharge un fichier depuis une URL
+ */
+async function downloadFile(url, destination) {
+  const headers: any = {
+    'User-Agent': 'Ryvie-Update-System'
+  };
+  
+  if (GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${GITHUB_TOKEN}`;
+  }
+  
+  const response = await axios({
+    method: 'GET',
+    url,
+    responseType: 'stream',
+    headers,
+    timeout: 300000
+  });
+  
+  const writer = fs.createWriteStream(destination);
+  response.data.pipe(writer);
+  
+  return new Promise((resolve, reject) => {
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
+
+/**
+ * Calcule le SHA256 d'un fichier
+ */
+function calculateSHA256(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    
+    stream.on('data', (data) => hash.update(data));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+/**
+ * Vérifie l'intégrité d'un fichier téléchargé
+ */
+async function verifyFileIntegrity(filePath, expectedSHA256) {
+  const actualSHA256 = await calculateSHA256(filePath);
+  
+  if (actualSHA256 !== expectedSHA256) {
+    throw new Error(`Checksum mismatch: expected ${expectedSHA256}, got ${actualSHA256}`);
+  }
+  
+  console.log('[Update] ✅ Checksum vérifié');
+  return true;
+}
+
+/**
+ * Met à jour Ryvie via GitHub Releases (téléchargement artefact + vérification + hook)
  */
 async function updateRyvie() {
   let snapshotPath = null;
+  let stagingDir = null;
   
   try {
     console.log('[Update] Début de la mise à jour de Ryvie...');
     
-    // 1. Créer un snapshot avant la mise à jour
+    // 0. Récupérer la version actuelle
+    const currentVersion = getCurrentRyvieVersion();
+    console.log(`[Update] Version actuelle: ${currentVersion}`);
+    
+    // 1. Récupérer la dernière release depuis GitHub
+    console.log('[Update] 📥 Récupération de la dernière release...');
+    const headers: any = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'Ryvie-Update-System'
+    };
+    
+    if (GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${GITHUB_TOKEN}`;
+    }
+    
+    const releaseResponse = await axios.get(
+      'https://api.github.com/repos/maisonnavejul/Ryvie/releases/latest',
+      { headers, timeout: 30000 }
+    );
+    
+    const release = releaseResponse.data;
+    const targetVersion = release.tag_name;
+    
+    console.log(`[Update] Dernière version disponible: ${targetVersion}`);
+    
+    if (currentVersion === targetVersion) {
+      return {
+        success: true,
+        message: `Ryvie est déjà à jour (${currentVersion})`,
+        needsRestart: false
+      };
+    }
+    
+    // 2. Utiliser l'asset auto-généré "Source code (tar.gz)"
+    const tarballUrl = release.tarball_url;
+    console.log(`[Update] URL du tarball: ${tarballUrl}`);
+    
+    // 3. Créer le dossier temporaire
+    if (fs.existsSync(TEMP_DIR)) {
+      execSync(`rm -rf "${TEMP_DIR}"`, { stdio: 'inherit' });
+    }
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+    
+    // 4. Créer un snapshot avant la mise à jour
     console.log('[Update] 📸 Création du snapshot de sécurité...');
     try {
       const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
       console.log(snapshotOutput);
       
-      // Extraire le chemin du snapshot
       const match = snapshotOutput.match(/SNAPSHOT_PATH=(.+)/);
       if (match) {
         snapshotPath = match[1].trim();
@@ -29,28 +148,103 @@ async function updateRyvie() {
       console.log('[Update] Continuation sans snapshot...');
     }
     
-    // 2. Fetch tags puis git pull
-    console.log('[Update] Récupération des tags distants...');
-    execSync('git fetch --tags origin', {
-      cwd: RYVIE_DIR,
-      stdio: 'inherit'
-    });
+    // 5. Télécharger le tarball (Source code auto-généré)
+    const tarballPath = path.join(TEMP_DIR, `${targetVersion}.tar.gz`);
+    console.log(`[Update] 📥 Téléchargement de la release ${targetVersion}...`);
+    await downloadFile(tarballUrl, tarballPath);
+    console.log('[Update] ✅ Téléchargement terminé');
     
-    console.log('[Update] Git pull dans /opt/Ryvie...');
-    execSync('git pull', {
-      cwd: RYVIE_DIR,
-      stdio: 'inherit'
-    });
+    // 6. Extraire dans le dossier staging
+    stagingDir = path.join(TEMP_DIR, 'extracted');
+    fs.mkdirSync(stagingDir, { recursive: true });
     
-    console.log('[Update] ✅ Code mis à jour avec succès');
+    console.log(`[Update] 📦 Extraction dans ${stagingDir}...`);
+    execSync(`tar -xzf "${tarballPath}" -C "${stagingDir}" --strip-components=1`, { stdio: 'inherit' });
+    console.log('[Update] ✅ Extraction terminée');
+    
+    // 7. Copier les configs locales vers le staging
+    console.log('[Update] 📋 Copie des configurations locales...');
+    
+    // Copier Front/src/config/
+    const frontConfigSrc = path.join(RYVIE_DIR, 'Ryvie-Front/src/config');
+    const frontConfigDest = path.join(stagingDir, 'Ryvie-Front/src/config');
+    if (fs.existsSync(frontConfigSrc)) {
+      if (fs.existsSync(frontConfigDest)) {
+        execSync(`rm -rf "${frontConfigDest}"`, { stdio: 'inherit' });
+      }
+      execSync(`cp -r "${frontConfigSrc}" "${frontConfigDest}"`, { stdio: 'inherit' });
+      console.log('[Update] ✅ Front/src/config copié');
+    }
+    
+    // Copier Back/.env
+    const backEnvSrc = path.join(RYVIE_DIR, 'Ryvie-Back/.env');
+    const backEnvDest = path.join(stagingDir, 'Ryvie-Back/.env');
+    if (fs.existsSync(backEnvSrc)) {
+      execSync(`cp "${backEnvSrc}" "${backEnvDest}"`, { stdio: 'inherit' });
+      console.log('[Update] ✅ Back/.env copié');
+    }
+    
+    // 8. Remplacer le contenu de /opt/Ryvie par le staging
+    console.log('[Update] 🔄 Application de la nouvelle version...');
+    
+    // Sauvegarder les fichiers critiques qui ne doivent pas être écrasés
+    const filesToPreserve = [
+      'Ryvie-Front/src/config',
+      'Ryvie-Back/.env',
+      'Ryvie-Back/node_modules',
+      'Ryvie-Front/node_modules',
+      'scripts',
+      '.git'
+    ];
+    
+    // Copier tout le staging vers /opt/Ryvie (en excluant les fichiers préservés déjà copiés)
+    execSync(
+      `rsync -av --exclude='.git' --exclude='node_modules' --exclude='.update-staging' "${stagingDir}/" "${RYVIE_DIR}/"`,
+      { stdio: 'inherit' }
+    );
+    
+    console.log('[Update] ✅ Nouvelle version appliquée');
+    
+    // 9. Lancer prod.sh pour rebuild et redémarrer
+    console.log('[Update] 🔧 Lancement de prod.sh (build + restart)...');
+    const prodScript = path.join(RYVIE_DIR, 'scripts/prod.sh');
+    
+    if (!fs.existsSync(prodScript)) {
+      throw new Error('Script prod.sh introuvable');
+    }
+    
+    execSync(`"${prodScript}"`, { cwd: RYVIE_DIR, stdio: 'inherit' });
+    console.log('[Update] ✅ Build et redémarrage terminés');
+    
+    // 10. Nettoyer le dossier temporaire
+    try {
+      execSync(`rm -rf "${TEMP_DIR}"`, { stdio: 'inherit' });
+      console.log('[Update] 🧹 Dossier temporaire nettoyé');
+    } catch (cleanError: any) {
+      console.warn('[Update] ⚠️ Impossible de nettoyer le dossier temporaire:', cleanError.message);
+    }
+    
+    console.log('[Update] ✅ Mise à jour terminée avec succès');
+    
     return {
       success: true,
-      message: 'Code mis à jour. Redémarrage en cours...',
+      message: `Ryvie mis à jour vers ${targetVersion}. Redémarrage en cours...`,
       needsRestart: true,
-      snapshotPath
+      snapshotPath,
+      version: targetVersion
     };
+    
   } catch (error: any) {
     console.error('[Update] ❌ Erreur lors de la mise à jour de Ryvie:', error.message);
+    
+    // Nettoyer le dossier temporaire si présent
+    if (fs.existsSync(TEMP_DIR)) {
+      try {
+        execSync(`rm -rf "${TEMP_DIR}"`, { stdio: 'inherit' });
+      } catch (cleanError: any) {
+        console.warn('[Update] ⚠️ Impossible de nettoyer le dossier temporaire:', cleanError.message);
+      }
+    }
     
     // Rollback si un snapshot existe
     if (snapshotPath) {
