@@ -203,7 +203,7 @@ try {
   } else {
     const defaults = {
       id: (crypto.randomUUID ? crypto.randomUUID() : 'ryvie-' + crypto.randomBytes(16).toString('hex')),
-      tokenExpirationMinutes: 15
+      tokenExpirationMinutes: 60
     };
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaults, null, 2));
     process.env.JWT_EXPIRES_MINUTES = defaults.tokenExpirationMinutes.toString();

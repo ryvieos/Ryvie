@@ -682,16 +682,19 @@
 .app-get-button {
   margin-left: auto; /* pousse le bouton à droite dans le footer */
   align-self: center; /* aligner verticalement avec la version */
-  padding: 7px 22px;
+  padding: 7px 16px;
   background: linear-gradient(135deg, #f3f4f6, #eef2ff);
   border: none;
   border-radius: 18px;
   color: #1976d2;
-  font-size: 15px;
+  font-size: clamp(11px, 2.5vw, 15px); /* Taille dynamique: min 11px, max 15px */
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
   letter-spacing: -0.01em;
+  white-space: nowrap; /* Empêche le retour à la ligne */
+  overflow: hidden;
+  text-overflow: ellipsis; /* Ajoute ... si vraiment trop long */
 }
 
 .app-get-button.installing,

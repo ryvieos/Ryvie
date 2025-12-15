@@ -40,7 +40,7 @@ updateAppFromStore(appId)
       console.log(`[InstallWorker] ✅ Installation de ${appId} terminée avec succès`);
       process.exit(0);
     } else {
-      console.error(`[InstallWorker] ❌ Échec de l'installation de ${appId}:`, result.error);
+      console.error(`[InstallWorker] ❌ Échec de l'installation de ${appId}:`, result.message || result.error);
       process.exit(1);
     }
   })

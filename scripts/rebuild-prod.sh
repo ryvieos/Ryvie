@@ -5,6 +5,16 @@
 echo "🔄 Rebuild et redémarrage en mode PRODUCTION..."
 echo ""
 
+# Installer les dépendances backend
+echo "📦 Installation des dépendances backend..."
+cd /opt/Ryvie/Ryvie-Back
+npm install
+
+# Installer les dépendances frontend
+echo "📦 Installation des dépendances frontend..."
+cd /opt/Ryvie/Ryvie-Front
+npm install
+
 # Build backend
 echo "📦 Build du backend..."
 cd /opt/Ryvie/Ryvie-Back
