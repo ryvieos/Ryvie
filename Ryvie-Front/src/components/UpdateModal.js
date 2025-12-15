@@ -134,11 +134,13 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
                 height: '80px',
                 margin: '0 auto',
                 borderRadius: '50%',
-                background: 'rgba(15, 23, 42, 0.06)',
+                background: 'rgba(34, 197, 94, 0.12)',
+                border: '2px solid rgba(34, 197, 94, 0.35)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '48px',
+                color: 'rgb(22, 163, 74)',
                 animation: 'successPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
               }}
             >
