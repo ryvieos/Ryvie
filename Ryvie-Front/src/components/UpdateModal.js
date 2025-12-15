@@ -102,8 +102,8 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0, 0, 0, 0.7)',
-        backdropFilter: 'blur(12px)',
+        background: 'rgba(0, 0, 0, 0.55)',
+        backdropFilter: 'blur(6px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -112,14 +112,15 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
       }}
     >
       <div
+        className="ryvie-update-modal-card"
         style={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          borderRadius: '24px',
-          padding: '48px',
+          background: 'var(--ryvie-update-modal-bg)',
+          borderRadius: '14px',
+          padding: '32px',
           maxWidth: '520px',
           width: '90%',
-          boxShadow: '0 24px 48px rgba(0, 0, 0, 0.3)',
-          color: 'white',
+          boxShadow: '0 16px 40px rgba(0, 0, 0, 0.22)',
+          color: 'var(--ryvie-update-modal-fg)',
           textAlign: 'center',
           animation: 'scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)'
         }}
@@ -133,7 +134,7 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
                 height: '80px',
                 margin: '0 auto',
                 borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.2)',
+                background: 'rgba(15, 23, 42, 0.06)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -150,7 +151,7 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
                 height: '80px',
                 margin: '0 auto',
                 borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.2)',
+                background: 'rgba(15, 23, 42, 0.06)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -165,8 +166,8 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
                 width: '80px',
                 height: '80px',
                 margin: '0 auto',
-                border: '4px solid rgba(255, 255, 255, 0.3)',
-                borderTop: '4px solid white',
+                border: '4px solid rgba(15, 23, 42, 0.15)',
+                borderTop: '4px solid rgba(15, 23, 42, 0.75)',
                 borderRadius: '50%',
                 animation: 'spin 1s linear infinite'
               }}
@@ -178,9 +179,8 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
         <h2
           style={{
             margin: '0 0 12px 0',
-            fontSize: '28px',
-            fontWeight: '700',
-            textShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+            fontSize: '22px',
+            fontWeight: '700'
           }}
         >
           {status === 'success' ? 'Mise à jour réussie!' : 
@@ -195,7 +195,7 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
             margin: '0 0 32px 0',
             fontSize: '16px',
             lineHeight: '1.6',
-            opacity: 0.95
+            opacity: 0.85
           }}
         >
           {message}
@@ -205,12 +205,13 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
         {targetVersion && status !== 'error' && (
           <div
             style={{
-              background: 'rgba(255, 255, 255, 0.15)',
-              borderRadius: '12px',
-              padding: '12px 20px',
+              background: 'rgba(15, 23, 42, 0.06)',
+              borderRadius: '10px',
+              padding: '10px 14px',
               marginBottom: '24px',
-              fontSize: '14px',
-              fontWeight: '600'
+              fontSize: '13px',
+              fontWeight: '600',
+              color: 'rgba(15, 23, 42, 0.85)'
             }}
           >
             Version cible: {targetVersion}
@@ -223,7 +224,7 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
             style={{
               width: '100%',
               height: '8px',
-              background: 'rgba(255, 255, 255, 0.2)',
+              background: 'rgba(15, 23, 42, 0.10)',
               borderRadius: '4px',
               overflow: 'hidden',
               marginBottom: '16px'
@@ -233,10 +234,10 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
               style={{
                 width: `${progress}%`,
                 height: '100%',
-                background: 'white',
+                background: 'rgba(15, 23, 42, 0.75)',
                 borderRadius: '4px',
                 transition: 'width 0.5s ease-out',
-                boxShadow: '0 0 12px rgba(255, 255, 255, 0.5)'
+                boxShadow: 'none'
               }}
             />
           </div>
@@ -247,7 +248,7 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
           <div
             style={{
               fontSize: '14px',
-              opacity: 0.8,
+              opacity: 0.7,
               marginBottom: '24px'
             }}
           >
@@ -262,23 +263,23 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
             style={{
               padding: '14px 32px',
               borderRadius: '12px',
-              border: 'none',
-              background: 'white',
-              color: '#667eea',
+              border: '1px solid rgba(15, 23, 42, 0.18)',
+              background: 'rgba(15, 23, 42, 0.06)',
+              color: '#0f172a',
               fontSize: '16px',
               fontWeight: '600',
               cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+              boxShadow: 'none',
               transition: 'all 0.2s',
               marginTop: '16px'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.3)';
+              e.currentTarget.style.boxShadow = 'none';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
+              e.currentTarget.style.boxShadow = 'none';
             }}
           >
             Rafraîchir la page
@@ -301,6 +302,18 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
       </div>
 
       <style>{`
+        :root {
+          --ryvie-update-modal-bg: #ffffff;
+          --ryvie-update-modal-fg: #0f172a;
+        }
+
+        @media (prefers-color-scheme: dark) {
+          :root {
+            --ryvie-update-modal-bg: #0b1220;
+            --ryvie-update-modal-fg: #e5e7eb;
+          }
+        }
+
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
