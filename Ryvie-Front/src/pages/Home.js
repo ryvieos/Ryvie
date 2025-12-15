@@ -590,6 +590,9 @@ const Home = () => {
 
   const [mounted, setMounted] = useState(false);
   const { socket, isConnected: socketConnected, serverStatus, setServerStatus } = useSocket();
+  const [updateNotificationShown, setUpdateNotificationShown] = useState(false);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState(null);
   
   // Appliquer le darkMode depuis localStorage au montage (avant le chargement backend)
   React.useLayoutEffect(() => {
@@ -1780,6 +1783,33 @@ const Home = () => {
     }
   }, [accessMode, currentUserName]);
 
+  // Vérifier les mises à jour disponibles au chargement (une seule fois par session)
+  useEffect(() => {
+    if (!accessMode || !currentUserName || updateNotificationShown) {
+      return;
+    }
+
+    const checkForUpdates = async () => {
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        const res = await axios.get(`${serverUrl}/api/settings/updates`);
+        
+        if (res.data?.ryvie?.updateAvailable) {
+          console.log('[Home] 🔔 Mise à jour Ryvie disponible:', res.data.ryvie.latestVersion);
+          setAvailableUpdate(res.data.ryvie);
+          setShowUpdateBanner(true);
+          setUpdateNotificationShown(true);
+        }
+      } catch (error) {
+        console.error('[Home] Erreur vérification mises à jour:', error.message);
+      }
+    };
+
+    // Vérifier après un court délai pour ne pas ralentir le chargement initial
+    const timeoutId = setTimeout(checkForUpdates, 2000);
+    return () => clearTimeout(timeoutId);
+  }, [accessMode, currentUserName, updateNotificationShown]);
+
 
 
   const openAppWindow = (url, useOverlay = true, appName = '') => {
@@ -2007,6 +2037,125 @@ const Home = () => {
               <div className="name">{currentUserName}</div>
             </div>
           )}
+          
+          {/* Bannière de notification de mise à jour */}
+          {showUpdateBanner && availableUpdate && (
+            <div
+              style={{
+                position: 'fixed',
+                top: '18px',
+                right: '18px',
+                zIndex: 9999,
+                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif",
+                background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                backdropFilter: 'blur(20px)',
+                borderRadius: '14px',
+                padding: '14px 14px 12px',
+                boxShadow: '0 16px 32px rgba(0, 0, 0, 0.10), 0 3px 10px rgba(0, 0, 0, 0.06)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                width: '320px',
+                animation: 'slideInRight 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                border: '1px solid rgba(15, 23, 42, 0.08)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.08) 0%, rgba(15, 23, 42, 0.04) 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    flexShrink: 0
+                  }}
+                >
+                  🔔
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      color: '#111827',
+                      marginBottom: '2px',
+                      letterSpacing: '-0.01em'
+                    }}
+                  >
+                    Mise à jour disponible
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      color: '#6b7280',
+                      lineHeight: '1.45',
+                      letterSpacing: '-0.005em'
+                    }}
+                  >
+                    Version {availableUpdate.latestVersion} est maintenant disponible
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowUpdateBanner(false)}
+                  style={{
+                    padding: '6px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'rgba(15, 23, 42, 0.4)',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                    lineHeight: 1,
+                    transition: 'all 0.2s',
+                    flexShrink: 0
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(15, 23, 42, 0.06)';
+                    e.currentTarget.style.color = 'rgba(15, 23, 42, 0.7)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(15, 23, 42, 0.4)';
+                  }}
+                  title="Fermer"
+                >
+                  ✕
+                </button>
+              </div>
+              <button
+                onClick={() => navigate('/settings#updates')}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.14)',
+                  letterSpacing: '-0.01em'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.25)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.15)';
+                }}
+              >
+                Mettre à jour
+              </button>
+            </div>
+          )}
+          
           <div className="content">
             <GridLauncher
               apps={(function() {

@@ -313,6 +313,46 @@ const Settings = () => {
     fetchData();
   }, []);
 
+  // Scroll automatique vers la section Mises à Jour si demandé via l'URL (#updates)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Support BrowserRouter et HashRouter.
+    // - BrowserRouter: /settings#updates  => window.location.hash === '#updates'
+    // - HashRouter:    /#/settings#updates => window.location.hash === '#/settings#updates'
+    const rawHash = String(window.location.hash || '');
+    const lastHashPart = rawHash.split('#').filter(Boolean).pop();
+    if (lastHashPart !== 'updates') return;
+
+    let attempts = 0;
+    const maxAttempts = 30; // ~3s
+
+    const tryScroll = () => {
+      attempts += 1;
+      const el = document.getElementById('ryvie-updates');
+      if (el) {
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Fallback: forcer le scroll window si nécessaire
+          const top = el.getBoundingClientRect().top;
+          if (typeof window !== 'undefined' && Math.abs(top) > 40) {
+            window.scrollTo({ top: window.scrollY + top - 16, behavior: 'smooth' });
+          }
+          return;
+        } catch (_) {
+          // continuer
+        }
+      }
+
+      if (attempts < maxAttempts) {
+        setTimeout(tryScroll, 100);
+      }
+    };
+
+    const t = setTimeout(tryScroll, 100);
+    return () => clearTimeout(t);
+  }, []);
+
   // Appliquer le mode sombre le plus tôt possible pour éviter le flash
   useLayoutEffect(() => {
     if (settings.darkMode) {
@@ -2363,7 +2403,7 @@ const Settings = () => {
       </section>
 
       {/* Section Mises à Jour */}
-      <section className="settings-section">
+      <section id="ryvie-updates" className="settings-section">
         <h2>🔄 Mises à Jour</h2>
         <div className="settings-card" style={{ 
           background: settings.darkMode 
