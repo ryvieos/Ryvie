@@ -1,3 +1,12 @@
 {
-    
+  "rdrive": 3010,
+  "rpictures": 3013,
+  "rtransfer": 3011,
+  "rdrop": 8080,
+  "affine": 3015,
+  "docuseal": 3020,
+  "gitlab": 8929,
+  "jellyfin": 8096,
+  "linkwarden": 3028,
+  "n8n": 5678
 }

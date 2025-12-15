@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, hasPermission } = require('../middleware/auth');
-const { getApps, getAppById, clearCache, getStoreHealth, updateAppFromStore, uninstallApp, progressEmitter } = require('../services/appStoreService');
+const { getApps, getAppById, clearCache, getStoreHealth, getRateLimitInfo, updateAppFromStore, uninstallApp, progressEmitter } = require('../services/appStoreService');
 const { checkStoreCatalogUpdate } = require('../services/updateCheckService');
 const { updateStoreCatalog } = require('../services/updateService');
 
@@ -65,6 +65,59 @@ router.get('/appstore/health', async (req: any, res: any) => {
     res.json(health);
   } catch (error: any) {
     console.error('[appStore] Erreur lors de la récupération de la santé:', error);
+    res.status(500).json({
+      status: 'error',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/appstore/rate-limit - Informations sur les limites GitHub API
+ * 
+ * IMPORTANT : Cet endpoint ne consomme AUCUNE requête GitHub !
+ * Il lit simplement les données en mémoire mises à jour lors des vraies requêtes.
+ */
+router.get('/appstore/rate-limit', async (req: any, res: any) => {
+  try {
+    const rateLimitInfo = getRateLimitInfo();
+    
+    // Calculer des informations supplémentaires
+    const info: any = { ...rateLimitInfo };
+    
+    if (rateLimitInfo.limit && rateLimitInfo.remaining !== null) {
+      info.percentUsed = ((rateLimitInfo.limit - rateLimitInfo.remaining) / rateLimitInfo.limit * 100).toFixed(1);
+      info.percentRemaining = (rateLimitInfo.remaining / rateLimitInfo.limit * 100).toFixed(1);
+    }
+    
+    if (rateLimitInfo.reset) {
+      const resetDate = new Date(rateLimitInfo.reset * 1000);
+      info.resetDate = resetDate.toISOString();
+      info.minutesUntilReset = Math.ceil((resetDate.getTime() - Date.now()) / 60000);
+    }
+    
+    // Ajouter un statut
+    if (!rateLimitInfo.limit) {
+      info.status = 'unknown';
+      info.message = 'Aucune requête GitHub effectuée encore';
+    } else if (rateLimitInfo.remaining === 0) {
+      info.status = 'exceeded';
+      info.message = 'Limite atteinte - attendez la réinitialisation';
+    } else if (rateLimitInfo.remaining < 10) {
+      info.status = 'critical';
+      info.message = 'Limite presque atteinte';
+    } else if (rateLimitInfo.remaining < rateLimitInfo.limit * 0.2) {
+      info.status = 'warning';
+      info.message = 'Moins de 20% de requêtes restantes';
+    } else {
+      info.status = 'ok';
+      info.message = 'Limite GitHub OK';
+    }
+    
+    res.set('Content-Type', 'application/json');
+    res.send(JSON.stringify(info, null, 2));
+  } catch (error: any) {
+    console.error('[appStore] Erreur lors de la récupération du rate limit:', error);
     res.status(500).json({
       status: 'error',
       error: error.message
