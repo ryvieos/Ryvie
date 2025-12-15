@@ -131,6 +131,32 @@ log "🔄 Application de la nouvelle version..."
 rsync -av --exclude='.git' --exclude='node_modules' --exclude='.update-staging' "$STAGING_DIR/" "$RYVIE_DIR/" >> "$LOG_FILE" 2>&1
 log "✅ Nouvelle version appliquée"
 
+# 5.5. Récupérer les tags git pour que git describe fonctionne
+log "🏷️  Récupération des tags git..."
+cd "$RYVIE_DIR"
+
+if [[ -d "$RYVIE_DIR/.git" ]]; then
+  # Fetch uniquement les tags (pas tout l'historique)
+  log "  Fetch des tags depuis origin..."
+  git fetch --tags origin >> "$LOG_FILE" 2>&1 || {
+    log "  ⚠️  Impossible de récupérer les tags depuis origin"
+  }
+  
+  # Vérifier que le tag cible existe localement
+  if git rev-parse "$TARGET_VERSION" >/dev/null 2>&1; then
+    log "  ✅ Tag $TARGET_VERSION disponible localement"
+    # Checkout le tag pour que git describe fonctionne correctement
+    git checkout "$TARGET_VERSION" >> "$LOG_FILE" 2>&1 || {
+      log "  ⚠️  Impossible de checkout le tag, git describe utilisera le tag le plus proche"
+    }
+  else
+    log "  ⚠️  Tag $TARGET_VERSION non trouvé localement"
+  fi
+else
+  log "  ⚠️  Pas de dépôt git (.git absent), git describe ne fonctionnera pas"
+  log "  💡 Conseil: cloner le repo au lieu d'utiliser un tarball pour conserver l'historique git"
+fi
+
 # 6. Rebuild et redémarrage
 log "🔧 Build et redémarrage de Ryvie (mode: $MODE)..."
 

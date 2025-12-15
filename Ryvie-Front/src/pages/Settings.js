@@ -11,6 +11,7 @@ import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../u
 import { useSocket } from '../contexts/SocketContext';
 import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo, endSession } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
+import UpdateModal from '../components/UpdateModal';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -226,6 +227,9 @@ const Settings = () => {
   const [updates, setUpdates] = useState(null);
   const [updatesLoading, setUpdatesLoading] = useState(false);
   const [updateInProgress, setUpdateInProgress] = useState(null); // 'ryvie' ou nom de l'app
+  // États pour le modal d'update
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateTargetVersion, setUpdateTargetVersion] = useState(null);
 
   useEffect(() => {
     // Restaurer la session depuis les paramètres URL si preserve_session=true
@@ -1077,15 +1081,10 @@ const Settings = () => {
       });
       
       if (response.data.success) {
-        await showConfirm(
-          '✅ Mise à jour réussie',
-          'Ryvie a été mis à jour avec succès ! Le serveur va redémarrer dans quelques secondes.',
-          true // Mode info (un seul bouton OK)
-        );
-        // Attendre un peu puis recharger la page
-        setTimeout(() => {
-          window.location.reload();
-        }, 3000);
+        // Afficher le modal avec spinner et polling
+        setUpdateTargetVersion(response.data.version || 'latest');
+        setShowUpdateModal(true);
+        setUpdateInProgress(null);
       } else {
         await showConfirm(
           '❌ Erreur de mise à jour',
@@ -3569,6 +3568,14 @@ const Settings = () => {
           }
         }
       `}</style>
+
+      {/* Modal de mise à jour avec spinner et polling */}
+      <UpdateModal 
+        isOpen={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        targetVersion={updateTargetVersion}
+        accessMode={accessMode}
+      />
     </div>
   );
 };
