@@ -222,12 +222,28 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
         console.log(`[appStore] ✅ Installation de ${appId} terminée avec succès`);
       } else {
         console.error(`[appStore] ❌ Installation de ${appId} échouée avec le code ${code}`);
+        
+        // Émettre un événement de progression d'erreur pour notifier le frontend
+        progressEmitter.emit('progress', {
+          appId: appId,
+          progress: 0,
+          message: 'Erreur lors de l\'installation/mise à jour',
+          stage: 'error'
+        });
       }
     });
     
     worker.on('error', (error) => {
       console.error(`[appStore] ❌ Erreur du worker pour ${appId}:`, error);
       activeWorkers.delete(appId);
+      
+      // Émettre un événement de progression d'erreur pour notifier le frontend
+      progressEmitter.emit('progress', {
+        appId: appId,
+        progress: 0,
+        message: error.message || 'Erreur lors de l\'installation/mise à jour',
+        stage: 'error'
+      });
     });
     
   } catch (error: any) {
