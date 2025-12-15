@@ -63,6 +63,17 @@
   }
 }
 
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
 .weather-modal-header {
   position: relative;
   padding: 18px 20px 16px;

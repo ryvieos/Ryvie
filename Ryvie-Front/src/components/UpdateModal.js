@@ -166,8 +166,8 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
                 width: '80px',
                 height: '80px',
                 margin: '0 auto',
-                border: '4px solid rgba(15, 23, 42, 0.15)',
-                borderTop: '4px solid rgba(15, 23, 42, 0.75)',
+                border: '4px solid rgba(14, 165, 233, 0.22)',
+                borderTop: '4px solid rgba(34, 211, 238, 0.95)',
                 borderRadius: '50%',
                 animation: 'spin 1s linear infinite'
               }}
@@ -224,7 +224,7 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
             style={{
               width: '100%',
               height: '8px',
-              background: 'rgba(15, 23, 42, 0.10)',
+              background: 'rgba(14, 165, 233, 0.16)',
               borderRadius: '4px',
               overflow: 'hidden',
               marginBottom: '16px'
@@ -234,7 +234,7 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
               style={{
                 width: `${progress}%`,
                 height: '100%',
-                background: 'rgba(15, 23, 42, 0.75)',
+                background: 'linear-gradient(90deg, #0ea5e9 0%, #22d3ee 55%, #38bdf8 100%)',
                 borderRadius: '4px',
                 transition: 'width 0.5s ease-out',
                 boxShadow: 'none'
@@ -305,6 +305,12 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
         :root {
           --ryvie-update-modal-bg: #ffffff;
           --ryvie-update-modal-fg: #0f172a;
+        }
+
+        :root {
+          --ryvie-brand-1: #0ea5e9;
+          --ryvie-brand-2: #22d3ee;
+          --ryvie-brand-3: #38bdf8;
         }
 
         @media (prefers-color-scheme: dark) {

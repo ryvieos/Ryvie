@@ -593,6 +593,7 @@ const Home = () => {
   const [updateNotificationShown, setUpdateNotificationShown] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState(null);
+  const [updateBannerClosing, setUpdateBannerClosing] = useState(false);
   
   // Appliquer le darkMode depuis localStorage au montage (avant le chargement backend)
   React.useLayoutEffect(() => {
@@ -2056,7 +2057,9 @@ const Home = () => {
                 flexDirection: 'column',
                 gap: '10px',
                 width: '320px',
-                animation: 'slideInRight 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                animation: updateBannerClosing
+                  ? 'slideOutRight 0.32s cubic-bezier(0.4, 0, 1, 1) forwards'
+                  : 'slideInRight 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
                 border: '1px solid rgba(15, 23, 42, 0.08)'
               }}
             >
@@ -2100,7 +2103,14 @@ const Home = () => {
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowUpdateBanner(false)}
+                  onClick={() => {
+                    if (updateBannerClosing) return;
+                    setUpdateBannerClosing(true);
+                    setTimeout(() => {
+                      setShowUpdateBanner(false);
+                      setUpdateBannerClosing(false);
+                    }, 320);
+                  }}
                   style={{
                     padding: '6px',
                     borderRadius: '10px',
@@ -2127,7 +2137,10 @@ const Home = () => {
                 </button>
               </div>
               <button
-                onClick={() => navigate('/settings#updates')}
+                onClick={() => {
+                  if (updateBannerClosing) return;
+                  navigate('/settings#updates');
+                }}
                 style={{
                   width: '100%',
                   padding: '10px 14px',
