@@ -4,7 +4,6 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const { EventEmitter } = require('events');
-const yaml = require('js-yaml');
 const { STORE_CATALOG, RYVIE_DIR, MANIFESTS_DIR, APPS_DIR } = require('../config/paths');
 
 // Configuration
@@ -23,6 +22,59 @@ let metadata = {
   releaseTag: null,
   lastCheck: null
 };
+
+// Rate limit info in memory
+let rateLimitInfo = {
+  limit: null,
+  remaining: null,
+  reset: null,
+  lastCheck: null
+};
+
+/**
+ * Log et met à jour les informations de rate limit GitHub
+ */
+function logRateLimit(headers, context = 'API call') {
+  if (!headers) return;
+
+  const limit = headers['x-ratelimit-limit'];
+  const remaining = headers['x-ratelimit-remaining'];
+  const reset = headers['x-ratelimit-reset'];
+
+  if (limit && remaining && reset) {
+    rateLimitInfo = {
+      limit: parseInt(limit),
+      remaining: parseInt(remaining),
+      reset: parseInt(reset),
+      lastCheck: new Date().toISOString()
+    };
+
+    const resetDate = new Date(parseInt(reset) * 1000);
+    const percentUsed = ((limit - remaining) / limit * 100).toFixed(1);
+
+    console.log(`[GitHub Rate Limit] ${context}: ${remaining}/${limit} restantes (${percentUsed}% utilisé) - Reset: ${resetDate.toLocaleTimeString()}`);
+
+    // Avertissement si moins de 20% restant
+    if (remaining < limit * 0.2) {
+      console.warn(`[GitHub Rate Limit] ⚠️  ATTENTION: Seulement ${remaining} requêtes restantes sur ${limit}!`);
+      /*if (!GITHUB_TOKEN) {
+        console.warn(`[GitHub Rate Limit] 💡 Ajoutez un GITHUB_TOKEN dans .env pour passer de 60 à 5000 requêtes/heure`);
+      }*/
+    }
+
+    // Erreur critique si moins de 10 requêtes
+    if (remaining < 10) {
+      console.error(`[GitHub Rate Limit] 🚨 CRITIQUE: Seulement ${remaining} requêtes restantes! Reset dans ${Math.ceil((resetDate.getTime() - Date.now()) / 60000)} minutes`);
+    }
+  }
+}
+
+/**
+ * Récupère les informations actuelles de rate limit
+ */
+function getRateLimitInfo() {
+  return { ...rateLimitInfo, hasToken: !!GITHUB_TOKEN };
+}
 
 // Système d'événements pour les mises à jour de progression
 const progressEmitter = new EventEmitter();
@@ -218,6 +270,9 @@ async function getLatestRelease() {
     });
     console.log('GITHUB_API_URL:', GITHUB_API_URL);
     
+    // Log rate limit après chaque requête API
+    logRateLimit(response.headers, 'getLatestRelease');
+    
     return {
       tag: response.data.tag_name,
       name: response.data.name,
@@ -301,92 +356,6 @@ async function saveMetadata() {
 }
 
 /**
- * Parse un fichier docker-compose.yml et extrait tous les bind-mounts relatifs
- * @param {string} composePath - Chemin absolu vers le fichier docker-compose.yml
- * @returns {Promise<string[]>} - Liste des chemins relatifs de bind-mounts (ex: ['./data', './config'])
- */
-async function parseBindMounts(composePath) {
-  try {
-    const composeContent = await fs.readFile(composePath, 'utf8');
-    const composeData = yaml.load(composeContent);
-    
-    const bindMounts = new Set();
-    
-    // Parcourir tous les services
-    if (composeData.services) {
-      for (const serviceName in composeData.services) {
-        const service = composeData.services[serviceName];
-        
-        if (service.volumes && Array.isArray(service.volumes)) {
-          for (const volume of service.volumes) {
-            // Les volumes peuvent être des strings ou des objets
-            let volumeStr = '';
-            if (typeof volume === 'string') {
-              volumeStr = volume;
-            } else if (volume.source) {
-              volumeStr = volume.source;
-            }
-            
-            // Détecter les bind-mounts relatifs (commence par ./ ou ../)
-            if (volumeStr.startsWith('./') || volumeStr.startsWith('../')) {
-              // Extraire la partie avant le ':' (le chemin host)
-              const hostPath = volumeStr.split(':')[0];
-              bindMounts.add(hostPath);
-            }
-          }
-        }
-      }
-    }
-    
-    return Array.from(bindMounts);
-  } catch (error: any) {
-    console.error(`[parseBindMounts] Erreur lors du parsing de ${composePath}:`, error.message);
-    return [];
-  }
-}
-
-/**
- * Crée et configure les permissions des dossiers bind-mount
- * @param {string} appDir - Répertoire de l'application
- * @param {string[]} bindMounts - Liste des chemins relatifs à créer
- */
-async function prepareBindMountDirectories(appDir, bindMounts) {
-  if (!bindMounts || bindMounts.length === 0) {
-    console.log('[prepareBindMounts] Aucun bind-mount relatif détecté');
-    return;
-  }
-  
-  console.log(`[prepareBindMounts] Préparation de ${bindMounts.length} dossier(s) bind-mount...`);
-  
-  for (const relativePath of bindMounts) {
-    try {
-      const fullPath = path.join(appDir, relativePath);
-      
-      // Vérifier si le dossier existe déjà
-      try {
-        await fs.access(fullPath);
-        console.log(`[prepareBindMounts] ✓ ${relativePath} existe déjà`);
-      } catch {
-        // Le dossier n'existe pas, le créer
-        console.log(`[prepareBindMounts] 📁 Création de ${relativePath}...`);
-        await fs.mkdir(fullPath, { recursive: true });
-      }
-      
-      // Appliquer les permissions ryvie:ryvie
-      console.log(`[prepareBindMounts] 🔐 Application des permissions sur ${relativePath}...`);
-      execSync(`chown -R ryvie:ryvie "${fullPath}"`, { stdio: 'pipe' });
-      console.log(`[prepareBindMounts] ✅ ${relativePath} prêt`);
-      
-    } catch (error: any) {
-      console.error(`[prepareBindMounts] ⚠️ Erreur pour ${relativePath}:`, error.message);
-      // On continue même en cas d'erreur sur un dossier
-    }
-  }
-  
-  console.log('[prepareBindMounts] ✅ Tous les bind-mounts sont prêts');
-}
-
-/**
  * Récupère apps.json depuis les assets d'une release
  */
 async function fetchAppsFromRelease(release) {
@@ -411,6 +380,7 @@ async function fetchAppsFromRelease(release) {
       headers
     });
     
+    logRateLimit(response.headers, 'fetchAppsFromRelease');
     console.log(`[appStore] apps.json récupéré depuis la release: ${release.tag}`);
     return response.data;
   } catch (error: any) {
@@ -476,6 +446,7 @@ async function downloadAppFromRepoArchive(release, appId) {
       timeout: 300000
     });
     
+    logRateLimit(response.headers, `downloadApp: ${appId}`);
     const allItems = response.data;
     
     if (!Array.isArray(allItems) || allItems.length === 0) {
@@ -597,9 +568,12 @@ async function downloadAppFromRepoArchive(release, appId) {
     if (error.response?.status === 404) {
       throw new Error(`Application "${appId}" non trouvée dans le repo ${repoOwner}/${repoName}`);
     } else if (error.response?.status === 403) {
-      const rateLimitRemaining = error.response.headers['x-ratelimit-remaining'];
-      if (rateLimitRemaining === '0') {
-        throw new Error(`Limite de rate GitHub atteinte. Ajoutez un GITHUB_TOKEN pour augmenter la limite.`);
+      // Vérifier si c'est une erreur de rate limit
+      if (error.response.data?.message?.includes('rate limit')) {
+        throw new Error(
+          `RATE_LIMIT_EXCEEDED: Vous avez atteint la limite d'installations pour cette heure. ` +
+          `Veuillez attendre quelques minutes avant de réessayer.`
+        );
       }
       throw new Error(`Accès refusé par GitHub: ${error.response.data?.message || 'Erreur 403'}`);
     } else if (error.response?.status === 401) {
@@ -632,6 +606,7 @@ async function downloadDirectoryRecursive(apiUrl, destinationPath, branch, heade
       timeout: 30000
     });
     
+    logRateLimit(response.headers, `downloadDirectory: ${destinationPath.split('/').pop()}`);
     const items = response.data;
     
     // Créer le dossier de destination
@@ -891,12 +866,6 @@ async function updateAppFromStore(appId) {
       console.log('[Update] ⚠️ Aucun fichier .env (peut être normal pour certaines apps)');
     }
 
-    // Préparer les dossiers bind-mount AVANT docker compose up
-    sendProgressUpdate(appId, 70, 'Préparation des dossiers de données...', 'installation');
-    const composePath = path.join(appDir, composeFile);
-    const bindMounts = await parseBindMounts(composePath);
-    await prepareBindMountDirectories(appDir, bindMounts);
-    
     sendProgressUpdate(appId, 75, 'Lancement des containers...', 'installation');
     
     // Nettoyer les containers arrêtés de cette app avant de lancer (évite les conflits de namespaces)
@@ -1348,6 +1317,7 @@ export = {
   getAppById,
   clearCache,
   getStoreHealth,
+  getRateLimitInfo,
   // Exports pour les services de check/update
   getLatestRelease,
   fetchAppsFromRelease,

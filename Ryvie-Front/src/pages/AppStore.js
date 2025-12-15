@@ -799,6 +799,7 @@ try {
       if (remote < local) return 'ahead';
     }
 
+    
     return 'up-to-date';
   };
 
