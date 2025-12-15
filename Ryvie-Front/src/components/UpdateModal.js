@@ -42,6 +42,8 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
   const startPolling = () => {
     let attempts = 0;
     const maxAttempts = 60; // 60 tentatives = 2 minutes max
+    let consecutiveReady = 0;
+    const requiredConsecutiveReady = 3;
 
     pollingIntervalRef.current = setInterval(async () => {
       attempts++;
@@ -51,24 +53,39 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
 
       try {
         const serverUrl = getServerUrl(accessMode);
-        const response = await axios.get(`${serverUrl}/api/health`, { 
+
+        // 1) Check health (peut revenir avant que tout soit vraiment prêt)
+        const health = await axios.get(`${serverUrl}/api/health`, {
           timeout: 3000,
           validateStatus: (status) => status === 200
         });
 
-        if (response.status === 200) {
-          // Backend est de retour!
+        // 2) Check endpoint authentifié (réduit les faux positifs)
+        const authed = await axios.get(`${serverUrl}/api/user/preferences`, {
+          timeout: 4000,
+          validateStatus: (status) => status === 200
+        });
+
+        if (health.status === 200 && authed.status === 200) {
+          consecutiveReady += 1;
+        } else {
+          consecutiveReady = 0;
+        }
+
+        if (consecutiveReady >= requiredConsecutiveReady) {
+          // Backend + routes principales stables sur plusieurs checks
           stopPolling();
           setStatus('success');
           setMessage('Mise à jour terminée avec succès!');
           setProgress(100);
 
-          // Attendre 1 seconde puis recharger la page
+          // Laisser un peu de marge au front pour recharger les assets et éviter l'écran "impossible de se connecter"
           setTimeout(() => {
             window.location.reload();
-          }, 1000);
+          }, 2500);
         }
       } catch (error) {
+        consecutiveReady = 0;
         // Backend pas encore prêt, continuer le polling
         if (attempts >= maxAttempts) {
           // Timeout après 2 minutes
