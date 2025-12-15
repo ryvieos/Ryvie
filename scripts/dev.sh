@@ -17,6 +17,16 @@ pm2 delete ryvie-backend-prod ryvie-frontend-prod 2>/dev/null || true
 # Arrêter les anciens processus dev s'ils existent
 pm2 delete ryvie-backend-dev ryvie-frontend-dev 2>/dev/null || true
 
+# Installer les dépendances backend
+echo "📦 Installation des dépendances backend..."
+cd /opt/Ryvie/Ryvie-Back
+npm install
+
+# Installer les dépendances frontend
+echo "📦 Installation des dépendances frontend..."
+cd /opt/Ryvie/Ryvie-Front
+npm install
+
 # Build initial du backend (nécessaire pour nodemon)
 echo "📦 Build initial du backend..."
 cd /opt/Ryvie/Ryvie-Back

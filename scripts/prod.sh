@@ -8,6 +8,16 @@ echo ""
 pm2 stop ryvie-backend-dev ryvie-frontend-dev 2>/dev/null || true
 pm2 delete ryvie-backend-dev ryvie-frontend-dev 2>/dev/null || true
 
+# Installer les dépendances backend
+echo "📦 Installation des dépendances backend..."
+cd /opt/Ryvie/Ryvie-Back
+npm install
+
+# Installer les dépendances frontend
+echo "📦 Installation des dépendances frontend..."
+cd /opt/Ryvie/Ryvie-Front
+npm install
+
 # Build backend
 echo "📦 Build du backend..."
 cd /opt/Ryvie/Ryvie-Back
