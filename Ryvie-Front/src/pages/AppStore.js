@@ -71,6 +71,7 @@ const AppStore = () => {
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(false);
   const [installProgress, setInstallProgress] = useState({});
+  const [rateLimit, setRateLimit] = useState(null);
 
   // Ajouter un log avec timestamp
   const addLog = (message, type = 'info') => {
@@ -902,6 +903,39 @@ try {
 
   return (
     <div className="appstore-container">
+
+      {/* Avertissement rate limit critique */}
+      {rateLimit && rateLimit.status === 'critical' && (() => {
+        const remainingInstalls = Math.floor(rateLimit.remaining / 3);
+        return (
+          <div className="rate-limit-banner critical">
+            <FontAwesomeIcon icon={faExclamationTriangle} className="banner-icon" />
+            <div className="banner-content">
+              <strong>Limite d'installations presque atteinte</strong>
+              <span>
+                Seulement {remainingInstalls} installation{remainingInstalls > 1 ? 's' : ''} possible{remainingInstalls > 1 ? 's' : ''} restante{remainingInstalls > 1 ? 's' : ''} cette heure. 
+                Réinitialisation dans {rateLimit.minutesUntilReset} minute{rateLimit.minutesUntilReset > 1 ? 's' : ''}.
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Avertissement rate limit warning */}
+      {rateLimit && rateLimit.status === 'warning' && (() => {
+        const remainingInstalls = Math.floor(rateLimit.remaining / 3);
+        const totalInstalls = Math.floor(rateLimit.limit / 3);
+        return (
+          <div className="rate-limit-banner warning">
+            <FontAwesomeIcon icon={faInfoCircle} className="banner-icon" />
+            <div className="banner-content">
+              <span>
+                {remainingInstalls}/{totalInstalls} installations restantes cette heure
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Section Featured Apps */}
       {featuredApps.length > 0 && (
