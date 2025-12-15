@@ -166,8 +166,8 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
                 width: '80px',
                 height: '80px',
                 margin: '0 auto',
-                border: '4px solid rgba(14, 165, 233, 0.22)',
-                borderTop: '4px solid rgba(34, 211, 238, 0.95)',
+                border: '4px solid rgba(30, 58, 138, 0.22)',
+                borderTop: '4px solid rgba(2, 132, 199, 0.95)',
                 borderRadius: '50%',
                 animation: 'spin 1s linear infinite'
               }}
@@ -224,7 +224,7 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
             style={{
               width: '100%',
               height: '8px',
-              background: 'rgba(14, 165, 233, 0.16)',
+              background: 'rgba(30, 58, 138, 0.14)',
               borderRadius: '4px',
               overflow: 'hidden',
               marginBottom: '16px'
@@ -234,7 +234,7 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
               style={{
                 width: `${progress}%`,
                 height: '100%',
-                background: 'linear-gradient(90deg, #0ea5e9 0%, #22d3ee 55%, #38bdf8 100%)',
+                background: 'linear-gradient(90deg, #1e3a8a 0%, #1d4ed8 55%, #0284c7 100%)',
                 borderRadius: '4px',
                 transition: 'width 0.5s ease-out',
                 boxShadow: 'none'
