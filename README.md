@@ -1,3 +1,7 @@
+<p align="center">
+   <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="180" />
+ </p>
+ 
 # Ryvie
  
  Ryvie est un **OS + une plateforme** qui transforme une machine (mini‑PC, serveur, etc.) en **cloud personnel** simple à piloter.
@@ -50,3 +54,19 @@
  - CPU: **4 cœurs minimum**
  - RAM: **8 Go minimum** (**16 Go recommandé**)
  - Stockage: **50 Go minimum**
+
+ ## Contributing
+ 
+ Les contributions sont les bienvenues.
+ 
+ - **Issues**: ouvre une issue avec un maximum de détails (contexte, étapes pour reproduire, logs, captures).
+ - **Pull requests**:
+   - crée une branche dédiée
+   - explique clairement le problème et la solution
+   - évite les changements non liés (un sujet par PR)
+ 
+ ## Disclaimer
+ 
+ Ce projet est fourni **"tel quel"**, sans garantie d'aucune sorte.
+ 
+ L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de données, indisponibilités ou autres problèmes résultant de l'utilisation (ou de l'impossibilité d'utiliser) Ryvie.
