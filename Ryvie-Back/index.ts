@@ -58,6 +58,7 @@ const systemRouter = require('./routes/system');
 const storageRouter = require('./routes/storage');
 const userPreferencesRouter = require('./routes/userPreferences');
 const appStoreRouter = require('./routes/appStore');
+const healthRouter = require('./routes/health');
 const { getAppStatus } = require('./services/dockerService');
 const { setupRealtime } = require('./services/realtimeService');
 const { getLocalIP, getPrivateIP, waitForWifiInterface, listNetworkInterfaces } = require('./utils/network');
@@ -170,6 +171,9 @@ app.use('/api', settingsRouter);
 
 // Mount App Store routes
 app.use('/api', appStoreRouter);
+
+// Mount Health check route (for update polling)
+app.use('/api', healthRouter);
 
 // Realtime (Socket.IO + Docker events) handled by services/realtimeService.js
 let realtime;

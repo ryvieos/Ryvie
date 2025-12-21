@@ -67,4 +67,20 @@ echo "▶️ Redémarrage containerd & Docker…"
 systemctl start containerd 2>/dev/null || true
 systemctl start docker 2>/dev/null || true
 
+# Redémarrer Ryvie après rollback
+echo "🔄 Redémarrage de Ryvie..."
+RYVIE_DIR="/opt/Ryvie"
+
+# Détecter le mode actuel (dev ou prod) via PM2
+if pm2 list 2>/dev/null | grep -q "ryvie-backend-dev"; then
+  echo "  Mode DEV détecté, relance via dev.sh"
+  cd "$RYVIE_DIR" && ./scripts/dev.sh 2>&1 | head -20
+elif pm2 list 2>/dev/null | grep -q "ryvie-backend-prod"; then
+  echo "  Mode PROD détecté, relance via prod.sh"
+  cd "$RYVIE_DIR" && ./scripts/prod.sh 2>&1 | head -20
+else
+  echo "  ⚠️ Aucun mode PM2 détecté, tentative dev.sh par défaut"
+  cd "$RYVIE_DIR" && ./scripts/dev.sh 2>&1 | head -20
+fi
+
 echo "✅ Rollback terminé depuis : $SET_PATH"

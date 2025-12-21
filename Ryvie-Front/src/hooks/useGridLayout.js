@@ -237,14 +237,68 @@ const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = 
         console.log('[useGridLayout] ✅ Réorganisation terminée, ancres préservées');
       }
 
-      // Les nouveaux items (apps/widgets nouvellement installés) sont placés par le BACKEND
-      // Le frontend ne fait qu'afficher les positions reçues via initialLayout
-      // Si un item n'a pas de position, c'est que le backend n'a pas encore calculé sa position
-      // → Home.js va recharger les préférences depuis le backend pour récupérer la position
+      // Placer les nouveaux items sans position dans les cases libres
       const itemsWithoutPosition = items.filter(item => !newLayout[item.id]);
       if (itemsWithoutPosition.length > 0) {
-        console.log(`[useGridLayout] ⏳ Items en attente de position du backend:`, itemsWithoutPosition.map(i => i.id).join(', '));
-        // NE PAS calculer de position ici - le backend s'en charge
+        console.log(`[useGridLayout] 🆕 Nouveaux items à placer:`, itemsWithoutPosition.map(i => i.id).join(', '));
+        
+        // Grille d'occupation pour trouver les cases libres
+        const occupied = new Set();
+        const mark = (c, r, w, h) => {
+          for (let rr = r; rr < r + h; rr++) {
+            for (let cc = c; cc < c + w; cc++) {
+              occupied.add(`${rr},${cc}`);
+            }
+          }
+        };
+        const canPlace = (c, r, w, h) => {
+          if (c < 0 || r < 0 || c + w > cols) return false;
+          for (let rr = r; rr < r + h; rr++) {
+            for (let cc = c; cc < c + w; cc++) {
+              if (occupied.has(`${rr},${cc}`)) return false;
+            }
+          }
+          return true;
+        };
+        
+        // Marquer toutes les positions déjà occupées
+        Object.entries(newLayout).forEach(([id, pos]) => {
+          if (pos) {
+            const w = pos.w || 1;
+            const h = pos.h || 1;
+            mark(pos.col, pos.row, w, h);
+          }
+        });
+        
+        // Placer chaque nouvel item
+        itemsWithoutPosition.forEach(item => {
+          const w = item.w || 1;
+          const h = item.h || 1;
+          
+          // Chercher la première position libre
+          let placed = false;
+          for (let r = 0; r < 100 && !placed; r++) {
+            for (let c = 0; c <= cols - w && !placed; c++) {
+              if (canPlace(c, r, w, h)) {
+                newLayout[item.id] = { col: c, row: r, w, h };
+                mark(c, r, w, h);
+                
+                // Créer une ancre pour ce nouvel item
+                const anchorIndex = r * BASE_COLS + c;
+                setAnchors(prev => ({ ...prev, [item.id]: anchorIndex }));
+                referenceAnchorsRef.current = { ...referenceAnchorsRef.current, [item.id]: anchorIndex };
+                
+                console.log(`[useGridLayout] ✅ ${item.id} placé à (${c}, ${r})`);
+                placed = true;
+                hasChanges = true;
+              }
+            }
+          }
+          
+          if (!placed) {
+            console.warn(`[useGridLayout] ⚠️ Impossible de placer ${item.id}`);
+          }
+        });
       }
 
       return hasChanges ? newLayout : prev;
