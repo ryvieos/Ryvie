@@ -1,0 +1,58 @@
+Ryvie Source-Available License (RSAL) v1.1
+
+Copyright (c) 2025 Ryvie
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to use, copy, modify, and distribute the Software, subject to the conditions below.
+
+IMPORTANT: This is a “source-available” license. It is not an OSI-approved open source license.
+
+1. Definitions
+
+1.1 “You” means the individual or legal entity exercising permissions granted by this License.
+
+1.2 “Provide the Software as a Service” or “SaaS” means making the Software (or a modified version) available to third parties over a network (including the Internet) as a hosted or managed offering, where the primary value is access to the Software’s functionality.
+
+1.3 “Hardware Distribution” means selling, leasing, licensing, or otherwise distributing hardware (including appliances, servers, NAS devices, gateways, embedded devices, or “boxes”) with the Software pre-installed, bundled, or configured for use, where the Software is a material part of the hardware’s value proposition.
+
+1.4 “Modification” means any change to the Software, including additions, deletions, or derivative works.
+
+2. Permitted Uses
+
+2.1 Self-hosting / internal use. You may use the Software for personal use, internal business use, education, research, and evaluation.
+
+2.2 Redistribution (free). You may redistribute unmodified copies of the Software free of charge, provided they remain under this RSAL v1.1 License and you comply with Section 4.
+
+3. Prohibited Uses (No SaaS / No Hardware Resale)
+
+3.1 No SaaS / managed service. You may not Provide the Software as a Service, whether for a fee or otherwise, without prior written permission from the Copyright Holder.
+
+3.2 No Hardware Distribution. You may not engage in Hardware Distribution without prior written permission from the Copyright Holder.
+
+3.3 No selling the Software. You may not sell, license for a fee, or otherwise monetize distribution of the Software itself, including offering paid downloads, paid access keys, or paid redistribution, without prior written permission from the Copyright Holder.
+
+4. Conditions for Redistribution and Modifications
+
+4.1 License notice. Any redistribution of the Software (modified or unmodified) must include:
+
+(a) a copy of this License; and
+(b) all copyright notices from the Software.
+
+4.2 Publication of modifications (copyleft-like requirement). If you distribute a Modification, or make a Modification available to third parties (including via network access that is not prohibited under Section 3), you must make the complete corresponding source code of the Modification publicly available at no charge under this same License, and you must clearly document how to obtain it.
+
+Any Modification must not be designed to enable or facilitate Prohibited Uses as defined in Section 3.
+
+4.3 No additional restrictions. You may not impose legal terms or technological measures that restrict the rights granted by this License on recipients of the Software.
+
+5. Trademarks
+
+This License does not grant permission to use the trade names, trademarks, service marks, or logos of the Copyright Holder, including “Ryvie”, except as required for reasonable and customary use in describing the origin of the Software. Commercial use of the name or logo in marketing, sales, or products is prohibited without written permission.
+
+6. Disclaimer of Warranty
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+7. How to obtain commercial / OEM / SaaS permission
+
+Written permission must be obtained prior to any SaaS offering, commercial redistribution, hardware distribution, OEM/third-party appliance distribution, or selling the Software.
+
+For written permission, contact: contact@ryvie.fr

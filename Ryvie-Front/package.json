@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Une application Electron avec React",
   "main": "main.js",
+  "license": "SEE LICENSE IN ../LICENSE",
   "homepage": "./",
   "scripts": {
     "start": "concurrently \"npm run dev\" \"npm run electron\"",

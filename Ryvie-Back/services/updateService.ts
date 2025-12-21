@@ -1,86 +1,170 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+const crypto = require('crypto');
 const { APPS_DIR, RYVIE_DIR } = require('../config/paths');
+require('dotenv').config();
+
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const TEMP_DIR = path.join(RYVIE_DIR, '.update-staging');
 
 /**
- * Met à jour Ryvie (git pull + pm2 reload)
+ * Récupère la version actuelle de Ryvie
+ */
+function getCurrentRyvieVersion() {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(path.join(RYVIE_DIR, 'package.json'), 'utf8'));
+    return packageJson.version || 'unknown';
+  } catch (error: any) {
+    console.warn('[Update] Impossible de lire la version actuelle:', error.message);
+    return 'unknown';
+  }
+}
+
+/**
+ * Télécharge un fichier depuis une URL
+ */
+async function downloadFile(url, destination) {
+  const headers: any = {
+    'User-Agent': 'Ryvie-Update-System'
+  };
+  
+  if (GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${GITHUB_TOKEN}`;
+  }
+  
+  const response = await axios({
+    method: 'GET',
+    url,
+    responseType: 'stream',
+    headers,
+    timeout: 300000
+  });
+  
+  const writer = fs.createWriteStream(destination);
+  response.data.pipe(writer);
+  
+  return new Promise((resolve, reject) => {
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
+
+/**
+ * Calcule le SHA256 d'un fichier
+ */
+function calculateSHA256(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    
+    stream.on('data', (data) => hash.update(data));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+/**
+ * Vérifie l'intégrité d'un fichier téléchargé
+ */
+async function verifyFileIntegrity(filePath, expectedSHA256) {
+  const actualSHA256 = await calculateSHA256(filePath);
+  
+  if (actualSHA256 !== expectedSHA256) {
+    throw new Error(`Checksum mismatch: expected ${expectedSHA256}, got ${actualSHA256}`);
+  }
+  
+  console.log('[Update] ✅ Checksum vérifié');
+  return true;
+}
+
+/**
+ * Met à jour Ryvie via script externe indépendant
  */
 async function updateRyvie() {
-  let snapshotPath = null;
-  
   try {
     console.log('[Update] Début de la mise à jour de Ryvie...');
     
-    // 1. Créer un snapshot avant la mise à jour
-    console.log('[Update] 📸 Création du snapshot de sécurité...');
-    try {
-      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
-      console.log(snapshotOutput);
-      
-      // Extraire le chemin du snapshot
-      const match = snapshotOutput.match(/SNAPSHOT_PATH=(.+)/);
-      if (match) {
-        snapshotPath = match[1].trim();
-        console.log(`[Update] Snapshot créé: ${snapshotPath}`);
-      }
-    } catch (snapError: any) {
-      console.error('[Update] ⚠️ Impossible de créer le snapshot:', snapError.message);
-      console.log('[Update] Continuation sans snapshot...');
+    // 1. Récupérer la dernière release depuis GitHub pour connaître la version cible
+    console.log('[Update] 📥 Récupération de la dernière release...');
+    const headers: any = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'Ryvie-Update-System'
+    };
+    
+    if (GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${GITHUB_TOKEN}`;
     }
     
-    // 2. Fetch tags puis git pull
-    console.log('[Update] Récupération des tags distants...');
-    execSync('git fetch --tags origin', {
-      cwd: RYVIE_DIR,
-      stdio: 'inherit'
-    });
+    const releaseResponse = await axios.get(
+      'https://api.github.com/repos/maisonnavejul/Ryvie/releases/latest',
+      { headers, timeout: 30000 }
+    );
     
-    console.log('[Update] Git pull dans /opt/Ryvie...');
-    execSync('git pull', {
-      cwd: RYVIE_DIR,
-      stdio: 'inherit'
-    });
+    const release = releaseResponse.data;
+    const targetVersion = release.tag_name;
     
-    console.log('[Update] ✅ Code mis à jour avec succès');
+    console.log(`[Update] Dernière version disponible: ${targetVersion}`);
+    
+    // 2. Vérifier si déjà à jour
+    const currentVersion = getCurrentRyvieVersion();
+    console.log(`[Update] Version actuelle: ${currentVersion}`);
+    
+    if (currentVersion === targetVersion) {
+      return {
+        success: true,
+        message: `Ryvie est déjà à jour (${currentVersion})`,
+        needsRestart: false
+      };
+    }
+    
+    // 3. Détecter le mode actuel (dev ou prod)
+    let mode = 'prod';
+    try {
+      const pm2List = execSync('pm2 list', { encoding: 'utf8' });
+      if (pm2List.includes('ryvie-backend-dev')) {
+        mode = 'dev';
+      }
+    } catch (_) {
+      mode = 'prod';
+    }
+    
+    console.log(`[Update] Mode détecté: ${mode}`);
+    
+    // 4. Lancer le script externe en arrière-plan détaché
+    const updateScript = path.join(RYVIE_DIR, 'scripts/update-and-restart.sh');
+    
+    if (!fs.existsSync(updateScript)) {
+      throw new Error('Script update-and-restart.sh introuvable');
+    }
+    
+    console.log(`[Update] 🚀 Lancement du script externe d'update...`);
+    console.log(`[Update] Commande: ${updateScript} ${targetVersion} --mode ${mode}`);
+    
+    // Lancer en background détaché avec nohup
+    // Le script gère: snapshot, download, extract, apply, restart, rollback si erreur
+    execSync(
+      `nohup "${updateScript}" "${targetVersion}" --mode ${mode} > /dev/null 2>&1 &`,
+      { 
+        cwd: RYVIE_DIR,
+        detached: true,
+        stdio: 'ignore'
+      }
+    );
+    
+    console.log('[Update] ✅ Script externe lancé');
+    console.log('[Update] Le backend va redémarrer dans quelques secondes...');
+    
     return {
       success: true,
-      message: 'Code mis à jour. Redémarrage en cours...',
+      message: `Mise à jour vers ${targetVersion} en cours. Le système va redémarrer...`,
       needsRestart: true,
-      snapshotPath
+      version: targetVersion
     };
-  } catch (error: any) {
-    console.error('[Update] ❌ Erreur lors de la mise à jour de Ryvie:', error.message);
     
-    // Rollback si un snapshot existe
-    if (snapshotPath) {
-      console.error('[Update] 🔄 Rollback en cours...');
-      try {
-        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
-        console.log(rollbackOutput);
-        console.log('[Update] ✅ Rollback terminé');
-        
-        // Supprimer le snapshot après rollback réussi
-        try {
-          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
-          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
-          console.log('[Update] 🧹 Snapshot supprimé après rollback');
-        } catch (delError: any) {
-          console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
-        }
-        
-        return {
-          success: false,
-          message: `Erreur: ${error.message}. Rollback effectué avec succès.`
-        };
-      } catch (rollbackError: any) {
-        console.error('[Update] ❌ Erreur lors du rollback:', rollbackError.message);
-        return {
-          success: false,
-          message: `Erreur: ${error.message}. Rollback échoué: ${rollbackError.message}`
-        };
-      }
-    }
+  } catch (error: any) {
+    console.error('[Update] ❌ Erreur lors du lancement de la mise à jour:', error.message);
     
     return {
       success: false,

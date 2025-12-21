@@ -11,6 +11,7 @@ import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../u
 import { useSocket } from '../contexts/SocketContext';
 import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo, endSession } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
+import UpdateModal from '../components/UpdateModal';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -226,6 +227,9 @@ const Settings = () => {
   const [updates, setUpdates] = useState(null);
   const [updatesLoading, setUpdatesLoading] = useState(false);
   const [updateInProgress, setUpdateInProgress] = useState(null); // 'ryvie' ou nom de l'app
+  // États pour le modal d'update
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateTargetVersion, setUpdateTargetVersion] = useState(null);
 
   useEffect(() => {
     // Restaurer la session depuis les paramètres URL si preserve_session=true
@@ -307,6 +311,46 @@ const Settings = () => {
       }
     };
     fetchData();
+  }, []);
+
+  // Scroll automatique vers la section Mises à Jour si demandé via l'URL (#updates)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Support BrowserRouter et HashRouter.
+    // - BrowserRouter: /settings#updates  => window.location.hash === '#updates'
+    // - HashRouter:    /#/settings#updates => window.location.hash === '#/settings#updates'
+    const rawHash = String(window.location.hash || '');
+    const lastHashPart = rawHash.split('#').filter(Boolean).pop();
+    if (lastHashPart !== 'updates') return;
+
+    let attempts = 0;
+    const maxAttempts = 30; // ~3s
+
+    const tryScroll = () => {
+      attempts += 1;
+      const el = document.getElementById('ryvie-updates');
+      if (el) {
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Fallback: forcer le scroll window si nécessaire
+          const top = el.getBoundingClientRect().top;
+          if (typeof window !== 'undefined' && Math.abs(top) > 40) {
+            window.scrollTo({ top: window.scrollY + top - 16, behavior: 'smooth' });
+          }
+          return;
+        } catch (_) {
+          // continuer
+        }
+      }
+
+      if (attempts < maxAttempts) {
+        setTimeout(tryScroll, 100);
+      }
+    };
+
+    const t = setTimeout(tryScroll, 100);
+    return () => clearTimeout(t);
   }, []);
 
   // Appliquer le mode sombre le plus tôt possible pour éviter le flash
@@ -1077,15 +1121,10 @@ const Settings = () => {
       });
       
       if (response.data.success) {
-        await showConfirm(
-          '✅ Mise à jour réussie',
-          'Ryvie a été mis à jour avec succès ! Le serveur va redémarrer dans quelques secondes.',
-          true // Mode info (un seul bouton OK)
-        );
-        // Attendre un peu puis recharger la page
-        setTimeout(() => {
-          window.location.reload();
-        }, 3000);
+        // Afficher le modal avec spinner et polling
+        setUpdateTargetVersion(response.data.version || 'latest');
+        setShowUpdateModal(true);
+        setUpdateInProgress(null);
       } else {
         await showConfirm(
           '❌ Erreur de mise à jour',
@@ -2364,7 +2403,7 @@ const Settings = () => {
       </section>
 
       {/* Section Mises à Jour */}
-      <section className="settings-section">
+      <section id="ryvie-updates" className="settings-section">
         <h2>🔄 Mises à Jour</h2>
         <div className="settings-card" style={{ 
           background: settings.darkMode 
@@ -3569,6 +3608,14 @@ const Settings = () => {
           }
         }
       `}</style>
+
+      {/* Modal de mise à jour avec spinner et polling */}
+      <UpdateModal 
+        isOpen={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        targetVersion={updateTargetVersion}
+        accessMode={accessMode}
+      />
     </div>
   );
 };
