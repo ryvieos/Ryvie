@@ -13,6 +13,37 @@ async function getServerInfo() {
   const diskLayout = await si.diskLayout();
   const fsSizes = await si.fsSize();
 
+  // Compter le nombre d'utilisateurs dans LDAP
+  let activeUsersCount = 0;
+  try {
+    const { listUsersPublic } = require('./ldapService');
+    const ldapUsers = await listUsersPublic();
+    activeUsersCount = ldapUsers.length;
+  } catch (error) {
+    console.log('[systemService] Impossible de compter les utilisateurs LDAP:', error);
+  }
+
+  // Compter le nombre d'apps installées
+  let appsCount = 0;
+  try {
+    const { listInstalledApps } = require('./appManagerService');
+    const installedApps = await listInstalledApps();
+    appsCount = installedApps.length;
+  } catch (error) {
+    console.log('[systemService] Impossible de compter les apps:', error);
+  }
+
+  // Vérifier le statut RAID
+  let raidStatus = 'inactif';
+  try {
+    const { stdout } = await execPromise('cat /proc/mdstat 2>/dev/null || echo ""', { timeout: 5000 });
+    if (stdout && stdout.includes('active')) {
+      raidStatus = 'actif';
+    }
+  } catch (error) {
+    console.log('[systemService] Impossible de vérifier le statut RAID');
+  }
+
   // Trouver la partition racine (/) et /data
   const rootPartition = fsSizes.find(f => f.mount === '/');
   const dataPartition = fsSizes.find(f => f.mount === '/data');
@@ -72,6 +103,9 @@ async function getServerInfo() {
     disques: disks,
     cpu: `${cpuUsagePercentage}%`,
     ram: `${ramUsagePercentage}%`,
+    activeUsers: activeUsersCount,
+    totalApps: appsCount,
+    raidDuplication: raidStatus,
   };
 }
 
