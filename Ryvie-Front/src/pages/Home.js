@@ -168,6 +168,10 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
   };
 
   const handleContextMenu = (e) => {
+    // IMPORTANT: Toujours empêcher le menu natif du navigateur en premier
+    e.preventDefault();
+    e.stopPropagation();
+    
     console.log(`[Icon] Clic droit sur ${appConfig.name}`, { 
       showStatus: appConfig.showStatus, 
       isAdmin,
@@ -185,9 +189,6 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
       console.log(`[Icon] Menu non affiché: utilisateur non admin`);
       return;
     }
-    
-    e.preventDefault();
-    e.stopPropagation();
     
     // Positionner le menu collé à l'icône (à droite par défaut)
     const iconRect = e.currentTarget.getBoundingClientRect();
@@ -447,29 +448,40 @@ const Zone = ({ zoneId, iconId, handleClick, showName, appStatus, appsConfig, ic
   );
 };
 
-// Composant Taskbar
-const Taskbar = ({ handleClick, appsConfig, onLoaded }) => {
+// Composant Taskbar - Mémorisé pour éviter les re-renders inutiles
+const Taskbar = React.memo(({ handleClick, appsConfig, onLoaded }) => {
   // Filtrer les icônes de la barre des tâches à partir de la configuration
-  const taskbarApps = Object.entries(appsConfig)
-    .filter(([_, config]) => config.isTaskbarApp)
-    .map(([iconId, config]) => ({ iconId, config }));
+  const taskbarApps = React.useMemo(() => {
+    return Object.entries(appsConfig)
+      .filter(([_, config]) => config.isTaskbarApp)
+      .map(([iconId, config]) => ({ iconId, config }));
+  }, [appsConfig]);
 
-  let total = 0;
-  let loaded = 0;
-  const handleImgLoad = () => {
-    loaded += 1;
-    if (loaded === total) {
+  const loadedRef = React.useRef(false);
+  const totalRef = React.useRef(0);
+  const loadedCountRef = React.useRef(0);
+
+  React.useEffect(() => {
+    // Compter le nombre total d'images à charger
+    totalRef.current = taskbarApps.filter(({ iconId }) => images[iconId]).length;
+    loadedCountRef.current = 0;
+    loadedRef.current = false;
+  }, [taskbarApps]);
+
+  const handleImgLoad = React.useCallback(() => {
+    if (loadedRef.current) return;
+    loadedCountRef.current += 1;
+    if (loadedCountRef.current === totalRef.current) {
+      loadedRef.current = true;
       try { onLoaded && onLoaded(); } catch {}
     }
-  };
+  }, [onLoaded]);
 
   return (
     <div className="taskbar">
       {taskbarApps.map(({ iconId, config }, index) => {
         const imgSrc = images[iconId];
         const label = config?.name || iconId;
-        try { console.debug('[Taskbar] Render icon', { iconId, label, hasImage: !!imgSrc, route: config?.route, src: imgSrc }); } catch (_) {}
-        if (imgSrc) total += 1;
 
         // Ajouter un fond blanc uniquement pour les icônes User et Transfer
         const isUserOrTransfer =
@@ -479,25 +491,23 @@ const Taskbar = ({ handleClick, appsConfig, onLoaded }) => {
           iconId === 'task-transfer.png';
         const circleClassName = `taskbar-circle${isUserOrTransfer ? ' taskbar-circle--white' : ''}`;
 
-        const Img = () => (
-          <img
-            src={imgSrc}
-            alt={label}
-            title={label}
-            onLoad={handleImgLoad}
-            onError={(e) => {
-              try { console.warn('[Taskbar] Image failed to load', { iconId, src: imgSrc }); } catch (_) {}
-              e.currentTarget.style.display = 'none';
-            }}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        );
-
         return (
-          <div key={index} className={circleClassName} aria-label={label} title={label}>
+          <div key={iconId} className={circleClassName} aria-label={label} title={label}>
             {config.route && config.route !== '/userlogin' ? (
               <Link to={config.route} aria-label={label} title={label} style={{ width: '100%', height: '100%' }}>
-                {imgSrc ? <Img /> : null}
+                {imgSrc ? (
+                  <img
+                    src={imgSrc}
+                    alt={label}
+                    title={label}
+                    onLoad={handleImgLoad}
+                    onError={(e) => {
+                      try { console.warn('[Taskbar] Image failed to load', { iconId, src: imgSrc }); } catch (_) {}
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : null}
               </Link>
             ) : (
               <div
@@ -509,7 +519,19 @@ const Taskbar = ({ handleClick, appsConfig, onLoaded }) => {
                 title={label}
                 style={{ width: '100%', height: '100%' }}
               >
-                {imgSrc ? <Img /> : null}
+                {imgSrc ? (
+                  <img
+                    src={imgSrc}
+                    alt={label}
+                    title={label}
+                    onLoad={handleImgLoad}
+                    onError={(e) => {
+                      try { console.warn('[Taskbar] Image failed to load', { iconId, src: imgSrc }); } catch (_) {}
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : null}
               </div>
             )}
           </div>
@@ -517,7 +539,21 @@ const Taskbar = ({ handleClick, appsConfig, onLoaded }) => {
       })}
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Comparaison personnalisée: ne re-render que si les apps de la taskbar changent
+  const prevTaskbarApps = Object.entries(prevProps.appsConfig)
+    .filter(([_, config]) => config.isTaskbarApp)
+    .map(([iconId]) => iconId)
+    .sort()
+    .join(',');
+  const nextTaskbarApps = Object.entries(nextProps.appsConfig)
+    .filter(([_, config]) => config.isTaskbarApp)
+    .map(([iconId]) => iconId)
+    .sort()
+    .join(',');
+  
+  return prevTaskbarApps === nextTaskbarApps;
+});
 
 // Composant principal
 const Home = () => {
@@ -1863,7 +1899,7 @@ const Home = () => {
     }, 250);
   };
 
-  const handleClick = (iconId) => {
+  const handleClick = React.useCallback((iconId) => {
     console.log("handleClick appelé avec iconId:", iconId);
     
     const appConfig = appsConfig[iconId];
@@ -1935,7 +1971,7 @@ const Home = () => {
         console.log("Pas d'URL trouvée pour cette icône :", iconId);
       }
     }
-  };
+  }, [appsConfig, appStoreMounted, accessMode, navigate]);
 
   // Construit l'URL de fond d'écran à partir de l'état courant
   const buildBackgroundUrl = () => {
