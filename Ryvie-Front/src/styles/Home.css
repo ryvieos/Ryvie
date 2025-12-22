@@ -374,7 +374,7 @@
 .taskbar {
   position: fixed;
   top: -25px;
-  left: 0;
+  left: 5px;
   width: 80px; /* Largeur de la barre */
   height: 100%;
   background-color: rgba(255, 255, 255, 0.0);
