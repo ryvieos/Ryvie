@@ -329,6 +329,11 @@ function generateManifest(appData) {
     if (Object.keys(ports).length === 0 && fs.existsSync(composePath)) {
         ports = extractPortsFromCompose(composePath);
     }
+    // Déterminer le port principal (priorité: ryvie-app.yml → metadata.mainPort → premier port détecté)
+    const resolvedMainPort = ryvieMeta.port ||
+        metadata.mainPort ||
+        (Object.keys(ports).length > 0 ? parseInt(Object.keys(ports)[0], 10) : null);
+
     // Créer le manifest
     const manifest = {
         id: finalId,
@@ -340,7 +345,7 @@ function generateManifest(appData) {
         developer: metadata.developer,
         ports: ports,
         // mainPort doit refléter le port hôte (clé du mapping)
-        mainPort: metadata.mainPort || (Object.keys(ports).length > 0 ? parseInt(Object.keys(ports)[0]) : null),
+        mainPort: resolvedMainPort,
         launchType: metadata.launchType,
         dockerComposePath: metadata.dockerComposePath,
         sourceDir: appDir,
