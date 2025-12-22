@@ -485,16 +485,21 @@ body.dark-mode .empty-state p {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  align-items: flex-start;
 }
 
 .stat-item span {
   font-size: 0.9rem;
   color: #718096;
+  height: 40px;
+  display: flex;
+  align-items: center;
 }
 
 .stat-item strong {
   font-size: 1.5rem;
   color: #1a1a1a;
+  line-height: 1;
 }
 
 /* Statut de la sauvegarde */
