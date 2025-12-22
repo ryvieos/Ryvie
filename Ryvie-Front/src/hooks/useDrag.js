@@ -13,11 +13,16 @@ const useDrag = (onDragEnd, onDragMove) => {
   const longPressTimeoutRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const latestPointerRef = useRef({ x: 0, y: 0 });
-  const pointerTargetRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
   const LONG_PRESS_MS = 100; // délai avant activation du drag
   const [, setDragTick] = useState(0);
   const handlePointerDown = useCallback((e, itemId, itemData) => {
+    // Ignorer le clic droit (button 2) pour permettre le menu contextuel
+    if (e.button === 2) {
+      console.log('[useDrag] ⏭️  Ignorer pointerDown: clic droit détecté');
+      return;
+    }
+    
     // Ignorer si le clic vient du menu contextuel ou d'un bouton
     if (e.target.closest('.context-menu') || e.target.closest('button') || e.target.closest('.widget-remove-btn')) {
       console.log('[useDrag] ⏭️  Ignorer pointerDown: clic sur bouton/menu');
@@ -36,7 +41,6 @@ const useDrag = (onDragEnd, onDragMove) => {
     hasDraggedRef.current = false; // Reset
     // Force a re-render so onClick reads the updated value
     setDragTick(t => t + 1);
-    pointerTargetRef.current = e.currentTarget;
     offsetRef.current = { x: offsetX, y: offsetY };
     latestPointerRef.current = { x: e.clientX, y: e.clientY };
 

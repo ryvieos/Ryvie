@@ -145,6 +145,10 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
   };
 
   const handleContextMenu = (e) => {
+    // IMPORTANT: Toujours empêcher le menu natif du navigateur en premier
+    e.preventDefault();
+    e.stopPropagation();
+    
     console.log(`[Icon] 🖱️ Clic droit sur ${id}`);
     console.log(`[Icon] showStatus:`, appConfig.showStatus);
     console.log(`[Icon] isAdmin:`, isAdmin);
@@ -157,9 +161,6 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
       console.log(`[Icon] ❌ Menu bloqué: pas admin`);
       return;
     }
-    
-    e.preventDefault();
-    e.stopPropagation();
     
     const iconRect = e.currentTarget.getBoundingClientRect();
     const menuWidth = 180;
