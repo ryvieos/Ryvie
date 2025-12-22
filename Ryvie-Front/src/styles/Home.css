@@ -696,6 +696,19 @@
   align-items: center;
 }
 
+.weather-humidity img, .weather-wind img {
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  object-fit: contain;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
 /* Conteneur des icônes pour les aligner verticalement - seulement dans les zones */
 .zone .icon-container {
   display: flex;

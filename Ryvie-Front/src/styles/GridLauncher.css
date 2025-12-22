@@ -187,6 +187,12 @@
   width: 36px;
   height: 36px;
   object-fit: contain;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 /* Tuile (app 1×1) - TAILLE FIXE */
@@ -414,9 +420,14 @@
   }
 }
 
-/* Focus pour accessibilité */
+/* Focus pour accessibilité - uniquement au clavier, pas à la souris */
 .grid-tile:focus,
 .weather-widget:focus {
+  outline: none;
+}
+
+.grid-tile:focus-visible,
+.weather-widget:focus-visible {
   outline: 2px solid rgba(100, 180, 255, 0.8);
   outline-offset: 2px;
 }

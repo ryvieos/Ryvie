@@ -168,6 +168,10 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
   };
 
   const handleContextMenu = (e) => {
+    // IMPORTANT: Toujours empêcher le menu natif du navigateur en premier
+    e.preventDefault();
+    e.stopPropagation();
+    
     console.log(`[Icon] Clic droit sur ${appConfig.name}`, { 
       showStatus: appConfig.showStatus, 
       isAdmin,
@@ -185,9 +189,6 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
       console.log(`[Icon] Menu non affiché: utilisateur non admin`);
       return;
     }
-    
-    e.preventDefault();
-    e.stopPropagation();
     
     // Positionner le menu collé à l'icône (à droite par défaut)
     const iconRect = e.currentTarget.getBoundingClientRect();

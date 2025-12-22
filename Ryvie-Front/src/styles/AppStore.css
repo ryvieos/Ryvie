@@ -701,27 +701,12 @@
 .featured-install-btn.installing,
 .btn-install-header.installing {
   position: relative;
-  overflow: hidden;
-}
-
-.app-get-button.installing::before,
-.featured-install-btn.installing::before,
-.btn-install-header.installing::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  /* Bleu plus marqué pour bien voir le remplissage */
-  background: rgba(37, 99, 235, 0.7);
-  transform-origin: left center;
-  transform: scaleX(var(--progress, 0));
-  transition: transform 0.25s ease-out;
 }
 
 .app-get-button.installing span,
 .featured-install-btn.installing span,
 .btn-install-header.installing span {
   position: relative;
-  z-index: 1;
   color: #ffffff;
 }
 
