@@ -1002,6 +1002,7 @@ try {
                             className={`featured-install-btn ${isInstalling ? 'installing' : ''}`}
                             disabled={disabled}
                             onClick={handleClick}
+                            style={isInstalling ? { ['--progress']: progress } : undefined}
                           >
                             <span>{label}</span>
                           </button>
@@ -1161,6 +1162,7 @@ try {
                             className={`app-get-button ${isInstalling ? 'installing' : ''}`}
                             disabled={disabled}
                             onClick={handleClick}
+                            style={isInstalling ? { ['--progress']: progress } : undefined}
                           >
                             <span>{label}</span>
                           </button>
@@ -1256,6 +1258,7 @@ try {
                         className={`btn-primary btn-install-header ${isInstalling ? 'installing' : ''}`}
                         disabled={disabled}
                         onClick={handleClick}
+                        style={isInstalling && selectedApp ? { ['--progress']: progress } : undefined}
                       >
                         <span><FontAwesomeIcon icon={faDownload} /> {label}</span>
                       </button>
