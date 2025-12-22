@@ -28,10 +28,9 @@ const Settings = () => {
           storageLimit: 0,
           cpuUsage: 0,
           ramUsage: 0,
-          activeUsers: 1,
-          totalFiles: 110,
-          backupStatus: 'Completed',
-          lastBackup: '2024-01-09 14:30',
+          activeUsers: 0,
+          totalApps: 0,
+          raidDuplication: 'inactif',
         };
       }
     }
@@ -40,10 +39,9 @@ const Settings = () => {
       storageLimit: 0,
       cpuUsage: 0,
       ramUsage: 0,
-      activeUsers: 1,
-      totalFiles: 110,
-      backupStatus: 'Completed',
-      lastBackup: '2024-01-09 14:30',
+      activeUsers: 0,
+      totalApps: 0,
+      raidDuplication: 'inactif',
     };
   });
 
@@ -679,7 +677,10 @@ const Settings = () => {
         storageUsed: storageUsed,
         storageLimit: storageTotal,
         cpuUsage: cpuUsage,
-        ramUsage: ramUsage
+        ramUsage: ramUsage,
+        activeUsers: data.activeUsers || 0,
+        totalApps: data.totalApps || 0,
+        raidDuplication: data.raidDuplication || 'inactif'
       };
       
       // Sauvegarder dans le cache localStorage pour chargement instantané
@@ -1030,6 +1031,11 @@ const Settings = () => {
           setSettings(prev => ({ ...prev, darkMode: preferDark }));
         }
       } catch (e) { console.warn('[Settings] Synchro darkMode avec système échouée:', e?.message || e); }
+    } else if (setting === 'twoFactorAuth') {
+      // Authentification à deux facteurs pas encore disponible
+      showToast('L\'authentification à deux facteurs n\'est pas encore disponible', 'info');
+      // Ne pas changer l'état
+      return;
     } else {
       setSettings(prev => ({
         ...prev,
@@ -1735,22 +1741,19 @@ const Settings = () => {
                 <strong>{stats.activeUsers}</strong>
               </div>
               <div className="stat-item">
-                <span>Fichiers totaux</span>
-                <strong>{stats.totalFiles}</strong>
+                <span>Applications</span>
+                <strong>{stats.totalApps}</strong>
               </div>
             </div>
           </div>
 
-          {/* Statut de la sauvegarde */}
+          {/* Statut de la duplication RAID */}
           <div className="stat-card backup">
-            <h3>Sauvegarde</h3>
+            <h3>Duplication</h3>
             <div className="backup-info">
               <div className="backup-status">
-                <span className={`status-indicator ${stats.backupStatus.toLowerCase()}`}></span>
-                <span>{stats.backupStatus}</span>
-              </div>
-              <div className="last-backup">
-                Dernière sauvegarde: {stats.lastBackup}
+                <span className={`status-indicator ${stats.raidDuplication === 'actif' ? 'running' : 'pending'}`}></span>
+                <span>{stats.raidDuplication === 'actif' ? 'Duplication active' : 'Duplication inactive'}</span>
               </div>
             </div>
           </div>
@@ -2184,35 +2187,6 @@ const Settings = () => {
       <section className="settings-section">
         <h2>Configuration du Cloud</h2>
         <div className="settings-grid">
-          {/* Sauvegardes */}
-          <div className="settings-card">
-            <h3>Sauvegardes</h3>
-            <div className="setting-item">
-              <label>Sauvegarde automatique</label>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={settings.autoBackup}
-                  onChange={(e) => handleSettingChange('autoBackup', e.target.checked)}
-                />
-                <span className="slider"></span>
-              </label>
-            </div>
-            <div className="setting-item">
-              <label>Fréquence des sauvegardes</label>
-              <select
-                value={settings.backupFrequency}
-                onChange={(e) => handleSettingChange('backupFrequency', e.target.value)}
-                disabled={!settings.autoBackup}
-              >
-                <option value="hourly">Toutes les heures</option>
-                <option value="daily">Quotidienne</option>
-                <option value="weekly">Hebdomadaire</option>
-                <option value="monthly">Mensuelle</option>
-              </select>
-            </div>
-          </div>
-
           {/* Sécurité */}
           <div className="settings-card">
             <h3>Sécurité</h3>
@@ -2265,9 +2239,9 @@ const Settings = () => {
             </div>
           </div>
 
-          {/* Notifications */}
+          {/* Préférences */}
           <div className="settings-card">
-            <h3>Notifications</h3>
+            <h3>Préférences</h3>
             <div className="setting-item">
               <label>Activer les notifications</label>
               <label className="switch">
@@ -2279,11 +2253,6 @@ const Settings = () => {
                 <span className="slider"></span>
               </label>
             </div>
-          </div>
-
-          {/* Préférences */}
-          <div className="settings-card">
-            <h3>Préférences</h3>
             <div className="setting-item">
               <label>Thème automatique (suivre le système)</label>
               <label className="switch">
@@ -2308,65 +2277,6 @@ const Settings = () => {
                 </label>
               </div>
             )}
-          </div>
-
-          {/* Performance */}
-          <div className="settings-card">
-            <h3>Performance</h3>
-            <div className="setting-item">
-              <label>Niveau de compression</label>
-              <select
-                value={settings.compressionLevel}
-                onChange={(e) => handleSettingChange('compressionLevel', e.target.value)}
-              >
-                <option value="none">Aucune compression</option>
-                <option value="low">Faible</option>
-                <option value="medium">Moyenne</option>
-                <option value="high">Élevée</option>
-              </select>
-            </div>
-            <div className="setting-item">
-              <label>Limite de bande passante</label>
-              <select
-                value={settings.bandwidthLimit}
-                onChange={(e) => handleSettingChange('bandwidthLimit', e.target.value)}
-              >
-                <option value="unlimited">Illimitée</option>
-                <option value="1000">1 Gbps</option>
-                <option value="500">500 Mbps</option>
-                <option value="100">100 Mbps</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Nettoyage automatique */}
-          <div className="settings-card">
-            <h3>Nettoyage automatique</h3>
-            <div className="setting-item">
-              <label>Suppression automatique des fichiers anciens</label>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={settings.autoDelete}
-                  onChange={(e) => handleSettingChange('autoDelete', e.target.checked)}
-                />
-                <span className="slider"></span>
-              </label>
-            </div>
-            <div className="setting-item">
-              <label>Période de conservation (jours)</label>
-              <select
-                value={settings.autoDeletionPeriod}
-                onChange={(e) => handleSettingChange('autoDeletionPeriod', e.target.value)}
-                disabled={!settings.autoDelete}
-              >
-                <option value="7">7 jours</option>
-                <option value="30">30 jours</option>
-                <option value="90">90 jours</option>
-                <option value="180">180 jours</option>
-                <option value="365">365 jours</option>
-              </select>
-            </div>
           </div>
 
           {/* Mode d'accès */}
