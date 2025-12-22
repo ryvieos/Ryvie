@@ -1006,16 +1006,6 @@ try {
                           >
                             <span>{label}</span>
                           </button>
-                          {installProgress[app.id] && (
-                            <div className="install-progress-container">
-                              <div className="install-progress-bar">
-                                <div 
-                                  className="install-progress-fill"
-                                  style={{ width: `${installProgress[app.id].progress || 0}%` }}
-                                />
-                              </div>
-                            </div>
-                          )}
                         </div>
                       );
                   })()}
@@ -1176,16 +1166,6 @@ try {
                             </button>
                           )}
                         </div>
-                        {installProgress[app.id] && (
-                          <div className="install-progress-container">
-                            <div className="install-progress-bar">
-                              <div 
-                                className="install-progress-fill"
-                                style={{ width: `${installProgress[app.id].progress || 0}%` }}
-                              />
-                            </div>
-                          </div>
-                        )}
                       </div>
                     );
                   })()}
