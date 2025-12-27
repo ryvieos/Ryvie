@@ -6,6 +6,7 @@ import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import { getCurrentUserRole, getCurrentUser, getSessionInfo } from '../utils/sessionManager';
+import { sessionManager } from '../utils/sessionManager';
 
 const User = () => {
   const navigate = useNavigate();
@@ -315,12 +316,13 @@ const User = () => {
       return;
     }
 
-    // Récupérer l'utilisateur actuel depuis le gestionnaire de session pour pré-remplir les identifiants admin
-    const currentUser = getCurrentUser() || '';
+    // Récupérer l'email de l'utilisateur actuel pour pré-remplir les identifiants admin
+    const sessionInfo = getSessionInfo();
+    const currentUserEmail = sessionInfo.userEmail || getCurrentUser() || '';
     
-    // Pré-remplir les identifiants admin avec l'utilisateur actuel
+    // Pré-remplir les identifiants admin avec l'email de l'utilisateur actuel
     setAdminCredentials({ 
-      uid: currentUser,
+      uid: currentUserEmail,
       password: '' 
     });
 
@@ -333,12 +335,13 @@ const User = () => {
       return;
     }
 
-    // Récupérer l'utilisateur actuel depuis le gestionnaire de session pour pré-remplir les identifiants admin
-    const currentUser = getCurrentUser() || '';
+    // Récupérer l'email de l'utilisateur actuel pour pré-remplir les identifiants admin
+    const sessionInfo = getSessionInfo();
+    const currentUserEmail = sessionInfo.userEmail || getCurrentUser() || '';
     
-    // Pré-remplir les identifiants admin avec l'utilisateur actuel
+    // Pré-remplir les identifiants admin avec l'email de l'utilisateur actuel
     setAdminCredentials({ 
-      uid: currentUser,
+      uid: currentUserEmail,
       password: '' 
     });
 
@@ -470,12 +473,13 @@ const User = () => {
   const handleDeleteUser = () => {
     if (!confirmDelete) return;
 
-    // Récupérer l'utilisateur actuel depuis le gestionnaire de session pour pré-remplir les identifiants admin
-    const currentUser = getCurrentUser() || '';
+    // Récupérer l'email de l'utilisateur actuel pour pré-remplir les identifiants admin
+    const sessionInfo = getSessionInfo();
+    const currentUserEmail = sessionInfo.userEmail || getCurrentUser() || '';
     
-    // Pré-remplir les identifiants admin avec l'utilisateur actuel
+    // Pré-remplir les identifiants admin avec l'email de l'utilisateur actuel
     setAdminCredentials({ 
-      uid: currentUser,
+      uid: currentUserEmail,
       password: '' 
     });
     
