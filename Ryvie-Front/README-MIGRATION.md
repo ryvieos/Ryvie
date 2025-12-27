@@ -61,7 +61,7 @@ app.use(cors({
 ### HTTPS (recommandé)
 Pour éviter les problèmes de mixed content, activer HTTPS sur :
 - Le serveur local (`https://ryvie.local:3002`)
-- L'application web publique
+- L'application web remote
 
 ## 🌐 Fonctionnement Web vs Electron
 
@@ -104,7 +104,7 @@ import { testServerConnectivity } from './utils/detectAccessMode';
 // Tester la connectivité privée
 const isPrivateOk = await testServerConnectivity('private');
 
-// Tester la connectivité publique  
+// Tester la connectivité remote  
 const isPublicOk = await testServerConnectivity('public');
 ```
 

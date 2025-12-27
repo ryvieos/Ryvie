@@ -648,6 +648,7 @@ const Home = () => {
   const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
   const [taskbarReady, setTaskbarReady] = useState(false); // Animations taskbar quand les icônes de la barre sont chargées
   const taskbarLoadedOnceRef = React.useRef(false); // Assure que l'animation ne se joue qu'une seule fois
+  const taskbarTimeoutRef = React.useRef(null); // Timeout de secours pour forcer l'affichage
   const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
   const [bgUrl, setBgUrl] = useState(null);         // URL calculée courante
   const [prevBgUrl, setPrevBgUrl] = useState(null); // URL précédente pour crossfade
@@ -1695,6 +1696,23 @@ const Home = () => {
   }, [backgroundImage, accessMode]);
 
   // Taskbar prête quand toutes les images locales sont chargées (une seule fois)
+  // Timeout de secours pour forcer l'affichage si les images ne se chargent pas
+  useEffect(() => {
+    // Forcer l'affichage de la taskbar après 500ms maximum
+    taskbarTimeoutRef.current = setTimeout(() => {
+      if (!taskbarLoadedOnceRef.current) {
+        console.log('[Home] ⏰ Timeout taskbar - forçage de l\'affichage');
+        taskbarLoadedOnceRef.current = true;
+        setTaskbarReady(true);
+      }
+    }, 500);
+
+    return () => {
+      if (taskbarTimeoutRef.current) {
+        clearTimeout(taskbarTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Fermer le menu contextuel si on clique ailleurs
   useEffect(() => {
@@ -2046,7 +2064,7 @@ const Home = () => {
               {serverStatus ? 'Connecté' : 'Déconnecté'}
             </span>
             <span className="mode-indicator">
-              {accessMode === 'private' ? 'Local' : 'Public'}
+              {accessMode === 'private' ? 'Local' : 'Remote'}
             </span>
             {!isElectron() && (
               <span className="platform-indicator">Web</span>
@@ -2066,6 +2084,11 @@ const Home = () => {
               if (taskbarLoadedOnceRef.current) return;
               taskbarLoadedOnceRef.current = true;
               setTaskbarReady(true);
+              // Annuler le timeout de secours si les images se chargent normalement
+              if (taskbarTimeoutRef.current) {
+                clearTimeout(taskbarTimeoutRef.current);
+                taskbarTimeoutRef.current = null;
+              }
             }}
           />
           {currentUserName && (

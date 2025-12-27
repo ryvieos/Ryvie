@@ -25,10 +25,10 @@ const Login = () => {
       } else {
         // 2) Pas de mode encore défini -> déterminer intelligemment
         if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
-          // En HTTPS, forcer PUBLIC pour éviter tout Mixed Content
+          // En HTTPS, forcer REMOTE pour éviter tout Mixed Content
           persistAccessMode('public');
           setAccessMode('public');
-          console.log('[Login] Page HTTPS - accessMode initialisé à PUBLIC');
+          console.log('[Login] Page HTTPS - accessMode initialisé à REMOTE');
         } else {
           // En HTTP (dev/local) -> tester la connectivité locale rapidement
           try {
@@ -39,7 +39,7 @@ const Login = () => {
             // Fallback sécurisé
             persistAccessMode('public');
             setAccessMode('public');
-            console.log('[Login] Détection échouée - fallback PUBLIC');
+            console.log('[Login] Détection échouée - fallback REMOTE');
           }
         }
       }
@@ -69,9 +69,9 @@ const Login = () => {
     initMode();
   }, []);
 
-  // Polling: rester en public et tenter périodiquement de basculer en privé dès que détecté
+  // Polling: rester en remote et tenter périodiquement de basculer en privé dès que détecté
   useEffect(() => {
-    // Ne pas tenter en HTTPS (évite Mixed Content) et uniquement si on est en PUBLIC
+    // Ne pas tenter en HTTPS (évite Mixed Content) et uniquement si on est en REMOTE
     if (typeof window !== 'undefined' && window.location?.protocol === 'https:') return;
     if (accessMode !== 'public') return;
 
@@ -86,7 +86,7 @@ const Login = () => {
           console.log('[Login] Mode privé détecté pendant le polling -> bascule en PRIVÉ');
         }
       } catch {
-        // Reste en public silencieusement
+        // Reste en remote silencieusement
       }
     };
 
@@ -236,9 +236,9 @@ const Login = () => {
           <span>Mode d'accès: </span>
           <button 
             onClick={toggleAccessMode}
-            className={`toggle-button ${accessMode === 'public' ? 'toggle-public' : 'toggle-private'}`}
+            className={`toggle-button ${accessMode === 'public' ? 'toggle-remote' : 'toggle-private'}`}
           >
-            {accessMode === 'public' ? 'Public' : 'Privé'}
+            {accessMode === 'public' ? 'Remote' : 'Privé'}
           </button>
         </div>
       </div>

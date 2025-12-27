@@ -131,7 +131,7 @@
   transition: all 0.2s;
 }
 
-.toggle-public {
+.toggle-remote {
   background-color: #d2e3fc;
   color: #1967d2;
 }
