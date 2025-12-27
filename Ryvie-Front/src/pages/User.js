@@ -126,7 +126,7 @@ const User = () => {
       const serverUrl = getServerUrl(effectiveMode);
       console.log("Connexion à :", serverUrl);
       
-      // Essayer l'endpoint protégé si un token existe. En cas d'échec 401/403, fallback public.
+      // Essayer l'endpoint protégé si un token existe. En cas d'échec 401/403, fallback remote.
       const session = getSessionInfo() || {};
       const token = session.token;
       let response;
@@ -137,9 +137,9 @@ const User = () => {
           });
         } catch (e) {
           if (e?.response?.status === 401 || e?.response?.status === 403) {
-            console.warn('[users] Accès refusé à /api/users, bascule sur /api/users-public');
+            console.warn('[users] Accès refusé à /api/users, bascule sur /api/users-remote');
             response = await axios.get(`${serverUrl}/api/users-public`);
-            setMessage('Session limitée — affichage des utilisateurs publics.');
+            setMessage('Session limitée — affichage des utilisateurs remote.');
             setMessageType('warning');
           } else {
             throw e;
@@ -149,7 +149,7 @@ const User = () => {
         response = await axios.get(`${serverUrl}/api/users-public`);
       }
 
-      // Mapping des utilisateurs sans forcer le rôle sur public et injection du rôle de session pour l'utilisateur courant
+      // Mapping des utilisateurs sans forcer le rôle sur remote et injection du rôle de session pour l'utilisateur courant
       const sessionUser = (getCurrentUser() || '').trim().toLowerCase();
       const sessionRole = getCurrentUserRole();
       const mapped = (response.data || []).map((user, index) => {

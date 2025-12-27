@@ -52,7 +52,7 @@ const registerAppPort = (appId, port) => {
       const domains = netbirdData?.domains || {};
       const domainsId = id;
       BASE_URLS.APPS[id.toUpperCase()] = {
-        PUBLIC: domains[domainsId] ? `https://${domains[domainsId]}` : '',
+        REMOTE: domains[domainsId] ? `https://${domains[domainsId]}` : '',
         PRIVATE: privateUrl('ryvie.local', port)
       };
     }
@@ -138,7 +138,7 @@ const buildAppUrl = (appId, port) => {
   }
 
   // En contexte HTTPS, si un domaine Netbird est défini pour cette application,
-  // toujours utiliser ce domaine public (accès via reverse proxy/domaine).
+  // toujours utiliser ce domaine remote (accès via reverse proxy/domaine).
   if (protocol === 'https:' && appDomain) {
     return `https://${appDomain}`;
   }
@@ -171,7 +171,7 @@ const generateBaseUrls = () => {
     const port = resolvePort(id, null);
     if (!port) return; // ignorer si pas de port défini
     apps[upper] = {
-      PUBLIC: domains[id] ? `https://${domains[id]}` : '',
+      REMOTE: domains[id] ? `https://${domains[id]}` : '',
       PRIVATE: privateUrl('ryvie.local', port)
     };
   });
@@ -179,13 +179,13 @@ const generateBaseUrls = () => {
   return {
     // URLs du frontend
     FRONTEND: {
-      PUBLIC: `https://${domains.app}`,
+      REMOTE: `https://${domains.app}`,
       PRIVATE: `http://ryvie.local:${LOCAL_PORTS.FRONTEND}`
     },
 
     // URLs du serveur principal
     SERVER: {
-      PUBLIC: `https://${domains.status}`,
+      REMOTE: `https://${domains.status}`,
       PRIVATE: `http://ryvie.local:${LOCAL_PORTS.SERVER}`
     },
 
@@ -195,15 +195,15 @@ const generateBaseUrls = () => {
     // URLs des services backend RDrive
     RDRIVE_BACKEND: {
       BACKEND: {
-        PUBLIC: `https://${domains['backend.rdrive']}`,
+        REMOTE: `https://${domains['backend.rdrive']}`,
         PRIVATE: `http://ryvie.local:${LOCAL_PORTS.BACKEND_RDRIVE}`
       },
       CONNECTOR: {
-        PUBLIC: `https://${domains['connector.rdrive']}`,
+        REMOTE: `https://${domains['connector.rdrive']}`,
         PRIVATE: `http://ryvie.local:${LOCAL_PORTS.CONNECTOR_RDRIVE}`
       },
       DOCUMENT: {
-        PUBLIC: `https://${domains['document.rdrive']}`,
+        REMOTE: `https://${domains['document.rdrive']}`,
         PRIVATE: `http://ryvie.local:${LOCAL_PORTS.DOCUMENT_RDRIVE}`
       }
     }
@@ -215,8 +215,8 @@ const BASE_URLS = generateBaseUrls();
 
 /**
  * Fonction utilitaire pour obtenir l'URL appropriée en fonction du mode d'accès
- * @param {Object} urlConfig - Configuration d'URL avec propriétés PUBLIC et PRIVATE
- * @param {string} accessMode - Mode d'accès ('public' ou 'private')
+ * @param {Object} urlConfig - Configuration d'URL avec propriétés REMOTE et PRIVATE
+ * @param {string} accessMode - Mode d'accès ('remote' ou 'private')
  * @returns {string} - L'URL appropriée selon le mode d'accès
  */
 const isHttpsContext = () => {
@@ -226,9 +226,9 @@ const isHttpsContext = () => {
 
 const getUrl = (urlConfig, accessMode) => {
   if (isHttpsContext()) {
-    return urlConfig.PUBLIC;
+    return urlConfig.REMOTE;
   }
-  return accessMode === 'public' ? urlConfig.PUBLIC : urlConfig.PRIVATE;
+  return accessMode === 'public' ? urlConfig.REMOTE : urlConfig.PRIVATE;
 };
 
 /**
@@ -249,8 +249,8 @@ const getServerUrl = (accessMode) => {
     return 'http://ryvie.local'; // Caddy route automatiquement /api/* vers le backend
   }
 
-  // En contexte public (HTTPS) et si un domaine Netbird "status" est défini,
-  // toujours utiliser ce domaine comme URL publique du backend.
+  // En contexte remote (HTTPS) et si un domaine Netbird "status" est défini,
+  // toujours utiliser ce domaine comme URL remote du backend.
   if (protocol === 'https:' && domains.status) {
     return `https://${domains.status}`;
   }
@@ -336,20 +336,20 @@ const getNetbirdInfo = () => {
 /**
  * Fonction pour déterminer automatiquement le mode d'accès
  * basé sur l'environnement ou l'hostname
- * @returns {string} - 'public' ou 'private'
+ * @returns {string} - 'remote' ou 'private'
  */
 const getAccessMode = () => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const protocol = window.location.protocol;
     if (protocol === 'https:') {
-      return 'public';
+      return 'remote';
     }
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.includes('local')) {
       return 'private';
     }
   }
-  return 'public';
+  return 'remote';
 };
 
 /**
@@ -379,19 +379,19 @@ const getAutoUrl = (type, name) => {
 /**
  * Obtient l'URL du frontend en fonction du mode d'accès
  * - Mode 'private' : utilise ryvie.local (sans port, via Caddy same-origin)
- * - Mode 'public' : 
+ * - Mode 'remote' : 
  *   - Si domains.app existe dans netbird-data.json → https://<domains.app>
  *   - Sinon → http://<backendHost>:3000
- * @param {string} mode - 'public' ou 'private'
+ * @param {string} mode - 'remote' ou 'private'
  * @returns {string} - L'URL du frontend
  */
-function getFrontendUrl(mode = 'public') {
+function getFrontendUrl(mode = 'remote') {
   if (mode === 'private') {
     // En mode privé, utiliser ryvie.local sans port (Caddy reverse proxy sur port 80)
     return `http://ryvie.local`;
   }
   
-  // Mode public : vérifier netbird-data.json
+  // Mode remote : vérifier netbird-data.json
   const domains = netbirdData?.domains || {};
   const backendHost = netbirdData?.received?.backendHost;
   

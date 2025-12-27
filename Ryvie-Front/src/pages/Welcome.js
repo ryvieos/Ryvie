@@ -334,14 +334,14 @@ const Welcome = () => {
     
     // Centralized access mode
     setGlobalAccessMode('public');
-    setPreloadStatus('Configuration du mode public...');
+    setPreloadStatus('Configuration du mode remote...');
     
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
       const userRole = getCurrentUserRole() || 'User';
       await window.electronAPI.invoke('update-session-partition', currentUser, 'public', userRole)
         .then(() => {
-          console.log(`Session mise à jour pour ${currentUser} en mode public avec le rôle ${userRole}`);
+          console.log(`Session mise à jour pour ${currentUser} en mode remote avec le rôle ${userRole}`);
         })
         .catch(err => {
           console.error('Erreur lors de la mise à jour de la session:', err);
