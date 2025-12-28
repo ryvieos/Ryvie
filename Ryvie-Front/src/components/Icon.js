@@ -179,8 +179,14 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     setActiveContextMenu({ iconId: id, x, y });
   };
 
+  const uninstallSuccessShownRef = React.useRef(false);
+
   // Fonction pour exécuter la désinstallation (appelée après confirmation)
   const executeUninstall = async (appId, appName, appKey) => {
+    if (uninstallSuccessShownRef.current) {
+      return;
+    }
+
     setPendingAction('stopping');
     setIsUninstalling(true);
     
@@ -191,7 +197,8 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
       const response = await axios.delete(uninstallUrl, { timeout: 120000 });
       console.log(`[Icon] ✅ Désinstallation de ${appName} terminée`);
 
-      // Afficher modal de succès
+      uninstallSuccessShownRef.current = true;
+
       setConfirmModal({
         show: true,
         type: 'success',
@@ -222,7 +229,6 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
     }
   };
 
-  // Ref pour empêcher la réouverture immédiate après fermeture
   const modalClosingRef = React.useRef(false);
 
   // Fermer la modal
