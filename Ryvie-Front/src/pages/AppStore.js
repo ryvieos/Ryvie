@@ -507,12 +507,81 @@ const AppStore = () => {
     addLog(`📡 Connexion au serveur: ${accessMode} mode`, 'info');
     addLog(`🔗 URL API: ${requestUrl}`, 'info');
 
-    // Établir la connexion SSE pour recevoir les mises à jour de progression
+    let response;
+    // Version améliorée avec options de débogage
+
+try {
+  addLog('📤 Envoi de la requête au serveur...', 'info');
+  
+  // Option 1: Essayer avec un body vide au lieu de null
+  response = await axios.post(requestUrl, {}, { 
+    timeout: 300000,
+    headers: {
+      'Content-Type': 'application/json',
+      // Ajoutez ici d'autres headers si nécessaires (auth, etc.)
+    }
+  });
+  
+  addLog(`📨 Réponse reçue du serveur (status: ${response.status})`, 'info');
+  const responsePayload = typeof response.data === 'object'
+    ? JSON.stringify(response.data, null, 2)
+    : String(response.data || '');
+  const truncatedPayload = responsePayload.length > 500 ? `${responsePayload.slice(0, 500)}…` : responsePayload;
+  addLog(`🧾 Corps de réponse: ${truncatedPayload || '⌀'}`, 'info');
+  
+} catch (requestError) {
+  if (axios.isAxiosError(requestError)) {
+    const { response: errorResponse, config } = requestError;
+    const status = errorResponse?.status ?? 'N/A';
+    const statusText = errorResponse?.statusText ?? 'inconnu';
+    addLog(`❌ Requête axios échouée (status: ${status} - ${statusText})`, 'error');
+    
+    if (config) {
+      addLog(`📑 Requête envoyée: ${config.method?.toUpperCase()} ${config.url}`, 'error');
+      addLog(`📋 Body envoyé: ${JSON.stringify(config.data)}`, 'error');
+    }
+    
+    if (errorResponse?.data) {
+      const errorPayload = typeof errorResponse.data === 'object'
+        ? JSON.stringify(errorResponse.data, null, 2)
+        : String(errorResponse.data);
+      const truncatedError = errorPayload.length > 500 ? `${errorPayload.slice(0, 500)}…` : errorPayload;
+      addLog(`🧨 Corps d'erreur: ${truncatedError}`, 'error');
+    }
+    
+    showToast(`Erreur lors de l'installation: ${statusText}`, 'error');
+  } else {
+    addLog(`❌ Erreur inattendue: ${requestError}`, 'error');
+    showToast('Erreur inattendue lors de l\'installation', 'error');
+  }
+  
+  // Nettoyer l'état
+  setInstallingApps(prev => {
+    const newSet = new Set(prev);
+    newSet.delete(appId);
+    return newSet;
+  });
+  
+  window.parent.postMessage({ 
+    type: 'APPSTORE_INSTALL_STATUS', 
+    installing: false, 
+    appName: appName,
+    appId: appId,
+    error: true
+  }, '*');
+  
+  return;
+}
+
+    // Maintenant que le worker est lancé, établir la connexion SSE
     const progressUrl = `${serverUrl}/api/appstore/progress/${appId}`;
     addLog(`📊 Connexion aux mises à jour de progression: ${progressUrl}`, 'info');
     
+    // Attendre un peu pour que le worker démarre
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     eventSource = new EventSource(progressUrl);
-    activeEventSources.current[appId] = eventSource; // Stocker pour pouvoir annuler
+    activeEventSources.current[appId] = eventSource;
     
     eventSource.onmessage = (event) => {
       try {
@@ -526,6 +595,24 @@ const AppStore = () => {
           } 
         }));
         addLog(data.message, data.stage === 'error' ? 'error' : 'info');
+        
+        // Sauvegarder la progression dans localStorage pour persistance
+        try {
+          const stored = localStorage.getItem('ryvie_installing_apps');
+          const state = stored ? JSON.parse(stored) : { installations: {}, timestamp: Date.now() };
+          if (!state.installations) state.installations = {};
+          
+          state.installations[appId] = {
+            appName: appName,
+            progress: data.progress || 0,
+            lastUpdate: Date.now()
+          };
+          state.timestamp = Date.now();
+          
+          localStorage.setItem('ryvie_installing_apps', JSON.stringify(state));
+        } catch (storageError) {
+          console.warn('[AppStore] Erreur sauvegarde progression:', storageError);
+        }
         
         // Envoyer la progression à Home pour l'indicateur
         window.parent.postMessage({ 
@@ -654,61 +741,6 @@ const AppStore = () => {
         window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
       }, 1000);
     };
-
-    let response;
-    // Version améliorée avec options de débogage
-
-try {
-  addLog('📤 Envoi de la requête au serveur...', 'info');
-  
-  // Option 1: Essayer avec un body vide au lieu de null
-  response = await axios.post(requestUrl, {}, { 
-    timeout: 300000,
-    headers: {
-      'Content-Type': 'application/json',
-      // Ajoutez ici d'autres headers si nécessaires (auth, etc.)
-    }
-  });
-  
-  addLog(`📨 Réponse reçue du serveur (status: ${response.status})`, 'info');
-  const responsePayload = typeof response.data === 'object'
-    ? JSON.stringify(response.data, null, 2)
-    : String(response.data || '');
-  const truncatedPayload = responsePayload.length > 500 ? `${responsePayload.slice(0, 500)}…` : responsePayload;
-  addLog(`🧾 Corps de réponse: ${truncatedPayload || '⌀'}`, 'info');
-  
-} catch (requestError) {
-  if (axios.isAxiosError(requestError)) {
-    const { response: errorResponse, config } = requestError;
-    const status = errorResponse?.status ?? 'N/A';
-    const statusText = errorResponse?.statusText ?? 'inconnu';
-    addLog(`❌ Requête axios échouée (status: ${status} - ${statusText})`, 'error');
-    
-    if (config) {
-      addLog(`📑 Requête envoyée: ${config.method?.toUpperCase()} ${config.url}`, 'error');
-      addLog(`📋 Body envoyé: ${JSON.stringify(config.data)}`, 'error');
-    }
-    
-    if (errorResponse?.data) {
-      const errorPayload = typeof errorResponse.data === 'object'
-        ? JSON.stringify(errorResponse.data, null, 2)
-        : String(errorResponse.data);
-      const truncatedError = errorPayload.length > 500 ? `${errorPayload.slice(0, 500)}…` : errorPayload;
-      addLog(`🧨 Corps d'erreur: ${truncatedError}`, 'error');
-    }
-    
-    if (errorResponse?.headers) {
-      const headersPreview = JSON.stringify(errorResponse.headers, null, 2);
-      const truncatedHeaders = headersPreview.length > 500 ? `${headersPreview.slice(0, 500)}…` : headersPreview;
-      addLog(`📬 En-têtes de réponse: ${truncatedHeaders}`, 'error');
-    }
-  } else {
-    addLog(`❌ Erreur non Axios lors de la requête: ${requestError.message}`, 'error');
-  }
-
-  console.error('[AppStore] Erreur lors de la requête d\'installation:', requestError);
-  throw requestError;
-}
 
     if (response.data.success) {
       // Le serveur a lancé l'installation en arrière-plan

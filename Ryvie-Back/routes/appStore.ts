@@ -8,6 +8,20 @@ const { updateStoreCatalog } = require('../services/updateService');
 // Map pour stocker les workers actifs (appId -> worker process)
 const activeWorkers = new Map();
 
+// Map pour stocker la dernière progression de chaque installation (appId -> { progress, message, stage })
+const lastProgressMap = new Map();
+
+/**
+ * GET /api/appstore/active-installations - Retourne la liste des installations en cours
+ */
+router.get('/appstore/active-installations', verifyToken, (req: any, res: any) => {
+  const activeInstallations = Array.from(activeWorkers.keys());
+  res.json({
+    success: true,
+    installations: activeInstallations
+  });
+});
+
 /**
  * GET /api/appstore/apps - Liste toutes les apps disponibles
  */
@@ -198,17 +212,36 @@ router.get('/appstore/progress/:appId', (req: any, res: any) => {
     'Access-Control-Allow-Headers': 'Cache-Control',
   });
   
-  // Envoyer un ping initial
-  res.write(`data: ${JSON.stringify({ appId, progress: 0, message: 'Connexion établie', stage: 'connected' })}\n\n`);
+  // Vérifier si l'installation est active
+  const isActive = activeWorkers.has(appId);
+  
+  // Récupérer la dernière progression connue
+  const lastProgressData = lastProgressMap.get(appId) || { progress: 0, message: 'Installation en cours...', stage: 'active' };
+  
+  // Envoyer un ping initial avec le statut et la vraie progression
+  if (isActive) {
+    res.write(`data: ${JSON.stringify({ appId, ...lastProgressData })}\n\n`);
+  } else {
+    res.write(`data: ${JSON.stringify({ appId, progress: 0, message: 'Installation non trouvée', stage: 'inactive' })}\n\n`);
+    res.end();
+    return;
+  }
+  
+  let lastProgressValue = 0;
   
   // Écouter les événements de progression pour cette app
   const progressListener = (update) => {
     if (update.appId === appId) {
+      lastProgressValue = update.progress || 0;
+      // Sauvegarder la dernière progression dans la Map
+      lastProgressMap.set(appId, { progress: update.progress || 0, message: update.message, stage: update.stage });
       res.write(`data: ${JSON.stringify(update)}\n\n`);
       
       // Fermer la connexion si l'installation est terminée
-      if (update.progress >= 100 || update.stage === 'completed') {
+      if (update.progress >= 100 || update.stage === 'completed' || update.stage === 'error') {
         setTimeout(() => {
+          progressEmitter.off('progress', progressListener);
+          if (heartbeatInterval) clearInterval(heartbeatInterval);
           res.end();
         }, 1000);
       }
@@ -217,15 +250,31 @@ router.get('/appstore/progress/:appId', (req: any, res: any) => {
   
   progressEmitter.on('progress', progressListener);
   
+  // Heartbeat toutes les 5 secondes pour garder la connexion vivante
+  const heartbeatInterval = setInterval(() => {
+    if (!activeWorkers.has(appId)) {
+      // L'installation n'est plus active
+      res.write(`data: ${JSON.stringify({ appId, progress: lastProgressValue, message: 'Installation terminée ou annulée', stage: 'inactive' })}\n\n`);
+      clearInterval(heartbeatInterval);
+      progressEmitter.off('progress', progressListener);
+      res.end();
+    } else {
+      // Envoyer un heartbeat
+      res.write(`: heartbeat\n\n`);
+    }
+  }, 5000);
+  
   // Nettoyer l'écouteur quand le client se déconnecte
   req.on('close', () => {
     progressEmitter.off('progress', progressListener);
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
     res.end();
   });
   
   // Timeout de sécurité (30 minutes)
   setTimeout(() => {
     progressEmitter.off('progress', progressListener);
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
     res.end();
   }, 30 * 60 * 1000);
 });
@@ -270,6 +319,8 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     worker.on('exit', (code) => {
       // Retirer le worker de la map quand il se termine
       activeWorkers.delete(appId);
+      // Nettoyer la progression sauvegardée
+      lastProgressMap.delete(appId);
       
       if (code === 0) {
         console.log(`[appStore] ✅ Installation de ${appId} terminée avec succès`);
@@ -289,6 +340,7 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     worker.on('error', (error) => {
       console.error(`[appStore] ❌ Erreur du worker pour ${appId}:`, error);
       activeWorkers.delete(appId);
+      lastProgressMap.delete(appId);
       
       // Émettre un événement de progression d'erreur pour notifier le frontend
       progressEmitter.emit('progress', {
@@ -334,6 +386,7 @@ router.post('/appstore/apps/:id/cancel', verifyToken, hasPermission('manage_apps
     
     // Retirer de la map
     activeWorkers.delete(appId);
+    lastProgressMap.delete(appId);
     
     // Envoyer un événement de progression pour informer le frontend
     progressEmitter.emit('progress', {

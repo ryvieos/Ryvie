@@ -69,7 +69,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
     };
 
     fetchStorageStats();
-    const interval = setInterval(fetchStorageStats, 10000); // Mise à jour toutes les 10 secondes
+    const interval = setInterval(fetchStorageStats, 30000); // Mise à jour toutes les 30 secondes
 
     return () => clearInterval(interval);
   }, [accessMode]);
