@@ -5,7 +5,19 @@ const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 
+// Cache pour getServerInfo (5 secondes)
+let serverInfoCache: any = null;
+let serverInfoCacheTime = 0;
+const CACHE_DURATION = 5000; // 5 secondes
+
 async function getServerInfo() {
+  // Retourner le cache si valide
+  const now = Date.now();
+  if (serverInfoCache && (now - serverInfoCacheTime) < CACHE_DURATION) {
+    return serverInfoCache;
+  }
+  
+  // Sinon, calculer les infos
   const totalRam = os.totalmem();
   const freeRam = os.freemem();
   const ramUsagePercentage = (((totalRam - freeRam) / totalRam) * 100).toFixed(1);
@@ -94,7 +106,7 @@ async function getServerInfo() {
     osutils.cpuUsage(u => resolve((u * 100).toFixed(1)));
   });
 
-  return {
+  const result = {
     stockage: {
       utilise: `${totalUsed.toFixed(1)} GB`,
       libre: `${totalFree.toFixed(1)} GB`,
@@ -107,6 +119,12 @@ async function getServerInfo() {
     totalApps: appsCount,
     raidDuplication: raidStatus,
   };
+  
+  // Mettre en cache le résultat
+  serverInfoCache = result;
+  serverInfoCacheTime = Date.now();
+  
+  return result;
 }
 
 async function restartServer() {

@@ -6,9 +6,17 @@ const appManager = require('./appManagerService');
 const docker = new Docker();
 
 // Container name mapping for display
-const containerMapping: Record<string, string> = {};
+const containerMapping: Record<string, string> = {
+  'ryvie-backend': 'Ryvie Backend',
+  'ryvie-frontend': 'Ryvie Frontend',
+  'openldap': 'OpenLDAP',
+  'redis': 'Redis',
+};
 
-
+// Cache pour getAppStatus (3 secondes)
+let appStatusCache: any = null;
+let appStatusCacheTime = 0;
+const APP_STATUS_CACHE_DURATION = 3000; // 3 secondes
 
 function extractAppName(containerName) {
   if (containerName.startsWith('app-')) {
@@ -30,13 +38,21 @@ async function getAllContainers(): Promise<any[]> {
 }
 
 async function getAppStatus() {
+  // Retourner le cache si valide
+  const now = Date.now();
+  if (appStatusCache && (now - appStatusCacheTime) < APP_STATUS_CACHE_DURATION) {
+    return appStatusCache;
+  }
+  
+  let result;
+  
   try {
     // Essayer d'abord d'utiliser le nouveau système avec manifests
     const installedApps = await appManager.listInstalledApps();
     
     if (installedApps && installedApps.length > 0) {
       console.log('[dockerService] Utilisation du système de manifests');
-      return installedApps.map(app => ({
+      result = installedApps.map(app => ({
         id: app.id,
         name: app.name,
         status: app.status,
@@ -48,6 +64,11 @@ async function getAppStatus() {
         category: app.category,
         description: app.description
       }));
+      
+      // Mettre en cache
+      appStatusCache = result;
+      appStatusCacheTime = Date.now();
+      return result;
     }
   } catch (error: any) {
     console.log('[dockerService] Erreur avec appManager, fallback sur ancien système:', error.message);
@@ -100,7 +121,7 @@ async function getAppStatus() {
     apps[appName].running = apps[appName].active > 0;
   }
 
-  return Object.values(apps).map((app) => ({
+  result = Object.values(apps).map((app) => ({
     id: app.id,
     name: app.name,
     status: app.running ? 'running' : 'stopped',
@@ -114,6 +135,12 @@ async function getAppStatus() {
     ports: app.ports.sort((a, b) => a - b),
     containers: app.containers,
   }));
+  
+  // Mettre en cache
+  appStatusCache = result;
+  appStatusCacheTime = Date.now();
+  
+  return result;
 }
 
 async function startApp(appId) {
