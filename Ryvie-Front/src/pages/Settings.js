@@ -909,12 +909,8 @@ const Settings = () => {
       window.electronAPI.updateAccessMode(newMode);
     }
     
-    // Afficher un message de confirmation
-    setChangeStatus({
-      show: true,
-      success: true,
-      message: `Mode d'accès changé pour: ${newMode === 'public' ? 'Public' : 'Privé'}. Redirection...`
-    });
+    // Afficher un toast de confirmation
+    showToast(`Mode d'accès changé pour: ${newMode === 'public' ? 'Remote' : 'Privé'}. Redirection...`, 'success');
     
     // Rediriger vers l'URL correspondante après 1.5 secondes
     setTimeout(() => {
@@ -2284,13 +2280,6 @@ const Settings = () => {
             <div className="setting-info">
               <h3>Mode d'accès</h3>
               <p>Définit comment l'application se connecte au serveur Ryvie</p>
-              {changeStatus.show && (
-                <div className={`status-message ${changeStatus.success ? 'success' : 'error'}`}>
-                  {changeStatus.success 
-                    ? changeStatus.message || "✓ Paramètre modifié avec succès" 
-                    : "✗ Erreur lors du changement de paramètre"}
-                </div>
-              )}
             </div>
             <div className="setting-control">
               <div className="toggle-buttons">
@@ -2304,7 +2293,7 @@ const Settings = () => {
                   className={`toggle-button ${accessMode === 'public' ? 'active' : ''}`}
                   onClick={() => handleAccessModeChange('public')}
                 >
-                  Public (Internet)
+                  Remote
                 </button>
               </div>
             </div>

@@ -55,7 +55,7 @@ const Userlogin = () => {
         const serverUrl = getServerUrl(mode);
         console.log(`[Connexion] Chargement des utilisateurs depuis: ${serverUrl}`);
         
-        // Essayer l'endpoint protégé si un token existe (pas seulement Admin). En cas d'échec 401/403, fallback public.
+        // Essayer l'endpoint protégé si un token existe (pas seulement Admin). En cas d'échec 401/403, fallback remote.
         const session = getSessionInfo() || {};
         const token = session.token;
         let response;
@@ -70,7 +70,7 @@ const Userlogin = () => {
             });
           } catch (e) {
             if (e?.response?.status === 401 || e?.response?.status === 403) {
-              console.warn('[Connexion] Accès refusé à /api/users, bascule sur /api/users-public');
+              console.warn('[Connexion] Accès refusé à /api/users, bascule sur /api/users-remote');
               response = await axios.get(`${serverUrl}/api/users-public`, {
                 timeout: 5000,
                 headers: { 'Accept': 'application/json' }
@@ -110,9 +110,9 @@ const Userlogin = () => {
       } catch (err) {
         console.error('Erreur lors du chargement des utilisateurs:', err);
         
-        // Si on est en web et qu'on a échoué en mode privé, forcer le mode privé (pas de serveur public pour les tests)
+        // Si on est en web et qu'on a échoué en mode privé, forcer le mode privé (pas de serveur remote pour les tests)
         if (!isElectron() && mode === 'private') {
-          console.log('[Connexion] Échec en mode privé, mais on reste en mode privé (pas de serveur public de test)');
+          console.log('[Connexion] Échec en mode privé, mais on reste en mode privé (pas de serveur remote de test)');
           setError('Impossible de se connecter au serveur local ryvie.local:3002. Vérifiez que le serveur est démarré et accessible.');
           setLoading(false);
           return;
@@ -299,7 +299,7 @@ const Userlogin = () => {
         
         <div className="access-mode-indicator">
           <span className={`mode-badge ${accessMode}`}>
-            Mode: {accessMode === 'private' ? 'Local' : 'Public'}
+            Mode: {accessMode === 'private' ? 'Local' : 'Remote'}
           </span>
           {!isElectron() && (
             <span className="platform-badge">Web</span>

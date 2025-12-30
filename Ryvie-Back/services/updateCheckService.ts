@@ -55,7 +55,7 @@ function getCurrentBranch(dir) {
 
 /**
  * Récupère la dernière release GitHub pour une branche donnée via target_commitish.
- * Fallback: si aucune release sur la branche, retourne la dernière release publique.
+ * Fallback: si aucune release sur la branche, retourne la dernière release remote.
  */
 async function getLatestGitHubReleaseForBranch(owner, repo, branch) {
   try {

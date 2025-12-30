@@ -7,6 +7,9 @@ import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 const ItemTypes = { ICON: 'icon' };
 
+// Set global pour empêcher plusieurs désinstallations parallèles de la même app
+const uninstallInProgress = new Set();
+
 // Composant ContextMenuPortal
 const ContextMenuPortal = ({ children, x, y }) => {
   const menu = (
@@ -181,6 +184,13 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
 
   // Fonction pour exécuter la désinstallation (appelée après confirmation)
   const executeUninstall = async (appId, appName, appKey) => {
+    // Empêcher plusieurs appels parallèles pour la même app (double clic, re-renders, etc.)
+    if (uninstallInProgress.has(appId)) {
+      console.log(`[Icon] ⏭️  Désinstallation déjà en cours pour ${appId}`);
+      return;
+    }
+    uninstallInProgress.add(appId);
+
     setPendingAction('stopping');
     setIsUninstalling(true);
     
@@ -191,7 +201,6 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
       const response = await axios.delete(uninstallUrl, { timeout: 120000 });
       console.log(`[Icon] ✅ Désinstallation de ${appName} terminée`);
 
-      // Afficher modal de succès
       setConfirmModal({
         show: true,
         type: 'success',
@@ -219,10 +228,11 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
         message: `Erreur lors de la désinstallation de ${appName}: ${errorMsg}`,
         onConfirm: () => setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null })
       });
+    } finally {
+      uninstallInProgress.delete(appId);
     }
   };
 
-  // Ref pour empêcher la réouverture immédiate après fermeture
   const modalClosingRef = React.useRef(false);
 
   // Fermer la modal
@@ -237,14 +247,22 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
 
   // Gérer le clic sur l'overlay
   const handleOverlayClick = React.useCallback((e) => {
-    // S'assurer que le clic est bien sur l'overlay et pas sur la modal
+    // Pour les modales de succès/erreur, le clic à l'extérieur ne doit rien faire :
+    // l'utilisateur doit obligatoirement cliquer sur OK.
+    if (confirmModal.type === 'success' || confirmModal.type === 'error') {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    // Pour les modales de confirmation (type "danger"), autoriser la fermeture par clic sur l'overlay
     if (e.target === e.currentTarget) {
       e.nativeEvent.stopImmediatePropagation();
       e.stopPropagation();
       e.preventDefault();
       closeModal();
     }
-  }, [closeModal]);
+  }, [closeModal, confirmModal.type]);
 
   // Bloquer tous les événements de l'overlay
   const blockAllEvents = React.useCallback((e) => {

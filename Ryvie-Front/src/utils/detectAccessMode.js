@@ -1,6 +1,6 @@
 /**
- * Utilitaire pour détecter automatiquement le mode d'accès (privé/public)
- * Teste la connectivité au serveur local et bascule vers public si nécessaire
+ * Utilitaire pour détecter automatiquement le mode d'accès (privé/remote)
+ * Teste la connectivité au serveur local et bascule vers remote si nécessaire
  */
 
 import urlsConfig from '../config/urls';
@@ -9,14 +9,14 @@ import { io } from 'socket.io-client';
 import { isElectron } from './platformUtils';
 
 // Etat global (source de vérité pour la session en cours)
-let currentMode = null; // 'private' | 'public' | null
+let currentMode = null; // 'private' | 'remote' | null
 
 /**
  * Détecte le mode d'accès basé sur l'URL courante du navigateur
- * - Si hostname = backendHost de netbird-data.json → public
- * - Si hostname = un domaine de netbird-data.json → public
+ * - Si hostname = backendHost de netbird-data.json → remote
+ * - Si hostname = un domaine de netbird-data.json → remote
  * - Sinon → private
- * @returns {'private' | 'public'}
+ * @returns {'private' | 'remote'}
  */
 function detectModeFromUrl() {
   if (typeof window === 'undefined') return 'private';
@@ -26,22 +26,22 @@ function detectModeFromUrl() {
   const backendHost = netbirdData?.received?.backendHost;
   const domains = netbirdData?.domains || {};
   
-  // Si on est sur l'IP Netbird (backendHost), c'est le mode public
+  // Si on est sur l'IP Netbird (backendHost), c'est le mode remote
   if (backendHost && hostname === backendHost) {
-    console.log(`[AccessMode] Hostname ${hostname} = backendHost → mode PUBLIC`);
+    console.log(`[AccessMode] Hostname ${hostname} = backendHost → mode REMOTE`);
     return 'public';
   }
   
-  // Si on est sur un domaine Netbird (*.ryvie.ovh), c'est le mode public
+  // Si on est sur un domaine Netbird (*.ryvie.ovh), c'est le mode remote
   const allDomains = Object.values(domains);
   if (allDomains.includes(hostname)) {
-    console.log(`[AccessMode] Hostname ${hostname} = domaine Netbird → mode PUBLIC`);
+    console.log(`[AccessMode] Hostname ${hostname} = domaine Netbird → mode REMOTE`);
     return 'public';
   }
   
 
   if (hostname.endsWith('.ryvie.fr')) {
-    console.log(`[AccessMode] Hostname ${hostname} contient .ryvie.ovh → mode PUBLIC`);
+    console.log(`[AccessMode] Hostname ${hostname} contient .ryvie.ovh → mode REMOTE`);
     return 'public';
   }
   
@@ -84,7 +84,7 @@ function ensureLoadedFromStorage() {
       persist(urlMode);
       return;
     }
-    if (stored === 'private' || stored === 'public') {
+    if (stored === 'private' || stored === 'public' || stored === 'remote') {
       currentMode = stored;
     }
   } catch {}
@@ -99,18 +99,18 @@ function ensureLoadedFromStorage() {
 /**
  * Détecte automatiquement le mode d'accès
  * PRIORITÉ: L'URL courante détermine le mode (pas le test de connectivité)
- * - Si on est sur l'IP Netbird ou un domaine *.ryvie.ovh → PUBLIC
+ * - Si on est sur l'IP Netbird ou un domaine *.ryvie.ovh → REMOTE
  * - Sinon → PRIVATE
  * @param {number} timeout - Timeout en millisecondes pour le test (défaut: 2000ms)
- * @returns {Promise<string>} - 'private' ou 'public'
+ * @returns {Promise<string>} - 'private' ou 'remote'
  */
 export async function detectAccessMode(timeout = 2000) {
   // PRIORITÉ: Détecter le mode basé sur l'URL courante
   const urlMode = detectModeFromUrl();
   
-  // Si l'URL indique clairement le mode public, ne pas faire de test de connectivité
+  // Si l'URL indique clairement le mode remote, ne pas faire de test de connectivité
   if (urlMode === 'public') {
-    console.log('[AccessMode] URL indique mode PUBLIC - pas de test de connectivité');
+    console.log('[AccessMode] URL indique mode REMOTE - pas de test de connectivité');
     setAccessMode('public');
     return 'public';
   }
@@ -162,7 +162,7 @@ export async function detectAccessMode(timeout = 2000) {
     }
   }
 
-  console.log('[AccessMode] Basculement vers le mode PUBLIC');
+  console.log('[AccessMode] Basculement vers le mode REMOTE');
   setAccessMode('public');
   return 'public';
 }
@@ -170,9 +170,9 @@ export async function detectAccessMode(timeout = 2000) {
 /**
  * Récupère le mode d'accès actuel
  * La détection est basée sur l'URL courante du navigateur:
- * - IP Netbird (backendHost) ou domaine *.ryvie.ovh → public
+ * - IP Netbird (backendHost) ou domaine *.ryvie.ovh → remote
  * - Sinon (ryvie.local, localhost, etc.) → private
- * @returns {string|null} - 'private', 'public' ou null si non défini
+ * @returns {string|null} - 'private', 'remote' ou null si non défini
  */
 export function getCurrentAccessMode() {
   // Toujours re-détecter basé sur l'URL courante
@@ -185,10 +185,10 @@ export function getCurrentAccessMode() {
     persist(urlMode);
   }
   
-  // IMPORTANT: Si on est en HTTPS, forcer le mode public pour éviter Mixed Content
+  // IMPORTANT: Si on est en HTTPS, forcer le mode remote pour éviter Mixed Content
   if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
     if (currentMode !== 'public') {
-      console.log('[AccessMode] Page HTTPS détectée - forçage du mode PUBLIC');
+      console.log('[AccessMode] Page HTTPS détectée - forçage du mode REMOTE');
       setAccessMode('public');
     }
     return 'public';
@@ -199,11 +199,11 @@ export function getCurrentAccessMode() {
 
 /**
  * Force un mode d'accès spécifique
- * @param {string} mode - 'private' ou 'public'
+ * @param {string} mode - 'private' ou 'remote'
  */
 export function setAccessMode(mode) {
-  if (mode !== 'private' && mode !== 'public') {
-    throw new Error('Mode d\'accès invalide. Utilisez "private" ou "public".');
+  if (mode !== 'private' && mode !== 'public' && mode !== 'remote') {
+    throw new Error('Mode d\'accès invalide. Utilisez "private" ou "remote".');
   }
   currentMode = mode;
   persist(mode);
@@ -213,7 +213,7 @@ export function setAccessMode(mode) {
 
 /**
  * Teste la connectivité vers un serveur spécifique
- * @param {string} mode - 'private' ou 'public'
+ * @param {string} mode - 'private' ou 'remote'
  * @param {number} timeout - Timeout en millisecondes
  * @returns {Promise<boolean>} - true si accessible, false sinon
  */
@@ -261,7 +261,7 @@ export function unsubscribeAccessMode(cb) {
 /**
  * Crée une connexion Socket.IO en respectant le mode d'accès et le contexte (Web/Electron, HTTPS, etc.)
  * @param {Object} params
- * @param {'private'|'public'} params.mode - Mode d'accès à utiliser
+ * @param {'private'|'remote'} params.mode - Mode d'accès à utiliser
  * @param {function} [params.onConnect]
  * @param {function} [params.onDisconnect]
  * @param {function} [params.onError]

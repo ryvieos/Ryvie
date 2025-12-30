@@ -8,6 +8,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useSocket } from '../contexts/SocketContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../utils/detectAccessMode';
+import { loadInstallState, saveInstallState, updateInstallation, removeInstallation } from '../utils/installStateManager';
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
 import { endSession, getCurrentUser, getCurrentUserRole, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
 import urlsConfig from '../config/urls';
@@ -621,7 +622,8 @@ const Home = () => {
   const [appStoreMounted, setAppStoreMounted] = useState(false);
   const [appStoreInstalling, setAppStoreInstalling] = useState(false);
   // Map des installations en cours: { appId: { appName, progress } }
-  const [installingApps, setInstallingApps] = useState({});
+  // Charger l'état depuis localStorage au montage
+  const [installingApps, setInstallingApps] = useState(() => loadInstallState());
   const [pendingUnmount, setPendingUnmount] = useState(false);
 
   const [mounted, setMounted] = useState(false);
@@ -648,6 +650,7 @@ const Home = () => {
   const [activeContextMenu, setActiveContextMenu] = useState(null); // Menu contextuel global
   const [taskbarReady, setTaskbarReady] = useState(false); // Animations taskbar quand les icônes de la barre sont chargées
   const taskbarLoadedOnceRef = React.useRef(false); // Assure que l'animation ne se joue qu'une seule fois
+  const taskbarTimeoutRef = React.useRef(null); // Timeout de secours pour forcer l'affichage
   const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
   const [bgUrl, setBgUrl] = useState(null);         // URL calculée courante
   const [prevBgUrl, setPrevBgUrl] = useState(null); // URL précédente pour crossfade
@@ -982,16 +985,22 @@ const Home = () => {
         
         if (installing && appId && appName) {
           // Ajouter ou mettre à jour l'installation
-          setInstallingApps(prev => ({
-            ...prev,
-            [appId]: { appName, progress: progress || 0 }
-          }));
+          setInstallingApps(prev => {
+            const updated = {
+              ...prev,
+              [appId]: { appName, progress: progress || 0 }
+            };
+            saveInstallState(updated);
+            return updated;
+          });
         } else if (!installing && appId) {
           // Installation terminée, supprimer après un délai
           setTimeout(() => {
             setInstallingApps(prev => {
               const newApps = { ...prev };
               delete newApps[appId];
+              saveInstallState(newApps);
+              removeInstallation(appId);
               return newApps;
             });
           }, 500);
@@ -1022,19 +1031,23 @@ const Home = () => {
         const { appId, appName, progress } = event.data;
         if (appId) {
           setInstallingApps(prev => {
+            let updated = prev;
             if (prev[appId]) {
-              return {
+              updated = {
                 ...prev,
                 [appId]: { ...prev[appId], progress: progress || 0 }
               };
             } else if (appName) {
               // Nouvelle app pas encore enregistrée
-              return {
+              updated = {
                 ...prev,
                 [appId]: { appName, progress: progress || 0 }
               };
             }
-            return prev;
+            if (updated !== prev) {
+              saveInstallState(updated);
+            }
+            return updated;
           });
         }
       }
@@ -1044,6 +1057,200 @@ const Home = () => {
     return () => window.removeEventListener('message', handleMessage);
   }, [navigate, refreshDesktopIcons, pendingUnmount]);
   
+  // Vérifier et restaurer les installations en cours au montage
+  useEffect(() => {
+    const activeEventSources = [];
+    
+    const checkOngoingInstallations = async () => {
+      const savedInstalls = loadInstallState();
+      const installIds = Object.keys(savedInstalls);
+      
+      if (installIds.length === 0) return;
+      
+      console.log('[Home] Vérification des installations en cours:', installIds);
+      
+      try {
+        const mode = getCurrentAccessMode() || 'private';
+        const serverUrl = getServerUrl(mode);
+        
+        // Vérifier les installations actives côté backend
+        const activeResponse = await axios.get(`${serverUrl}/api/appstore/active-installations`);
+        const activeInstalls = activeResponse.data?.installations || [];
+        
+        console.log('[Home] Installations actives côté backend:', activeInstalls);
+        
+        // Vérifier les apps installées
+        const appsResponse = await axios.get(`${serverUrl}/api/apps`);
+        const installedApps = appsResponse.data || [];
+        
+        // Synchroniser l'état
+        for (const appId of installIds) {
+          const isActive = activeInstalls.includes(appId);
+          const isInstalled = installedApps.some(app => app.id === appId);
+          
+          if (isInstalled) {
+            // L'installation est terminée, nettoyer
+            console.log(`[Home] Installation de ${appId} terminée, nettoyage`);
+            removeInstallation(appId);
+            setInstallingApps(prev => {
+              const updated = { ...prev };
+              delete updated[appId];
+              return updated;
+            });
+          } else if (!isActive) {
+            // L'installation n'est plus active et l'app n'est pas installée
+            // Probablement échouée ou annulée
+            console.log(`[Home] Installation de ${appId} n'est plus active, nettoyage`);
+            removeInstallation(appId);
+            setInstallingApps(prev => {
+              const updated = { ...prev };
+              delete updated[appId];
+              return updated;
+            });
+          } else {
+            // L'installation est toujours en cours, reconnecter au SSE
+            console.log(`[Home] Installation de ${appId} toujours en cours, reconnexion SSE`);
+            
+            // Restaurer l'état de l'installation dans le state pour afficher la notification
+            setInstallingApps(prev => ({
+              ...prev,
+              [appId]: savedInstalls[appId]
+            }));
+            
+            const progressUrl = `${serverUrl}/api/appstore/progress/${appId}`;
+            const eventSource = new EventSource(progressUrl);
+            activeEventSources.push(eventSource);
+            
+            eventSource.onmessage = (event) => {
+              try {
+                const data = JSON.parse(event.data);
+                console.log(`[Home] SSE Progress pour ${appId}:`, data.progress, data.message);
+                
+                // Mettre à jour la progression
+                setInstallingApps(prev => {
+                  const appData = savedInstalls[appId];
+                  if (!appData) {
+                    console.warn(`[Home] Pas de données pour ${appId} dans savedInstalls`);
+                    return prev;
+                  }
+                  
+                  const updated = {
+                    ...prev,
+                    [appId]: { 
+                      appName: appData.appName,
+                      progress: data.progress || 0 
+                    }
+                  };
+                  saveInstallState(updated);
+                  return updated;
+                });
+                
+                // Si terminé avec succès
+                if (data.progress >= 100 || data.stage === 'complete') {
+                  console.log(`[Home] Installation de ${appId} terminée via SSE`);
+                  eventSource.close();
+                  setTimeout(() => {
+                    removeInstallation(appId);
+                    setInstallingApps(prev => {
+                      const updated = { ...prev };
+                      delete updated[appId];
+                      return updated;
+                    });
+                    refreshDesktopIcons();
+                  }, 1000);
+                }
+                
+                // Si erreur
+                if (data.stage === 'error') {
+                  console.error(`[Home] Erreur installation ${appId}:`, data.message);
+                  eventSource.close();
+                  removeInstallation(appId);
+                  setInstallingApps(prev => {
+                    const updated = { ...prev };
+                    delete updated[appId];
+                    return updated;
+                  });
+                }
+              } catch (error) {
+                console.warn(`[Home] Erreur parsing SSE pour ${appId}:`, error);
+              }
+            };
+            
+            eventSource.onerror = (error) => {
+              console.warn(`[Home] Erreur SSE pour ${appId}:`, error);
+              eventSource.close();
+            };
+          }
+        }
+        
+        // Rafraîchir les icônes pour afficher les apps installées
+        setTimeout(() => refreshDesktopIcons(), 1000);
+      } catch (error) {
+        console.warn('[Home] Erreur vérification installations:', error);
+        // En cas d'erreur, garder l'état local
+      }
+    };
+    
+    checkOngoingInstallations();
+    
+    // Cleanup: fermer les EventSources au démontage
+    return () => {
+      activeEventSources.forEach(es => es.close());
+    };
+  }, []);
+  
+  // Polling séparé pour vérifier les installations terminées
+  useEffect(() => {
+    // Polling périodique toutes les 10 secondes pour vérifier les installations
+    const pollInterval = setInterval(async () => {
+      const savedInstalls = loadInstallState();
+      const installIds = Object.keys(savedInstalls);
+      
+      if (installIds.length === 0) return;
+      
+      try {
+        const mode = getCurrentAccessMode() || 'private';
+        const serverUrl = getServerUrl(mode);
+        
+        const [activeResponse, appsResponse] = await Promise.all([
+          axios.get(`${serverUrl}/api/appstore/active-installations`),
+          axios.get(`${serverUrl}/api/apps`)
+        ]);
+        
+        const activeInstalls = activeResponse.data?.installations || [];
+        const installedApps = appsResponse.data || [];
+        
+        let hasChanges = false;
+        
+        for (const appId of installIds) {
+          const isActive = activeInstalls.includes(appId);
+          const isInstalled = installedApps.some(app => app.id === appId);
+          
+          if (isInstalled || !isActive) {
+            console.log(`[Home] Polling: Installation de ${appId} terminée ou inactive, nettoyage`);
+            removeInstallation(appId);
+            setInstallingApps(prev => {
+              const updated = { ...prev };
+              delete updated[appId];
+              return updated;
+            });
+            hasChanges = true;
+          }
+        }
+        
+        if (hasChanges) {
+          refreshDesktopIcons();
+        }
+      } catch (error) {
+        console.warn('[Home] Erreur polling installations:', error);
+      }
+    }, 10000);
+    
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, []);
+
   useEffect(() => {
     const initializeAccessMode = () => {
       // TOUJOURS utiliser le mode stocké - ne jamais faire de détection automatique
@@ -1695,6 +1902,23 @@ const Home = () => {
   }, [backgroundImage, accessMode]);
 
   // Taskbar prête quand toutes les images locales sont chargées (une seule fois)
+  // Timeout de secours pour forcer l'affichage si les images ne se chargent pas
+  useEffect(() => {
+    // Forcer l'affichage de la taskbar après 500ms maximum
+    taskbarTimeoutRef.current = setTimeout(() => {
+      if (!taskbarLoadedOnceRef.current) {
+        console.log('[Home] ⏰ Timeout taskbar - forçage de l\'affichage');
+        taskbarLoadedOnceRef.current = true;
+        setTaskbarReady(true);
+      }
+    }, 500);
+
+    return () => {
+      if (taskbarTimeoutRef.current) {
+        clearTimeout(taskbarTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Fermer le menu contextuel si on clique ailleurs
   useEffect(() => {
@@ -2046,7 +2270,7 @@ const Home = () => {
               {serverStatus ? 'Connecté' : 'Déconnecté'}
             </span>
             <span className="mode-indicator">
-              {accessMode === 'private' ? 'Local' : 'Public'}
+              {accessMode === 'private' ? 'Local' : 'Remote'}
             </span>
             {!isElectron() && (
               <span className="platform-indicator">Web</span>
@@ -2066,6 +2290,11 @@ const Home = () => {
               if (taskbarLoadedOnceRef.current) return;
               taskbarLoadedOnceRef.current = true;
               setTaskbarReady(true);
+              // Annuler le timeout de secours si les images se chargent normalement
+              if (taskbarTimeoutRef.current) {
+                clearTimeout(taskbarTimeoutRef.current);
+                taskbarTimeoutRef.current = null;
+              }
             }}
           />
           {currentUserName && (

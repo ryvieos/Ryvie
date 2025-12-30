@@ -10,7 +10,7 @@ const { getServerUrl } = urlsConfig;
  * Teste la connectivité avec une approche progressive
  * 1. Test simple sans credentials
  * 2. Test avec une requête HEAD si disponible
- * 3. Fallback vers mode public si tout échoue
+ * 3. Fallback vers mode remote si tout échoue
  */
 export async function detectAccessModeRobust(timeout = 3000) {
   console.log('[FallbackDetection] Démarrage de la détection robuste...');
@@ -23,16 +23,16 @@ export async function detectAccessModeRobust(timeout = 3000) {
     return 'private';
   }
   
-  // Test 2: Vérifier si le serveur public est accessible
+  // Test 2: Vérifier si le serveur remote est accessible
   const publicAccessible = await testSimpleConnectivity('public', timeout);
   if (publicAccessible) {
-    console.log('[FallbackDetection] Serveur public accessible - Mode PUBLIC');
+    console.log('[FallbackDetection] Serveur remote accessible - Mode REMOTE');
     localStorage.setItem('accessMode', 'public');
     return 'public';
   }
   
-  // Fallback: Si aucun serveur n'est accessible, utiliser le mode public par défaut
-  console.log('[FallbackDetection] Aucun serveur accessible - Fallback vers PUBLIC');
+  // Fallback: Si aucun serveur n'est accessible, utiliser le mode remote par défaut
+  console.log('[FallbackDetection] Aucun serveur accessible - Fallback vers REMOTE');
   localStorage.setItem('accessMode', 'public');
   return 'public';
 }
@@ -127,7 +127,7 @@ export async function detectWithRetry(maxRetries = 2, timeout = 2000) {
       console.log(`[FallbackDetection] Tentative ${attempt} échouée:`, error.message);
       
       if (attempt === maxRetries) {
-        console.log('[FallbackDetection] Toutes les tentatives ont échoué - Fallback vers PUBLIC');
+        console.log('[FallbackDetection] Toutes les tentatives ont échoué - Fallback vers REMOTE');
         localStorage.setItem('accessMode', 'public');
         return 'public';
       }

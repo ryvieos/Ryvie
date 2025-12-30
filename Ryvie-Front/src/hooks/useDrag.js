@@ -14,7 +14,7 @@ const useDrag = (onDragEnd, onDragMove) => {
   const longPressTriggeredRef = useRef(false);
   const latestPointerRef = useRef({ x: 0, y: 0 });
   const offsetRef = useRef({ x: 0, y: 0 });
-  const LONG_PRESS_MS = 100; // délai avant activation du drag
+  const LONG_PRESS_MS = 250; // délai avant activation du drag
   const [, setDragTick] = useState(0);
   const handlePointerDown = useCallback((e, itemId, itemData) => {
     // Ignorer le clic droit (button 2) pour permettre le menu contextuel

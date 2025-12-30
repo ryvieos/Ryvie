@@ -222,16 +222,16 @@ router.get('/settings/ryvie-domains', (req: any, res: any) => {
         const nb = JSON.parse(fs.readFileSync(NETBIRD_FILE, 'utf8')) || {};
         const domains = nb.domains ? Object.values(nb.domains).filter(Boolean).map(d => String(d).toLowerCase()) : [];
         if (domains.includes(hostOnly) || hostOnly.endsWith('.ryvie.fr')) {
-          console.log(`[settings] Accès via domaine public Netbird refusé (${hostOnly})`);
-          return res.status(403).json({ error: 'Accès refusé: cette API n\'est pas exposée via le domaine public' });
+          console.log(`[settings] Accès via domaine remote Netbird refusé (${hostOnly})`);
+          return res.status(403).json({ error: 'Accès refusé: cette API n\'est pas exposée via le domaine remote' });
         }
       }
     } catch (_: any) {}
 
-    // Bloquer le port public 3002 uniquement si la requête n'est PAS locale
+    // Bloquer le port remote 3002 uniquement si la requête n'est PAS locale
     if (!isLocal && hostHeader.includes(':3002')) {
-      console.log(`[settings] Accès via port public 3002 refusé pour ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP})`);
-      return res.status(403).json({ error: 'Accès refusé: cette API n\'est pas exposée via l\'adresse publique' });
+      console.log(`[settings] Accès via port remote 3002 refusé pour ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP})`);
+      return res.status(403).json({ error: 'Accès refusé: cette API n\'est pas exposée via l\'adresse remote' });
     }
 
     if (!isLocal) {

@@ -851,7 +851,7 @@ router.get('/geolocate', async (req: any, res: any) => {
       clientIp = clientIp.replace('::ffff:', '');
     }
     
-    // Si l'IP est locale, essayer de récupérer l'IP publique
+    // Si l'IP est locale, essayer de récupérer l'IP remote
     const isLocalIp = !clientIp || 
                       clientIp === '::1' || 
                       clientIp === '127.0.0.1' || 
@@ -866,14 +866,14 @@ router.get('/geolocate', async (req: any, res: any) => {
                       clientIp.startsWith('172.31.');
     
     if (isLocalIp) {
-      console.log('[userPreferences] IP locale détectée, récupération IP publique...');
+      console.log('[userPreferences] IP locale détectée, récupération IP remote...');
       try {
-        // Récupérer l'IP publique du serveur
+        // Récupérer l'IP remote du serveur
         const ipResp = await axios.get('https://api.ipify.org?format=json', { timeout: 3000 });
         clientIp = ipResp.data.ip;
-        console.log('[userPreferences] IP publique récupérée:', clientIp);
+        console.log('[userPreferences] IP remote récupérée:', clientIp);
       } catch (ipErr: any) {
-        console.warn('[userPreferences] Impossible de récupérer IP publique:', ipErr.message);
+        console.warn('[userPreferences] Impossible de récupérer IP remote:', ipErr.message);
       }
     }
     
