@@ -59,10 +59,6 @@
  - RAM: **8 Go minimum** (**16 Go recommandé**)
  - Stockage: **50 Go minimum**
 
-## Authors
-
-* **Jules Maisonnave** - *Initial work & Lead Development* - [GitHub](https://github.com/votre-username-si-besoin)
-
 ## Contributing
 
 Les contributions sont les bienvenues.
@@ -78,3 +74,7 @@ Les contributions sont les bienvenues.
 Ce projet est fourni **"tel quel"**, sans garantie d'aucune sorte.
 
 L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de données, indisponibilités ou autres problèmes résultant de l'utilisation (ou de l'impossibilité d'utiliser) Ryvie.
+
+## Authors
+
+* **Jules Maisonnave** - *Initial work & Lead Development* - [GitHub](https://github.com/votre-username-si-besoin)
