@@ -1,10 +1,11 @@
 <p align="center">
    <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="180" />
  </p>
+<img width="860" height="526" alt="Capture d’écran 2026-01-02 114848" src="https://github.com/user-attachments/assets/8dae1979-8291-4c29-a459-89aee3315a28" />
 
 # Ryvie
  
- Ryvie est un **OS + une plateforme** qui transforme une machine (mini‑PC, serveur, etc.) en **cloud personnel** simple à piloter.
+ Ryvie est un **OS + une plateforme** qui transforme une machine (mini‑PC, serveur, etc.) en **cloud personnel** simple à utiliser.
  
  L'objectif: avoir une page d'accueil type “launcher” (style iOS) pour lancer et administrer tes services (apps Docker), avec:
  
@@ -13,7 +14,7 @@
  - **Des préférences utilisateur** (layout, fond d’écran, thème, etc.)
  - **Une connexion P2P intégrée** pour l'accès à distance
  - **Un accès local ou distant** selon le mode (public/privé)
-   <img width="860" height="526" alt="Capture d’écran 2026-01-02 114848" src="https://github.com/user-attachments/assets/8dae1979-8291-4c29-a459-89aee3315a28" />
+ 
  ## Fonctionnalités
  - **Launcher**: grille responsive, drag & drop, widgets (météo, CPU/RAM, stockage…)
  - **Connexion P2P intégrée**: accès distant sans configuration réseau complexe
@@ -42,6 +43,9 @@
  ## Développement / contributions
  
  ### Architecture (repo)
+
+  <img width="5320" height="4243" alt="isoflow-export-2026-01-02T17_59_01 900Z" src="https://github.com/user-attachments/assets/74701ede-9edd-433c-8e9b-c3009b09fff1" />
+  
  - **Backend** (`Ryvie-Back/`) : API Express, Socket.IO, authentification LDAP + JWT, persistance des préférences utilisateurs dans `/data/config/`.
  - **Frontend** (`Ryvie-Front/`) : React 18 + Electron, grille responsive gérée par `GridLauncher`, consommation des manifests exposés par l'API.
  - **Données** (`/data/`) :
@@ -55,18 +59,22 @@
  - RAM: **8 Go minimum** (**16 Go recommandé**)
  - Stockage: **50 Go minimum**
 
- ## Contributing
- 
- Les contributions sont les bienvenues.
- 
- - **Issues**: ouvre une issue avec un maximum de détails (contexte, étapes pour reproduire, logs, captures).
- - **Pull requests**:
-   - crée une branche dédiée
-   - explique clairement le problème et la solution
-   - évite les changements non liés (un sujet par PR)
- 
- ## Disclaimer
- 
- Ce projet est fourni **"tel quel"**, sans garantie d'aucune sorte.
- 
- L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de données, indisponibilités ou autres problèmes résultant de l'utilisation (ou de l'impossibilité d'utiliser) Ryvie.
+## Authors
+
+* **Jules Maisonnave** - *Initial work & Lead Development* - [GitHub](https://github.com/votre-username-si-besoin)
+
+## Contributing
+
+Les contributions sont les bienvenues.
+
+- **Issues**: ouvre une issue avec un maximum de détails (contexte, étapes pour reproduire, logs, captures).
+- **Pull requests**:
+  - crée une branche dédiée
+  - explique clairement le problème et la solution
+  - évite les changements non liés (un sujet par PR)
+
+## Disclaimer
+
+Ce projet est fourni **"tel quel"**, sans garantie d'aucune sorte.
+
+L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de données, indisponibilités ou autres problèmes résultant de l'utilisation (ou de l'impossibilité d'utiliser) Ryvie.
