@@ -79,4 +79,4 @@ L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de do
 
 * **Jules Maisonnave** - *Initial work & Lead Development*
 * **Driss Bendahan** (@thegreenprogrammer) - *Infrastructure & DevOps*
-* **Paul Quiquempois** (@Loghin01) - *Frontend Architecture & User Experience*
+* **Paul Quiquempois** (@Loghin01) - *Development*
