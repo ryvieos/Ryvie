@@ -1,7 +1,7 @@
 <p align="center">
    <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="180" />
  </p>
- 
+
 # Ryvie
  
  Ryvie est un **OS + une plateforme** qui transforme une machine (mini‑PC, serveur, etc.) en **cloud personnel** simple à piloter.
@@ -13,7 +13,7 @@
  - **Des préférences utilisateur** (layout, fond d’écran, thème, etc.)
  - **Une connexion P2P intégrée** pour l'accès à distance
  - **Un accès local ou distant** selon le mode (public/privé)
- 
+   <img width="860" height="526" alt="Capture d’écran 2026-01-02 114848" src="https://github.com/user-attachments/assets/8dae1979-8291-4c29-a459-89aee3315a28" />
  ## Fonctionnalités
  - **Launcher**: grille responsive, drag & drop, widgets (météo, CPU/RAM, stockage…)
  - **Connexion P2P intégrée**: accès distant sans configuration réseau complexe
