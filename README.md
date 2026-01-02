@@ -1,83 +1,93 @@
 <p align="center">
-   <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="180" />
- </p>
-<img width="1920" height="1080" alt="Pitch cyber summit" src="https://github.com/user-attachments/assets/c432252e-0cf7-46d4-8b3b-8a5e0344003d" />
+  <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="180" />
+</p>
+<h1 align="center">Votre cloud personnel</h1>
+<p align="center">
+  <img width="1920" height="1080" alt="Pitch cyber summit" src="https://github.com/user-attachments/assets/c432252e-0cf7-46d4-8b3b-8a5e0344003d" />
+</p>
 
+---
 
-# Ryvie
- 
- Ryvie est un **OS + une plateforme** qui transforme une machine (mini‑PC, serveur, etc.) en **cloud personnel** simple à utiliser.
- 
- L'objectif: avoir une page d'accueil type “launcher” (style iOS) pour lancer et administrer tes services (apps Docker), avec:
- 
- - **Un launcher en grille** (apps + widgets)
- - **Une gestion centralisée** des apps (manifests, icônes, ports)
- - **Des préférences utilisateur** (layout, fond d’écran, thème, etc.)
- - **Une connexion P2P intégrée** pour l'accès à distance
- - **Un accès local ou distant** selon le mode (public/privé)
- 
- ## Fonctionnalités
- - **Launcher**: grille responsive, drag & drop, widgets (météo, CPU/RAM, stockage…)
- - **Connexion P2P intégrée**: accès distant sans configuration réseau complexe
- - **Catalogue d’apps**: les apps présentes sont détectées via des manifests générés
- - **Sauvegarde des préférences** par utilisateur côté backend
- - **Backend temps réel** (Socket.IO) pour état/rafraîchissements
- 
- ## Installation (utilisateur final)
- 
- 1. **Télécharger et installer l’OS Ryvie**
-    - Télécharge l’image/installeur fourni pour Ryvie.
-    - Installe l’OS sur la machine qui hébergera ton cloud personnel.
- 
- 2. **Télécharger le client Ryvie**
-    - Va sur `https://ryvie.fr`
-    - Télécharge le **client Ryvie** (selon ton système)
-    - Connecte-toi à ton instance Ryvie
- 
- 3. **Accéder à l’interface**
-    - Une fois connecté, tu arrives sur le launcher et tu peux:
-      - Lancer tes apps
-      - Organiser la grille
-      - Ajouter/supprimer des widgets
-      - Changer le fond d’écran et les préférences
- 
- ## Développement / contributions
- 
- ### Architecture (repo)
+## 🌟 Présentation
 
-  <img width="5320" height="4243" alt="isoflow-export-2026-01-02T17_59_01 900Z" src="https://github.com/user-attachments/assets/74701ede-9edd-433c-8e9b-c3009b09fff1" />
-  
- - **Backend** (`Ryvie-Back/`) : API Express, Socket.IO, authentification LDAP + JWT, persistance des préférences utilisateurs dans `/data/config/`.
- - **Frontend** (`Ryvie-Front/`) : React 18 + Electron, grille responsive gérée par `GridLauncher`, consommation des manifests exposés par l'API.
- - **Données** (`/data/`) :
-   - `/data/apps/` : dossiers sources des apps (docker-compose, configs…)
-   - `/data/config/manifests/` : manifests générés (icône + metadata)
-   - `/data/config/user-preferences/` : préférences par utilisateur (`<username>.json`)
-   - `/data/images/backgrounds/` : fonds personnalisés uploadés par les utilisateurs
- 
- ### Prérequis
- - CPU: **4 cœurs minimum**
- - RAM: **8 Go minimum** (**16 Go recommandé**)
- - Stockage: **50 Go minimum**
+**Ryvie** est un **OS + une plateforme** qui transforme n'importe quelle machine (mini‑PC, serveur, etc.) en un **cloud personnel** puissant et simple à utiliser. 
 
-## Contributing
+L'objectif est d'offrir une page d'accueil de type **"launcher"** (style iOS 📱) pour lancer et administrer vos services (apps Docker) en toute fluidité :
 
-Les contributions sont les bienvenues.
+- **🖥️ Launcher en grille** : Organisation intuitive des apps + widgets personnalisables.
+- **📦 Gestion centralisée** : Détection automatique des apps (manifests, icônes, ports).
+- **🎨 Préférences utilisateur** : Customisation complète (layout, fond d’écran, thèmes).
+- **🌐 Connexion P2P intégrée** : Accès distant sécurisé sans configuration réseau complexe.
+- **🔒 Accès flexible** : Mode local ou distant selon vos besoins (public/privé).
 
-- **Issues**: ouvre une issue avec un maximum de détails (contexte, étapes pour reproduire, logs, captures).
-- **Pull requests**:
-  - crée une branche dédiée
-  - explique clairement le problème et la solution
-  - évite les changements non liés (un sujet par PR)
+---
 
-## Disclaimer
+## 🚀 Fonctionnalités
 
-Ce projet est fourni **"tel quel"**, sans garantie d'aucune sorte.
+- **Grid Launcher** : Interface responsive, drag & drop, et widgets (météo, CPU/RAM, stockage...).
+- **P2P Ready** : Accès à vos données partout dans le monde, simplement.
+- **App Catalog** : Détection dynamique des applications via manifests générés.
+- **Cloud Sync** : Sauvegarde de vos préférences par utilisateur côté backend.
+- **Real-time Monitoring** : Backend réactif via Socket.IO pour un état du système toujours à jour.
 
-L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de données, indisponibilités ou autres problèmes résultant de l'utilisation (ou de l'impossibilité d'utiliser) Ryvie.
+---
 
-## Authors
+## 💻 Installation (utilisateur final)
 
-* **Jules Maisonnave** (@maisonnavejul) - *Initial work & Lead Development*
-* **Driss Bendahan** (@thegreenprogrammer) - *Infrastructure & DevOps*
-* **Paul Quiquempois** (@Loghin01) - *Development*
+1. **Télécharger et installer l’OS Ryvie** 💿
+   - Téléchargez l’image/installeur fourni.
+   - Installez l’OS sur la machine hôte.
+
+2. **Télécharger le client Ryvie** 📥
+   - Rendez-vous sur [ryvie.fr](https://ryvie.fr).
+   - Téléchargez le **client Ryvie** adapté à votre système.
+   - Connectez-vous à votre instance.
+
+3. **Accéder à l’interface** 🎉
+   - Gérez vos apps, organisez votre grille et personnalisez votre espace !
+
+---
+
+## 🏗️ Développement & Architecture
+
+### Architecture du Repo 🛠️
+
+<p align="center">
+  <img width="100%" alt="Architecture Schema" src="https://github.com/user-attachments/assets/74701ede-9edd-433c-8e9b-c3009b09fff1" />
+</p>
+
+- **Backend** (`Ryvie-Back/`) : API Express, Socket.IO, authentification LDAP + JWT.
+- **Frontend** (`Ryvie-Front/`) : React 18 + Electron pour une expérience fluide.
+- **Données** (`/data/`) : Configuration, manifests d'apps et stockage utilisateur.
+
+### 📋 Prérequis
+- **CPU** : 4 cœurs minimum 
+- **RAM** : 8 Go minimum (**16 Go recommandé**) 
+- **Stockage** : 50 Go minimum 
+
+---
+
+## 🤝 Contributing
+
+Les contributions sont les bienvenues ! ❤️
+
+- **Issues** : Signalez un bug ou proposez une idée avec un maximum de détails.
+- **Pull requests** : Créez une branche dédiée et expliquez clairement vos modifications.
+
+---
+
+## ⚠️ Disclaimer
+
+Ce projet est fourni **"tel quel"**, sans garantie d'aucune sorte. L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de données ou indisponibilités résultant de l'utilisation de la plateforme.
+
+---
+
+## 👥 Authors
+
+* **Jules Maisonnave** ([@maisonnavejul](https://github.com/maisonnavejul)) - *Initial work & Lead Development* 
+* **Driss Bendahan** ([@thegreenprogrammer](https://github.com/thegreenprogrammer)) - *Infrastructure & DevOps* 
+* **Paul Quiquempois** ([@Loghin01](https://github.com/Loghin01)) - *Development & Frontend* 
+
+<p align="center">
+  Fait avec ❤️ par l'équipe Ryvie.
+</p>
