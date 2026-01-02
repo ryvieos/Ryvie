@@ -1,7 +1,6 @@
 <p align="center">
   <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="180" />
 </p>
-<h1 align="center">Votre cloud personnel</h1>
 <p align="center">
   <img width="1920" height="1080" alt="Pitch cyber summit" src="https://github.com/user-attachments/assets/c432252e-0cf7-46d4-8b3b-8a5e0344003d" />
 </p>
