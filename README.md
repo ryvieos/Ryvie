@@ -1,7 +1,8 @@
 <p align="center">
    <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="180" />
  </p>
-<img width="860" height="526" alt="Capture d’écran 2026-01-02 114848" src="https://github.com/user-attachments/assets/8dae1979-8291-4c29-a459-89aee3315a28" />
+<img width="1920" height="1080" alt="Pitch cyber summit" src="https://github.com/user-attachments/assets/c432252e-0cf7-46d4-8b3b-8a5e0344003d" />
+
 
 # Ryvie
  
