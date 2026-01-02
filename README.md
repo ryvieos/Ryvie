@@ -77,6 +77,6 @@ L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de do
 
 ## Authors
 
-* **Jules Maisonnave** - *Initial work & Lead Development*
+* **Jules Maisonnave** (@maisonnavejul) - *Initial work & Lead Development*
 * **Driss Bendahan** (@thegreenprogrammer) - *Infrastructure & DevOps*
 * **Paul Quiquempois** (@Loghin01) - *Development*
