@@ -77,4 +77,6 @@ L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de do
 
 ## Authors
 
-* **Jules Maisonnave** - *Initial work & Lead Development* - [GitHub](https://github.com/votre-username-si-besoin)
+* **Jules Maisonnave** - *Initial work & Lead Development*
+* **Driss Bendahan** (@thegreenprogrammer) - *Infrastructure & DevOps*
+* **Paul Quiquempois** (@Loghin01) - *Frontend Architecture & User Experience*
