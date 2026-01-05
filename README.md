@@ -85,7 +85,7 @@ Ce projet est fourni **"tel quel"**, sans garantie d'aucune sorte. L'équipe Ryv
 
 * **Jules Maisonnave** ([@maisonnavejul](https://github.com/maisonnavejul)) - *Initial work & Lead Development* 
 * **Driss Bendahan** ([@thegreenprogrammer](https://github.com/thegreenprogrammer)) - *Infrastructure & DevOps* 
-* **Paul Quiquempois** ([@Loghin01](https://github.com/Loghin01)) - *Development & Frontend* 
+* **Paul Quiquempois** ([@Loghin01](https://github.com/Loghin01)) - *Development & CI/CD* 
 
 <p align="center">
   Fait avec ❤️ par l'équipe Ryvie.
