@@ -231,6 +231,10 @@ try {
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
+    // Vérifier et redémarrer Redis si nécessaire
+    const { ensureRedisRunning } = require('./utils/redisHealthCheck');
+    await ensureRedisRunning();
+    
     // Attendre qu'une interface réseau soit disponible (max 30 secondes)
     console.log('📶 Attente d\'une interface réseau valide...');
     listNetworkInterfaces(); // Debug: afficher les interfaces disponibles
