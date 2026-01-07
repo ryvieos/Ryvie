@@ -4,17 +4,29 @@
 // - docker: dockerode instance
 // - getLocalIP: function returning local IP string
 // - getAppStatus: async function returning list of apps with statuses
-const POLLING_INTERVAL_MS = 60000;
+const POLLING_INTERVAL_MS = 30000; // 30 secondes
 
 function setupRealtime(io, docker, getLocalIP, getAppStatus) {
   // Active containers cache
   let activeContainers = [];
   let statusPollingInterval = null;
   let dockerEventStream = null;
+  let lastAppStatus = null; // Cache du dernier statut envoyé
 
   const broadcastAppStatus = () => getAppStatus()
     .then(apps => {
-      // Émettre les deux noms d'événement pour compatibilité
+      // Comparer avec le dernier statut pour détecter les changements
+      const currentStatusStr = JSON.stringify(apps);
+      const lastStatusStr = lastAppStatus ? JSON.stringify(lastAppStatus) : null;
+      
+      if (currentStatusStr === lastStatusStr) {
+        // Aucun changement, ne pas diffuser
+        return apps;
+      }
+      
+      // Changement détecté, diffuser et mettre à jour le cache
+      console.log('[realtime] Changement de statut détecté, diffusion...');
+      lastAppStatus = apps;
       io.emit('apps-status-update', apps);
       io.emit('appsStatusUpdate', apps);
       return apps;

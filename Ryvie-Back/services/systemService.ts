@@ -5,10 +5,10 @@ const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 
-// Cache pour getServerInfo (5 secondes)
+// Cache pour getServerInfo (10 secondes)
 let serverInfoCache: any = null;
 let serverInfoCacheTime = 0;
-const CACHE_DURATION = 5000; // 5 secondes
+const CACHE_DURATION = 10000; // 10 secondes
 
 async function getServerInfo() {
   // Retourner le cache si valide

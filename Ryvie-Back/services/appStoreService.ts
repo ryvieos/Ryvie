@@ -570,9 +570,21 @@ async function downloadAppFromRepoArchive(release, appId) {
     } else if (error.response?.status === 403) {
       // Vérifier si c'est une erreur de rate limit
       if (error.response.data?.message?.includes('rate limit')) {
+        const resetTime = error.response.headers?.['x-ratelimit-reset'];
+        const remaining = error.response.headers?.['x-ratelimit-remaining'] || 0;
+        const limit = error.response.headers?.['x-ratelimit-limit'] || 60;
+        
+        let waitMessage = '';
+        if (resetTime) {
+          const resetDate = new Date(parseInt(resetTime) * 1000);
+          const minutesUntilReset = Math.ceil((resetDate.getTime() - Date.now()) / 60000);
+          waitMessage = ` Réinitialisation dans ${minutesUntilReset} minute${minutesUntilReset > 1 ? 's' : ''}.`;
+        }
+        
         throw new Error(
-          `RATE_LIMIT_EXCEEDED: Vous avez atteint la limite d'installations pour cette heure. ` +
-          `Veuillez attendre quelques minutes avant de réessayer.`
+          `Quota d'installations GitHub atteint (${remaining}/${limit} requêtes restantes).${waitMessage} ` +
+          `Veuillez attendre quelques minutes avant de réessayer. ` +
+          `💡 Astuce: Ajoutez un GITHUB_TOKEN dans votre fichier .env pour augmenter le quota à 5000 requêtes/heure.`
         );
       }
       throw new Error(`Accès refusé par GitHub: ${error.response.data?.message || 'Erreur 403'}`);
@@ -969,16 +981,17 @@ async function updateAppFromStore(appId) {
     
     sendProgressUpdate(appId, 95, 'Finalisation de l\'installation...', 'finalization');
     
-    // 5. Régénérer les manifests (si nécessaire)
+    // 5. Régénérer le manifest uniquement pour cette app
     currentStep = 'manifest-regeneration';
     console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
     try {
-      console.log('[Update] Régénération des manifests...');
+      console.log(`[Update] Régénération du manifest pour ${appId}...`);
       const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
-      execSync(`node ${manifestScript}`, { stdio: 'inherit' });
-      console.log('[Update] ✅ Manifests régénérés');
+      // Passer l'appId en paramètre pour ne générer que le manifest de cette app
+      execSync(`node ${manifestScript} ${appId}`, { stdio: 'inherit' });
+      console.log(`[Update] ✅ Manifest de ${appId} régénéré`);
     } catch (manifestError: any) {
-      console.warn('[Update] ⚠️ Impossible de régénérer les manifests:', manifestError.message);
+      console.warn(`[Update] ⚠️ Impossible de régénérer le manifest de ${appId}:`, manifestError.message);
     }
     
     // 5b. Actualiser le catalogue pour mettre à jour les statuts
@@ -997,6 +1010,31 @@ async function updateAppFromStore(appId) {
     }
     
     console.log(`[Update] ✅ ${appId} installé/mis à jour avec succès`);
+    
+    // Invalider le cache des statuts pour forcer une mise à jour immédiate
+    try {
+      const dockerService = require('./dockerService');
+      if (dockerService.clearAppStatusCache) {
+        dockerService.clearAppStatusCache();
+        console.log('[Update] 🔄 Cache des statuts invalidé');
+      }
+    } catch (e: any) {
+      console.warn('[Update] ⚠️ Impossible d\'invalider le cache:', e.message);
+    }
+    
+    // Déclencher une mise à jour immédiate des statuts via Socket.IO
+    try {
+      const io = (global as any).io;
+      if (io) {
+        const dockerService = require('./dockerService');
+        const apps = await dockerService.getAppStatus();
+        io.emit('apps-status-update', apps);
+        io.emit('appsStatusUpdate', apps);
+        console.log('[Update] 📡 Statuts diffusés via Socket.IO');
+      }
+    } catch (e: any) {
+      console.warn('[Update] ⚠️ Impossible de diffuser les statuts:', e.message);
+    }
     
     sendProgressUpdate(appId, 100, 'Installation terminée avec succès !', 'completed');
     
@@ -1024,6 +1062,9 @@ async function updateAppFromStore(appId) {
       console.error('[Update] Stack trace:', error.stack);
     }
     console.error(`[Update] ❌ Erreur lors de l'installation/mise à jour de ${appId}:`, error.message);
+    
+    // Envoyer le message d'erreur détaillé au frontend via progressEmitter
+    sendProgressUpdate(appId, 0, error.message, 'error');
     
     // Nettoyer le dossier de l'app en cas d'échec
     if (appDir) {
@@ -1296,6 +1337,24 @@ async function uninstallApp(appId) {
     }
     
     console.log(`[Uninstall] ✅ ${appId} désinstallé avec succès`);
+    
+    // Invalider le cache et diffuser les nouveaux statuts via Socket.IO
+    try {
+      const dockerService = require('./dockerService');
+      if (dockerService.clearAppStatusCache) {
+        dockerService.clearAppStatusCache();
+      }
+      
+      const io = (global as any).io;
+      if (io) {
+        const apps = await dockerService.getAppStatus();
+        io.emit('apps-status-update', apps);
+        io.emit('appsStatusUpdate', apps);
+        console.log('[Uninstall] 📡 Statuts diffusés via Socket.IO');
+      }
+    } catch (e: any) {
+      console.warn('[Uninstall] ⚠️ Impossible de diffuser les statuts:', e.message);
+    }
     
     return {
       success: true,
