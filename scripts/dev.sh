@@ -17,6 +17,17 @@ pm2 delete ryvie-backend-prod ryvie-frontend-prod 2>/dev/null || true
 # Arrêter les anciens processus dev s'ils existent
 pm2 delete ryvie-backend-dev ryvie-frontend-dev 2>/dev/null || true
 
+# Synchroniser le fichier .env depuis /data/config
+echo "🔄 Synchronisation du fichier .env..."
+if [ -f /data/config/backend-view/.env ]; then
+  cp /data/config/backend-view/.env /opt/Ryvie/Ryvie-Back/.env
+  echo "✅ Fichier .env synchronisé depuis /data/config/backend-view/"
+else
+  echo "⚠️  Fichier .env non trouvé dans /data/config/backend-view/"
+  echo "💡 Le backend risque de ne pas démarrer sans configuration"
+fi
+echo "ℹ️  netbird-data.json sera synchronisé automatiquement au démarrage du backend"
+
 # Installer les dépendances backend
 echo "📦 Installation des dépendances backend..."
 cd /opt/Ryvie/Ryvie-Back

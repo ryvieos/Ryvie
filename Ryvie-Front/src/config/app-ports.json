@@ -1,3 +1,9 @@
 {
-
+  "rdrive": 3010,
+  "rpictures": 3013,
+  "rtransfer": 3011,
+  "rdrop": 8080,
+  "fossflow": 3012,
+  "jellyfin": 8096,
+  "memos": 3012
 }

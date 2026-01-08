@@ -1,14 +1,9 @@
 /**
  * Configuration centralisée des URLs pour l'application Ryvie
- * Version front-end - lit les données depuis netbird_data.json
+ * Version front-end - charge les données dynamiquement au runtime
  */
 
-// Import des données Netbird
-import netbirdDataRaw from './netbird-data.json';
-// Import des ports d'app générés par le backend (si une app n'est pas listée, fallback sur LOCAL_PORTS)
-import appPortsRaw from './app-ports.json';
-
-// Mapping des services vers les ports locaux
+// Mapping des services vers les ports locaux (fallback si app-ports.json n'est pas chargé)
 const LOCAL_PORTS = {
   FRONTEND: 3000,
   SERVER: 3002,
@@ -23,9 +18,122 @@ const LOCAL_PORTS = {
   DOCUMENT_RDRIVE: 3014
 };
 
-// Données Netbird (copie pour éviter les mutations)
-const netbirdData = { ...netbirdDataRaw };
-const appPorts = { ...appPortsRaw };
+// Données Netbird (chargées dynamiquement au runtime)
+let netbirdData = {
+  domains: {},
+  received: {
+    backendHost: ''
+  }
+};
+
+// Ports des applications (chargés dynamiquement au runtime)
+const appPorts = {};
+
+// État du chargement des fichiers JSON
+let netbirdDataLoaded = false;
+let netbirdDataLoading = false;
+const netbirdDataCallbacks = [];
+
+let appPortsLoaded = false;
+let appPortsLoading = false;
+const appPortsCallbacks = [];
+
+/**
+ * Charge les données Netbird depuis le serveur de manière asynchrone
+ * @returns {Promise<Object>} - Les données Netbird
+ */
+const loadNetbirdData = async () => {
+  // Si déjà chargé, retourner immédiatement
+  if (netbirdDataLoaded) {
+    return netbirdData;
+  }
+  
+  // Si en cours de chargement, attendre la fin
+  if (netbirdDataLoading) {
+    return new Promise((resolve) => {
+      netbirdDataCallbacks.push(resolve);
+    });
+  }
+  
+  netbirdDataLoading = true;
+  
+  try {
+    // Charger depuis le serveur (le fichier est servi statiquement)
+    const response = await fetch('/config/netbird-data.json', {
+      cache: 'no-cache'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      netbirdData = { ...data };
+      console.log('[urls] Données Netbird chargées:', netbirdData);
+    } else {
+      console.warn('[urls] Impossible de charger netbird-data.json, utilisation des valeurs par défaut');
+    }
+  } catch (error) {
+    console.warn('[urls] Erreur lors du chargement de netbird-data.json:', error.message);
+  } finally {
+    netbirdDataLoaded = true;
+    netbirdDataLoading = false;
+    
+    // Notifier tous les callbacks en attente
+    netbirdDataCallbacks.forEach(cb => cb(netbirdData));
+    netbirdDataCallbacks.length = 0;
+  }
+  
+  return netbirdData;
+};
+
+/**
+ * Charge les ports des applications depuis le serveur de manière asynchrone
+ * @returns {Promise<Object>} - Les ports des applications
+ */
+const loadAppPorts = async () => {
+  // Si déjà chargé, retourner immédiatement
+  if (appPortsLoaded) {
+    return appPorts;
+  }
+  
+  // Si en cours de chargement, attendre la fin
+  if (appPortsLoading) {
+    return new Promise((resolve) => {
+      appPortsCallbacks.push(resolve);
+    });
+  }
+  
+  appPortsLoading = true;
+  
+  try {
+    // Charger depuis le serveur (le fichier est servi statiquement)
+    const response = await fetch('/config/app-ports.json', {
+      cache: 'no-cache'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      // Fusionner les données chargées avec l'objet appPorts
+      Object.assign(appPorts, data);
+      console.log('[urls] Ports des applications chargés:', appPorts);
+    } else {
+      console.warn('[urls] Impossible de charger app-ports.json, utilisation de LOCAL_PORTS');
+    }
+  } catch (error) {
+    console.warn('[urls] Erreur lors du chargement de app-ports.json:', error.message);
+  } finally {
+    appPortsLoaded = true;
+    appPortsLoading = false;
+    
+    // Notifier tous les callbacks en attente
+    appPortsCallbacks.forEach(cb => cb(appPorts));
+    appPortsCallbacks.length = 0;
+  }
+  
+  return appPorts;
+};
+
+// Charger les données au démarrage de l'application
+loadNetbirdData();
+loadAppPorts();
 
 // Cache de l'IP locale du serveur
 let cachedLocalIP = null;
@@ -430,5 +538,8 @@ export default {
   buildAppUrl,
   registerAppPort,
   setLocalIP,
-  getLocalIP
+  getLocalIP,
+  // Chargement dynamique des fichiers JSON
+  loadNetbirdData,
+  loadAppPorts
 };

@@ -39,21 +39,62 @@ cleanup() {
 
 # Fonction de rollback
 rollback() {
+  echo ""
+  echo "═══════════════════════════════════════════════════════════════"
+  echo "⚠️  ERREUR DÉTECTÉE PENDANT LA MISE À JOUR"
+  echo "🔄 RETOUR À LA VERSION PRÉCÉDENTE EN COURS..."
+  echo "═══════════════════════════════════════════════════════════════"
+  echo ""
+  
   log "❌ Erreur détectée, rollback en cours..."
+  
   if [[ -n "$SNAPSHOT_PATH" && -d "$SNAPSHOT_PATH" ]]; then
     log "🔄 Restauration du snapshot: $SNAPSHOT_PATH"
-    sudo "$RYVIE_DIR/scripts/rollback.sh" --set "$SNAPSHOT_PATH" 2>&1 | tee -a "$LOG_FILE"
-    log "✅ Rollback terminé"
+    log "📦 Restauration des données et du code..."
+    
+    if sudo "$RYVIE_DIR/scripts/rollback.sh" --set "$SNAPSHOT_PATH" 2>&1 | tee -a "$LOG_FILE"; then
+      echo ""
+      echo "═══════════════════════════════════════════════════════════════"
+      echo "✅ ROLLBACK TERMINÉ AVEC SUCCÈS"
+      echo "📌 Le système a été restauré à la version précédente"
+      echo "💡 Consultez les logs pour plus de détails: $LOG_FILE"
+      echo "═══════════════════════════════════════════════════════════════"
+      echo ""
+      log "✅ Rollback terminé avec succès"
+    else
+      echo ""
+      echo "═══════════════════════════════════════════════════════════════"
+      echo "❌ ERREUR CRITIQUE: Le rollback a échoué"
+      echo "⚠️  Intervention manuelle requise"
+      echo "📋 Log: $LOG_FILE"
+      echo "═══════════════════════════════════════════════════════════════"
+      echo ""
+      log "❌ ERREUR CRITIQUE: Rollback échoué"
+    fi
   else
     log "⚠️ Pas de snapshot disponible pour rollback"
-    # Relancer manuellement selon le mode
-    log "🔄 Relance manuelle de Ryvie..."
+    log "🔄 Tentative de relance manuelle de Ryvie..."
+    
+    # Arrêter les processus actuels
+    pm2 stop all 2>/dev/null || true
+    pm2 delete all 2>/dev/null || true
+    
+    # Relancer selon le mode
     if [[ "$MODE" == "dev" ]]; then
       cd "$RYVIE_DIR" && ./scripts/dev.sh >> "$LOG_FILE" 2>&1 &
     else
       cd "$RYVIE_DIR" && ./scripts/prod.sh >> "$LOG_FILE" 2>&1 &
     fi
+    
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "⚠️  ROLLBACK PARTIEL"
+    echo "📌 Pas de snapshot disponible, redémarrage du système actuel"
+    echo "💡 Consultez les logs: $LOG_FILE"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
   fi
+  
   cleanup
   exit 1
 }
@@ -114,8 +155,12 @@ find . -maxdepth 1 -mindepth 1 \
   ! -name 'node_modules' \
   ! -name '.git' \
   ! -name '.update-staging' \
+  ! -name 'netbird-data.json' \
   -exec rm -rf {} + 2>/dev/null || true
 log "✅ Ancien code supprimé"
+
+# Note: netbird-data.json sera synchronisé automatiquement par le backend au démarrage
+echo "ℹ️  netbird-data.json sera synchronisé par le backend au démarrage"
 
 # 5. Copier la nouvelle version
 log "🔄 Application de la nouvelle version..."
@@ -149,10 +194,133 @@ fi
 
 if [ $? -ne 0 ]; then
   log "❌ Erreur lors du build/redémarrage"
+  log "⚠️  UNE ERREUR S'EST PRODUITE PENDANT LA MISE À JOUR"
+  log "🔄 RETOUR À LA VERSION PRÉCÉDENTE EN COURS..."
   rollback
 fi
 
 log "✅ Build et redémarrage terminés"
+
+# 7.1. Health check intelligent avec détection rapide
+log "🏥 Health check du système..."
+
+# Déterminer les processus et logs selon le mode
+if [[ "$MODE" == "dev" ]]; then
+  BACKEND_PROCESS="ryvie-backend-dev"
+  FRONTEND_PROCESS="ryvie-frontend-dev"
+  BACKEND_LOG="/data/logs/backend-dev-error.log"
+  BACKEND_OUT="/data/logs/backend-dev-out.log"
+else
+  BACKEND_PROCESS="ryvie-backend-prod"
+  FRONTEND_PROCESS="ryvie-frontend-prod"
+  BACKEND_LOG="/data/logs/backend-prod-error-0.log"
+  BACKEND_OUT="/data/logs/backend-prod-out-0.log"
+fi
+
+# Fonction de health check intelligent
+perform_health_check() {
+  local max_wait=60  # Timeout de sécurité pour erreurs silencieuses
+  local start_time=$(date +%s)
+  local check_interval=2
+  
+  log "  Surveillance active (timeout sécurité: ${max_wait}s)..."
+  
+  while true; do
+    local current_time=$(date +%s)
+    local elapsed=$((current_time - start_time))
+    
+    # 1. Vérifier les erreurs critiques dans les logs
+    if [[ -f "$BACKEND_LOG" ]]; then
+      local recent_errors=$(tail -n 50 "$BACKEND_LOG" 2>/dev/null || echo "")
+      
+      # Erreurs critiques qui nécessitent un rollback immédiat
+      if echo "$recent_errors" | grep -qiE "(Cannot find module.*dist/index\.js|ENOENT.*dist/index|MODULE_NOT_FOUND.*dist|Error: Cannot find module|CRITICAL.*environment variable.*required|Fatal error|Segmentation fault|EADDRINUSE|listen EADDRINUSE)"; then
+        log "  ❌ ERREUR CRITIQUE détectée dans les logs après ${elapsed}s!"
+        echo "$recent_errors" | tail -n 10 >> "$LOG_FILE"
+        return 1
+      fi
+      
+      # PM2 a arrêté le processus
+      if echo "$recent_errors" | grep -qiE "(Script.*had too many unstable restarts|stopped|errored)"; then
+        log "  ❌ PM2 a arrêté le processus après ${elapsed}s!"
+        echo "$recent_errors" | tail -n 10 >> "$LOG_FILE"
+        return 1
+      fi
+    fi
+    
+    # 2. Vérifier le statut PM2
+    local backend_status=$(pm2 jlist 2>/dev/null | jq -r ".[] | select(.name==\"$BACKEND_PROCESS\") | .pm2_env.status" 2>/dev/null || echo "not_found")
+    local restart_count=$(pm2 jlist 2>/dev/null | jq -r ".[] | select(.name==\"$BACKEND_PROCESS\") | .pm2_env.restart_time" 2>/dev/null || echo "0")
+    
+    # Processus en erreur ou arrêté
+    if [[ "$backend_status" == "stopped" ]] || [[ "$backend_status" == "errored" ]]; then
+      log "  ❌ Backend en état $backend_status après ${elapsed}s"
+      return 1
+    fi
+    
+    # Trop de redémarrages
+    if [[ "$restart_count" -gt 5 ]]; then
+      log "  ❌ Backend a redémarré $restart_count fois après ${elapsed}s"
+      return 1
+    fi
+    
+    # 3. Si le backend est online, vérifier qu'il répond
+    if [[ "$backend_status" == "online" ]]; then
+      # Attendre un peu que le serveur soit vraiment prêt
+      if [[ $elapsed -ge 5 ]]; then
+        # Test HTTP pour confirmer que le backend répond
+        if command -v curl >/dev/null 2>&1; then
+          local http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3002/api/health 2>/dev/null || echo "000")
+          
+          # Codes acceptables: 200 (OK), 401 (auth requise mais serveur répond), 404 (route pas trouvée mais serveur répond)
+          if [[ "$http_code" == "200" ]] || [[ "$http_code" == "401" ]] || [[ "$http_code" == "404" ]]; then
+            log "  ✅ Backend online et répond correctement (HTTP $http_code) après ${elapsed}s"
+            log "  Backend: status=$backend_status, restarts=$restart_count"
+            return 0
+          fi
+          
+          # Erreur serveur
+          if [[ "$http_code" == "500" ]] || [[ "$http_code" == "502" ]] || [[ "$http_code" == "503" ]]; then
+            log "  ❌ Backend répond avec erreur HTTP $http_code après ${elapsed}s"
+            return 1
+          fi
+        else
+          # Pas de curl, on fait confiance au statut PM2
+          log "  ✅ Backend online (PM2) après ${elapsed}s"
+          log "  Backend: status=$backend_status, restarts=$restart_count"
+          return 0
+        fi
+      fi
+    fi
+    
+    # 4. Timeout de sécurité atteint (erreur silencieuse)
+    if [[ $elapsed -ge $max_wait ]]; then
+      log "  ⚠️  Timeout de sécurité atteint (${max_wait}s) - backend: $backend_status"
+      if [[ "$backend_status" == "online" ]]; then
+        log "  ℹ️  Le backend est online mais ne répond pas aux requêtes HTTP"
+        log "  ℹ️  Cela peut être normal si le démarrage est lent"
+        # On considère que c'est OK si PM2 dit que c'est online
+        return 0
+      else
+        log "  ❌ Timeout et backend pas online: $backend_status"
+        return 1
+      fi
+    fi
+    
+    # Attendre avant la prochaine vérification
+    sleep $check_interval
+  done
+}
+
+# Exécuter le health check
+if ! perform_health_check; then
+  log "⚠️  UNE ERREUR S'EST PRODUITE AU DÉMARRAGE"
+  log "🔄 RETOUR À LA VERSION PRÉCÉDENTE EN COURS..."
+  rollback
+fi
+
+log "✅ Mise à jour terminée avec succès!"
+log "📊 Le système fonctionne correctement"
 
 # 8. Nettoyage
 cleanup

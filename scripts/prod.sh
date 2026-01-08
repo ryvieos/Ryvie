@@ -8,6 +8,16 @@ echo ""
 pm2 stop ryvie-backend-dev ryvie-frontend-dev 2>/dev/null || true
 pm2 delete ryvie-backend-dev ryvie-frontend-dev 2>/dev/null || true
 
+# Synchroniser les fichiers de configuration depuis /data/config
+echo "🔄 Synchronisation des fichiers de configuration..."
+if [ -f /data/config/backend-view/.env ]; then
+  cp /data/config/backend-view/.env /opt/Ryvie/Ryvie-Back/.env
+  echo "✅ Fichier .env synchronisé depuis /data/config/backend-view/"
+else
+  echo "⚠️  Fichier .env non trouvé dans /data/config/backend-view/"
+  echo "💡 Le backend risque de ne pas démarrer sans configuration"
+fi
+
 # Installer les dépendances backend
 echo "📦 Installation des dépendances backend..."
 cd /opt/Ryvie/Ryvie-Back
