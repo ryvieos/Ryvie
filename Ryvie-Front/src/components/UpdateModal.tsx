@@ -15,22 +15,22 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
 
     startTimeRef.current = Date.now();
     
-    // Simuler une progression pendant la phase d'update (0-50%)
+    // Phase 1: Progression simulée pendant la mise à jour (0-70% sur 90 secondes)
     const progressInterval = setInterval(() => {
       setProgress(prev => {
-        if (prev < 50) return prev + 2;
+        if (prev < 70) return prev + 0.8;
         return prev;
       });
-    }, 500);
+    }, 1000);
 
-    // Après 5 secondes, passer en mode "redémarrage" et commencer le polling
+    // Après 90 secondes, passer en mode "redémarrage" et commencer le polling
     const restartTimeout = setTimeout(() => {
       clearInterval(progressInterval);
       setStatus('restarting');
       setMessage('Redémarrage du système en cours...');
-      setProgress(60);
+      setProgress(75);
       startPolling();
-    }, 5000);
+    }, 90000); // 90 secondes pour laisser le temps à l'update de se faire
 
     return () => {
       clearInterval(progressInterval);

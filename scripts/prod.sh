@@ -18,12 +18,19 @@ else
   echo "💡 Le backend risque de ne pas démarrer sans configuration"
 fi
 
-# Nettoyer les anciens node_modules pour éviter les problèmes de permissions
-echo "🧹 Nettoyage des dépendances obsolètes..."
-sudo rm -rf /opt/Ryvie/Ryvie-Back/node_modules
-sudo rm -rf /opt/Ryvie/Ryvie-Front/node_modules
+# Vérifier et corriger les permissions des node_modules existants si nécessaire
+echo "🔍 Vérification des node_modules existants..."
+if [ -d "/opt/Ryvie/Ryvie-Back/node_modules" ]; then
+  echo "  ✓ node_modules backend trouvé, vérification des permissions..."
+  sudo chown -R ryvie:ryvie /opt/Ryvie/Ryvie-Back/node_modules 2>/dev/null || true
+fi
+if [ -d "/opt/Ryvie/Ryvie-Front/node_modules" ]; then
+  echo "  ✓ node_modules frontend trouvé, vérification des permissions..."
+  sudo chown -R ryvie:ryvie /opt/Ryvie/Ryvie-Front/node_modules 2>/dev/null || true
+fi
 
 # Installer les dépendances backend (avec devDependencies pour tsc)
+# npm install mettra à jour uniquement les dépendances modifiées
 echo "📦 Installation des dépendances backend..."
 cd /opt/Ryvie/Ryvie-Back
 if ! npm install --include=dev; then
