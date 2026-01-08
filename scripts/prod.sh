@@ -20,8 +20,8 @@ fi
 
 # Nettoyer les anciens node_modules pour éviter les problèmes de permissions
 echo "🧹 Nettoyage des dépendances obsolètes..."
-rm -rf /opt/Ryvie/Ryvie-Back/node_modules
-rm -rf /opt/Ryvie/Ryvie-Front/node_modules
+sudo rm -rf /opt/Ryvie/Ryvie-Back/node_modules
+sudo rm -rf /opt/Ryvie/Ryvie-Front/node_modules
 
 # Installer les dépendances backend (avec devDependencies pour tsc)
 echo "📦 Installation des dépendances backend..."
