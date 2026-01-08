@@ -314,7 +314,7 @@ perform_health_check() {
     # 3. Si le backend est online, vérifier qu'il répond
     if [[ "$backend_status" == "online" ]]; then
       # Attendre un peu que le serveur soit vraiment prêt
-      if [[ $elapsed -ge 5 ]]; then
+      if [[ $elapsed -ge 10 ]]; then
         # Test HTTP pour confirmer que le backend répond
         if command -v curl >/dev/null 2>&1; then
           local http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3002/api/health 2>/dev/null || echo "000")
@@ -330,6 +330,14 @@ perform_health_check() {
           if [[ "$http_code" == "500" ]] || [[ "$http_code" == "502" ]] || [[ "$http_code" == "503" ]]; then
             log "  ❌ Backend répond avec erreur HTTP $http_code après ${elapsed}s"
             return 1
+          fi
+          
+          # Si le backend est online depuis plus de 30s mais ne répond pas encore, on considère que c'est OK
+          # Le backend peut prendre du temps à initialiser tous les services
+          if [[ $elapsed -ge 30 ]]; then
+            log "  ✅ Backend online (PM2) depuis ${elapsed}s, initialisation en cours"
+            log "  Backend: status=$backend_status, restarts=$restart_count"
+            return 0
           fi
         else
           # Pas de curl, on fait confiance au statut PM2

@@ -36,39 +36,48 @@ echo "📦 Set sélectionné : $SET_PATH"
 mapfile -t NAMES < <(find "$SET_PATH" -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' | sort)
 [[ ${#NAMES[@]} -gt 0 ]] || { echo "❌ Set vide: $SET_PATH"; exit 1; }
 
-echo "🛑 Arrêt de Docker & containerd…"
-systemctl stop docker.socket 2>/dev/null || true
-systemctl stop docker 2>/dev/null || true
-systemctl stop containerd 2>/dev/null || true
-
-# 3) Supprimer l'état courant
+# Filtrer pour exclure les volumes Docker (apps, config, docker)
+# On ne restaure que les données de Ryvie (logs, images)
+RYVIE_VOLUMES=()
 for name in "${NAMES[@]}"; do
-  CUR="$DATA_ROOT/$name"
-  if [[ -e "$CUR" ]]; then
-    echo "🧹 Suppression: $CUR"
-    if btrfs subvolume show "$CUR" &>/dev/null; then
-      btrfs subvolume delete "$CUR"
-    else
-      rm -rf "$CUR"
-    fi
-  fi
-done
-
-# 4) Restaurer depuis le set
-for name in "${NAMES[@]}"; do
-  SRC="$SET_PATH/$name"
-  DST="$DATA_ROOT/$name"
-  if btrfs subvolume show "$SRC" &>/dev/null; then
-    echo "♻️  Restauration: $name"
-    btrfs subvolume snapshot "$SRC" "$DST"   # R/W
+  # Exclure les volumes Docker qui ne doivent pas être touchés lors d'un rollback Ryvie
+  if [[ "$name" != "apps" && "$name" != "docker" && "$name" != "config" ]]; then
+    RYVIE_VOLUMES+=("$name")
   else
-    echo "⚠️  $SRC n'est pas un sous-volume Btrfs, ignoré."
+    echo "⏭️  Ignoré (volume Docker): $name"
   fi
 done
 
-echo "▶️ Redémarrage containerd & Docker…"
-systemctl start containerd 2>/dev/null || true
-systemctl start docker 2>/dev/null || true
+if [[ ${#RYVIE_VOLUMES[@]} -eq 0 ]]; then
+  echo "⚠️  Aucun volume Ryvie à restaurer"
+else
+  # 3) Supprimer l'état courant des volumes Ryvie uniquement
+  for name in "${RYVIE_VOLUMES[@]}"; do
+    CUR="$DATA_ROOT/$name"
+    if [[ -e "$CUR" ]]; then
+      echo "🧹 Suppression: $CUR"
+      if btrfs subvolume show "$CUR" &>/dev/null; then
+        btrfs subvolume delete "$CUR"
+      else
+        rm -rf "$CUR"
+      fi
+    fi
+  done
+
+  # 4) Restaurer depuis le set (volumes Ryvie uniquement)
+  for name in "${RYVIE_VOLUMES[@]}"; do
+    SRC="$SET_PATH/$name"
+    DST="$DATA_ROOT/$name"
+    if btrfs subvolume show "$SRC" &>/dev/null; then
+      echo "♻️  Restauration: $name"
+      btrfs subvolume snapshot "$SRC" "$DST"   # R/W
+    else
+      echo "⚠️  $SRC n'est pas un sous-volume Btrfs, ignoré."
+    fi
+  done
+fi
+
+echo "ℹ️  Docker non affecté par le rollback Ryvie"
 
 # Redémarrer Ryvie après rollback
 echo "🔄 Redémarrage de Ryvie..."
