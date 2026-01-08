@@ -549,7 +549,14 @@ try {
       addLog(`🧨 Corps d'erreur: ${truncatedError}`, 'error');
     }
     
-    showToast(`Erreur lors de l'installation: ${statusText}`, 'error');
+    // Gérer spécifiquement le cas de la limite d'installations atteinte
+    if (status === 429) {
+      const errorMessage = errorResponse?.data?.message || 'Maximum 2 installations simultanées autorisées';
+      addLog(`⚠️ ${errorMessage}`, 'warning');
+      showToast(errorMessage, 'warning');
+    } else {
+      showToast(`Erreur lors de l'installation: ${statusText}`, 'error');
+    }
   } else {
     addLog(`❌ Erreur inattendue: ${requestError}`, 'error');
     showToast('Erreur inattendue lors de l\'installation', 'error');
@@ -686,10 +693,27 @@ try {
             progress: 100
           }, '*');
           
-          // Rafraîchir la liste des apps et notifier Home
+          // Rafraîchir la liste des apps et notifier Home avec retry
+          const refreshWithRetry = async (attempt = 1, maxAttempts = 3) => {
+            try {
+              await fetchApps(true);
+              // Attendre un peu plus pour que le backend mette à jour les statuts
+              await new Promise(resolve => setTimeout(resolve, 1500));
+              window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+              addLog(`✅ Bureau rafraîchi (tentative ${attempt})`, 'success');
+            } catch (error) {
+              if (attempt < maxAttempts) {
+                addLog(`⚠️ Échec refresh, nouvelle tentative dans 2s...`, 'warning');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return refreshWithRetry(attempt + 1, maxAttempts);
+              } else {
+                addLog(`❌ Impossible de rafraîchir après ${maxAttempts} tentatives`, 'error');
+              }
+            }
+          };
+          
           setTimeout(async () => {
-            await fetchApps(true);
-            window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+            await refreshWithRetry();
             
             // Nettoyer la progression et les logs après un délai
             setTimeout(() => {
@@ -709,7 +733,15 @@ try {
     
     eventSource.onerror = (error) => {
       console.error('Erreur SSE:', error);
-      addLog('❌ Erreur de connexion aux mises à jour de progression', 'error');
+      
+      // Vérifier si c'est une erreur de rate limit GitHub
+      if (error.target && error.target.readyState === EventSource.CLOSED) {
+        // L'erreur sera gérée par le message d'erreur du backend
+        addLog('❌ Erreur lors de l\'installation', 'error');
+      } else {
+        addLog('❌ Erreur de connexion aux mises à jour de progression', 'error');
+      }
+      
       eventSource.close();
       delete activeEventSources.current[appId];
       

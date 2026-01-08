@@ -288,6 +288,18 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     const appId = req.params.id;
     console.log(`[appStore] Lancement de l'installation/mise à jour de ${appId} dans un processus séparé...`);
     
+    // Vérifier le nombre d'installations en cours
+    const activeInstallationsCount = activeWorkers.size;
+    if (activeInstallationsCount >= 2) {
+      console.log(`[appStore] ⚠️ Limite d'installations atteinte (${activeInstallationsCount}/2)`);
+      return res.status(429).json({
+        success: false,
+        error: 'Limite d\'installations atteinte',
+        message: 'Maximum 2 installations simultanées autorisées. Veuillez attendre qu\'une installation se termine.',
+        activeInstallations: activeInstallationsCount
+      });
+    }
+    
     // Répondre immédiatement au client
     res.json({
       success: true,

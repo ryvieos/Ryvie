@@ -31,8 +31,8 @@ const ContextMenuPortal = ({ children, x, y }) => {
   return ReactDOM.createPortal(menu, document.body);
 };
 
-// Composant Icon
-const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons }) => {
+// Composant Icon avec React.memo pour éviter les re-renders inutiles
+const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons }) => {
   const appConfig = appsConfig[id] || {};
   const [imgSrc, setImgSrc] = React.useState(src);
   const [imgError, setImgError] = React.useState(false);
@@ -208,6 +208,7 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
         message: `${appName} a été désinstallé avec succès.`,
         onConfirm: async () => {
           setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null });
+          // Rafraîchir pour supprimer l'icône (avec debouncing pour éviter les doublons)
           if (typeof refreshDesktopIcons === 'function') {
             await refreshDesktopIcons();
           }
@@ -629,6 +630,18 @@ const Icon = ({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData,
       )}
     </>
   );
-};
+}, (prevProps, nextProps) => {
+  // Comparaison personnalisée pour éviter les re-renders inutiles
+  // Ne re-render que si les props importantes changent
+  return (
+    prevProps.id === nextProps.id &&
+    prevProps.src === nextProps.src &&
+    prevProps.showName === nextProps.showName &&
+    prevProps.isAdmin === nextProps.isAdmin &&
+    prevProps.accessMode === nextProps.accessMode &&
+    JSON.stringify(prevProps.appStatusData) === JSON.stringify(nextProps.appStatusData) &&
+    prevProps.activeContextMenu === nextProps.activeContextMenu
+  );
+});
 
 export default Icon;

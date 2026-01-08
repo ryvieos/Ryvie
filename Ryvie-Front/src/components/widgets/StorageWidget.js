@@ -28,7 +28,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
       try {
         const serverUrl = getServerUrl(accessMode);
         const response = await axios.get(`${serverUrl}/api/server-info`, {
-          timeout: 10000
+          timeout: 30000
         });
         
         if (response.data && response.data.stockage) {
