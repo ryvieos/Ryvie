@@ -3,11 +3,12 @@ import axios from '../utils/setupAxios';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 
-const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
-  const [status, setStatus] = useState('updating'); // updating, restarting, success, error
+const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
+  const [status, setStatus] = useState('updating'); // updating, restarting, waiting_health, success, error
   const [message, setMessage] = useState('Téléchargement et application de la mise à jour...');
   const [progress, setProgress] = useState(0);
-  const pollingIntervalRef = useRef(null);
+  const statusPollingRef = useRef(null);
+  const healthPollingRef = useRef(null);
   const startTimeRef = useRef(null);
 
   useEffect(() => {
@@ -15,52 +16,67 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
 
     startTimeRef.current = Date.now();
     
-    // Phase 1: Progression simulée pendant la mise à jour (0-70% sur 90 secondes)
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev < 70) return prev + 0.8;
-        return prev;
-      });
-    }, 1000);
-
-    // Après 90 secondes, passer en mode "redémarrage" et commencer le polling
-    const restartTimeout = setTimeout(() => {
-      clearInterval(progressInterval);
-      setStatus('restarting');
-      setMessage('Redémarrage du système en cours...');
-      setProgress(75);
-      startPolling();
-    }, 90000); // 90 secondes pour laisser le temps à l'update de se faire
+    // Polling du fichier de statut pour suivre la progression réelle
+    startStatusPolling();
 
     return () => {
-      clearInterval(progressInterval);
-      clearTimeout(restartTimeout);
-      stopPolling();
+      stopStatusPolling();
+      stopHealthPolling();
     };
   }, [isOpen]);
 
-  const startPolling = () => {
+  // Polling du fichier de statut de mise à jour
+  const startStatusPolling = () => {
+    statusPollingRef.current = setInterval(async () => {
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        const response = await axios.get(`${serverUrl}/api/settings/update-status`, {
+          timeout: 3000
+        });
+        
+        const updateStatus = response.data;
+        
+        if (updateStatus.step && updateStatus.message) {
+          setMessage(updateStatus.message);
+          setProgress(updateStatus.progress || 0);
+          
+          // Quand la mise à jour atteint 100% (fichiers prêts), passer en mode "restarting"
+          if (updateStatus.progress >= 100 || updateStatus.step === 'completed') {
+            stopStatusPolling();
+            setStatus('restarting');
+            setMessage('Redémarrage en cours...');
+            setProgress(100);
+            
+            // Commencer le health check
+            startHealthPolling();
+          }
+        }
+      } catch (error) {
+        // Le backend peut être arrêté pendant l'update, continuer le polling
+      }
+    }, 1000); // Poll toutes les secondes pour suivre la progression
+  };
+
+  // Polling du health check après que les fichiers soient prêts
+  const startHealthPolling = () => {
     let attempts = 0;
-    const maxAttempts = 60; // 60 tentatives = 2 minutes max
+    const maxAttempts = 120; // 120 tentatives = 4 minutes max
     let consecutiveReady = 0;
     const requiredConsecutiveReady = 3;
 
-    pollingIntervalRef.current = setInterval(async () => {
+    healthPollingRef.current = setInterval(async () => {
       attempts++;
-      
-      // Mettre à jour la progression (60-95%)
-      setProgress(Math.min(95, 60 + (attempts * 0.6)));
 
       try {
         const serverUrl = getServerUrl(accessMode);
 
-        // 1) Check health (peut revenir avant que tout soit vraiment prêt)
+        // Check health
         const health = await axios.get(`${serverUrl}/api/health`, {
           timeout: 3000,
           validateStatus: (status) => status === 200
         });
 
-        // 2) Check endpoint authentifié (réduit les faux positifs)
+        // Check endpoint authentifié
         const authed = await axios.get(`${serverUrl}/api/user/preferences`, {
           timeout: 4000,
           validateStatus: (status) => status === 200
@@ -73,35 +89,38 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
         }
 
         if (consecutiveReady >= requiredConsecutiveReady) {
-          // Backend + routes principales stables sur plusieurs checks
-          stopPolling();
+          // Backend prêt, recharger la page
+          stopHealthPolling();
           setStatus('success');
           setMessage('Mise à jour terminée avec succès!');
-          setProgress(100);
-
-          // Laisser un peu de marge au front pour recharger les assets et éviter l'écran "impossible de se connecter"
+          
           setTimeout(() => {
             window.location.reload();
-          }, 2500);
+          }, 1500);
         }
       } catch (error) {
         consecutiveReady = 0;
         // Backend pas encore prêt, continuer le polling
         if (attempts >= maxAttempts) {
-          // Timeout après 2 minutes
-          stopPolling();
+          stopHealthPolling();
           setStatus('error');
           setMessage('Le redémarrage prend plus de temps que prévu. Veuillez rafraîchir la page manuellement.');
-          setProgress(100);
         }
       }
     }, 2000); // Poll toutes les 2 secondes
   };
 
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
+  const stopStatusPolling = () => {
+    if (statusPollingRef.current) {
+      clearInterval(statusPollingRef.current);
+      statusPollingRef.current = null;
+    }
+  };
+
+  const stopHealthPolling = () => {
+    if (healthPollingRef.current) {
+      clearInterval(healthPollingRef.current);
+      healthPollingRef.current = null;
     }
   };
 
@@ -119,14 +138,16 @@ const UpdateModal = ({ isOpen, onClose, targetVersion, accessMode }) => {
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0, 0, 0, 0.55)',
-        backdropFilter: 'blur(6px)',
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 10001,
-        animation: 'fadeIn 0.3s ease-out'
+        animation: 'fadeIn 0.3s ease-out',
+        pointerEvents: 'all'
       }}
+      onClick={(e) => e.stopPropagation()}
     >
       <div
         className="ryvie-update-modal-card"
