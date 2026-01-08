@@ -12,7 +12,7 @@
     "electron": "wait-on http://localhost:3000 && electron .",
     "build": "webpack --mode production",
     "build:web": "webpack --mode production --config webpack.config.js",
-    "serve": "serve -s dist -p 3000",
+    "serve": "npx serve -s dist -p 3000",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -33,7 +33,6 @@
     "electron-reload": "^2.0.0-alpha.1",
     "html-webpack-plugin": "^5.6.5",
     "react-refresh": "^0.14.2",
-    "serve": "^14.2.5",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.0",
     "typescript": "^5.3.0",
@@ -53,6 +52,7 @@
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^18.0.0",
     "react-router-dom": "^6.26.2",
+    "serve": "^14.2.5",
     "socket.io": "^4.8.0",
     "socket.io-client": "^4.8.1"
   },

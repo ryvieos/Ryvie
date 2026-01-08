@@ -66,6 +66,14 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+# Réinstaller uniquement les dépendances de production (optimisation)
+echo "🧹 Nettoyage des devDependencies pour la production..."
+cd /opt/Ryvie/Ryvie-Back
+npm prune --production
+cd /opt/Ryvie/Ryvie-Front
+npm prune --production
+echo "✅ Environnement de production optimisé"
+
 # Arrêter les anciens processus prod s'ils existent
 pm2 delete ryvie-backend-prod ryvie-frontend-prod 2>/dev/null || true
 
