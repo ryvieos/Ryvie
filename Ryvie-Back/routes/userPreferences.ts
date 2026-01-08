@@ -327,22 +327,27 @@ router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
           return `${id}@(${pos?.col},${pos?.row})`;
         }).join(', '));
         
-        // Placer chaque nouvelle app dans une position libre
+        // Placer chaque nouvelle app dans une position libre SANS TOUCHER aux positions existantes
         missing.forEach((appId) => {
-          if (!layout[appId]) {
-            // Trouver une position libre pour cette app (1x1)
-            const pos = findFreePosition(layout, 1, 1, 12);
-            if (pos) {
-              layout[appId] = pos;
-              console.log(`[userPreferences] ✅ ${appId} placé à (${pos.col}, ${pos.row})`);
-            } else {
-              // Fallback: placer à (0, 0) si aucune position libre trouvée
-              layout[appId] = { col: 0, row: 0, w: 1, h: 1 };
-              console.warn(`[userPreferences] ⚠️ ${appId} placé à (0,0) par défaut (aucune position libre)`);
-            }
+          // Vérifier si l'app a déjà une position (ne devrait pas arriver mais sécurité)
+          if (layout[appId]) {
+            console.log(`[userPreferences] ℹ️ ${appId} a déjà une position, on la garde`);
+            return;
           }
           
-          // Créer une ancre basée sur la position
+          // Trouver une position libre pour cette app (1x1)
+          const pos = findFreePosition(layout, 1, 1, 12);
+          if (pos) {
+            layout[appId] = pos;
+            console.log(`[userPreferences] ✅ ${appId} placé à (${pos.col}, ${pos.row})`);
+          } else {
+            // Fallback: placer à la fin de la grille
+            const maxRow = Math.max(0, ...Object.values(layout).map((p: any) => (p.row || 0) + (p.h || 1)));
+            layout[appId] = { col: 0, row: maxRow + 1, w: 1, h: 1 };
+            console.warn(`[userPreferences] ⚠️ ${appId} placé à (0,${maxRow + 1}) - grille pleine`);
+          }
+          
+          // Créer une ancre basée sur la position UNIQUEMENT pour les nouvelles apps
           if (typeof anchors[appId] !== 'number') {
             const pos = layout[appId] as any;
             const BASE_COLS = 12; // Grille de référence

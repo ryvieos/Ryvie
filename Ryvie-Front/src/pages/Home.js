@@ -718,9 +718,26 @@ const Home = () => {
     return { layout, anchors, apps: ordered };
   }, [appsConfig, DEFAULT_ANCHORS]);
   const savedDefaultOnceRef = React.useRef(false);
+  const refreshTimeoutRef = React.useRef(null);
   
   // Fonction pour rafraîchir les icônes du bureau après installation/désinstallation
   const refreshDesktopIcons = React.useCallback(async () => {
+    // Debounce: annuler le refresh précédent s'il est en attente
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+    
+    // Attendre 300ms avant de rafraîchir pour grouper les appels multiples
+    return new Promise((resolve) => {
+      refreshTimeoutRef.current = setTimeout(async () => {
+        await performRefresh();
+        resolve();
+      }, 300);
+    });
+  }, [accessMode, launcherLayout, launcherAnchors, widgets]);
+  
+  // Fonction interne qui fait le vrai rafraîchissement
+  const performRefresh = React.useCallback(async () => {
     // Être plus robuste: si accessMode n'est pas encore initialisé,
     // retomber sur la détection actuelle.
     const mode = accessMode || getCurrentAccessMode() || 'private';
@@ -892,7 +909,7 @@ const Home = () => {
         // Récupérer les statuts des apps depuis l'API pour mettre à jour les badges
         try {
           const serverUrl = getServerUrl(mode);
-          const response = await axios.get(`${serverUrl}/api/apps`);
+          const response = await axios.get(`${serverUrl}/api/apps`, { timeout: 30000 });
           const apps = response.data.map(app => ({
             ...app,
             port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
@@ -908,6 +925,15 @@ const Home = () => {
       console.error('[Home] ❌ Erreur lors du rafraîchissement des icônes:', error);
     }
   }, [accessMode, launcherLayout, launcherAnchors, widgets]);
+  
+  // Cleanup du timeout au démontage
+  React.useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Écouteur de messages pour fermer l'overlay depuis l'iframe
   useEffect(() => {
@@ -1074,13 +1100,13 @@ const Home = () => {
         const serverUrl = getServerUrl(mode);
         
         // Vérifier les installations actives côté backend
-        const activeResponse = await axios.get(`${serverUrl}/api/appstore/active-installations`);
+        const activeResponse = await axios.get(`${serverUrl}/api/appstore/active-installations`, { timeout: 20000 });
         const activeInstalls = activeResponse.data?.installations || [];
         
         console.log('[Home] Installations actives côté backend:', activeInstalls);
         
         // Vérifier les apps installées
-        const appsResponse = await axios.get(`${serverUrl}/api/apps`);
+        const appsResponse = await axios.get(`${serverUrl}/api/apps`, { timeout: 30000 });
         const installedApps = appsResponse.data || [];
         
         // Synchroniser l'état
@@ -1184,7 +1210,7 @@ const Home = () => {
         }
         
         // Rafraîchir les icônes pour afficher les apps installées
-        setTimeout(() => refreshDesktopIcons(), 1000);
+        refreshDesktopIcons();
       } catch (error) {
         console.warn('[Home] Erreur vérification installations:', error);
         // En cas d'erreur, garder l'état local
@@ -1213,8 +1239,8 @@ const Home = () => {
         const serverUrl = getServerUrl(mode);
         
         const [activeResponse, appsResponse] = await Promise.all([
-          axios.get(`${serverUrl}/api/appstore/active-installations`),
-          axios.get(`${serverUrl}/api/apps`)
+          axios.get(`${serverUrl}/api/appstore/active-installations`, { timeout: 20000 }),
+          axios.get(`${serverUrl}/api/apps`, { timeout: 30000 })
         ]);
         
         const activeInstalls = activeResponse.data?.installations || [];
@@ -1244,7 +1270,7 @@ const Home = () => {
       } catch (error) {
         console.warn('[Home] Erreur polling installations:', error);
       }
-    }, 10000);
+    }, 15000);
     
     return () => {
       if (pollInterval) clearInterval(pollInterval);
@@ -1504,7 +1530,7 @@ const Home = () => {
       try {
         const appsBase = getServerUrl(accessMode);
         console.log('[Home] Récupération des apps depuis:', appsBase, 'mode =', accessMode);
-        const response = await axios.get(`${appsBase}/api/apps`);
+        const response = await axios.get(`${appsBase}/api/apps`, { timeout: 30000 });
         const apps = response.data.map(app => ({
           ...app,
           port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
@@ -1560,8 +1586,10 @@ const Home = () => {
     if (socket) {
       const handleAppsStatusUpdate = (updatedApps) => {
         console.log('[Home] Mise à jour des applications reçue:', updatedApps);
+        
+        // Comparer avec l'état actuel pour éviter les re-renders inutiles
         setApplications(prevApps => {
-          return updatedApps.map(updatedApp => {
+          const newApps = updatedApps.map(updatedApp => {
             const existingApp = prevApps.find(app => app.id === updatedApp.id);
             return {
               ...updatedApp,
@@ -1569,34 +1597,50 @@ const Home = () => {
               autostart: existingApp ? existingApp.autostart : false
             };
           });
+          
+          // Vérifier si les données ont vraiment changé
+          if (JSON.stringify(prevApps) === JSON.stringify(newApps)) {
+            console.log('[Home] Aucun changement détecté dans applications, skip update');
+            return prevApps; // Retourner l'ancien état pour éviter le re-render
+          }
+          
+          return newApps;
         });
 
-        const newAppStatus = {};
-        updatedApps.forEach(app => {
-          const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
-            const match = config.name.toLowerCase() === app.name.toLowerCase() || 
-                         iconId.includes(app.name.toLowerCase()) ||
-                         (config.id && config.id === app.id);
-            return match;
+        setAppStatus(prevStatus => {
+          const newAppStatus = {};
+          updatedApps.forEach(app => {
+            const configEntry = Object.entries(appsConfig).find(([iconId, config]) => {
+              const match = config.name.toLowerCase() === app.name.toLowerCase() || 
+                           iconId.includes(app.name.toLowerCase()) ||
+                           (config.id && config.id === app.id);
+              return match;
+            });
+            if (configEntry) {
+              const [iconId] = configEntry;
+              newAppStatus[iconId] = {
+                status: app.status,
+                progress: app.progress,
+                containersTotal: app.containersTotal,
+                containersRunning: app.containersRunning,
+                containersHealthy: app.containersHealthy,
+                containersStarting: app.containersStarting,
+                containersUnhealthy: app.containersUnhealthy,
+                containersStopped: app.containersStopped
+              };
+            }
           });
-          if (configEntry) {
-            const [iconId] = configEntry;
-            // Stocker l'objet complet avec status, progress, etc.
-            newAppStatus[iconId] = {
-              status: app.status,
-              progress: app.progress,
-              containersTotal: app.containersTotal,
-              containersRunning: app.containersRunning,
-              containersHealthy: app.containersHealthy,
-              containersStarting: app.containersStarting,
-              containersUnhealthy: app.containersUnhealthy,
-              containersStopped: app.containersStopped
-            };
+          
+          // Vérifier si le statut a vraiment changé
+          if (JSON.stringify(prevStatus) === JSON.stringify(newAppStatus)) {
+            console.log('[Home] Aucun changement détecté dans appStatus, skip update');
+            return prevStatus; // Retourner l'ancien état pour éviter le re-render
           }
+          
+          // Sauvegarder dans le cache seulement si changement
+          StorageManager.setItem('appStatus_cache', newAppStatus);
+          return newAppStatus;
         });
-        setAppStatus(newAppStatus);
-        // Sauvegarder dans le cache
-        StorageManager.setItem('appStatus_cache', newAppStatus);
       };
       
       // Écouter les deux noms d'événement pour compatibilité
