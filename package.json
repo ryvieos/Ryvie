@@ -1,6 +1,6 @@
 {
   "name": "ryvie",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "description": "Plateforme tout-en-un pour piloter un parc d'applications Ryvie",
   "main": "index.js",
   "scripts": {
