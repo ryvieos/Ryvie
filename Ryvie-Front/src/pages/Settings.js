@@ -92,6 +92,8 @@ const Settings = () => {
   });
   // État pour l'application sélectionnée (détails)
   const [selectedApp, setSelectedApp] = useState(null);
+  // État pour afficher toutes les apps ou seulement une ligne
+  const [showAllApps, setShowAllApps] = useState(false);
 
   const [disks, setDisks] = useState([
     {
@@ -1825,14 +1827,14 @@ const Settings = () => {
                       className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
                       onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
                     >
-                      {(selectedApp.status === 'running' && selectedApp.progress > 0) ? 'Arrêter tous les conteneurs' : 'Démarrer tous les conteneurs'}
+                      {(selectedApp.status === 'running' && selectedApp.progress > 0) ? '⏸️ Arrêter tous les conteneurs' : '▶️ Démarrer tous les conteneurs'}
                     </button>
                     <button
                       className="docker-action-btn-large restart"
                       onClick={() => handleAppAction(selectedApp.id, 'restart')}
                       disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
                     >
-                      Redémarrer tous les conteneurs
+                      🔄 Redémarrer tous les conteneurs
                     </button>
                     <button
                       className="docker-action-btn-large uninstall"
@@ -1862,41 +1864,45 @@ const Settings = () => {
             <p>Aucune application Docker détectée.</p>
           </div>
         ) : (
-          <div className="docker-apps-grid">
-            {applications.map(app => {
-              // URL standard de l'icône exposée par le backend
-              const serverUrl = getServerUrl(accessMode);
-              const iconUrl = `${serverUrl}/api/apps/${app.id}/icon`;
+          <>
+            <div className="docker-apps-grid">
+              {applications.map((app, index) => {
+                // URL standard de l'icône exposée par le backend
+                const serverUrl = getServerUrl(accessMode);
+                const iconUrl = `${serverUrl}/api/apps/${app.id}/icon`;
 
-              return (
-                <div 
-                  key={app.id} 
-                  className={`docker-app-card ${selectedApp && selectedApp.id === app.id ? 'active' : ''}`}
-                  onClick={() => handleAppSelect(app)}
-                >
-                  <div className="docker-app-header">
-                    <div className="docker-app-main">
-                      {iconUrl && (
-                        <img
-                          src={iconUrl}
-                          alt={app.name}
-                          className="docker-app-logo"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      )}
-                      <h3>{app.name}</h3>
+                // Afficher seulement les 4 premières apps si showAllApps est false
+                if (!showAllApps && index >= 4) return null;
+
+                return (
+                  <div 
+                    key={app.id} 
+                    className={`docker-app-card ${selectedApp && selectedApp.id === app.id ? 'active' : ''}`}
+                    onClick={() => handleAppSelect(app)}
+                  >
+                    <div className="docker-app-header">
+                      <div className="docker-app-main">
+                        {iconUrl && (
+                          <img
+                            src={iconUrl}
+                            alt={app.name}
+                            className="docker-app-logo"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
+                        <h3>{app.name}</h3>
+                      </div>
+                      <span className={`docker-status-badge ${
+                        app.status === 'running' && app.progress === 100 ? 'running' : 
+                        app.status === 'starting' || app.status === 'partial' ? 'starting' : 
+                        'stopped'
+                      }`}>
+                        {app.status === 'running' && app.progress === 100 ? 'En cours' : 
+                         app.status === 'starting' ? 'Démarrage...' :
+                         app.status === 'partial' ? 'Partiel' :
+                         'Arrêté'}
+                      </span>
                     </div>
-                    <span className={`docker-status-badge ${
-                      app.status === 'running' && app.progress === 100 ? 'running' : 
-                      app.status === 'starting' || app.status === 'partial' ? 'starting' : 
-                      'stopped'
-                    }`}>
-                      {app.status === 'running' && app.progress === 100 ? 'En cours' : 
-                       app.status === 'starting' ? 'Démarrage...' :
-                       app.status === 'partial' ? 'Partiel' :
-                       'Arrêté'}
-                    </span>
-                  </div>
                 {appActionStatus.show && appActionStatus.appId === app.id && (
                   <div className={`docker-action-status ${appActionStatus.success ? 'success' : 'error'}`}>
                     {appActionStatus.message}
@@ -1952,6 +1958,38 @@ const Settings = () => {
             );
             })}
           </div>
+          {applications.length > 4 && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+              <button
+                onClick={() => setShowAllApps(!showAllApps)}
+                style={{
+                  padding: '12px 32px',
+                  backgroundColor: '#0078d4',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 2px 8px rgba(0, 120, 212, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#006cbe';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 120, 212, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#0078d4';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 120, 212, 0.3)';
+                }}
+              >
+                {showAllApps ? '▲ Voir moins' : `▼ Voir toutes les applications (${applications.length})`}
+              </button>
+            </div>
+          )}
+          </>
         )}
       </section>
 
