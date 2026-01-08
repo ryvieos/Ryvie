@@ -13,6 +13,15 @@ Ryvie dispose maintenant de deux modes de fonctionnement distincts :
 
 ## 🚀 Commandes Rapides
 
+### Mise à jour Ryvie (via interface web)
+- Cliquer sur "Mettre à jour" dans les paramètres
+- Télécharge automatiquement la dernière release GitHub
+- Sauvegarde automatique (snapshot btrfs)
+- Préservation des permissions
+- Installation des dépendances
+- Build et déploiement en production
+- Rollback automatique en cas d'erreur
+
 ### Démarrer en mode DEV
 ```bash
 /opt/Ryvie/scripts/dev.sh

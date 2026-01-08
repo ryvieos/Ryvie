@@ -162,12 +162,31 @@ log "✅ Ancien code supprimé"
 # Note: netbird-data.json sera synchronisé automatiquement par le backend au démarrage
 echo "ℹ️  netbird-data.json sera synchronisé par le backend au démarrage"
 
-# 5. Copier la nouvelle version
+# 5. Sauvegarder les permissions actuelles
+log "📋 Sauvegarde des permissions..."
+CURRENT_USER=$(stat -c '%U' "$RYVIE_DIR" 2>/dev/null || stat -f '%Su' "$RYVIE_DIR" 2>/dev/null || echo "ryvie")
+CURRENT_GROUP=$(stat -c '%G' "$RYVIE_DIR" 2>/dev/null || stat -f '%Sg' "$RYVIE_DIR" 2>/dev/null || echo "ryvie")
+log "  Propriétaire actuel: $CURRENT_USER:$CURRENT_GROUP"
+
+# 6. Copier la nouvelle version
 log "🔄 Application de la nouvelle version..."
 cp -rf "$STAGING_DIR"/* "$RYVIE_DIR/"
 log "✅ Nouvelle version appliquée"
 
-# 6. Vérifier package.json (la release est censée l'apporter)
+# 7. Restaurer les permissions
+log "🔐 Restauration des permissions..."
+if [ "$CURRENT_USER" != "$(whoami)" ]; then
+  log "  ⚠️  Changement de propriétaire nécessaire (sudo requis)"
+  sudo chown -R "$CURRENT_USER:$CURRENT_GROUP" "$RYVIE_DIR"
+else
+  chown -R "$CURRENT_USER:$CURRENT_GROUP" "$RYVIE_DIR" 2>/dev/null || true
+fi
+
+# Rendre les scripts exécutables
+find "$RYVIE_DIR/scripts" -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+log "✅ Permissions restaurées ($CURRENT_USER:$CURRENT_GROUP)"
+
+# 8. Vérifier package.json (la release est censée l'apporter)
 cd "$RYVIE_DIR"
 if [[ ! -f "$RYVIE_DIR/package.json" ]]; then
   log "⚠️  package.json absent après update, création d'un fallback avec version $TARGET_VERSION"
@@ -183,7 +202,7 @@ if [[ ! -f "$RYVIE_DIR/package.json" ]]; then
 EOF
 fi
 
-# 7. Rebuild et redémarrage
+# 9. Rebuild et redémarrage
 log "🔧 Build et redémarrage de Ryvie (mode: $MODE)..."
 
 if [[ "$MODE" == "dev" ]]; then
@@ -201,7 +220,7 @@ fi
 
 log "✅ Build et redémarrage terminés"
 
-# 7.1. Health check intelligent avec détection rapide
+# 10. Health check intelligent avec détection rapide
 log "🏥 Health check du système..."
 
 # Déterminer les processus et logs selon le mode
@@ -322,10 +341,10 @@ fi
 log "✅ Mise à jour terminée avec succès!"
 log "📊 Le système fonctionne correctement"
 
-# 8. Nettoyage
+# 11. Nettoyage
 cleanup
 
-# 9. Supprimer le snapshot si tout s'est bien passé
+# 12. Supprimer le snapshot si tout s'est bien passé
 if [[ -n "$SNAPSHOT_PATH" && -d "$SNAPSHOT_PATH" ]]; then
   log "🧹 Suppression du snapshot de sécurité..."
   sudo btrfs subvolume delete "$SNAPSHOT_PATH"/* 2>/dev/null || true
