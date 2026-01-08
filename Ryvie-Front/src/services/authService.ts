@@ -1,14 +1,12 @@
 import axios from '../utils/setupAxios';
 
-// Clés utilisées pour le stockage dans localStorage
 const TOKEN_KEY = 'jwt_token';
 const USER_KEY = 'currentUser';
 const USER_ROLE_KEY = 'currentUserRole';
 const USER_EMAIL_KEY = 'currentUserEmail';
 const SESSION_ACTIVE_KEY = 'sessionActive';
 
-// Configure axios pour inclure le token dans les en-têtes
-export const setAuthToken = (token) => {
+export const setAuthToken = (token: string | null): void => {
   if (token) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   } else {
@@ -16,8 +14,7 @@ export const setAuthToken = (token) => {
   }
 };
 
-// Initialiser le token au chargement de l'application
-export const initializeToken = () => {
+export const initializeToken = (): boolean => {
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) {
     setAuthToken(token);
@@ -26,23 +23,19 @@ export const initializeToken = () => {
   return false;
 };
 
-// Vérifier si l'utilisateur est authentifié
-export const isAuthenticated = () => {
+export const isAuthenticated = (): boolean => {
   const hasToken = !!localStorage.getItem(TOKEN_KEY);
-  // Vérifier également les paramètres d'URL pour le mode public
   const urlParams = new URLSearchParams(window.location.search);
   const urlUser = urlParams.get('user');
   const urlRole = urlParams.get('role');
-  return hasToken || (urlUser && urlRole);
+  return hasToken || (!!urlUser && !!urlRole);
 };
 
-// Récupérer les informations de l'utilisateur actuel
-export const getCurrentUser = () => {
+export const getCurrentUser = (): { name: string; role: string; email: string | null; fromUrl?: boolean } | null => {
   const user = localStorage.getItem(USER_KEY);
   const role = localStorage.getItem(USER_ROLE_KEY);
   const email = localStorage.getItem(USER_EMAIL_KEY);
   
-  // Si les données ne sont pas dans localStorage, vérifier les paramètres d'URL
   if (!user) {
     const urlParams = new URLSearchParams(window.location.search);
     const urlUser = urlParams.get('user');
@@ -67,8 +60,7 @@ export const getCurrentUser = () => {
   };
 };
 
-// Gérer la déconnexion
-export const logout = () => {
+export const logout = (): void => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(USER_ROLE_KEY);
@@ -76,7 +68,6 @@ export const logout = () => {
   setAuthToken(null);
 };
 
-// Définir la configuration pour une requête authentifiée
 export const getAuthConfig = () => {
   const token = localStorage.getItem(TOKEN_KEY);
   return {
@@ -86,35 +77,29 @@ export const getAuthConfig = () => {
   };
 };
 
-// Gérer les erreurs d'authentification et rediriger vers la page de connexion si nécessaire
-export const handleAuthError = (error) => {
-  // Ignorer les erreurs 404 pour les requêtes de vérification du serveur
+export const handleAuthError = (error: any): boolean => {
   if (error.config && error.config.url && error.config.url.includes('/api/server-status')) {
     console.log('Erreur de vérification du serveur ignorée pour l\'authentification');
     return false;
   }
 
-  // Si on est déjà sur la page de login, ne jamais forcer de redirection
   if (typeof window !== 'undefined' && window.location.hash.includes('#/login')) {
     return false;
   }
   
-  // Vérifier si c'est une erreur d'authentification (401)
   if (error.response && error.response.status === 401) {
     console.log('Session expirée ou erreur d\'authentification. Déconnexion automatique...');
     
-    // Déconnecter l'utilisateur
     logout();
     
-    // Rediriger vers la page de connexion avec le hash router
     if (!window.location.hash.includes('#/login')) {
       window.location.href = '#/login';
     }
     
-    return true; // Indique que l'erreur a été traitée comme une erreur d'authentification
+    return true;
   }
   
-  return false; // Indique que ce n'est pas une erreur d'authentification
+  return false;
 };
 
 export default {

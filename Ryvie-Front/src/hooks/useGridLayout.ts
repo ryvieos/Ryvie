@@ -1,12 +1,30 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { GRID_CONFIG } from '../config/appConfig';
+import { GridLayout, GridPosition, GridAnchors } from '../types';
 
-/**
- * Hook pour gérer le layout de la grille iOS
- * @param {Array} items - Liste des items {id, type, w, h}
- * @param {number} cols - Nombre de colonnes
- */
-const useGridLayout = (items, cols = 12, initialLayout = null, initialAnchors = null) => {
+interface GridItem {
+  id: string;
+  w?: number;
+  h?: number;
+  type?: string;
+}
+
+interface UseGridLayoutReturn {
+  layout: GridLayout;
+  moveItem: (itemId: string, col: number, row: number, width: number, height: number) => boolean;
+  swapItems: (a: string, b: string) => void;
+  isPositionValid: (itemId: string, col: number, row: number, width: number, height: number) => boolean;
+  pixelToGrid: (x: number, y: number, slotSize: number, gap: number) => { col: number; row: number };
+  findFreePosition: (w: number, h: number) => GridPosition | null;
+  getAnchors: () => GridAnchors;
+}
+
+const useGridLayout = (
+  items: GridItem[],
+  cols: number = 12,
+  initialLayout: GridLayout | null = null,
+  initialAnchors: GridAnchors | null = null
+): UseGridLayoutReturn => {
   const [layout, setLayout] = useState(initialLayout || {});
   const [prevCols, setPrevCols] = useState(cols);
   const [anchors, setAnchors] = useState(initialAnchors || {});
