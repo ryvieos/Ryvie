@@ -22,7 +22,11 @@ RYVIE_DIR="/opt/Ryvie"
 TEMP_DIR="$RYVIE_DIR/.update-staging"
 GITHUB_REPO="maisonnavejul/Ryvie"
 SNAPSHOT_PATH=""
-LOG_FILE="/tmp/ryvie-update-$(date +%Y%m%d-%H%M%S).log"
+
+# Créer le dossier de logs s'il n'existe pas
+mkdir -p /data/logs
+
+LOG_FILE="/data/logs/update-$(date +%Y%m%d-%H%M%S).log"
 STATUS_FILE="/tmp/ryvie-update-status.json"
 
 # Fonction de logging
@@ -232,20 +236,45 @@ if [[ -f "$RYVIE_DIR/scripts/prod.sh" ]]; then
 fi
 
 # 9. Rebuild et redmarrage
-update_status "building" "Installation des dpendances et compilation" 60
+update_status "building" "Installation des dépendances et compilation" 60
+
+log "🔄 Lancement du script de démarrage en mode $MODE..."
 
 if [[ "$MODE" == "dev" ]]; then
-  cd "$RYVIE_DIR" && bash ./scripts/dev.sh >> "$LOG_FILE" 2>&1
+  if ! bash "$RYVIE_DIR/scripts/dev.sh" >> "$LOG_FILE" 2>&1; then
+    log "❌ Erreur lors du build/redémarrage en mode dev"
+    log "⚠️  UNE ERREUR S'EST PRODUITE PENDANT LA MISE À JOUR"
+    log "🔄 RETOUR À LA VERSION PRÉCÉDENTE EN COURS..."
+    rollback
+  fi
 else
-  cd "$RYVIE_DIR" && bash ./scripts/prod.sh >> "$LOG_FILE" 2>&1
+  if ! bash "$RYVIE_DIR/scripts/prod.sh" >> "$LOG_FILE" 2>&1; then
+    log "❌ Erreur lors du build/redémarrage en mode prod"
+    log "📋 Dernières lignes du log:"
+    tail -n 50 "$LOG_FILE" | tee -a "$LOG_FILE"
+    log "⚠️  UNE ERREUR S'EST PRODUITE PENDANT LA MISE À JOUR"
+    log "🔄 RETOUR À LA VERSION PRÉCÉDENTE EN COURS..."
+    rollback
+  fi
 fi
 
-if [ $? -ne 0 ]; then
-  log "❌ Erreur lors du build/redémarrage"
-  log "⚠️  UNE ERREUR S'EST PRODUITE PENDANT LA MISE À JOUR"
+log "✅ Script de démarrage terminé avec succès"
+
+# Vérifier que les node_modules sont bien installés
+log "🔍 Vérification de l'installation des dépendances..."
+if [ ! -d "$RYVIE_DIR/Ryvie-Back/node_modules" ]; then
+  log "❌ ERREUR: node_modules du backend non installé!"
   log "🔄 RETOUR À LA VERSION PRÉCÉDENTE EN COURS..."
   rollback
 fi
+
+if [ ! -d "$RYVIE_DIR/Ryvie-Front/node_modules" ]; then
+  log "❌ ERREUR: node_modules du frontend non installé!"
+  log "🔄 RETOUR À LA VERSION PRÉCÉDENTE EN COURS..."
+  rollback
+fi
+
+log "✅ Dépendances backend et frontend correctement installées"
 
 update_status "health_check" "Vérification du démarrage" 80
 

@@ -26,12 +26,28 @@ sudo rm -rf /opt/Ryvie/Ryvie-Front/node_modules
 # Installer les dépendances backend (avec devDependencies pour tsc)
 echo "📦 Installation des dépendances backend..."
 cd /opt/Ryvie/Ryvie-Back
-npm install --include=dev
+if ! npm install --include=dev; then
+  echo "❌ Erreur lors de l'installation des dépendances backend"
+  exit 1
+fi
+if [ ! -d "node_modules" ]; then
+  echo "❌ Erreur: node_modules du backend non créé"
+  exit 1
+fi
+echo "✅ Dépendances backend installées"
 
 # Installer les dépendances frontend (avec devDependencies pour webpack)
 echo "📦 Installation des dépendances frontend..."
 cd /opt/Ryvie/Ryvie-Front
-npm install --include=dev
+if ! npm install --include=dev; then
+  echo "❌ Erreur lors de l'installation des dépendances frontend"
+  exit 1
+fi
+if [ ! -d "node_modules" ]; then
+  echo "❌ Erreur: node_modules du frontend non créé"
+  exit 1
+fi
+echo "✅ Dépendances frontend installées"
 
 # Vérifier et corriger les permissions si nécessaire
 echo "🔐 Vérification des permissions..."
@@ -69,9 +85,22 @@ fi
 # Réinstaller uniquement les dépendances de production (optimisation)
 echo "🧹 Nettoyage des devDependencies pour la production..."
 cd /opt/Ryvie/Ryvie-Back
-npm prune --production
+if ! npm prune --production; then
+  echo "⚠️  Avertissement: npm prune a échoué pour le backend (non critique)"
+fi
 cd /opt/Ryvie/Ryvie-Front
-npm prune --production
+if ! npm prune --production; then
+  echo "⚠️  Avertissement: npm prune a échoué pour le frontend (non critique)"
+fi
+
+# Vérifier que serve est toujours présent après le prune
+if [ ! -f "/opt/Ryvie/Ryvie-Front/node_modules/.bin/serve" ] && [ ! -d "/opt/Ryvie/Ryvie-Front/node_modules/serve" ]; then
+  echo "❌ ERREUR CRITIQUE: serve a été supprimé par npm prune!"
+  echo "🔄 Réinstallation de serve..."
+  cd /opt/Ryvie/Ryvie-Front
+  npm install serve --save
+fi
+
 echo "✅ Environnement de production optimisé"
 
 # Arrêter les anciens processus prod s'ils existent
