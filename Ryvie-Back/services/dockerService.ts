@@ -13,10 +13,10 @@ const containerMapping: Record<string, string> = {
   'redis': 'Redis',
 };
 
-// Cache pour getAppStatus (3 secondes)
+// Cache pour getAppStatus (5 secondes)
 let appStatusCache: any = null;
 let appStatusCacheTime = 0;
-const APP_STATUS_CACHE_DURATION = 3000; // 3 secondes
+const APP_STATUS_CACHE_DURATION = 5000; // 5 secondes
 
 function extractAppName(containerName) {
   if (containerName.startsWith('app-')) {
@@ -203,10 +203,18 @@ async function restartApp(appId) {
   return { success: failedCount === 0, message: `${restartedCount} conteneur(s) redémarré(s), ${failedCount} échec(s)`, appId };
 }
 
+// Fonction pour invalider le cache manuellement
+function clearAppStatusCache() {
+  appStatusCache = null;
+  appStatusCacheTime = 0;
+  console.log('[dockerService] Cache des statuts invalidé');
+}
+
 export = {
   getAllContainers,
   getAppStatus,
   startApp,
   stopApp,
   restartApp,
+  clearAppStatusCache,
 };

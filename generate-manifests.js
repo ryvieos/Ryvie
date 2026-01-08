@@ -396,11 +396,16 @@ function createGenericIcon() {
     }
 }
 /**
- * Fonction principale
+ * Point d'entrée principal
  */
-function main() {
+function main(specificAppId = null) {
     console.log(`📂 Scan du répertoire: ${APPS_SOURCE_DIR}`);
     console.log(`📁 Destination: ${MANIFESTS_DIR}\n`);
+    
+    if (specificAppId) {
+        console.log(`🎯 Mode ciblé: génération uniquement pour l'app "${specificAppId}"\n`);
+    }
+    
     // Créer l'icône générique
     createGenericIcon();
     // Créer le dossier de destination
@@ -410,7 +415,16 @@ function main() {
     }
     // Scanner automatiquement les apps
     console.log('🔍 Scan automatique de tous les dossiers dans /data/apps/...\n');
-    const scannedApps = scanAppsDirectories();
+    let scannedApps = scanAppsDirectories();
+    
+    // Si un appId spécifique est fourni, filtrer pour ne garder que cette app
+    if (specificAppId) {
+        scannedApps = scannedApps.filter(app => app.id === specificAppId);
+        if (scannedApps.length === 0) {
+            console.log(`⚠️  App "${specificAppId}" non trouvée dans /data/apps/`);
+            return;
+        }
+    }
     if (scannedApps.length === 0) {
         console.log('⚠️  Aucune app trouvée dans /data/apps/');
         console.log('💡 Création des fichiers de configuration vides...\n');
@@ -418,29 +432,32 @@ function main() {
         console.log(`\n✅ ${scannedApps.length} app(s) détectée(s)\n`);
     }
     // Nettoyer les manifests orphelins (apps supprimées de /data/apps/)
-    try {
-        const existingManifests = fs.readdirSync(MANIFESTS_DIR, { withFileTypes: true })
-            .filter((entry) => entry.isDirectory())
-            .map((entry) => entry.name);
-        const scannedIds = scannedApps.map((app) => app.id);
-        const orphans = existingManifests.filter((id) => !scannedIds.includes(id));
-        if (orphans.length > 0) {
-            console.log(`🗑️  Nettoyage de ${orphans.length} manifest(s) orphelin(s):`);
-            orphans.forEach((id) => {
-                const orphanPath = path.join(MANIFESTS_DIR, id);
-                try {
-                    fs.rmSync(orphanPath, { recursive: true, force: true });
-                    console.log(`   ✅ Supprimé: ${id}`);
-                }
-                catch (e) {
-                    console.warn(`   ⚠️  Impossible de supprimer ${id}:`, e.message);
-                }
-            });
-            console.log('');
+    // Seulement si on génère tous les manifests (pas en mode ciblé)
+    if (!specificAppId) {
+        try {
+            const existingManifests = fs.readdirSync(MANIFESTS_DIR, { withFileTypes: true })
+                .filter((entry) => entry.isDirectory())
+                .map((entry) => entry.name);
+            const scannedIds = scannedApps.map((app) => app.id);
+            const orphans = existingManifests.filter((id) => !scannedIds.includes(id));
+            if (orphans.length > 0) {
+                console.log(`🗑️  Nettoyage de ${orphans.length} manifest(s) orphelin(s):`);
+                orphans.forEach((id) => {
+                    const orphanPath = path.join(MANIFESTS_DIR, id);
+                    try {
+                        fs.rmSync(orphanPath, { recursive: true, force: true });
+                        console.log(`   ✅ Supprimé: ${id}`);
+                    }
+                    catch (e) {
+                        console.warn(`   ⚠️  Impossible de supprimer ${id}:`, e.message);
+                    }
+                });
+                console.log('');
+            }
         }
-    }
-    catch (e) {
-        console.warn('⚠️  Erreur lors du nettoyage des manifests orphelins:', e.message);
+        catch (e) {
+            console.warn('⚠️  Erreur lors du nettoyage des manifests orphelins:', e.message);
+        }
     }
     // Générer les manifests
     const generatedManifests = [];
@@ -520,6 +537,8 @@ function main() {
 }
 // Exécution
 if (require.main === module) {
-    main();
+    // Lire l'appId depuis les arguments de ligne de commande
+    const appIdArg = process.argv[2];
+    main(appIdArg);
 }
-module.exports = { generateManifest, findAppIcon };
+module.exports = { generateManifest, findAppIcon, main };

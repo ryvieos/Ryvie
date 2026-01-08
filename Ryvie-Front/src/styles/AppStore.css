@@ -1147,6 +1147,10 @@
   border-left: 4px solid #2196f3;
 }
 
+.toast-warning {
+  border-left: 4px solid #ff9800;
+}
+
 .toast svg {
   font-size: 20px;
 }
@@ -1161,6 +1165,10 @@
 
 .toast-info svg {
   color: #2196f3;
+}
+
+.toast-warning svg {
+  color: #ff9800;
 }
 
 .toast span {

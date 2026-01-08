@@ -27,7 +27,7 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
       try {
         const serverUrl = getServerUrl(accessMode);
         const response = await axios.get(`${serverUrl}/api/server-info`, {
-          timeout: 10000
+          timeout: 30000
         });
         
         if (response.data) {
@@ -71,7 +71,7 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     };
 
     fetchSystemStats();
-    const interval = setInterval(fetchSystemStats, 10000); // Mise à jour toutes les 3 secondes (CasaOS-style)
+    const interval = setInterval(fetchSystemStats, 15000); // Mise à jour toutes les 15 secondes
 
     return () => clearInterval(interval);
   }, [accessMode]);
