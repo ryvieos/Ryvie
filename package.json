@@ -1,19 +1,19 @@
 {
   "name": "ryvie",
   "version": "0.1.34",
-  "description": "Plateforme tout-en-un pour piloter un parc d'applications Ryvie",
+  "description": "Votre Cloud personnel transparent",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/maisonnavejul/Ryvie.git"
+    "url": "git+https://github.com/ryvieos/Ryvie.git"
   },
   "author": "maisonnavejul",
   "license": "SEE LICENSE IN LICENSE",
   "bugs": {
-    "url": "https://github.com/maisonnavejul/Ryvie/issues"
+    "url": "https://github.com/ryvieos/Ryvie/issues"
   },
-  "homepage": "https://github.com/maisonnavejul/Ryvie#readme"
+  "homepage": "https://github.com/ryvieos/Ryvie#readme"
 }
