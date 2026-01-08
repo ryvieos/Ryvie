@@ -1,37 +1,35 @@
-/**
- * Gestionnaire de sessions pour l'application Ryvie
- * Compatible web et Electron avec gestion des cookies et tokens JWT
- */
-
 import { StorageManager, isElectron } from './platformUtils';
 import axios from './setupAxios';
 
-/**
- * Gestionnaire de sessions unifié
- */
-export class SessionManager {
-  constructor() {
-    this.tokenKey = 'jwt_token';
-    this.userKey = 'currentUser';
-    this.userRoleKey = 'currentUserRole';
-    this.userEmailKey = 'currentUserEmail';
-    this.sessionActiveKey = 'sessionActive';
-    this.sessionStartKey = 'sessionStartTime';
-  }
+interface UserData {
+  token: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  userEmail?: string;
+}
 
-  /**
-   * Démarre une nouvelle session utilisateur
-   * @param {Object} userData - Données utilisateur
-   * @param {string} userData.token - Token JWT
-   * @param {string} userData.userId - ID utilisateur
-   * @param {string} userData.userName - Nom utilisateur
-   * @param {string} userData.userRole - Rôle utilisateur
-   * @param {string} userData.userEmail - Email utilisateur
-   */
-  startSession(userData) {
+interface SessionInfo {
+  isActive: boolean;
+  token: string | null;
+  user: string | null;
+  userRole: string;
+  userEmail: string;
+  startTime: string | null;
+  platform: 'electron' | 'web';
+}
+
+export class SessionManager {
+  private tokenKey = 'jwt_token';
+  private userKey = 'currentUser';
+  private userRoleKey = 'currentUserRole';
+  private userEmailKey = 'currentUserEmail';
+  private sessionActiveKey = 'sessionActive';
+  private sessionStartKey = 'sessionStartTime';
+
+  startSession(userData: UserData): void {
     const { token, userId, userName, userRole, userEmail } = userData;
     
-    // Stocker les informations de session
     StorageManager.setItem(this.tokenKey, token);
     StorageManager.setItem(this.userKey, userName || userId);
     StorageManager.setItem(this.userRoleKey, userRole || 'User');
@@ -39,25 +37,19 @@ export class SessionManager {
     StorageManager.setItem(this.sessionActiveKey, true);
     StorageManager.setItem(this.sessionStartKey, new Date().toISOString());
     
-    // Configurer axios pour inclure le token dans toutes les requêtes
     this.setAuthHeader(token);
     
     console.log(`[SessionManager] Session démarrée pour ${userName || userId}`);
     
-    // En web, gérer les cookies pour la persistance entre onglets
     if (!isElectron()) {
-      this.setCookie('ryvie_session', token, 7); // 7 jours
+      this.setCookie('ryvie_session', token, 7);
       this.setCookie('ryvie_user', userName || userId, 7);
     }
   }
 
-  /**
-   * Termine la session actuelle
-   */
-  endSession() {
+  endSession(): void {
     const currentUser = this.getCurrentUser();
     
-    // Supprimer les informations de session
     StorageManager.removeItem(this.tokenKey);
     StorageManager.removeItem(this.userKey);
     StorageManager.removeItem(this.userRoleKey);
@@ -65,40 +57,28 @@ export class SessionManager {
     StorageManager.removeItem(this.sessionActiveKey);
     StorageManager.removeItem(this.sessionStartKey);
     
-    // Supprimer l'en-tête d'autorisation
     delete axios.defaults.headers.common['Authorization'];
     
     console.log(`[SessionManager] Session terminée pour ${currentUser}`);
     
-    // En web, supprimer les cookies
     if (!isElectron()) {
       this.deleteCookie('ryvie_session');
       this.deleteCookie('ryvie_user');
     }
   }
 
-  /**
-   * Vérifie si une session est active
-   * @returns {boolean}
-   */
-  isSessionActive() {
+  isSessionActive(): boolean {
     const token = this.getToken();
     const hasToken = !!token;
     const hasUser = !!this.getCurrentUser();
-    const sessionActive = StorageManager.getItem(this.sessionActiveKey, false);
+    const sessionActive = StorageManager.getItem<boolean>(this.sessionActiveKey, false) || false;
     
-    // Exige un JWT valide pour considérer la session active (évite les cookies/caches résiduels)
     return hasToken && hasUser && sessionActive;
   }
 
-  /**
-   * Récupère le token JWT actuel
-   * @returns {string|null}
-   */
-  getToken() {
-    let token = StorageManager.getItem(this.tokenKey);
+  getToken(): string | null {
+    let token = StorageManager.getItem<string>(this.tokenKey);
     
-    // En web, essayer aussi de récupérer depuis les cookies
     if (!token && !isElectron()) {
       token = this.getCookie('ryvie_session');
     }
@@ -106,14 +86,9 @@ export class SessionManager {
     return token;
   }
 
-  /**
-   * Récupère l'utilisateur actuel
-   * @returns {string|null}
-   */
-  getCurrentUser() {
-    let user = StorageManager.getItem(this.userKey);
+  getCurrentUser(): string | null {
+    let user = StorageManager.getItem<string>(this.userKey);
     
-    // En web, essayer aussi de récupérer depuis les cookies
     if (!user && !isElectron()) {
       user = this.getCookie('ryvie_user');
     }
@@ -121,12 +96,7 @@ export class SessionManager {
     return user;
   }
 
-  /**
-   * Définit le nom utilisateur courant (sans gérer de token)
-   * Utile pour des contextes Electron où l'utilisateur est connu avant l'auth
-   * @param {string} name
-   */
-  setCurrentUserName(name) {
+  setCurrentUserName(name: string): void {
     if (!name) return;
     StorageManager.setItem(this.userKey, name);
     if (!isElectron()) {
@@ -134,53 +104,33 @@ export class SessionManager {
     }
   }
 
-  /**
-   * Récupère le rôle de l'utilisateur actuel
-   * @returns {string}
-   */
-  getCurrentUserRole() {
-    return StorageManager.getItem(this.userRoleKey, 'User');
+  getCurrentUserRole(): string {
+    return StorageManager.getItem<string>(this.userRoleKey, 'User') || 'User';
   }
 
-  /**
-   * Récupère l'email de l'utilisateur actuel
-   * @returns {string}
-   */
-  getCurrentUserEmail() {
-    return StorageManager.getItem(this.userEmailKey, '');
+  getCurrentUserEmail(): string {
+    return StorageManager.getItem<string>(this.userEmailKey, '') || '';
   }
 
-  /**
-   * Récupère les informations complètes de la session
-   * @returns {Object}
-   */
-  getSessionInfo() {
+  getSessionInfo(): SessionInfo {
     return {
       isActive: this.isSessionActive(),
       token: this.getToken(),
       user: this.getCurrentUser(),
       userRole: this.getCurrentUserRole(),
       userEmail: this.getCurrentUserEmail(),
-      startTime: StorageManager.getItem(this.sessionStartKey),
+      startTime: StorageManager.getItem<string>(this.sessionStartKey),
       platform: isElectron() ? 'electron' : 'web'
     };
   }
 
-  /**
-   * Configure l'en-tête d'autorisation pour axios
-   * @param {string} token - Token JWT
-   */
-  setAuthHeader(token) {
+  setAuthHeader(token: string): void {
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
   }
 
-  /**
-   * Met à jour le token JWT courant (stockage + header axios + cookie web)
-   * @param {string} newToken
-   */
-  setToken(newToken) {
+  setToken(newToken: string): void {
     if (!newToken) return;
     StorageManager.setItem(this.tokenKey, newToken);
     this.setAuthHeader(newToken);
@@ -189,10 +139,7 @@ export class SessionManager {
     }
   }
 
-  /**
-   * Initialise la session au démarrage de l'application
-   */
-  initializeSession() {
+  initializeSession(): void {
     const token = this.getToken();
     if (token) {
       this.setAuthHeader(token);
@@ -200,20 +147,13 @@ export class SessionManager {
     }
   }
 
-  /**
-   * Valide le token JWT (vérifie s'il n'est pas expiré)
-   * @param {string} token - Token à valider
-   * @returns {boolean}
-   */
-  validateToken(token) {
+  validateToken(token: string): boolean {
     if (!token) return false;
     
     try {
-      // Décoder le payload du JWT (partie centrale)
       const payload = JSON.parse(atob(token.split('.')[1]));
       const now = Math.floor(Date.now() / 1000);
       
-      // Vérifier si le token n'est pas expiré
       return payload.exp > now;
     } catch (error) {
       console.error('[SessionManager] Erreur lors de la validation du token:', error);
@@ -221,11 +161,7 @@ export class SessionManager {
     }
   }
 
-  /**
-   * Rafraîchit automatiquement le token si nécessaire
-   * @param {string} refreshEndpoint - Endpoint pour rafraîchir le token
-   */
-  async refreshTokenIfNeeded(refreshEndpoint) {
+  async refreshTokenIfNeeded(refreshEndpoint: string): Promise<boolean> {
     const token = this.getToken();
     if (!token) return false;
     
@@ -250,8 +186,7 @@ export class SessionManager {
     return false;
   }
 
-  // Méthodes utilitaires pour les cookies (web uniquement)
-  setCookie(name, value, days) {
+  private setCookie(name: string, value: string, days: number): void {
     if (isElectron()) return;
     
     const expires = new Date();
@@ -259,7 +194,7 @@ export class SessionManager {
     document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
   }
 
-  getCookie(name) {
+  private getCookie(name: string): string | null {
     if (isElectron()) return null;
     
     const nameEQ = name + "=";
@@ -272,25 +207,23 @@ export class SessionManager {
     return null;
   }
 
-  deleteCookie(name) {
+  private deleteCookie(name: string): void {
     if (isElectron()) return;
     
     document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
   }
 }
 
-// Instance singleton
 export const sessionManager = new SessionManager();
 
-// Fonctions utilitaires exportées
-export const startSession = (userData) => sessionManager.startSession(userData);
+export const startSession = (userData: UserData) => sessionManager.startSession(userData);
 export const getSessionInfo = () => sessionManager.getSessionInfo();
 export const initializeSession = () => sessionManager.initializeSession();
 export const isSessionActive = () => sessionManager.isSessionActive();
 export const getCurrentUser = () => sessionManager.getCurrentUser();
 export const getCurrentUserRole = () => sessionManager.getCurrentUserRole();
 export const endSession = () => sessionManager.endSession();
-export const setCurrentUserName = (name) => sessionManager.setCurrentUserName(name);
-export const setToken = (token) => sessionManager.setToken(token);
+export const setCurrentUserName = (name: string) => sessionManager.setCurrentUserName(name);
+export const setToken = (token: string) => sessionManager.setToken(token);
 
 export default sessionManager;

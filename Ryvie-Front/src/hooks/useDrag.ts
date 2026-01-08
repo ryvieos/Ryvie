@@ -1,30 +1,69 @@
 import { useState, useCallback, useRef } from 'react';
 
-/**
- * Hook pour gérer le drag & drop avec Pointer Events
- */
-const useDrag = (onDragEnd, onDragMove) => {
+interface DragOffset {
+  x: number;
+  y: number;
+}
+
+interface DragPosition {
+  x: number;
+  y: number;
+}
+
+interface DraggedItem {
+  itemId: string;
+  itemData: any;
+}
+
+interface DragEndData {
+  itemId: string;
+  itemData: any;
+  x: number;
+  y: number;
+  initialX: number;
+  initialY: number;
+}
+
+interface UseDragHandlers {
+  onPointerDown: (e: any, itemId: string, itemData: any) => void;
+  onPointerMove: (e: any) => void;
+  onPointerUp: (e: any) => void;
+}
+
+interface UseDragReturn {
+  isDragging: boolean;
+  dragPosition: DragPosition;
+  draggedItem: DraggedItem | null;
+  hasDragged: boolean;
+  handlers: UseDragHandlers;
+}
+
+const useDrag = (
+  onDragEnd?: (data: DragEndData) => void,
+  onDragMove?: (x: number, y: number, item: DraggedItem) => void
+): UseDragReturn => {
   const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
-  const draggedItemRef = useRef(null);
-  const initialPosRef = useRef({ x: 0, y: 0 });
+  const [dragOffset, setDragOffset] = useState<DragOffset>({ x: 0, y: 0 });
+  const [dragPosition, setDragPosition] = useState<DragPosition>({ x: 0, y: 0 });
+  const draggedItemRef = useRef<DraggedItem | null>(null);
+  const initialPosRef = useRef<DragPosition>({ x: 0, y: 0 });
   const hasDraggedRef = useRef(false);
-  const longPressTimeoutRef = useRef(null);
+  const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTriggeredRef = useRef(false);
-  const latestPointerRef = useRef({ x: 0, y: 0 });
-  const offsetRef = useRef({ x: 0, y: 0 });
-  const LONG_PRESS_MS = 200; // délai avant activation du drag
+  const latestPointerRef = useRef<DragPosition>({ x: 0, y: 0 });
+  const offsetRef = useRef<DragOffset>({ x: 0, y: 0 });
+  const LONG_PRESS_MS = 200;
   const [, setDragTick] = useState(0);
-  const handlePointerDown = useCallback((e, itemId, itemData) => {
-    // Ignorer le clic droit (button 2) pour permettre le menu contextuel
-    if (e.button === 2) {
+
+  const handlePointerDown = useCallback((e: React.PointerEvent, itemId: string, itemData: unknown) => {
+    if ((e as any).button === 2) {
       console.log('[useDrag] ⏭️  Ignorer pointerDown: clic droit détecté');
       return;
     }
     
-    // Ignorer si le clic vient du menu contextuel ou d'un bouton
-    if (e.target.closest('.context-menu') || e.target.closest('button') || e.target.closest('.widget-remove-btn')) {
+    if ((e.target as HTMLElement).closest('.context-menu') || 
+        (e.target as HTMLElement).closest('button') || 
+        (e.target as HTMLElement).closest('.widget-remove-btn')) {
       console.log('[useDrag] ⏭️  Ignorer pointerDown: clic sur bouton/menu');
       return;
     }
@@ -38,30 +77,28 @@ const useDrag = (onDragEnd, onDragMove) => {
 
     draggedItemRef.current = { itemId, itemData };
     initialPosRef.current = { x: rect.left, y: rect.top };
-    hasDraggedRef.current = false; // Reset
-    // Force a re-render so onClick reads the updated value
-    setDragTick(t => t + 1);
+    hasDraggedRef.current = false;
+    setDragTick((t: number) => t + 1);
     offsetRef.current = { x: offsetX, y: offsetY };
     latestPointerRef.current = { x: e.clientX, y: e.clientY };
 
     longPressTriggeredRef.current = false;
-    // Capturer le pointeur IMMÉDIATEMENT pour continuer à recevoir les events hors du cadre
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    try { (e.currentTarget as any).setPointerCapture(e.pointerId); } catch {}
     if (longPressTimeoutRef.current) clearTimeout(longPressTimeoutRef.current);
     longPressTimeoutRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
       setIsDragging(true);
       setDragOffset({ x: offsetRef.current.x, y: offsetRef.current.y });
-      setDragPosition({ x: latestPointerRef.current.x - offsetRef.current.x, y: latestPointerRef.current.y - offsetRef.current.y });
-      // Le pointeur est déjà capturé
+      setDragPosition({ 
+        x: latestPointerRef.current.x - offsetRef.current.x, 
+        y: latestPointerRef.current.y - offsetRef.current.y 
+      });
     }, LONG_PRESS_MS);
   }, []);
 
-  const handlePointerMove = useCallback((e) => {
-    // Toujours mémoriser la dernière position
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
     latestPointerRef.current = { x: e.clientX, y: e.clientY };
 
-    // Si long press pas encore déclenché, ne pas annuler même si on bouge ou sort du cadre
     if (!longPressTriggeredRef.current) return;
 
     if (!isDragging) return;
@@ -70,7 +107,6 @@ const useDrag = (onDragEnd, onDragMove) => {
     const newX = e.clientX - dragOffset.x;
     const newY = e.clientY - dragOffset.y;
     
-    // Détecter si on a bougé de plus de 5px (seuil pour considérer comme drag)
     const deltaX = Math.abs(newX - initialPosRef.current.x);
     const deltaY = Math.abs(newY - initialPosRef.current.y);
     if (deltaX > 5 || deltaY > 5) {
@@ -79,14 +115,12 @@ const useDrag = (onDragEnd, onDragMove) => {
     
     setDragPosition({ x: newX, y: newY });
     
-    // Appeler onDragMove pour permettre le snap en temps réel
     if (onDragMove && draggedItemRef.current) {
       onDragMove(newX, newY, draggedItemRef.current);
     }
   }, [isDragging, dragOffset, onDragMove]);
 
-  const handlePointerUp = useCallback((e) => {
-    // Nettoyer le timer si le long press n'a pas été atteint
+  const handlePointerUp = useCallback((e: PointerEvent) => {
     if (!longPressTriggeredRef.current) {
       if (longPressTimeoutRef.current) {
         clearTimeout(longPressTimeoutRef.current);

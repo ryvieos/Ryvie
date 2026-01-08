@@ -1,21 +1,11 @@
-/**
- * Détection de fallback plus robuste avec gestion d'erreurs avancée
- * Gère les cas où les serveurs ne sont pas accessibles ou n'ont pas CORS configuré
- */
-
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 
-/**
- * Teste la connectivité avec une approche progressive
- * 1. Test simple sans credentials
- * 2. Test avec une requête HEAD si disponible
- * 3. Fallback vers mode remote si tout échoue
- */
-export async function detectAccessModeRobust(timeout = 3000) {
+type AccessMode = 'private' | 'public';
+
+export async function detectAccessModeRobust(timeout: number = 3000): Promise<AccessMode> {
   console.log('[FallbackDetection] Démarrage de la détection robuste...');
   
-  // Test 1: Tentative de connexion simple au serveur privé
   const privateAccessible = await testSimpleConnectivity('private', timeout);
   if (privateAccessible) {
     console.log('[FallbackDetection] Serveur privé accessible - Mode PRIVATE');
@@ -23,7 +13,6 @@ export async function detectAccessModeRobust(timeout = 3000) {
     return 'private';
   }
   
-  // Test 2: Vérifier si le serveur remote est accessible
   const publicAccessible = await testSimpleConnectivity('public', timeout);
   if (publicAccessible) {
     console.log('[FallbackDetection] Serveur remote accessible - Mode REMOTE');
@@ -31,16 +20,12 @@ export async function detectAccessModeRobust(timeout = 3000) {
     return 'public';
   }
   
-  // Fallback: Si aucun serveur n'est accessible, utiliser le mode remote par défaut
   console.log('[FallbackDetection] Aucun serveur accessible - Fallback vers REMOTE');
   localStorage.setItem('accessMode', 'public');
   return 'public';
 }
 
-/**
- * Test de connectivité simple avec gestion d'erreurs
- */
-async function testSimpleConnectivity(mode, timeout = 2000) {
+async function testSimpleConnectivity(mode: AccessMode, timeout: number = 2000): Promise<boolean> {
   const serverUrl = getServerUrl(mode);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -48,16 +33,14 @@ async function testSimpleConnectivity(mode, timeout = 2000) {
   try {
     console.log(`[FallbackDetection] Test ${mode}: ${serverUrl}`);
     
-    // Essayer d'abord avec une requête HEAD (plus légère)
-    let response;
+    let response: Response;
     try {
       response = await fetch(`${serverUrl}/api/server-info`, {
         method: 'HEAD',
-        mode: 'no-cors', // Éviter les problèmes CORS pour le test
+        mode: 'no-cors',
         signal: controller.signal
       });
     } catch (headError) {
-      // Si HEAD échoue, essayer avec GET
       response = await fetch(`${serverUrl}/api/server-info`, {
         method: 'GET',
         mode: 'no-cors',
@@ -67,11 +50,10 @@ async function testSimpleConnectivity(mode, timeout = 2000) {
     
     clearTimeout(timeoutId);
     
-    // En mode no-cors, response.ok n'est pas fiable, on vérifie juste que la requête n'a pas échoué
     console.log(`[FallbackDetection] ${mode} - Réponse reçue (type: ${response.type})`);
     return true;
     
-  } catch (error) {
+  } catch (error: any) {
     clearTimeout(timeoutId);
     
     if (error.name === 'AbortError') {
@@ -84,10 +66,7 @@ async function testSimpleConnectivity(mode, timeout = 2000) {
   }
 }
 
-/**
- * Test de connectivité avec CORS approprié (pour les requêtes réelles)
- */
-export async function testCorsConnectivity(mode, timeout = 2000) {
+export async function testCorsConnectivity(mode: AccessMode, timeout: number = 2000): Promise<boolean> {
   const serverUrl = getServerUrl(mode);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -106,24 +85,21 @@ export async function testCorsConnectivity(mode, timeout = 2000) {
     clearTimeout(timeoutId);
     return response.ok;
     
-  } catch (error) {
+  } catch (error: any) {
     clearTimeout(timeoutId);
     console.log(`[FallbackDetection] CORS test ${mode} échoué:`, error.message);
     return false;
   }
 }
 
-/**
- * Détection avec retry automatique
- */
-export async function detectWithRetry(maxRetries = 2, timeout = 2000) {
+export async function detectWithRetry(maxRetries: number = 2, timeout: number = 2000): Promise<AccessMode> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     console.log(`[FallbackDetection] Tentative ${attempt}/${maxRetries}`);
     
     try {
       const result = await detectAccessModeRobust(timeout);
       return result;
-    } catch (error) {
+    } catch (error: any) {
       console.log(`[FallbackDetection] Tentative ${attempt} échouée:`, error.message);
       
       if (attempt === maxRetries) {
@@ -132,8 +108,9 @@ export async function detectWithRetry(maxRetries = 2, timeout = 2000) {
         return 'public';
       }
       
-      // Attendre un peu avant la prochaine tentative
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
+  
+  return 'public';
 }
