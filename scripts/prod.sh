@@ -28,10 +28,10 @@ echo "📦 Installation des dépendances backend..."
 cd /opt/Ryvie/Ryvie-Back
 npm install --include=dev
 
-# Installer les dépendances frontend
+# Installer les dépendances frontend (avec devDependencies pour webpack)
 echo "📦 Installation des dépendances frontend..."
 cd /opt/Ryvie/Ryvie-Front
-npm install
+npm install --include=dev
 
 # Vérifier et corriger les permissions si nécessaire
 echo "🔐 Vérification des permissions..."

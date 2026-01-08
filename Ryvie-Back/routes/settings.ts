@@ -97,6 +97,28 @@ router.patch('/settings/token-expiration', verifyToken, (req: any, res: any) => 
   }
 });
 
+// GET /api/settings/update-status - Récupérer le statut de la mise à jour en cours
+router.get('/settings/update-status', verifyToken, (req: any, res: any) => {
+  try {
+    const statusFile = '/tmp/ryvie-update-status.json';
+    
+    if (fs.existsSync(statusFile)) {
+      const data = fs.readFileSync(statusFile, 'utf8');
+      const status = JSON.parse(data);
+      res.json(status);
+    } else {
+      res.json({ 
+        step: 'idle', 
+        message: 'Aucune mise à jour en cours',
+        progress: 0
+      });
+    }
+  } catch (error: any) {
+    console.error('[settings] Erreur GET update-status:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // GET /api/settings/updates - Vérifier les mises à jour disponibles
 router.get('/settings/updates', verifyToken, async (req: any, res: any) => {
   try {

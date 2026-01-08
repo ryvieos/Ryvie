@@ -23,10 +23,29 @@ TEMP_DIR="$RYVIE_DIR/.update-staging"
 GITHUB_REPO="maisonnavejul/Ryvie"
 SNAPSHOT_PATH=""
 LOG_FILE="/tmp/ryvie-update-$(date +%Y%m%d-%H%M%S).log"
+STATUS_FILE="/tmp/ryvie-update-status.json"
 
 # Fonction de logging
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+# Fonction pour mettre à jour le statut (visible par le frontend)
+update_status() {
+  local step="$1"
+  local message="$2"
+  local progress="${3:-0}"
+  
+  cat > "$STATUS_FILE" <<EOF
+{
+  "step": "$step",
+  "message": "$message",
+  "progress": $progress,
+  "timestamp": "$(date -Iseconds)",
+  "logFile": "$LOG_FILE"
+}
+EOF
+  log "$message"
 }
 
 # Fonction de nettoyage
@@ -46,13 +65,14 @@ rollback() {
   echo "═══════════════════════════════════════════════════════════════"
   echo ""
   
+  update_status "rollback" "Erreur détectée - Restauration en cours" 0
   log "❌ Erreur détectée, rollback en cours..."
   
   if [[ -n "$SNAPSHOT_PATH" && -d "$SNAPSHOT_PATH" ]]; then
     log "🔄 Restauration du snapshot: $SNAPSHOT_PATH"
     log "📦 Restauration des données et du code..."
     
-    if sudo "$RYVIE_DIR/scripts/rollback.sh" --set "$SNAPSHOT_PATH" 2>&1 | tee -a "$LOG_FILE"; then
+    if sudo "$RYVIE_DIR/scripts/rollback.sh" --set "$SNAPSHOT_PATH" --mode "$MODE" 2>&1 | tee -a "$LOG_FILE"; then
       echo ""
       echo "═══════════════════════════════════════════════════════════════"
       echo "✅ ROLLBACK TERMINÉ AVEC SUCCÈS"
@@ -99,17 +119,19 @@ rollback() {
   exit 1
 }
 
-trap rollback ERR
+trap cleanup EXIT
 
-log "========================================="
-log "🚀 Début de la mise à jour Ryvie"
-log "   Version cible: $TARGET_VERSION"
-log "   Mode: $MODE"
-log "   Log: $LOG_FILE"
-log "========================================="
+update_status "starting" "Démarrage de la mise à jour vers $TARGET_VERSION" 5
+log "═══════════════════════════════════════════════════════════════"
+log "🚀 DÉBUT DE LA MISE À JOUR RYVIE"
+log "═══════════════════════════════════════════════════════════════"
+log "Version cible: $TARGET_VERSION"
+log "Mode: $MODE"
+log "Log file: $LOG_FILE"
+log "═══════════════════════════════════════════════════════════════"
 
-# 1. Créer snapshot de sécurité
-log "📸 Création du snapshot de sécurité..."
+# 1. Créer un snapshot de sécurité
+update_status "snapshot" "Création du snapshot de sécurité" 10
 SNAPSHOT_OUTPUT=$(sudo "$RYVIE_DIR/scripts/snapshot.sh" 2>&1 || true)
 echo "$SNAPSHOT_OUTPUT" >> "$LOG_FILE"
 
@@ -120,8 +142,8 @@ else
   log "⚠️ Snapshot non créé, continuation sans filet de sécurité"
 fi
 
-# 2. Télécharger la release depuis GitHub
-log "📥 Téléchargement de la release $TARGET_VERSION..."
+# 2. Télécharger la release
+update_status "downloading" "Téléchargement de la version $TARGET_VERSION" 30
 
 # Nettoyer et créer le dossier temporaire
 [[ -d "$TEMP_DIR" ]] && rm -rf "$TEMP_DIR"
@@ -140,8 +162,8 @@ fi
 
 log "✅ Téléchargement terminé"
 
-# 3. Extraire
-log "📦 Extraction de l'archive..."
+# 3. Extraire l'archive
+update_status "extracting" "Extraction des fichiers" 40
 STAGING_DIR="$TEMP_DIR/extracted"
 mkdir -p "$STAGING_DIR"
 tar -xzf "$TARBALL_PATH" -C "$STAGING_DIR" --strip-components=1 >> "$LOG_FILE" 2>&1
@@ -163,13 +185,13 @@ log "✅ Ancien code supprimé"
 echo "ℹ️  netbird-data.json sera synchronisé par le backend au démarrage"
 
 # 5. Sauvegarder les permissions actuelles
-log "📋 Sauvegarde des permissions..."
+update_status "permissions" "Sauvegarde des permissions" 50
 CURRENT_USER=$(stat -c '%U' "$RYVIE_DIR" 2>/dev/null || stat -f '%Su' "$RYVIE_DIR" 2>/dev/null || echo "ryvie")
 CURRENT_GROUP=$(stat -c '%G' "$RYVIE_DIR" 2>/dev/null || stat -f '%Sg' "$RYVIE_DIR" 2>/dev/null || echo "ryvie")
 log "  Propriétaire actuel: $CURRENT_USER:$CURRENT_GROUP"
 
 # 6. Copier la nouvelle version
-log "🔄 Application de la nouvelle version..."
+update_status "applying" "Application de la nouvelle version" 55
 cp -rf "$STAGING_DIR"/* "$RYVIE_DIR/"
 log "✅ Nouvelle version appliquée"
 
@@ -184,15 +206,12 @@ fi
 
 # Rendre les scripts exécutables
 find "$RYVIE_DIR/scripts" -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
-log "✅ Permissions restaurées ($CURRENT_USER:$CURRENT_GROUP)"
+log "  Permissions restaurs ($CURRENT_USER:$CURRENT_GROUP)"
 
-# 8. Vérifier package.json (la release est censée l'apporter)
-cd "$RYVIE_DIR"
-if [[ ! -f "$RYVIE_DIR/package.json" ]]; then
-  log "⚠️  package.json absent après update, création d'un fallback avec version $TARGET_VERSION"
-
-  # Extraire la version sans le préfixe 'v' pour package.json (format semver)
-  SEMVER="${TARGET_VERSION#v}"
+# 8. Mettre jour le package.json racine avec la version
+if [[ "$TARGET_VERSION" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+  SEMVER="${BASH_REMATCH[1]}"
+  log "  Mise jour de package.json avec version $SEMVER..."
 
   cat > "$RYVIE_DIR/package.json" <<EOF
 {
@@ -202,8 +221,18 @@ if [[ ! -f "$RYVIE_DIR/package.json" ]]; then
 EOF
 fi
 
-# 9. Rebuild et redémarrage
-log "🔧 Build et redémarrage de Ryvie (mode: $MODE)..."
+# 8.5. Patcher prod.sh pour s'assurer qu'il installe les devDependencies
+log "🔧 Patch de prod.sh pour compatibilité..."
+if [[ -f "$RYVIE_DIR/scripts/prod.sh" ]]; then
+  # Remplacer toutes les occurrences de "npm install" (sans --include=dev) par "npm install --include=dev"
+  # Cela garantit que les devDependencies sont installées pour le build
+  sed -i 's/npm install$/npm install --include=dev/g' "$RYVIE_DIR/scripts/prod.sh"
+  chmod +x "$RYVIE_DIR/scripts/prod.sh"
+  log "✅ prod.sh patché"
+fi
+
+# 9. Rebuild et redmarrage
+update_status "building" "Installation des dpendances et compilation" 60
 
 if [[ "$MODE" == "dev" ]]; then
   cd "$RYVIE_DIR" && bash ./scripts/dev.sh >> "$LOG_FILE" 2>&1
@@ -218,10 +247,9 @@ if [ $? -ne 0 ]; then
   rollback
 fi
 
-log "✅ Build et redémarrage terminés"
+update_status "health_check" "Vérification du démarrage" 80
 
 # 10. Health check intelligent avec détection rapide
-log "🏥 Health check du système..."
 
 # Déterminer les processus et logs selon le mode
 if [[ "$MODE" == "dev" ]]; then
@@ -238,7 +266,7 @@ fi
 
 # Fonction de health check intelligent
 perform_health_check() {
-  local max_wait=60  # Timeout de sécurité pour erreurs silencieuses
+  local max_wait=180  # Timeout de sécurité pour erreurs silencieuses (3 minutes)
   local start_time=$(date +%s)
   local check_interval=2
   
@@ -338,7 +366,7 @@ if ! perform_health_check; then
   rollback
 fi
 
-log "✅ Mise à jour terminée avec succès!"
+update_status "completed" "Mise à jour terminée avec succès!" 100
 log "📊 Le système fonctionne correctement"
 
 # 11. Nettoyage

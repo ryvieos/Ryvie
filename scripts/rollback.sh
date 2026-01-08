@@ -3,12 +3,15 @@ set -euo pipefail
 
 # --- Options ---
 SET_PATH=""
+MODE="prod"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --set) SET_PATH="${2:-}"; shift 2 ;;
+    --mode) MODE="${2:-prod}"; shift 2 ;;
     -h|--help)
-      echo "Usage: $(basename "$0") [--set /data/snapshot/<TS>]"
+      echo "Usage: $(basename "$0") [--set /data/snapshot/<TS>] [--mode dev|prod]"
       echo "Sans --set : restaure le DERNIER set de /data/snapshot/"
+      echo "Sans --mode : utilise prod par défaut"
       exit 0 ;;
     *) echo "Option inconnue: $1"; exit 1 ;;
   esac
@@ -71,16 +74,22 @@ systemctl start docker 2>/dev/null || true
 echo "🔄 Redémarrage de Ryvie..."
 RYVIE_DIR="/opt/Ryvie"
 
-# Détecter le mode actuel (dev ou prod) via PM2
-if pm2 list 2>/dev/null | grep -q "ryvie-backend-dev"; then
-  echo "  Mode DEV détecté, relance via dev.sh"
+# Utiliser le mode passé en paramètre ou détecter via PM2
+if [[ "$MODE" == "dev" ]]; then
+  echo "  Mode DEV (paramètre), relance via dev.sh"
+  cd "$RYVIE_DIR" && ./scripts/dev.sh 2>&1 | head -20
+elif [[ "$MODE" == "prod" ]]; then
+  echo "  Mode PROD (paramètre), relance via prod.sh"
+  cd "$RYVIE_DIR" && ./scripts/prod.sh 2>&1 | head -20
+elif pm2 list 2>/dev/null | grep -q "ryvie-backend-dev"; then
+  echo "  Mode DEV détecté via PM2, relance via dev.sh"
   cd "$RYVIE_DIR" && ./scripts/dev.sh 2>&1 | head -20
 elif pm2 list 2>/dev/null | grep -q "ryvie-backend-prod"; then
-  echo "  Mode PROD détecté, relance via prod.sh"
+  echo "  Mode PROD détecté via PM2, relance via prod.sh"
   cd "$RYVIE_DIR" && ./scripts/prod.sh 2>&1 | head -20
 else
-  echo "  ⚠️ Aucun mode PM2 détecté, tentative dev.sh par défaut"
-  cd "$RYVIE_DIR" && ./scripts/dev.sh 2>&1 | head -20
+  echo "  ⚠️ Mode non détecté, utilisation de prod.sh par défaut"
+  cd "$RYVIE_DIR" && ./scripts/prod.sh 2>&1 | head -20
 fi
 
 echo "✅ Rollback terminé depuis : $SET_PATH"
