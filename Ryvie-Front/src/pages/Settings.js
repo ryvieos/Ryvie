@@ -215,6 +215,9 @@ const Settings = () => {
   const [publicAddresses, setPublicAddresses] = useState(null);
   const [copiedAddress, setCopiedAddress] = useState(null);
   const [showPublicAddresses, setShowPublicAddresses] = useState(false);
+  const [setupKey, setSetupKey] = useState(null);
+  const [showSetupKey, setShowSetupKey] = useState(false);
+  const [copiedSetupKey, setCopiedSetupKey] = useState(false);
   const [prefsLoaded, setPrefsLoaded] = useState(false); // préférences utilisateur chargées
   // Rôle de l'utilisateur pour contrôler l'accès aux boutons
   const [userRole, setUserRole] = useState('User');
@@ -294,14 +297,18 @@ const Settings = () => {
           }));
         }
         
-        // Charger les adresses publiques depuis netbird-data.json
+        // Charger les adresses publiques et setup key depuis l'API backend
         try {
-          const netbirdData = await import('../config/netbird-data.json');
-          if (netbirdData && netbirdData.domains) {
-            setPublicAddresses(netbirdData.domains);
+          const serverUrl = getServerUrl('private');
+          const response = await axios.get(`${serverUrl}/api/settings/ryvie-domains`);
+          if (response.data && response.data.domains) {
+            setPublicAddresses(response.data.domains);
+          }
+          if (response.data && response.data.setupKey) {
+            setSetupKey(response.data.setupKey);
           }
         } catch (error) {
-          console.log('[Settings] Impossible de charger netbird-data.json:', error);
+          console.log('[Settings] Impossible de charger les domaines Netbird:', error);
         }
         
         setLoading(false);
@@ -2905,6 +2912,130 @@ const Settings = () => {
           </div>
         </div>
       </section>
+
+      {/* Section Setup Key (Admin uniquement) */}
+      {isAdmin && setupKey && (
+        <section className="settings-section">
+          <h2>
+            <FontAwesomeIcon icon={faPlug} style={{ marginRight: '8px' }} />
+            Setup Key ( clé de connexion à distance )
+          </h2>
+          <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
+            Clé de configuration pour connecter de nouveaux appareils à votre Ryvie depuis n'importe où dans le monde
+          </p>
+          
+          {!showSetupKey ? (
+            <div style={{ textAlign: 'center', padding: '20px' }}>
+              <button
+                onClick={() => setShowSetupKey(true)}
+                style={{
+                  padding: '12px 24px',
+                  background: '#1976d2',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = '#1565c0'}
+                onMouseOut={(e) => e.currentTarget.style.background = '#1976d2'}
+              >
+                <FontAwesomeIcon icon={faPlug} />
+                Découvrir la Setup Key
+              </button>
+            </div>
+          ) : (
+            <div className="settings-grid">
+              <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+                <div style={{
+                  padding: '16px',
+                  background: '#f8f9fa',
+                  borderRadius: '8px',
+                  border: '1px solid #e0e0e0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px'
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px', fontWeight: '600', textTransform: 'uppercase' }}>
+                      Setup Key
+                    </div>
+                    <code style={{
+                      fontSize: '13px',
+                      color: '#333',
+                      display: 'block',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontFamily: 'monospace',
+                      background: '#fff',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd'
+                    }}>
+                      {setupKey}
+                    </code>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          await navigator.clipboard.writeText(setupKey);
+                          setCopiedSetupKey(true);
+                          setTimeout(() => setCopiedSetupKey(false), 2000);
+                        } else {
+                          const textArea = document.createElement('textarea');
+                          textArea.value = setupKey;
+                          textArea.style.position = 'fixed';
+                          textArea.style.left = '-999999px';
+                          document.body.appendChild(textArea);
+                          textArea.select();
+                          try {
+                            document.execCommand('copy');
+                            setCopiedSetupKey(true);
+                            setTimeout(() => setCopiedSetupKey(false), 2000);
+                          } catch (err) {
+                            console.error('Erreur lors de la copie:', err);
+                          }
+                          document.body.removeChild(textArea);
+                        }
+                      } catch (err) {
+                        console.error('Erreur lors de la copie:', err);
+                      }
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      background: copiedSetupKey ? '#4caf50' : '#fff',
+                      color: copiedSetupKey ? '#fff' : '#666',
+                      border: copiedSetupKey ? '1px solid #4caf50' : '1px solid #ddd',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Copier la Setup Key"
+                  >
+                    <FontAwesomeIcon icon={copiedSetupKey ? faCheck : faCopy} />
+                    {copiedSetupKey ? 'Copié !' : 'Copier'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Section Adresses Publiques */}
       {publicAddresses && (
