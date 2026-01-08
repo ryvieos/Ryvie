@@ -80,13 +80,13 @@ async function verifyFileIntegrity(filePath, expectedSHA256) {
 }
 
 /**
- * Met à jour Ryvie via script externe indépendant
+ * Met à jour Ryvie via GitHub releases
  */
 async function updateRyvie() {
   try {
     console.log('[Update] Début de la mise à jour de Ryvie...');
     
-    // 1. Récupérer la dernière release depuis GitHub pour connaître la version cible
+    // 1. Récupérer la dernière release depuis GitHub
     console.log('[Update] 📥 Récupération de la dernière release...');
     const headers: any = {
       'Accept': 'application/vnd.github.v3+json',
@@ -99,7 +99,7 @@ async function updateRyvie() {
     
     const releaseResponse = await axios.get(
       'https://api.github.com/repos/maisonnavejul/Ryvie/releases/latest',
-      { headers, timeout: 30000 }
+      { headers, timeout: 60000 }
     );
     
     const release = releaseResponse.data;
@@ -143,7 +143,7 @@ async function updateRyvie() {
     console.log(`[Update] Commande: ${updateScript} ${targetVersion} --mode ${mode}`);
     
     // Lancer en background détaché avec nohup
-    // Le script gère: snapshot, download, extract, apply, restart, rollback si erreur
+    // Le script gère: snapshot, download, extract, permissions, build, deploy, rollback si erreur
     execSync(
       `nohup "${updateScript}" "${targetVersion}" --mode ${mode} > /dev/null 2>&1 &`,
       { 
