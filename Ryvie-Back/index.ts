@@ -200,7 +200,6 @@ let realtime;
 // Inline realtime code removed; replaced by realtimeService
 
 // Charger les paramètres au démarrage
-const fs = require('fs');
 const { SETTINGS_FILE } = require('./config/paths');
 try {
   // S'assurer que le dossier existe et créer un fichier avec id si absent
