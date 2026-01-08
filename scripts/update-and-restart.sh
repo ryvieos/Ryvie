@@ -106,32 +106,23 @@ mkdir -p "$STAGING_DIR"
 tar -xzf "$TARBALL_PATH" -C "$STAGING_DIR" --strip-components=1 >> "$LOG_FILE" 2>&1
 log "✅ Extraction terminée"
 
-# 4. Copier les configurations locales vers le staging
-log "📋 Copie des configurations locales..."
+# 4. Supprimer l'ancien code (sauf /data, node_modules, .git)
+log "🗑️  Suppression de l'ancien code..."
+cd "$RYVIE_DIR"
+find . -maxdepth 1 -mindepth 1 \
+  ! -name 'data' \
+  ! -name 'node_modules' \
+  ! -name '.git' \
+  ! -name '.update-staging' \
+  -exec rm -rf {} + 2>/dev/null || true
+log "✅ Ancien code supprimé"
 
-# Front/src/config/
-FRONT_CONFIG_SRC="$RYVIE_DIR/Ryvie-Front/src/config"
-FRONT_CONFIG_DEST="$STAGING_DIR/Ryvie-Front/src/config"
-if [[ -d "$FRONT_CONFIG_SRC" ]]; then
-  [[ -d "$FRONT_CONFIG_DEST" ]] && rm -rf "$FRONT_CONFIG_DEST"
-  cp -r "$FRONT_CONFIG_SRC" "$FRONT_CONFIG_DEST"
-  log "  ✅ Front/src/config copié"
-fi
-
-# Back/.env
-BACK_ENV_SRC="$RYVIE_DIR/Ryvie-Back/.env"
-BACK_ENV_DEST="$STAGING_DIR/Ryvie-Back/.env"
-if [[ -f "$BACK_ENV_SRC" ]]; then
-  cp "$BACK_ENV_SRC" "$BACK_ENV_DEST"
-  log "  ✅ Back/.env copié"
-fi
-
-# 5. Appliquer la nouvelle version
+# 5. Copier la nouvelle version
 log "🔄 Application de la nouvelle version..."
-rsync -av --exclude='.git' --exclude='node_modules' --exclude='.update-staging' "$STAGING_DIR/" "$RYVIE_DIR/" >> "$LOG_FILE" 2>&1
+cp -rf "$STAGING_DIR"/* "$RYVIE_DIR/"
 log "✅ Nouvelle version appliquée"
 
-# 5.5. Vérifier package.json (la release est censée l'apporter)
+# 6. Vérifier package.json (la release est censée l'apporter)
 cd "$RYVIE_DIR"
 if [[ ! -f "$RYVIE_DIR/package.json" ]]; then
   log "⚠️  package.json absent après update, création d'un fallback avec version $TARGET_VERSION"
@@ -147,21 +138,26 @@ if [[ ! -f "$RYVIE_DIR/package.json" ]]; then
 EOF
 fi
 
-# 6. Rebuild et redémarrage
+# 7. Rebuild et redémarrage
 log "🔧 Build et redémarrage de Ryvie (mode: $MODE)..."
 
 if [[ "$MODE" == "dev" ]]; then
-  cd "$RYVIE_DIR" && ./scripts/dev.sh >> "$LOG_FILE" 2>&1
+  cd "$RYVIE_DIR" && bash ./scripts/dev.sh >> "$LOG_FILE" 2>&1
 else
-  cd "$RYVIE_DIR" && ./scripts/prod.sh >> "$LOG_FILE" 2>&1
+  cd "$RYVIE_DIR" && bash ./scripts/prod.sh >> "$LOG_FILE" 2>&1
+fi
+
+if [ $? -ne 0 ]; then
+  log "❌ Erreur lors du build/redémarrage"
+  rollback
 fi
 
 log "✅ Build et redémarrage terminés"
 
-# 7. Nettoyage
+# 8. Nettoyage
 cleanup
 
-# 8. Supprimer le snapshot si tout s'est bien passé
+# 9. Supprimer le snapshot si tout s'est bien passé
 if [[ -n "$SNAPSHOT_PATH" && -d "$SNAPSHOT_PATH" ]]; then
   log "🧹 Suppression du snapshot de sécurité..."
   sudo btrfs subvolume delete "$SNAPSHOT_PATH"/* 2>/dev/null || true

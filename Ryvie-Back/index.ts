@@ -8,6 +8,23 @@ const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
+// Récupérer automatiquement le .env depuis /data/config/backend-view/.env
+const persistentEnvPath = '/data/config/backend-view/.env';
+const localEnvPath = path.join(__dirname, '.env');
+
+if (fs.existsSync(persistentEnvPath)) {
+  try {
+    fs.copyFileSync(persistentEnvPath, localEnvPath);
+    console.log('✅ Configuration .env récupérée depuis /data/config/backend-view/');
+  } catch (error: any) {
+    console.warn('⚠️  Impossible de copier le .env depuis /data/config/backend-view/:', error.message);
+  }
+} else {
+  console.warn('⚠️  Aucun .env trouvé dans /data/config/backend-view/');
+}
 
 // Charger les variables d'environnement du fichier .env
 dotenv.config();
