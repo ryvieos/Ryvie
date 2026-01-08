@@ -1938,6 +1938,7 @@ select:disabled {
   flex-direction: column;
   gap: 10px;
   margin-top: 20px;
+  align-items: center;
 }
 
 .docker-action-btn-large {
@@ -1948,6 +1949,8 @@ select:disabled {
   cursor: pointer;
   font-size: 16px;
   transition: background-color 0.2s ease;
+  max-width: 400px;
+  width: 100%;
 }
 
 .docker-action-btn-large.start {
@@ -1960,12 +1963,12 @@ select:disabled {
 }
 
 .docker-action-btn-large.stop {
-  background-color: #d13438;
+  background-color: #0078d4;
   color: white;
 }
 
 .docker-action-btn-large.stop:hover {
-  background-color: #c42c30;
+  background-color: #006cbe;
 }
 
 .docker-action-btn-large.restart {
