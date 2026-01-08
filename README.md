@@ -52,7 +52,7 @@ L'objectif est d'offrir une page d'accueil de type **"launcher"** (style iOS �
 ### Architecture du Repo 🛠️
 
 <p align="center">
-  <img width="100%" alt="Architecture Schema" src="https://github.com/user-attachments/assets/74701ede-9edd-433c-8e9b-c3009b09fff1" />
+  <img width="5194" height="4220" alt="isoflow-export-2026-01-07T21_11_21 841Z" src="https://github.com/user-attachments/assets/f3cb3336-77f4-47c9-86b0-de1c49169243" />
 </p>
 
 - **Backend** (`Ryvie-Back/`) : API Express, Socket.IO, authentification LDAP + JWT.
