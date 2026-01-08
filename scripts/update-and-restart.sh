@@ -298,29 +298,35 @@ perform_health_check() {
   local max_wait=180  # Timeout de sécurité pour erreurs silencieuses (3 minutes)
   local start_time=$(date +%s)
   local check_interval=2
+  local health_check_start_timestamp=$(date '+%Y-%m-%dT%H:%M')
   
   log "  Surveillance active (timeout sécurité: ${max_wait}s)..."
+  log "  Timestamp de référence: $health_check_start_timestamp"
   
   while true; do
     local current_time=$(date +%s)
     local elapsed=$((current_time - start_time))
     
-    # 1. Vérifier les erreurs critiques dans les logs
+    # 1. Vérifier les erreurs critiques dans les logs RÉCENTS uniquement
     if [[ -f "$BACKEND_LOG" ]]; then
-      local recent_errors=$(tail -n 50 "$BACKEND_LOG" 2>/dev/null || echo "")
+      # Ne regarder que les logs des 2 dernières minutes (depuis le début du health check)
+      local recent_errors=$(grep "$health_check_start_timestamp" "$BACKEND_LOG" 2>/dev/null | tail -n 50 || echo "")
       
-      # Erreurs critiques qui nécessitent un rollback immédiat
-      if echo "$recent_errors" | grep -qiE "(Cannot find module.*dist/index\.js|ENOENT.*dist/index|MODULE_NOT_FOUND.*dist|Error: Cannot find module|CRITICAL.*environment variable.*required|Fatal error|Segmentation fault|EADDRINUSE|listen EADDRINUSE)"; then
-        log "  ❌ ERREUR CRITIQUE détectée dans les logs après ${elapsed}s!"
-        echo "$recent_errors" | tail -n 10 >> "$LOG_FILE"
-        return 1
-      fi
-      
-      # PM2 a arrêté le processus
-      if echo "$recent_errors" | grep -qiE "(Script.*had too many unstable restarts|stopped|errored)"; then
-        log "  ❌ PM2 a arrêté le processus après ${elapsed}s!"
-        echo "$recent_errors" | tail -n 10 >> "$LOG_FILE"
-        return 1
+      # Si pas d'erreurs récentes, tout va bien - ne pas regarder les vieilles erreurs
+      if [[ -n "$recent_errors" ]]; then
+        # Erreurs critiques qui nécessitent un rollback immédiat
+        if echo "$recent_errors" | grep -qiE "(Cannot find module.*dist/index\.js|ENOENT.*dist/index|MODULE_NOT_FOUND.*dist|Error: Cannot find module|CRITICAL.*environment variable.*required|Fatal error|Segmentation fault|EADDRINUSE|listen EADDRINUSE)"; then
+          log "  ❌ ERREUR CRITIQUE détectée dans les logs RÉCENTS après ${elapsed}s!"
+          echo "$recent_errors" | tail -n 10 >> "$LOG_FILE"
+          return 1
+        fi
+        
+        # PM2 a arrêté le processus
+        if echo "$recent_errors" | grep -qiE "(Script.*had too many unstable restarts|stopped|errored)"; then
+          log "  ❌ PM2 a arrêté le processus après ${elapsed}s!"
+          echo "$recent_errors" | tail -n 10 >> "$LOG_FILE"
+          return 1
+        fi
       fi
     fi
     

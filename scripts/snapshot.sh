@@ -98,6 +98,37 @@ for relpath in "${SUBVOLS[@]}"; do
   fi
 done
 
+# ---- Backup du code Ryvie (/opt/Ryvie) -------------------------------------
+echo "💾 Sauvegarde du code Ryvie..."
+RYVIE_DIR="/opt/Ryvie"
+RYVIE_BACKUP="$SET_DIR/ryvie-code.tar.gz"
+
+if [[ -d "$RYVIE_DIR" ]]; then
+  echo "  • Création de l'archive du code Ryvie"
+  # Exclure les dossiers volumineux et temporaires
+  sudo tar -czf "$RYVIE_BACKUP" \
+    --exclude="$RYVIE_DIR/node_modules" \
+    --exclude="$RYVIE_DIR/.git" \
+    --exclude="$RYVIE_DIR/data" \
+    --exclude="$RYVIE_DIR/.update-staging" \
+    --exclude="$RYVIE_DIR/Ryvie-Back/node_modules" \
+    --exclude="$RYVIE_DIR/Ryvie-Back/dist" \
+    --exclude="$RYVIE_DIR/Ryvie-Front/node_modules" \
+    --exclude="$RYVIE_DIR/Ryvie-Front/dist" \
+    -C "$(dirname "$RYVIE_DIR")" "$(basename "$RYVIE_DIR")"
+  
+  # Sauvegarder aussi la version actuelle
+  if [[ -f "$RYVIE_DIR/package.json" ]]; then
+    CURRENT_VERSION=$(grep -oP '"version":\s*"\K[^"]+' "$RYVIE_DIR/package.json" 2>/dev/null || echo "unknown")
+    echo "$CURRENT_VERSION" | sudo tee "$SET_DIR/ryvie-version.txt" >/dev/null
+    echo "  • Version sauvegardée: $CURRENT_VERSION"
+  fi
+  
+  echo "  ✅ Code Ryvie sauvegardé ($(du -h "$RYVIE_BACKUP" | cut -f1))"
+else
+  echo "  ⚠️  $RYVIE_DIR introuvable, backup du code ignoré"
+fi
+
 # ---- Reprendre Docker -------------------------------------------------------
 if [[ $DOCKER_ACTIVE -eq 1 ]]; then
   echo "▶️  Reprise des conteneurs Docker..."
@@ -126,6 +157,10 @@ if [[ -n "$KEEP" ]]; then
     for ((i=0; i<TO_DEL; i++)); do
       OLD="${SETS[$i]}"
       echo "   - suppression de $OLD"
+      # supprimer le backup du code Ryvie
+      if [[ -f "$OLD/ryvie-code.tar.gz" ]]; then
+        sudo rm -f "$OLD/ryvie-code.tar.gz" "$OLD/ryvie-version.txt" || true
+      fi
       # supprimer les sous-volumes enfants d'abord
       if compgen -G "$OLD/*" > /dev/null; then
         sudo btrfs subvolume delete "$OLD"/* || true

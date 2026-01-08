@@ -32,6 +32,65 @@ fi
 
 echo "📦 Set sélectionné : $SET_PATH"
 
+# 1.5) Vérifier si un backup du code Ryvie existe
+RYVIE_BACKUP="$SET_PATH/ryvie-code.tar.gz"
+RYVIE_VERSION_FILE="$SET_PATH/ryvie-version.txt"
+RYVIE_DIR="/opt/Ryvie"
+
+if [[ -f "$RYVIE_BACKUP" ]]; then
+  echo "💾 Backup du code Ryvie trouvé"
+  if [[ -f "$RYVIE_VERSION_FILE" ]]; then
+    BACKUP_VERSION=$(cat "$RYVIE_VERSION_FILE")
+    echo "   Version du backup: $BACKUP_VERSION"
+  fi
+  
+  # Arrêter PM2 avant de restaurer le code
+  echo "🛑 Arrêt des processus PM2..."
+  pm2 stop all 2>/dev/null || true
+  pm2 delete all 2>/dev/null || true
+  
+  # Sauvegarder temporairement les node_modules et .git si ils existent
+  TEMP_BACKUP="/tmp/ryvie-rollback-temp-$$"
+  mkdir -p "$TEMP_BACKUP"
+  
+  if [[ -d "$RYVIE_DIR/.git" ]]; then
+    echo "   💾 Sauvegarde temporaire de .git"
+    sudo cp -a "$RYVIE_DIR/.git" "$TEMP_BACKUP/" 2>/dev/null || true
+  fi
+  
+  # Supprimer l'ancien code (sauf data et .git)
+  echo "🗑️  Suppression de l'ancien code Ryvie..."
+  cd "$RYVIE_DIR"
+  sudo find . -maxdepth 1 -mindepth 1 \
+    ! -name 'data' \
+    ! -name '.git' \
+    ! -name '.update-staging' \
+    -exec rm -rf {} + 2>/dev/null || true
+  
+  # Restaurer le code depuis le backup
+  echo "♻️  Restauration du code Ryvie depuis le backup..."
+  sudo tar -xzf "$RYVIE_BACKUP" -C "$(dirname "$RYVIE_DIR")" --overwrite
+  
+  # Restaurer .git si il avait été sauvegardé
+  if [[ -d "$TEMP_BACKUP/.git" ]]; then
+    echo "   ♻️  Restauration de .git"
+    sudo cp -a "$TEMP_BACKUP/.git" "$RYVIE_DIR/" 2>/dev/null || true
+  fi
+  
+  # Nettoyer le backup temporaire
+  rm -rf "$TEMP_BACKUP"
+  
+  # Restaurer les permissions
+  echo "🔐 Restauration des permissions..."
+  sudo chown -R ryvie:ryvie "$RYVIE_DIR"
+  sudo find "$RYVIE_DIR/scripts" -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+  
+  echo "✅ Code Ryvie restauré"
+else
+  echo "⚠️  Aucun backup du code Ryvie trouvé dans ce snapshot"
+  echo "   Le rollback restaurera uniquement les données"
+fi
+
 # 2) Déterminer la liste des sous-volumes à restaurer (contenu du set)
 mapfile -t NAMES < <(find "$SET_PATH" -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' | sort)
 [[ ${#NAMES[@]} -gt 0 ]] || { echo "❌ Set vide: $SET_PATH"; exit 1; }
@@ -81,7 +140,6 @@ echo "ℹ️  Docker non affecté par le rollback Ryvie"
 
 # Redémarrer Ryvie après rollback
 echo "🔄 Redémarrage de Ryvie..."
-RYVIE_DIR="/opt/Ryvie"
 
 # Utiliser le mode passé en paramètre ou détecter via PM2
 if [[ "$MODE" == "dev" ]]; then
