@@ -10,7 +10,6 @@ const FirstTimeSetup = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     uid: '',
-    name: '',
     email: '',
     password: '',
     confirmPassword: ''
@@ -58,7 +57,7 @@ const FirstTimeSetup = () => {
     e.preventDefault();
     
     // Validation
-    if (!formData.uid || !formData.name || !formData.email || !formData.password) {
+    if (!formData.uid || !formData.email || !formData.password) {
       setMessage('Tous les champs sont requis');
       setMessageType('error');
       return;
@@ -85,7 +84,7 @@ const FirstTimeSetup = () => {
       
       const response = await axios.post(`${serverUrl}/api/ldap/create-first-user`, {
         uid: formData.uid,
-        name: formData.name,
+        name: formData.uid,
         email: formData.email,
         password: formData.password
       });
@@ -165,19 +164,6 @@ const FirstTimeSetup = () => {
               disabled={loading}
               autoFocus
               placeholder="nom d'utilisateur"
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="name">Nom complet *</label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              disabled={loading}
-              placeholder="prénom nom"
             />
           </div>
           
