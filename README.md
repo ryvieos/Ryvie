@@ -70,8 +70,14 @@ L'objectif est d'offrir une page d'accueil de type **"launcher"** (style iOS �
 
 Les contributions sont les bienvenues ! ❤️
 
-- **Issues** : Signalez un bug ou proposez une idée avec un maximum de détails.
-- **Pull requests** : Créez une branche dédiée et expliquez clairement vos modifications.
+**Avant de contribuer**, veuillez lire notre [Guide de contribution](CONTRIBUTING.md) et signer notre [CLA](CLA.md).
+
+- **📋 [Guide de contribution](CONTRIBUTING.md)** : Instructions complètes pour contribuer au projet
+- **✍️ [CLA](CLA.md)** : Contributor License Agreement (requis pour toutes les contributions)
+- **🐛 Issues** : Signalez un bug ou proposez une idée avec un maximum de détails
+- **🔀 Pull requests** : Créez une branche dédiée et expliquez clairement vos modifications
+
+Le CLA protège à la fois vous (vous conservez la propriété de votre code) et Ryvie (nous pouvons maintenir et faire évoluer le projet). Le processus de signature est automatisé via notre bot CLA Assistant.
 
 ---
 
