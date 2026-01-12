@@ -60,7 +60,7 @@ export interface LocationInfo {
   port: string;
 }
 
-export type AccessMode = 'remote' | 'private' | 'public';
+export type AccessMode = 'private' | 'remote';
 
 export interface SessionInfo {
   token: string;

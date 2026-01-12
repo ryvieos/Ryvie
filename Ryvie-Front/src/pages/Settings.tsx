@@ -7,7 +7,7 @@ import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy } from '@
 import { isElectron } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getFrontendUrl } = urlsConfig;
-import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from '../utils/detectAccessMode';
+import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, testServerConnectivity } from '../utils/detectAccessMode';
 import { useSocket } from '../contexts/SocketContext';
 import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo, endSession } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
@@ -194,11 +194,11 @@ const Settings = () => {
   const [accessMode, setAccessMode] = useState(() => {
     const mode = getCurrentAccessMode();
     if (mode) return mode;
-    // Fallback sécurisé: en HTTPS forcer public, sinon rester public pour éviter erreurs DNS
+    // Fallback sécurisé: en HTTPS forcer remote, sinon rester remote pour éviter erreurs DNS
     try {
-      if (typeof window !== 'undefined' && window.location?.protocol === 'https:') return 'public';
+      if (typeof window !== 'undefined' && window.location?.protocol === 'https:') return 'remote';
     } catch {}
-    return 'public';
+    return 'remote';
   });
   const [systemDisksInfo, setSystemDisksInfo] = useState(null);
   const [showDisksInfo, setShowDisksInfo] = useState(false);
@@ -897,7 +897,7 @@ const Settings = () => {
   };
 
   // Fonction pour changer le mode d'accès
-  const handleAccessModeChange = (newMode) => {
+  const handleAccessModeChange = async (newMode) => {
     // Récupérer les informations de l'utilisateur actuel avant le changement
     const currentUser = getCurrentUser();
     const currentRole = getCurrentUserRole();
@@ -907,6 +907,18 @@ const Settings = () => {
     console.log(`[Settings] Changement de mode: ${accessMode} -> ${newMode}`);
     console.log(`[Settings] Utilisateur actuel: ${currentUser}, Rôle: ${currentRole}`);
     
+    // Tester la connectivité avant de rediriger
+    showToast(`Test de connectivité vers le mode ${newMode === 'remote' ? 'Remote' : 'Privé'}...`, 'info');
+    
+    const isAccessible = await testServerConnectivity(newMode, 3000);
+    
+    if (!isAccessible) {
+      showToast(`❌ Impossible d'accéder au serveur en mode ${newMode === 'remote' ? 'Remote' : 'Privé'}. Vérifiez votre connexion.`, 'error');
+      console.error(`[Settings] Serveur non accessible en mode ${newMode}`);
+      return;
+    }
+    
+    // Si accessible, procéder au changement
     // Mettre à jour le mode via le gestionnaire centralisé
     setGlobalAccessMode(newMode);
     
@@ -919,7 +931,7 @@ const Settings = () => {
     }
     
     // Afficher un toast de confirmation
-    showToast(`Mode d'accès changé pour: ${newMode === 'public' ? 'Remote' : 'Privé'}. Redirection...`, 'success');
+    showToast(`✓ Connexion réussie. Redirection vers le mode ${newMode === 'remote' ? 'Remote' : 'Privé'}...`, 'success');
     
     // Rediriger vers l'URL correspondante après 1.5 secondes
     setTimeout(() => {
@@ -2335,8 +2347,8 @@ const Settings = () => {
                   Privé (Local)
                 </button>
                 <button 
-                  className={`toggle-button ${accessMode === 'public' ? 'active' : ''}`}
-                  onClick={() => handleAccessModeChange('public')}
+                  className={`toggle-button ${accessMode === 'remote' ? 'active' : ''}`}
+                  onClick={() => handleAccessModeChange('remote')}
                 >
                   Remote
                 </button>

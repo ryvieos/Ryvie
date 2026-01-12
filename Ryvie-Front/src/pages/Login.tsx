@@ -5,7 +5,7 @@ import '../styles/Login.css';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 import { isSessionActive, startSession } from '../utils/sessionManager';
-import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode } from '../utils/detectAccessMode';
+import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode, testServerConnectivity } from '../utils/detectAccessMode';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -26,8 +26,8 @@ const Login = () => {
         // 2) Pas de mode encore défini -> déterminer intelligemment
         if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
           // En HTTPS, forcer REMOTE pour éviter tout Mixed Content
-          persistAccessMode('public');
-          setAccessMode('public');
+          persistAccessMode('remote');
+          setAccessMode('remote');
           console.log('[Login] Page HTTPS - accessMode initialisé à REMOTE');
         } else {
           // En HTTP (dev/local) -> tester la connectivité locale rapidement
@@ -37,8 +37,8 @@ const Login = () => {
             console.log(`[Login] accessMode détecté: ${detected}`);
           } catch {
             // Fallback sécurisé
-            persistAccessMode('public');
-            setAccessMode('public');
+            persistAccessMode('remote');
+            setAccessMode('remote');
             console.log('[Login] Détection échouée - fallback REMOTE');
           }
         }
@@ -73,7 +73,7 @@ const Login = () => {
   useEffect(() => {
     // Ne pas tenter en HTTPS (évite Mixed Content) et uniquement si on est en REMOTE
     if (typeof window !== 'undefined' && window.location?.protocol === 'https:') return;
-    if (accessMode !== 'public') return;
+    if (accessMode !== 'remote') return;
 
     let isCancelled = false;
 
@@ -167,10 +167,28 @@ const Login = () => {
     }
   };
 
-  const toggleAccessMode = () => {
-    const newMode = accessMode === 'private' ? 'public' : 'private';
+  const toggleAccessMode = async () => {
+    const newMode = accessMode === 'private' ? 'remote' : 'private';
+    
+    // Tester la connectivité avant de rediriger
+    setMessage(`Test de connectivité vers le mode ${newMode === 'remote' ? 'Remote' : 'Privé'}...`);
+    setMessageType('info');
+    
+    const isAccessible = await testServerConnectivity(newMode, 3000);
+    
+    if (!isAccessible) {
+      setMessage(`❌ Impossible d'accéder au serveur en mode ${newMode === 'remote' ? 'Remote' : 'Privé'}. Vérifiez votre connexion.`);
+      setMessageType('error');
+      console.error(`[Login] Serveur non accessible en mode ${newMode}`);
+      return;
+    }
+    
+    // Si accessible, procéder à la redirection
     setAccessMode(newMode);
     persistAccessMode(newMode);
+    
+    setMessage(`✓ Connexion réussie, redirection...`);
+    setMessageType('success');
     
     // Rediriger vers l'URL correspondante
     const frontendUrl = urlsConfig.getFrontendUrl(newMode);
@@ -180,7 +198,9 @@ const Login = () => {
     console.log(`[Login] Redirection vers ${newMode}: ${newUrl}`);
     
     // Redirection dans le même onglet (replace évite d'ajouter à l'historique)
-    window.location.replace(newUrl);
+    setTimeout(() => {
+      window.location.replace(newUrl);
+    }, 500);
   };
 
   return (
@@ -236,9 +256,9 @@ const Login = () => {
           <span>Mode d'accès: </span>
           <button 
             onClick={toggleAccessMode}
-            className={`toggle-button ${accessMode === 'public' ? 'toggle-remote' : 'toggle-private'}`}
+            className={`toggle-button ${accessMode === 'remote' ? 'toggle-remote' : 'toggle-private'}`}
           >
-            {accessMode === 'public' ? 'Remote' : 'Privé'}
+            {accessMode === 'remote' ? 'Remote' : 'Privé'}
           </button>
         </div>
       </div>

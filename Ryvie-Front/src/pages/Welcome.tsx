@@ -333,13 +333,13 @@ const Welcome = () => {
     setUnlocked(true);
     
     // Centralized access mode
-    setGlobalAccessMode('public');
+    setGlobalAccessMode('remote');
     setPreloadStatus('Configuration du mode remote...');
     
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
       const userRole = getCurrentUserRole() || 'User';
-      await window.electronAPI.invoke('update-session-partition', currentUser, 'public', userRole)
+      await window.electronAPI.invoke('update-session-partition', currentUser, 'remote', userRole)
         .then(() => {
           console.log(`Session mise à jour pour ${currentUser} en mode remote avec le rôle ${userRole}`);
         })
@@ -349,7 +349,7 @@ const Welcome = () => {
     }
     
     // Précharger les données avant de naviguer
-    await preloadHomeData('public');
+    await preloadHomeData('remote');
     
     // Navigation fluide
     navigate('/home');
@@ -409,7 +409,7 @@ const Welcome = () => {
                 <span className="button-subtitle">Accès depuis la maison</span>
               </div>
             </button>
-          ) : currentAccessMode === 'public' ? (
+          ) : currentAccessMode === 'remote' ? (
             <button
               className="welcome-button network-button"
               onClick={handlePublicAccess}
