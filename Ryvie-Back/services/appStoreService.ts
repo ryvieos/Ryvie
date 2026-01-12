@@ -1167,17 +1167,32 @@ async function uninstallApp(appId) {
   try {
     console.log(`[Uninstall] Début de la désinstallation de ${appId}...`);
     
-    // 1. Arrêter et supprimer les containers Docker
-    const appDir = path.join(APPS_DIR, appId);
+    // 1. Lire le manifest pour obtenir le sourceDir
+    const manifestPath = path.join(MANIFESTS_DIR, appId, 'manifest.json');
+    let appDir = null;
     
     try {
-      await fs.access(appDir);
-      console.log(`[Uninstall] Dossier de l'app trouvé: ${appDir}`);
-    } catch {
-      console.warn(`[Uninstall] ⚠️ Dossier ${appDir} introuvable, l'app n'est peut-être pas installée`);
+      const manifestContent = await fs.readFile(manifestPath, 'utf8');
+      const manifest = JSON.parse(manifestContent);
+      appDir = manifest.sourceDir;
+      console.log(`[Uninstall] Dossier de l'app depuis le manifest: ${appDir}`);
+    } catch (manifestError: any) {
+      console.warn(`[Uninstall] ⚠️ Impossible de lire le manifest de ${appId}:`, manifestError.message);
       return {
         success: false,
-        message: `L'application ${appId} n'est pas installée`
+        message: `L'application ${appId} n'est pas installée ou le manifest est introuvable`
+      };
+    }
+    
+    // 2. Vérifier que le dossier existe
+    try {
+      await fs.access(appDir);
+      console.log(`[Uninstall] Dossier de l'app vérifié: ${appDir}`);
+    } catch {
+      console.warn(`[Uninstall] ⚠️ Dossier ${appDir} introuvable`);
+      return {
+        success: false,
+        message: `Le dossier de l'application ${appId} n'existe pas: ${appDir}`
       };
     }
     
