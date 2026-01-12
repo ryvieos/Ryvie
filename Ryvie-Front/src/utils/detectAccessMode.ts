@@ -3,7 +3,7 @@ const { getServerUrl, netbirdData, setLocalIP } = urlsConfig;
 import { io, Socket } from 'socket.io-client';
 import { isElectron } from './platformUtils';
 
-type AccessMode = 'private' | 'public' | 'remote';
+type AccessMode = 'private' | 'remote';
 
 let currentMode: AccessMode | null = null;
 
@@ -17,18 +17,18 @@ function detectModeFromUrl(): AccessMode {
   
   if (backendHost && hostname === backendHost) {
     console.log(`[AccessMode] Hostname ${hostname} = backendHost → mode REMOTE`);
-    return 'public';
+    return 'remote';
   }
   
   const allDomains = Object.values(domains);
   if (allDomains.includes(hostname)) {
     console.log(`[AccessMode] Hostname ${hostname} = domaine Netbird → mode REMOTE`);
-    return 'public';
+    return 'remote';
   }
   
   if (hostname.endsWith('.ryvie.fr')) {
     console.log(`[AccessMode] Hostname ${hostname} contient .ryvie.ovh → mode REMOTE`);
-    return 'public';
+    return 'remote';
   }
   
   if (hostname === 'ryvie.local' && (port === '80' || port === '')) {
@@ -36,7 +36,30 @@ function detectModeFromUrl(): AccessMode {
     return 'private';
   }
   
-  console.log(`[AccessMode] Hostname ${hostname}:${port} → mode PRIVATE`);
+  // Détecter les IPs Netbird (plage 100.64.0.0/10)
+  if (/^100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\./.test(hostname)) {
+    console.log(`[AccessMode] IP Netbird détectée ${hostname} → mode REMOTE`);
+    return 'remote';
+  }
+  
+  // Détecter les IPs locales (localhost, 127.x.x.x, 192.168.x.x, 10.x.x.x)
+  if (hostname === 'localhost' || 
+      hostname === '127.0.0.1' || 
+      /^127\./.test(hostname) ||
+      /^192\.168\./.test(hostname) || 
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)) {
+    console.log(`[AccessMode] IP locale détectée ${hostname} → mode PRIVATE`);
+    return 'private';
+  }
+  
+  // Si c'est une IP mais pas locale → mode REMOTE
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    console.log(`[AccessMode] IP publique/externe détectée ${hostname} → mode REMOTE`);
+    return 'remote';
+  }
+  
+  console.log(`[AccessMode] Hostname ${hostname}:${port} → mode PRIVATE (fallback)`);
   return 'private';
 }
 
@@ -65,7 +88,7 @@ function ensureLoadedFromStorage(): void {
       persist(urlMode);
       return;
     }
-    if (stored === 'private' || stored === 'public' || stored === 'remote') {
+    if (stored === 'private' || stored === 'remote') {
       currentMode = stored;
     }
   } catch {}
@@ -79,10 +102,10 @@ function ensureLoadedFromStorage(): void {
 export async function detectAccessMode(timeout: number = 2000): Promise<AccessMode> {
   const urlMode = detectModeFromUrl();
   
-  if (urlMode === 'public') {
+  if (urlMode === 'remote') {
     console.log('[AccessMode] URL indique mode REMOTE - pas de test de connectivité');
-    setAccessMode('public');
-    return 'public';
+    setAccessMode('remote');
+    return 'remote';
   }
   
   const privateUrl = getServerUrl('private');
@@ -131,8 +154,8 @@ export async function detectAccessMode(timeout: number = 2000): Promise<AccessMo
   }
 
   console.log('[AccessMode] Basculement vers le mode REMOTE');
-  setAccessMode('public');
-  return 'public';
+  setAccessMode('remote');
+  return 'remote';
 }
 
 export function getCurrentAccessMode(): AccessMode | null {
@@ -145,18 +168,18 @@ export function getCurrentAccessMode(): AccessMode | null {
   }
   
   if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
-    if (currentMode !== 'public') {
+    if (currentMode !== 'remote') {
       console.log('[AccessMode] Page HTTPS détectée - forçage du mode REMOTE');
-      setAccessMode('public');
+      setAccessMode('remote');
     }
-    return 'public';
+    return 'remote';
   }
   
   return currentMode;
 }
 
 export function setAccessMode(mode: AccessMode): void {
-  if (mode !== 'private' && mode !== 'public' && mode !== 'remote') {
+  if (mode !== 'private' && mode !== 'remote') {
     throw new Error('Mode d\'accès invalide. Utilisez "private" ou "remote".');
   }
   currentMode = mode;

@@ -255,7 +255,7 @@ const getUrl = (urlConfig: UrlConfig, accessMode: string): string => {
   if (isHttpsContext()) {
     return urlConfig.REMOTE;
   }
-  return accessMode === 'public' ? urlConfig.REMOTE : urlConfig.PRIVATE;
+  return accessMode === 'remote' ? urlConfig.REMOTE : urlConfig.PRIVATE;
 };
 
 const getServerUrl = (accessMode: string): string => {
@@ -354,17 +354,27 @@ function getFrontendUrl(mode: string = 'remote'): string {
     return `http://ryvie.local`;
   }
   
+  // Mode remote
   const domains = netbirdData?.domains || {};
   const backendHost = netbirdData?.received?.backendHost;
   
+  // Priorité 1: Domaine Netbird pour l'app frontend
   if (domains.app) {
     return `https://${domains.app}`;
   }
   
+  // Priorité 2: Backend host Netbird
   if (backendHost) {
     return `http://${backendHost}:${LOCAL_PORTS.FRONTEND}`;
   }
   
+  // Priorité 3: IP locale en cache (quand on bascule depuis ryvie.local)
+  if (cachedLocalIP) {
+    console.log(`[getFrontendUrl] Utilisation de l'IP locale en cache: ${cachedLocalIP}`);
+    return `http://${cachedLocalIP}:${LOCAL_PORTS.FRONTEND}`;
+  }
+  
+  // Fallback: hostname actuel
   const { hostname, protocol } = getCurrentLocation();
   const scheme = protocol === 'https:' ? 'https' : 'http';
   return `${scheme}://${hostname}:${LOCAL_PORTS.FRONTEND}`;

@@ -7,7 +7,7 @@ const { NETBIRD_FILE } = require('../config/paths');
  */
 function syncNetbirdConfig() {
   const sourceFile = NETBIRD_FILE;
-  const targetFile = path.join(__dirname, '../../Ryvie-Front/src/config/netbird-data.json');
+  const targetFile = path.join(__dirname, '../../../Ryvie-Front/src/config/netbird-data.json');
   
   try {
     // Vérifier si le fichier source existe
