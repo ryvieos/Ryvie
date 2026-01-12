@@ -146,7 +146,7 @@ function getRyvieAppPort(appDir, dockerComposeRelativePath) {
  * Extrait des métadonnées (id, name, port) depuis ryvie-app.yml si présent
  */
 function getRyvieAppMeta(appDir, dockerComposeRelativePath) {
-    const meta = { id: null, name: null, port: null, version: null };
+    const meta = { id: null, name: null, port: null, buildId: null };
     try {
         const composeDir = dockerComposeRelativePath
             ? path.dirname(path.join(appDir, dockerComposeRelativePath))
@@ -170,9 +170,9 @@ function getRyvieAppMeta(appDir, dockerComposeRelativePath) {
                     const portMatch = content.match(/^\s*port\s*:\s*["']?(\d{1,5})["']?/mi);
                     if (portMatch)
                         meta.port = parseInt(portMatch[1], 10);
-                    const versionMatch = content.match(/^\s*version\s*:\s*["']?([^"'\n]+)["']?/mi);
-                    if (versionMatch)
-                        meta.version = versionMatch[1].trim();
+                    const buildIdMatch = content.match(/^\s*buildId\s*:\s*["']?(\d+)["']?/mi);
+                    if (buildIdMatch)
+                        meta.buildId = parseInt(buildIdMatch[1], 10);
                     // Dès qu'on a lu un fichier, on peut retourner (le plus proche du compose est prioritaire)
                     return meta;
                 }
@@ -338,7 +338,7 @@ function generateManifest(appData) {
     const manifest = {
         id: finalId,
         name: finalName,
-        version: ryvieMeta.version,
+        buildId: ryvieMeta.buildId,
         description: metadata.description,
         icon: `icon${iconExt}`,
         category: metadata.category,
@@ -476,7 +476,7 @@ function main(specificAppId = null) {
     console.log('\n📋 Résumé des apps:');
     const appPorts = {};
     const allPorts = {};
-    const appVersions = {};
+    const appBuildIds = {};
     generatedManifests.forEach((manifest) => {
         const ryviePort = getRyvieAppPort(manifest.sourceDir, manifest.dockerComposePath);
         const displayPort = ryviePort || manifest.mainPort || 'N/A';
@@ -487,8 +487,8 @@ function main(specificAppId = null) {
         if (manifest.ports && Object.keys(manifest.ports).length > 0) {
             allPorts[manifest.id] = manifest.ports;
         }
-        if (manifest.version) {
-            appVersions[manifest.id] = manifest.version;
+        if (manifest.buildId !== null && manifest.buildId !== undefined) {
+            appBuildIds[manifest.id] = manifest.buildId;
         }
     });
     const frontendConfigDir = path.join(__dirname, 'Ryvie-Front/src/config');
@@ -502,8 +502,21 @@ function main(specificAppId = null) {
     // Écrire le mapping des ports pour le frontend
     try {
         const frontendPortsPath = path.join(frontendConfigDir, 'app-ports.json');
-        fs.writeFileSync(frontendPortsPath, JSON.stringify(appPorts, null, 2));
-        console.log(`\n📝 Ports des apps écrits pour le frontend: ${frontendPortsPath}`);
+        
+        // En mode ciblé, fusionner avec les ports existants au lieu d'écraser
+        let finalPorts = appPorts;
+        if (specificAppId && fs.existsSync(frontendPortsPath)) {
+            try {
+                const existingPorts = JSON.parse(fs.readFileSync(frontendPortsPath, 'utf8'));
+                finalPorts = { ...existingPorts, ...appPorts };
+                console.log(`\n🔄 Fusion avec les ports existants (mode ciblé)`);
+            } catch (e) {
+                console.log(`⚠️  Impossible de lire les ports existants, écrasement: ${e.message}`);
+            }
+        }
+        
+        fs.writeFileSync(frontendPortsPath, JSON.stringify(finalPorts, null, 2));
+        console.log(`📝 Ports des apps écrits pour le frontend: ${frontendPortsPath}`);
     }
     catch (e) {
         console.log(`\n⚠️  Impossible d'écrire app-ports.json pour le frontend: ${e.message}`);
@@ -514,17 +527,43 @@ function main(specificAppId = null) {
         const dir = path.dirname(allPortsPath);
         if (!fs.existsSync(dir))
             fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(allPortsPath, JSON.stringify(allPorts, null, 2));
+        
+        // En mode ciblé, fusionner avec les ports existants
+        let finalAllPorts = allPorts;
+        if (specificAppId && fs.existsSync(allPortsPath)) {
+            try {
+                const existingAllPorts = JSON.parse(fs.readFileSync(allPortsPath, 'utf8'));
+                finalAllPorts = { ...existingAllPorts, ...allPorts };
+                console.log(`🔄 Fusion avec all-ports existants (mode ciblé)`);
+            } catch (e) {
+                console.log(`⚠️  Impossible de lire all-ports existants: ${e.message}`);
+            }
+        }
+        
+        fs.writeFileSync(allPortsPath, JSON.stringify(finalAllPorts, null, 2));
         console.log(`📝 Ports détaillés écrits pour le frontend: ${allPortsPath}`);
     }
     catch (e) {
         console.log(`⚠️  Impossible d'écrire all-ports.json pour le frontend: ${e.message}`);
     }
-    // Écrire les versions des apps pour le frontend
+    // Écrire les buildIds des apps pour le frontend
     try {
         const versionsPath = path.join(frontendConfigDir, 'apps-versions.json');
-        fs.writeFileSync(versionsPath, JSON.stringify(appVersions, null, 2));
-        console.log(`📝 Versions des apps écrites pour le frontend: ${versionsPath}`);
+        
+        // En mode ciblé, fusionner avec les buildIds existants
+        let finalBuildIds = appBuildIds;
+        if (specificAppId && fs.existsSync(versionsPath)) {
+            try {
+                const existingBuildIds = JSON.parse(fs.readFileSync(versionsPath, 'utf8'));
+                finalBuildIds = { ...existingBuildIds, ...appBuildIds };
+                console.log(`🔄 Fusion avec les buildIds existants (mode ciblé)`);
+            } catch (e) {
+                console.log(`⚠️  Impossible de lire les buildIds existants: ${e.message}`);
+            }
+        }
+        
+        fs.writeFileSync(versionsPath, JSON.stringify(finalBuildIds, null, 2));
+        console.log(`📝 BuildIds des apps écrits pour le frontend: ${versionsPath}`);
     }
     catch (e) {
         console.log(`⚠️  Impossible d'écrire apps-versions.json pour le frontend: ${e.message}`);

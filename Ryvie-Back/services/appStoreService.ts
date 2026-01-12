@@ -118,11 +118,11 @@ async function loadInstalledVersionsFromManifests() {
             return;
           }
           
-          const version = typeof manifest.version === 'string' && manifest.version.trim() !== ''
-            ? manifest.version.trim()
+          const buildId = typeof manifest.buildId === 'number'
+            ? manifest.buildId
             : null;
-          if (version) {
-            installed[normalizedId] = version;
+          if (buildId !== null) {
+            installed[normalizedId] = buildId;
           }
         }
       } catch (manifestError: any) {
@@ -211,35 +211,51 @@ function compareAppVersions(installed, latest) {
   return 'up-to-date';
 }
 
-// Ajoute installedVersion/updateAvailable aux apps et liste celles à mettre à jour
+// Compare deux buildIds numériques
+function compareBuildIds(installedBuildId, latestBuildId) {
+  if (installedBuildId === null || latestBuildId === null) {
+    return null;
+  }
+  
+  if (latestBuildId > installedBuildId) {
+    return 'update-available';
+  } else if (latestBuildId === installedBuildId) {
+    return 'up-to-date';
+  } else {
+    return 'ahead';
+  }
+}
+
+// Ajoute installedBuildId/updateAvailable/installed aux apps et liste celles à mettre à jour
 async function enrichAppsWithInstalledVersions(apps) {
   if (!Array.isArray(apps)) {
     return { apps, updates: [] };
   }
 
-  const installedVersions = await loadInstalledVersions();
+  const installedBuildIds = await loadInstalledVersions();
   const updates = [];
 
   const enriched = apps.map(app => {
-    const installedVersion = installedVersions?.[app.id];
-    if (!installedVersion) {
-      // App non installée : supprimer les champs installedVersion et updateAvailable s'ils existent
-      const { installedVersion: _, updateAvailable: __, ...cleanApp } = app;
-      return cleanApp;
+    const installedBuildId = installedBuildIds?.[app.id];
+    if (installedBuildId === null || installedBuildId === undefined) {
+      // App non installée : supprimer les champs installedBuildId, updateAvailable et installed
+      const { installedBuildId: _, updateAvailable: __, installed: ___, ...cleanApp } = app;
+      return { ...cleanApp, installed: false };
     }
 
-    const status = compareAppVersions(installedVersion, app.version);
+    const status = compareBuildIds(installedBuildId, app.buildId);
     const enhancedApp = {
       ...app,
-      installedVersion,
-      updateAvailable: status === 'update-available'
+      installedBuildId,
+      updateAvailable: status === 'update-available',
+      installed: true
     };
 
     if (status === 'update-available') {
       updates.push({
         id: app.id,
-        installedVersion,
-        latestVersion: app.version
+        installedBuildId,
+        latestBuildId: app.buildId
       });
     }
 

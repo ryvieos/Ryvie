@@ -164,6 +164,15 @@ const AppStore = () => {
     })();
   }, []);
 
+  // Polling pour recharger les apps toutes les 5 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchApps(true); // silent = true pour ne pas afficher le loader
+    }, 300000); // 5 minutes
+    
+    return () => clearInterval(interval);
+  }, []);
+
   // Notifier Home du statut d'installation
   useEffect(() => {
     window.parent.postMessage({
@@ -880,15 +889,12 @@ try {
     }
 
     const appId = app.id;
-    const installedVersion = app?.installedVersion;
-    const installed = typeof installedVersion === 'string'
-      ? installedVersion.trim() !== ''
-      : installedVersion !== null && installedVersion !== undefined;
+    const installedBuildId = app?.installedBuildId;
+    const installed = installedBuildId !== null && installedBuildId !== undefined;
 
     const updateFlagRaw = app?.updateAvailable;
     const updateFlag = updateFlagRaw === true || updateFlagRaw === 'true' || updateFlagRaw === 1;
-    const versionStatus = installed ? compareVersions(installedVersion, app?.version) : null;
-    const updateAvailable = updateFlag || versionStatus === 'update-available';
+    const updateAvailable = updateFlag;
 
     // Déterminer le label en fonction de l'état
     const isCurrentlyInstalling = appId ? installingApps.has(appId) : false;
