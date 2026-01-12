@@ -1,6 +1,7 @@
 const path = require('path');
 const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
@@ -95,6 +96,15 @@ module.exports = {
       template: './public/index.html', // Template HTML source
       filename: 'index.html', // Fichier de sortie
       inject: 'body', // Injecter les scripts dans le body
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: 'src/config/*.json',
+          to: 'config/[name][ext]',
+          noErrorOnMissing: true,
+        },
+      ],
     }),
   ].filter(Boolean), // Filtrer les plugins null/undefined
 };

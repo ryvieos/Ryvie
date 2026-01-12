@@ -1,7 +1,7 @@
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 
-type AccessMode = 'private' | 'public';
+type AccessMode = 'private' | 'remote';
 
 export async function detectAccessModeRobust(timeout: number = 3000): Promise<AccessMode> {
   console.log('[FallbackDetection] Démarrage de la détection robuste...');
@@ -13,16 +13,16 @@ export async function detectAccessModeRobust(timeout: number = 3000): Promise<Ac
     return 'private';
   }
   
-  const publicAccessible = await testSimpleConnectivity('public', timeout);
+  const publicAccessible = await testSimpleConnectivity('remote', timeout);
   if (publicAccessible) {
     console.log('[FallbackDetection] Serveur remote accessible - Mode REMOTE');
-    localStorage.setItem('accessMode', 'public');
-    return 'public';
+    localStorage.setItem('accessMode', 'remote');
+    return 'remote';
   }
   
   console.log('[FallbackDetection] Aucun serveur accessible - Fallback vers REMOTE');
-  localStorage.setItem('accessMode', 'public');
-  return 'public';
+  localStorage.setItem('accessMode', 'remote');
+  return 'remote';
 }
 
 async function testSimpleConnectivity(mode: AccessMode, timeout: number = 2000): Promise<boolean> {
@@ -104,13 +104,13 @@ export async function detectWithRetry(maxRetries: number = 2, timeout: number = 
       
       if (attempt === maxRetries) {
         console.log('[FallbackDetection] Toutes les tentatives ont échoué - Fallback vers REMOTE');
-        localStorage.setItem('accessMode', 'public');
-        return 'public';
+        localStorage.setItem('accessMode', 'remote');
+        return 'remote';
       }
       
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
   
-  return 'public';
+  return 'remote';
 }
