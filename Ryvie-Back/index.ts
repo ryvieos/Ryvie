@@ -100,6 +100,9 @@ const io = new Server(httpServer, {
   }
 });
 
+// Exposer Socket.IO dans global pour qu'il soit accessible depuis les routes et workers
+(global as any).io = io;
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for API server

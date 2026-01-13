@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, hasPermission } = require('../middleware/auth');
-const { getApps, getAppById, clearCache, getStoreHealth, getRateLimitInfo, updateAppFromStore, uninstallApp, progressEmitter } = require('../services/appStoreService');
+const { getApps, getAppById, clearCache, getStoreHealth, getRateLimitInfo, updateAppFromStore, uninstallApp, forceCleanupCancelledInstall, progressEmitter } = require('../services/appStoreService');
 const { checkStoreCatalogUpdate } = require('../services/updateCheckService');
 const { updateStoreCatalog } = require('../services/updateService');
 
@@ -11,6 +11,9 @@ const activeWorkers = new Map();
 // Map pour stocker la dernière progression de chaque installation (appId -> { progress, message, stage })
 const lastProgressMap = new Map();
 
+// Map pour stocker les apps en cours de nettoyage (appId -> timestamp)
+const cleaningApps = new Map();
+
 /**
  * GET /api/appstore/active-installations - Retourne la liste des installations en cours
  */
@@ -19,6 +22,21 @@ router.get('/appstore/active-installations', verifyToken, (req: any, res: any) =
   res.json({
     success: true,
     installations: activeInstallations
+  });
+});
+
+/**
+ * GET /api/appstore/cleaning-apps - Retourne la liste des apps en cours de nettoyage
+ */
+router.get('/appstore/cleaning-apps', verifyToken, (req: any, res: any) => {
+  const cleaningAppsList = Array.from(cleaningApps.entries()).map(([appId, startTime]) => ({
+    appId,
+    startTime,
+    duration: Math.floor((Date.now() - startTime) / 1000)
+  }));
+  res.json({
+    success: true,
+    cleaning: cleaningAppsList
   });
 });
 
@@ -288,6 +306,20 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     const appId = req.params.id;
     console.log(`[appStore] Lancement de l'installation/mise à jour de ${appId} dans un processus séparé...`);
     
+    // Vérifier si l'app est en cours de nettoyage
+    if (cleaningApps.has(appId)) {
+      const cleaningStartTime = cleaningApps.get(appId);
+      const elapsedSeconds = Math.floor((Date.now() - cleaningStartTime) / 1000);
+      console.log(`[appStore] ⚠️ ${appId} est en cours de nettoyage (${elapsedSeconds}s écoulées)`);
+      return res.status(409).json({
+        success: false,
+        error: 'App en cours de nettoyage',
+        message: `L'application ${appId} est en cours de nettoyage suite à une annulation. Veuillez patienter quelques secondes avant de réinstaller.`,
+        appId: appId,
+        cleaningDuration: elapsedSeconds
+      });
+    }
+    
     // Vérifier le nombre d'installations en cours
     const activeInstallationsCount = activeWorkers.size;
     if (activeInstallationsCount >= 2) {
@@ -336,6 +368,10 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
       
       if (code === 0) {
         console.log(`[appStore] ✅ Installation de ${appId} terminée avec succès`);
+      } else if (code === null) {
+        // Code null = worker tué (SIGKILL) = annulation volontaire
+        console.log(`[appStore] 🛑 Installation de ${appId} annulée (worker tué)`);
+        // Ne pas émettre d'événement d'erreur, l'annulation a déjà envoyé son propre événement
       } else {
         console.error(`[appStore] ❌ Installation de ${appId} échouée avec le code ${code}`);
         
@@ -374,6 +410,7 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
 
 /**
  * POST /api/appstore/apps/:id/cancel - Annule une installation en cours
+ * Tue immédiatement tous les processus et nettoie complètement toutes les traces
  */
 router.post('/appstore/apps/:id/cancel', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
   try {
@@ -392,28 +429,65 @@ router.post('/appstore/apps/:id/cancel', verifyToken, hasPermission('manage_apps
       });
     }
     
-    // Tuer le processus worker
-    console.log(`[appStore] 🔪 Arrêt du worker pour ${appId}...`);
-    worker.kill('SIGTERM');
+    // 1. Tuer IMMÉDIATEMENT le processus worker avec SIGKILL (pas SIGTERM)
+    console.log(`[appStore] ⚡ Arrêt IMMÉDIAT du worker pour ${appId}...`);
+    try {
+      worker.kill('SIGKILL'); // SIGKILL pour tuer immédiatement sans laisser le temps de cleanup
+    } catch (e) {
+      console.log(`[appStore] Worker déjà terminé`);
+    }
     
-    // Retirer de la map
+    // 2. Retirer de la map immédiatement
     activeWorkers.delete(appId);
     lastProgressMap.delete(appId);
     
-    // Envoyer un événement de progression pour informer le frontend
+    // 3. Envoyer un événement de progression pour informer le frontend
     progressEmitter.emit('progress', {
       appId: appId,
       progress: 0,
-      message: 'Installation annulée par l\'utilisateur',
+      message: 'Installation annulée - nettoyage en cours...',
       stage: 'cancelled'
     });
     
-    console.log(`[appStore] ✅ Installation de ${appId} annulée avec succès`);
-    
+    // 4. Répondre immédiatement au client
     res.json({
       success: true,
-      message: `Installation de ${appId} annulée avec succès`,
+      message: `Installation de ${appId} annulée - nettoyage en cours`,
       appId: appId
+    });
+    
+    // 5. Marquer l'app comme étant en cours de nettoyage
+    cleaningApps.set(appId, Date.now());
+    console.log(`[appStore] 🔒 ${appId} verrouillée pour nettoyage`);
+    
+    // 6. Lancer le nettoyage complet en arrière-plan (non-bloquant)
+    console.log(`[appStore] 🧹 Lancement du nettoyage complet en arrière-plan...`);
+    
+    // Utiliser setImmediate pour ne pas bloquer la réponse HTTP
+    setImmediate(async () => {
+      try {
+        const result = await forceCleanupCancelledInstall(appId);
+        
+        if (result.success) {
+          console.log(`[appStore] ✅ Nettoyage complet de ${appId} terminé`);
+          
+          // Envoyer un événement final
+          progressEmitter.emit('progress', {
+            appId: appId,
+            progress: 0,
+            message: 'Installation annulée et nettoyée',
+            stage: 'cleaned'
+          });
+        } else {
+          console.error(`[appStore] ⚠️ Nettoyage partiel de ${appId}:`, result.message);
+        }
+      } catch (cleanupError: any) {
+        console.error(`[appStore] ❌ Erreur lors du nettoyage de ${appId}:`, cleanupError.message);
+      } finally {
+        // Retirer l'app de la Map de nettoyage (toujours exécuté)
+        cleaningApps.delete(appId);
+        console.log(`[appStore] 🔓 ${appId} déverrouillée, réinstallation possible`);
+      }
     });
     
   } catch (error: any) {
@@ -427,21 +501,67 @@ router.post('/appstore/apps/:id/cancel', verifyToken, hasPermission('manage_apps
 
 /**
  * DELETE /api/appstore/apps/:id/uninstall - Désinstalle une application
+ * La désinstallation se fait dans un processus séparé pour ne pas bloquer le serveur
  */
 router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
   try {
     const appId = req.params.id;
-    console.log(`[appStore] Lancement de la désinstallation de ${appId}...`);
+    console.log(`[appStore] Lancement de la désinstallation de ${appId} dans un processus séparé...`);
     
-    const result = await uninstallApp(appId);
+    // Répondre immédiatement au client
+    res.json({
+      success: true,
+      message: `Désinstallation de ${appId} lancée en arrière-plan`,
+      appId: appId
+    });
     
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(500).json(result);
-    }
+    // Lancer la désinstallation dans un processus enfant séparé (non-bloquant)
+    const { fork } = require('child_process');
+    const workerPath = require('path').join(__dirname, '../workers/uninstallWorker.js');
+    
+    const worker = fork(workerPath, [appId], {
+      detached: false,
+      stdio: 'inherit'
+    });
+    
+    worker.on('exit', async (code) => {
+      console.log(`[appStore] 🔔 Worker exit callback appelé pour ${appId}, code:`, code);
+      
+      if (code === 0) {
+        console.log(`[appStore] ✅ Désinstallation de ${appId} terminée avec succès`);
+        
+        // Émettre un événement Socket.IO pour notifier tous les clients
+        try {
+          const io = (global as any).io;
+          console.log(`[appStore] 🔍 Socket.IO disponible:`, !!io);
+          
+          if (io) {
+            const payload = {
+              appId: appId,
+              success: true,
+              message: `${appId} désinstallé avec succès`
+            };
+            console.log(`[appStore] 📤 Émission de l'événement 'app-uninstalled' avec payload:`, payload);
+            io.emit('app-uninstalled', payload);
+            console.log(`[appStore] 📡 Notification de désinstallation envoyée via Socket.IO`);
+          } else {
+            console.error(`[appStore] ❌ Socket.IO non disponible (global.io est undefined)`);
+          }
+        } catch (e: any) {
+          console.error('[appStore] ⚠️ Erreur lors de l\'envoi de la notification Socket.IO:', e.message);
+          console.error('[appStore] Stack trace:', e.stack);
+        }
+      } else {
+        console.error(`[appStore] ❌ Désinstallation de ${appId} échouée avec le code ${code}`);
+      }
+    });
+    
+    worker.on('error', (error) => {
+      console.error(`[appStore] ❌ Erreur du worker de désinstallation pour ${appId}:`, error);
+    });
+    
   } catch (error: any) {
-    console.error(`[appStore] Erreur lors de la désinstallation de ${req.params.id}:`, error);
+    console.error(`[appStore] Erreur lors du lancement de la désinstallation de ${req.params.id}:`, error);
     res.status(500).json({
       success: false,
       error: error.message

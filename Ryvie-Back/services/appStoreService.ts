@@ -118,11 +118,11 @@ async function loadInstalledVersionsFromManifests() {
             return;
           }
           
-          const version = typeof manifest.version === 'string' && manifest.version.trim() !== ''
-            ? manifest.version.trim()
+          const buildId = typeof manifest.buildId === 'number'
+            ? manifest.buildId
             : null;
-          if (version) {
-            installed[normalizedId] = version;
+          if (buildId !== null) {
+            installed[normalizedId] = buildId;
           }
         }
       } catch (manifestError: any) {
@@ -211,35 +211,51 @@ function compareAppVersions(installed, latest) {
   return 'up-to-date';
 }
 
-// Ajoute installedVersion/updateAvailable aux apps et liste celles à mettre à jour
+// Compare deux buildIds numériques
+function compareBuildIds(installedBuildId, latestBuildId) {
+  if (installedBuildId === null || latestBuildId === null) {
+    return null;
+  }
+  
+  if (latestBuildId > installedBuildId) {
+    return 'update-available';
+  } else if (latestBuildId === installedBuildId) {
+    return 'up-to-date';
+  } else {
+    return 'ahead';
+  }
+}
+
+// Ajoute installedBuildId/updateAvailable/installed aux apps et liste celles à mettre à jour
 async function enrichAppsWithInstalledVersions(apps) {
   if (!Array.isArray(apps)) {
     return { apps, updates: [] };
   }
 
-  const installedVersions = await loadInstalledVersions();
+  const installedBuildIds = await loadInstalledVersions();
   const updates = [];
 
   const enriched = apps.map(app => {
-    const installedVersion = installedVersions?.[app.id];
-    if (!installedVersion) {
-      // App non installée : supprimer les champs installedVersion et updateAvailable s'ils existent
-      const { installedVersion: _, updateAvailable: __, ...cleanApp } = app;
-      return cleanApp;
+    const installedBuildId = installedBuildIds?.[app.id];
+    if (installedBuildId === null || installedBuildId === undefined) {
+      // App non installée : supprimer les champs installedBuildId, updateAvailable et installed
+      const { installedBuildId: _, updateAvailable: __, installed: ___, ...cleanApp } = app;
+      return { ...cleanApp, installed: false };
     }
 
-    const status = compareAppVersions(installedVersion, app.version);
+    const status = compareBuildIds(installedBuildId, app.buildId);
     const enhancedApp = {
       ...app,
-      installedVersion,
-      updateAvailable: status === 'update-available'
+      installedBuildId,
+      updateAvailable: status === 'update-available',
+      installed: true
     };
 
     if (status === 'update-available') {
       updates.push({
         id: app.id,
-        installedVersion,
-        latestVersion: app.version
+        installedBuildId,
+        latestBuildId: app.buildId
       });
     }
 
@@ -281,7 +297,29 @@ async function getLatestRelease() {
     };
   } catch (error: any) {
     console.error('[appStore] Erreur lors de la récupération de la dernière release:', error.message);
-    throw new Error('Échec de la récupération de la release depuis GitHub');
+    
+    // Vérifier si c'est une erreur de rate limit GitHub
+    if (error.response?.status === 403 && error.response.data?.message?.includes('rate limit')) {
+      const resetTime = error.response.headers?.['x-ratelimit-reset'];
+      const remaining = error.response.headers?.['x-ratelimit-remaining'] || 0;
+      const limit = error.response.headers?.['x-ratelimit-limit'] || 60;
+      
+      let waitMessage = '';
+      if (resetTime) {
+        const resetDate = new Date(parseInt(resetTime) * 1000);
+        const resetTimeFormatted = resetDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        waitMessage = ` Réinitialisation à ${resetTimeFormatted}.`;
+      }
+      
+      throw new Error(
+        `Quota d'installations atteint (${remaining}/${limit} requêtes restantes).${waitMessage} ` +
+        `Veuillez patienter avant de réessayer. ` +
+        `💡 Astuce: Ajoutez un GITHUB_TOKEN dans votre fichier .env pour augmenter le quota à 5000 requêtes/heure.`
+      );
+    }
+    
+    // Propager l'erreur réelle
+    throw error;
   }
 }
 
@@ -385,7 +423,29 @@ async function fetchAppsFromRelease(release) {
     return response.data;
   } catch (error: any) {
     console.error('[appStore] Erreur lors de la récupération de apps.json depuis la release:', error.message);
-    throw new Error('Échec de la récupération de apps.json depuis la release');
+    
+    // Vérifier si c'est une erreur de rate limit GitHub
+    if (error.response?.status === 403 && error.response.data?.message?.includes('rate limit')) {
+      const resetTime = error.response.headers?.['x-ratelimit-reset'];
+      const remaining = error.response.headers?.['x-ratelimit-remaining'] || 0;
+      const limit = error.response.headers?.['x-ratelimit-limit'] || 60;
+      
+      let waitMessage = '';
+      if (resetTime) {
+        const resetDate = new Date(parseInt(resetTime) * 1000);
+        const resetTimeFormatted = resetDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        waitMessage = ` Réinitialisation à ${resetTimeFormatted}.`;
+      }
+      
+      throw new Error(
+        `Quota d'installations atteint (${remaining}/${limit} requêtes restantes).${waitMessage} ` +
+        `Veuillez patienter avant de réessayer. ` +
+        `💡 Astuce: Ajoutez un GITHUB_TOKEN dans votre fichier .env pour augmenter le quota à 5000 requêtes/heure.`
+      );
+    }
+    
+    // Propager l'erreur réelle
+    throw error;
   }
 }
 
@@ -577,13 +637,13 @@ async function downloadAppFromRepoArchive(release, appId) {
         let waitMessage = '';
         if (resetTime) {
           const resetDate = new Date(parseInt(resetTime) * 1000);
-          const minutesUntilReset = Math.ceil((resetDate.getTime() - Date.now()) / 60000);
-          waitMessage = ` Réinitialisation dans ${minutesUntilReset} minute${minutesUntilReset > 1 ? 's' : ''}.`;
+          const resetTimeFormatted = resetDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+          waitMessage = ` Réinitialisation à ${resetTimeFormatted}.`;
         }
         
         throw new Error(
-          `Quota d'installations GitHub atteint (${remaining}/${limit} requêtes restantes).${waitMessage} ` +
-          `Veuillez attendre quelques minutes avant de réessayer. ` +
+          `Quota d'installations atteint (${remaining}/${limit} requêtes restantes).${waitMessage} ` +
+          `Veuillez patienter avant de réessayer. ` +
           `💡 Astuce: Ajoutez un GITHUB_TOKEN dans votre fichier .env pour augmenter le quota à 5000 requêtes/heure.`
         );
       }
@@ -1022,6 +1082,51 @@ async function updateAppFromStore(appId) {
       console.warn('[Update] ⚠️ Impossible d\'invalider le cache:', e.message);
     }
     
+    // 5c. Vérifier que l'app est visible avec un statut valide avant de terminer
+    currentStep = 'app-status-verification';
+    console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
+    sendProgressUpdate(appId, 97, 'Vérification du statut de l\'application...', 'verification');
+    
+    let appStatusVerified = false;
+    const maxStatusChecks = 10; // 10 tentatives max
+    const statusCheckInterval = 1000; // 1 seconde entre chaque tentative
+    
+    for (let attempt = 1; attempt <= maxStatusChecks; attempt++) {
+      try {
+        console.log(`[Update] 🔍 Tentative ${attempt}/${maxStatusChecks} de vérification du statut de ${appId}...`);
+        const dockerService = require('./dockerService');
+        const apps = await dockerService.getAppStatus();
+        const appStatus = apps.find((app: any) => app.id === appId);
+        
+        if (appStatus) {
+          console.log(`[Update] 📊 Statut de ${appId}: ${appStatus.status}`);
+          
+          // Accepter les statuts: running (vert) ou starting (jaune)
+          if (appStatus.status === 'running' || appStatus.status === 'starting') {
+            console.log(`[Update] ✅ ${appId} a un statut valide: ${appStatus.status}`);
+            appStatusVerified = true;
+            break;
+          } else {
+            console.log(`[Update] ⏳ ${appId} a le statut '${appStatus.status}', attente...`);
+          }
+        } else {
+          console.log(`[Update] ⏳ ${appId} pas encore visible dans la liste des apps, attente...`);
+        }
+        
+        // Attendre avant la prochaine tentative (sauf à la dernière)
+        if (attempt < maxStatusChecks) {
+          await new Promise(resolve => setTimeout(resolve, statusCheckInterval));
+        }
+      } catch (statusError: any) {
+        console.warn(`[Update] ⚠️ Erreur lors de la vérification du statut (tentative ${attempt}):`, statusError.message);
+      }
+    }
+    
+    if (!appStatusVerified) {
+      console.warn(`[Update] ⚠️ Impossible de vérifier le statut de ${appId} après ${maxStatusChecks} tentatives`);
+      // On continue quand même mais on log un warning
+    }
+    
     // Déclencher une mise à jour immédiate des statuts via Socket.IO
     try {
       const io = (global as any).io;
@@ -1160,6 +1265,157 @@ async function initialize() {
 }
 
 // Exports pour être utilisés par updateCheckService et updateService
+/**
+ * Nettoyage complet et immédiat d'une installation annulée
+ * Tue tous les processus Docker en cours et supprime toutes les traces
+ */
+async function forceCleanupCancelledInstall(appId) {
+  try {
+    console.log(`[ForceCleanup] 🛑 Nettoyage complet de l'installation annulée de ${appId}...`);
+    
+    const APPS_DIR = '/data/apps';
+    const MANIFESTS_DIR = '/data/config/manifests';
+    const appDir = path.join(APPS_DIR, appId);
+    
+    // 1. TUER IMMÉDIATEMENT tous les processus Docker liés à cette app
+    console.log(`[ForceCleanup] ⚡ Arrêt forcé de tous les processus Docker pour ${appId}...`);
+    try {
+      // Tuer tous les processus docker pull/compose pour cette app
+      execSync(`pkill -9 -f "docker.*${appId}" 2>/dev/null || true`, { stdio: 'inherit' });
+      execSync(`pkill -9 -f "docker.*compose.*${appId}" 2>/dev/null || true`, { stdio: 'inherit' });
+      execSync(`pkill -9 -f "docker.*pull.*${appId}" 2>/dev/null || true`, { stdio: 'inherit' });
+    } catch (e) {
+      // Ignore les erreurs
+    }
+    
+    // 2. Arrêter tous les containers Docker (par nom de projet)
+    console.log(`[ForceCleanup] 🐳 Arrêt des containers Docker...`);
+    try {
+      execSync(`docker compose -p ${appId} down -v --remove-orphans 2>/dev/null || true`, { stdio: 'inherit' });
+    } catch (e) {
+      // Ignore
+    }
+    
+    // 3. Si le dossier existe avec un docker-compose.yml, arrêter aussi via le dossier
+    try {
+      const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
+      for (const file of composeFiles) {
+        const composePath = path.join(appDir, file);
+        try {
+          await fs.access(composePath);
+          console.log(`[ForceCleanup] 📄 Arrêt via ${file}...`);
+          execSync(`cd "${appDir}" && docker compose down -v --remove-orphans 2>/dev/null || true`, { stdio: 'inherit' });
+          break;
+        } catch {}
+      }
+    } catch (e) {
+      // Ignore
+    }
+    
+    // 4. Supprimer tous les volumes Docker liés à cette app
+    console.log(`[ForceCleanup] 🗑️ Suppression des volumes Docker...`);
+    try {
+      const volumesOutput = execSync(`docker volume ls -q --filter "name=${appId}"`, { encoding: 'utf8' }).trim();
+      if (volumesOutput) {
+        const volumes = volumesOutput.split('\n').filter(vol => vol.trim());
+        for (const volume of volumes) {
+          try {
+            execSync(`docker volume rm ${volume} 2>/dev/null || true`, { stdio: 'inherit' });
+          } catch {}
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+    
+    // 5. Supprimer le dossier de l'application
+    console.log(`[ForceCleanup] 🗑️ Suppression du dossier ${appDir}...`);
+    try {
+      execSync(`sudo rm -rf "${appDir}" 2>/dev/null || true`, { stdio: 'inherit' });
+    } catch (e) {
+      // Ignore
+    }
+    
+    // 6. Supprimer le manifest
+    const manifestDir = path.join(MANIFESTS_DIR, appId);
+    console.log(`[ForceCleanup] 🗑️ Suppression du manifest ${manifestDir}...`);
+    try {
+      execSync(`sudo rm -rf "${manifestDir}" 2>/dev/null || true`, { stdio: 'inherit' });
+    } catch (e) {
+      // Ignore
+    }
+    
+    // 7. Supprimer l'entrée dans apps-versions.json
+    console.log(`[ForceCleanup] 🔄 Nettoyage de apps-versions.json...`);
+    try {
+      let installedVersions = {};
+      try {
+        const raw = await fs.readFile(APPS_VERSIONS_FILE, 'utf8');
+        installedVersions = JSON.parse(raw);
+      } catch {}
+      
+      if (installedVersions[appId]) {
+        delete installedVersions[appId];
+        await fs.writeFile(APPS_VERSIONS_FILE, JSON.stringify(installedVersions, null, 2));
+      }
+    } catch (e) {
+      // Ignore
+    }
+    
+    // 8. Régénérer les manifests
+    console.log(`[ForceCleanup] 🔄 Régénération des manifests...`);
+    try {
+      const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
+      execSync(`node ${manifestScript}`, { stdio: 'inherit' });
+    } catch (e) {
+      // Ignore
+    }
+    
+    // 9. Actualiser le catalogue
+    console.log(`[ForceCleanup] 🔄 Actualisation du catalogue...`);
+    try {
+      const localApps = await loadAppsFromFile();
+      if (Array.isArray(localApps)) {
+        const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(localApps);
+        await saveAppsToFile(enrichedApps);
+      }
+    } catch (e) {
+      // Ignore
+    }
+    
+    // 10. Diffuser les nouveaux statuts via Socket.IO
+    try {
+      const dockerService = require('./dockerService');
+      if (dockerService.clearAppStatusCache) {
+        dockerService.clearAppStatusCache();
+      }
+      
+      const io = (global as any).io;
+      if (io) {
+        const apps = await dockerService.getAppStatus();
+        io.emit('apps-status-update', apps);
+        io.emit('appsStatusUpdate', apps);
+      }
+    } catch (e) {
+      // Ignore
+    }
+    
+    console.log(`[ForceCleanup] ✅ Nettoyage complet de ${appId} terminé`);
+    
+    return {
+      success: true,
+      message: `Installation de ${appId} annulée et nettoyée complètement`
+    };
+    
+  } catch (error: any) {
+    console.error(`[ForceCleanup] ❌ Erreur lors du nettoyage de ${appId}:`, error.message);
+    return {
+      success: false,
+      message: `Erreur lors du nettoyage: ${error.message}`
+    };
+  }
+}
+
 /**
  * Désinstalle proprement une application
  */
@@ -1407,6 +1663,7 @@ export = {
   enrichAppsWithInstalledVersions,
   updateAppFromStore,
   uninstallApp,
+  forceCleanupCancelledInstall,
   // Export pour les mises à jour de progression
   progressEmitter
 };
