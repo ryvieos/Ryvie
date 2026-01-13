@@ -502,8 +502,9 @@ router.post('/appstore/apps/:id/cancel', verifyToken, hasPermission('manage_apps
 /**
  * DELETE /api/appstore/apps/:id/uninstall - Désinstalle une application
  * La désinstallation se fait dans un processus séparé pour ne pas bloquer le serveur
+ * Réservé aux Admins uniquement
  */
-router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('manage_apps'), async (req: any, res: any) => {
+router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('uninstall_apps'), async (req: any, res: any) => {
   try {
     const appId = req.params.id;
     console.log(`[appStore] Lancement de la désinstallation de ${appId} dans un processus séparé...`);
