@@ -58,6 +58,7 @@ const AppStore = () => {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [installingApps, setInstallingApps] = useState(new Set());
+  const [cleaningApps, setCleaningApps] = useState(new Set());
   const [enlargedImage, setEnlargedImage] = useState(null);
   const [closingImage, setClosingImage] = useState(false);
   const [featuredApps, setFeaturedApps] = useState([]);
@@ -101,12 +102,50 @@ const AppStore = () => {
       addLog(`🛑 Envoi de la demande d'annulation au serveur...`, 'info');
       await axios.post(cancelUrl, {}, { timeout: 10000 });
       addLog(`✅ Annulation confirmée par le serveur`, 'success');
+      
+      // Marquer l'app comme en cours de nettoyage
+      setCleaningApps(prev => new Set(prev).add(appId));
+      addLog(`🧹 Nettoyage en cours pour ${appName}...`, 'info');
+      
+      // Démarrer un polling pour vérifier quand le nettoyage est terminé
+      const checkCleaningInterval = setInterval(async () => {
+        try {
+          const cleaningUrl = `${serverUrl}/api/appstore/cleaning-apps`;
+          const response = await axios.get(cleaningUrl);
+          const cleaningList = response.data.cleaning || [];
+          const isStillCleaning = cleaningList.some(item => item.appId === appId);
+          
+          if (!isStillCleaning) {
+            // Nettoyage terminé
+            clearInterval(checkCleaningInterval);
+            setCleaningApps(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(appId);
+              return newSet;
+            });
+            addLog(`✅ Nettoyage de ${appName} terminé`, 'success');
+          }
+        } catch (error) {
+          console.error('[AppStore] Erreur lors de la vérification du nettoyage:', error);
+        }
+      }, 1000); // Vérifier toutes les secondes
+      
+      // Timeout de sécurité après 30 secondes
+      setTimeout(() => {
+        clearInterval(checkCleaningInterval);
+        setCleaningApps(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(appId);
+          return newSet;
+        });
+      }, 30000);
+      
     } catch (error) {
       console.error('[AppStore] Erreur lors de l\'annulation:', error);
       addLog(`⚠️ Impossible de contacter le serveur pour l'annulation`, 'warning');
     }
     
-    // Nettoyer les états
+    // Nettoyer les états d'installation
     setInstallingApps(prev => {
       const newSet = new Set(prev);
       newSet.delete(appId);
@@ -702,14 +741,15 @@ try {
             progress: 100
           }, '*');
           
-          // Rafraîchir la liste des apps et notifier Home avec retry
+          // Rafraîchir IMMÉDIATEMENT le bureau pour afficher l'icône
+          window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
+          addLog(`🔄 Bureau rafraîchi immédiatement`, 'success');
+          
+          // Rafraîchir la liste des apps en arrière-plan avec retry
           const refreshWithRetry = async (attempt = 1, maxAttempts = 3) => {
             try {
               await fetchApps(true);
-              // Attendre un peu plus pour que le backend mette à jour les statuts
-              await new Promise(resolve => setTimeout(resolve, 1500));
-              window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
-              addLog(`✅ Bureau rafraîchi (tentative ${attempt})`, 'success');
+              addLog(`✅ Liste des apps rafraîchie (tentative ${attempt})`, 'success');
             } catch (error) {
               if (attempt < maxAttempts) {
                 addLog(`⚠️ Échec refresh, nouvelle tentative dans 2s...`, 'warning');
@@ -898,9 +938,12 @@ try {
 
     // Déterminer le label en fonction de l'état
     const isCurrentlyInstalling = appId ? installingApps.has(appId) : false;
+    const isCurrentlyCleaning = appId ? cleaningApps.has(appId) : false;
     let label;
     if (isCurrentlyInstalling) {
       label = 'Installation...';
+    } else if (isCurrentlyCleaning) {
+      label = 'Nettoyage...';
     } else if (updateAvailable) {
       label = 'Mettre à jour';
     } else if (installed) {
@@ -913,8 +956,9 @@ try {
       installed,
       updateAvailable,
       label,
-      disabled: (installed && !updateAvailable) || isCurrentlyInstalling,
+      disabled: (installed && !updateAvailable) || isCurrentlyInstalling || isCurrentlyCleaning,
       isInstalling: isCurrentlyInstalling,
+      isCleaning: isCurrentlyCleaning,
     };
   };
 

@@ -199,23 +199,13 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
       const uninstallUrl = `${serverUrl}/api/appstore/apps/${appId}/uninstall`;
       console.log(`[Icon] 📡 DELETE ${uninstallUrl}`);
       const response = await axios.delete(uninstallUrl, { timeout: 120000 });
-      console.log(`[Icon] ✅ Désinstallation de ${appName} terminée`);
+      console.log(`[Icon] ✅ Désinstallation de ${appName} lancée en arrière-plan`);
 
-      setConfirmModal({
-        show: true,
-        type: 'success',
-        title: 'Désinstallation réussie',
-        message: `${appName} a été désinstallé avec succès.`,
-        onConfirm: async () => {
-          setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null });
-          // Rafraîchir pour supprimer l'icône (avec debouncing pour éviter les doublons)
-          if (typeof refreshDesktopIcons === 'function') {
-            await refreshDesktopIcons();
-          }
-        }
-      });
-
-      setIsUninstalling(false);
+      // La notification sera envoyée par le backend quand la désinstallation sera vraiment terminée
+      // Ne pas afficher de notification ici car c'est juste le lancement
+      
+      // NE PAS arrêter l'animation pulse ici - elle doit continuer jusqu'à ce que l'icône disparaisse
+      // L'icône disparaîtra automatiquement quand le backend émettra l'événement 'app-uninstalled'
     } catch (error) {
       console.error(`[Icon] ❌ Erreur lors de la désinstallation de ${appName}:`, error);
       setIsUninstalling(false);

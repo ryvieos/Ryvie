@@ -3,6 +3,8 @@
  * S'exécute dans un processus séparé pour ne pas bloquer le serveur principal
  */
 
+export {}; // Make this file a module to avoid global scope conflicts
+
 const appStoreService = require('../services/appStoreService');
 
 // Wrapper pour intercepter les événements de progression
