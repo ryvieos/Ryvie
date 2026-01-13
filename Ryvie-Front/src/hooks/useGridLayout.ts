@@ -256,7 +256,13 @@ const useGridLayout = (
       }
 
       // Placer les nouveaux items sans position dans les cases libres
-      const itemsWithoutPosition = items.filter(item => !newLayout[item.id]);
+      // IMPORTANT: Vérifier aussi les ancres pour éviter de replacer des items qui ont déjà été placés
+      const itemsWithoutPosition = items.filter(item => {
+        const hasLayoutPosition = !!newLayout[item.id];
+        const hasAnchor = anchors[item.id] != null || referenceAnchorsRef.current[item.id] != null;
+        // Un item est vraiment nouveau seulement s'il n'a NI position NI ancre
+        return !hasLayoutPosition && !hasAnchor;
+      });
       if (itemsWithoutPosition.length > 0) {
         console.log(`[useGridLayout] 🆕 Nouveaux items à placer:`, itemsWithoutPosition.map(i => i.id).join(', '));
         

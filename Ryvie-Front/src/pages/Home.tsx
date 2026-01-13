@@ -632,6 +632,7 @@ const Home = () => {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState(null);
   const [updateBannerClosing, setUpdateBannerClosing] = useState(false);
+  const [notification, setNotification] = useState({ show: false, message: '', type: 'info' });
   
   // Appliquer le darkMode depuis localStorage au montage (avant le chargement backend)
   React.useLayoutEffect(() => {
@@ -1004,6 +1005,20 @@ const Home = () => {
       } else if (event.data && event.data.type === 'REFRESH_DESKTOP_ICONS') {
         console.log('[Home] Réception du message REFRESH_DESKTOP_ICONS');
         refreshDesktopIcons();
+      } else if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+        // Afficher une notification toast
+        const { notification } = event.data;
+        if (notification) {
+          setNotification({
+            show: true,
+            message: notification.message,
+            type: notification.type || 'info'
+          });
+          // Masquer après 4 secondes
+          setTimeout(() => {
+            setNotification({ show: false, message: '', type: 'info' });
+          }, 4000);
+        }
       } else if (event.data && event.data.type === 'APPSTORE_INSTALL_STATUS') {
         const { installing, appName, appId, progress } = event.data;
         console.log('[Home] Réception du statut d\'installation:', installing, appName, appId);
@@ -1647,12 +1662,43 @@ const Home = () => {
       socket.on('appsStatusUpdate', handleAppsStatusUpdate);
       socket.on('apps-status-update', handleAppsStatusUpdate);
       
+      // Écouter l'événement de désinstallation terminée
+      const handleAppUninstalled = (data: any) => {
+        console.log('[Home] 📡 Événement app-uninstalled reçu:', data);
+        if (data.success && data.appId) {
+          console.log('[Home] ✅ Traitement de la désinstallation de', data.appId);
+          
+          // Afficher la notification toast
+          setNotification({
+            show: true,
+            message: data.message || `${data.appId} désinstallé avec succès`,
+            type: 'success'
+          });
+          setTimeout(() => {
+            setNotification({ show: false, message: '', type: 'info' });
+          }, 4000);
+          
+          // Attendre un peu que le backend termine toutes les opérations (manifest, etc.)
+          // puis rafraîchir le bureau pour supprimer l'icône
+          setTimeout(() => {
+            console.log('[Home] 🔄 Rafraîchissement du bureau après désinstallation de', data.appId);
+            refreshDesktopIcons();
+          }, 500);
+        } else {
+          console.warn('[Home] ⚠️ Événement app-uninstalled reçu mais données invalides:', data);
+        }
+      };
+      
+      console.log('[Home] 🎧 Enregistrement du listener Socket.IO pour app-uninstalled');
+      socket.on('app-uninstalled', handleAppUninstalled);
+      
       return () => {
         socket.off('appsStatusUpdate', handleAppsStatusUpdate);
         socket.off('apps-status-update', handleAppsStatusUpdate);
+        socket.off('app-uninstalled', handleAppUninstalled);
       };
     }
-  }, [accessMode, socket, appsConfig]);
+  }, [accessMode, socket, appsConfig, refreshDesktopIcons]);
   
   useEffect(() => {
     // Attendre que les préférences soient chargées avant de récupérer la météo
@@ -2674,6 +2720,41 @@ const Home = () => {
       {/* Indicateur d'installation moderne - supporte plusieurs installations */}
       {Object.keys(installingApps).length > 0 && (
         <InstallIndicator installations={installingApps} />
+      )}
+
+      {/* Toast de notification */}
+      {notification.show && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '24px',
+            right: '24px',
+            background: 'white',
+            padding: '16px 24px',
+            borderRadius: '12px',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            zIndex: 10000,
+            animation: 'slideInFromTop 0.3s',
+            maxWidth: '400px',
+            borderLeft: `4px solid ${
+              notification.type === 'success' ? '#4caf50' :
+              notification.type === 'error' ? '#f44336' :
+              notification.type === 'warning' ? '#ff9800' : '#2196f3'
+            }`
+          }}
+        >
+          <span style={{ fontSize: '20px' }}>
+            {notification.type === 'success' ? '✓' : 
+             notification.type === 'error' ? '✕' :
+             notification.type === 'warning' ? '⚠' : 'ℹ'}
+          </span>
+          <span style={{ fontSize: '14px', color: '#333' }}>
+            {notification.message}
+          </span>
+        </div>
       )}
     </div>
   );

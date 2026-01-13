@@ -116,8 +116,8 @@ const hasPermission = (permission: string) => {
     
     // Définir les permissions par rôle
     const permissions: any = {
-      Admin: ['manage_users', 'manage_apps', 'view_server_info', 'access_settings'],
-      User: ['view_server_info'],
+      Admin: ['manage_users', 'manage_apps', 'uninstall_apps', 'view_server_info', 'access_settings'],
+      User: ['manage_apps', 'view_server_info'],
       Guest: []
     };
 

@@ -409,23 +409,23 @@ async function updateStoreCatalog() {
     // Télécharger apps.json depuis la release
     const data = await appStoreService.fetchAppsFromRelease(latestRelease);
     
-    // Enrichir avec les informations d'installation
+    // Sauvegarder le catalogue pur depuis GitHub (sans enrichissement)
+    // L'enrichissement se fera automatiquement en mémoire lors de l'appel à getApps()
+    await appStoreService.saveAppsToFile(data);
+    
+    // Vérifier les apps installées pour le log
     let detectedUpdates = [];
-    let enrichedData = data;
     try {
-      console.log('[Update] 🔄 Actualisation des statuts d\'installation...');
+      console.log('[Update] 🔄 Vérification des apps installées...');
       if (Array.isArray(data)) {
         const enrichment = await appStoreService.enrichAppsWithInstalledVersions(data);
-        enrichedData = enrichment.apps;
         detectedUpdates = enrichment.updates;
-        console.log(`[Update] ✅ Statuts actualisés: ${enrichedData.filter(a => a.installedVersion).length} apps installées, ${detectedUpdates.length} mise(s) à jour disponible(s)`);
+        const installedCount = enrichment.apps.filter(a => a.installedBuildId !== null && a.installedBuildId !== undefined).length;
+        console.log(`[Update] ✅ ${installedCount} apps installées, ${detectedUpdates.length} mise(s) à jour disponible(s)`);
       }
     } catch (enrichError: any) {
-      console.warn('[Update] ⚠️ Impossible de rafraîchir les informations d\'installation:', enrichError.message);
+      console.warn('[Update] ⚠️ Impossible de vérifier les apps installées:', enrichError.message);
     }
-    
-    // Sauvegarder sur disque avec les informations enrichies
-    await appStoreService.saveAppsToFile(enrichedData);
     
     // Mettre à jour les métadonnées
     appStoreService.metadata.releaseTag = latestRelease.tag;
@@ -438,7 +438,7 @@ async function updateStoreCatalog() {
       success: true,
       message: `Catalogue mis à jour vers ${latestRelease.tag}`,
       version: latestRelease.tag,
-      appsCount: Array.isArray(enrichedData) ? enrichedData.length : 0,
+      appsCount: Array.isArray(data) ? data.length : 0,
       updated: true,
       updates: detectedUpdates
     };
