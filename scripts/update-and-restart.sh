@@ -409,8 +409,8 @@ if ! perform_health_check; then
   rollback
 fi
 
-update_status "completed" "Mise à jour terminée avec succès!" 100
-log "📊 Le système fonctionne correctement"
+update_status "restarting" "Redémarrage du système en cours..." 95
+log "📊 Le système fonctionne correctement, redémarrage en cours"
 
 # 11. Nettoyage
 cleanup
