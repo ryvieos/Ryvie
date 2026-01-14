@@ -220,81 +220,99 @@ async function updateApp(appName) {
       cwd: appPath,
       stdio: 'inherit'
     });
-    
-    // Trouver le docker-compose.yml
-    const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
-    let composeFile = null;
-    
-    for (const file of composeFiles) {
-      const filePath = path.join(appPath, file);
-      if (fs.existsSync(filePath)) {
-        composeFile = file;
-        break;
-      }
-    }
-    
-    if (!composeFile) {
-      return {
-        success: false,
-        message: `Aucun fichier docker-compose trouvé pour ${appName}`
-      };
-    }
-    
-    // Docker compose up -d --build
-    console.log(`[Update] Docker compose up -d --build pour ${appName}...`);
-    execSync(`docker compose -f ${composeFile} up -d --build`, {
-      cwd: appPath,
-      stdio: 'inherit'
-    });
-    
-    // Attendre 5 secondes que le container démarre
-    console.log(`[Update] Attente du démarrage du container (5 secondes)...`);
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    // Vérifier le statut du container
-    console.log(`[Update] Vérification du statut du container ${appName}...`);
-    
-    try {
-      // Récupérer le statut du container
-      const statusOutput = execSync(`docker ps -a --filter "name=${appName}" --format "{{.Status}}"`, { 
-        encoding: 'utf8' 
-      }).trim();
-      
-      console.log(`[Update] Container ${appName} - Status: ${statusOutput}`);
-      
-      // Vérifier si le container est exited (erreur)
-      if (statusOutput.toLowerCase().includes('exited')) {
-        throw new Error(`Le container ${appName} s'est arrêté (exited) pendant la mise à jour`);
-      }
-      
-      // Vérifier le health status si disponible
+
+    const installScriptPath = path.join(appPath, 'install.sh');
+    const hasInstallScript = fs.existsSync(installScriptPath);
+
+    if (hasInstallScript) {
+      console.log(`[Update] install.sh détecté pour ${appName}, exécution du script...`);
       try {
-        const healthOutput = execSync(
-          `docker inspect --format='{{.State.Health.Status}}' $(docker ps -aq --filter "name=${appName}")`, 
-          { encoding: 'utf8' }
-        ).trim();
-        
-        console.log(`[Update] Container ${appName} - Health: ${healthOutput}`);
-        
-        if (healthOutput === 'unhealthy') {
-          throw new Error(`Le container ${appName} est en état unhealthy`);
+        execSync(`chmod +x "${installScriptPath}"`, { stdio: 'pipe' });
+        execSync(`bash "${installScriptPath}"`, {
+          cwd: appPath,
+          stdio: 'inherit',
+          env: { ...process.env, APP_ID: appName }
+        });
+        console.log('[Update] ✅ Script install.sh exécuté avec succès');
+      } catch (scriptError: any) {
+        throw new Error(`Échec du script d'installation: ${scriptError.message}`);
+      }
+    } else {
+      // Trouver le docker-compose.yml
+      const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
+      let composeFile = null;
+      
+      for (const file of composeFiles) {
+        const filePath = path.join(appPath, file);
+        if (fs.existsSync(filePath)) {
+          composeFile = file;
+          break;
         }
-        
-        if (healthOutput === 'healthy') {
-          console.log(`[Update] ✅ Container ${appName} est healthy`);
-        } else if (healthOutput === 'starting') {
-          console.log(`[Update] ⏳ Container ${appName} est en cours de démarrage`);
-        }
-      } catch (healthError: any) {
-        // Pas de healthcheck configuré, on vérifie juste que le container est Up
-        if (!statusOutput.toLowerCase().includes('up')) {
-          throw new Error(`Le container ${appName} n'est pas démarré`);
-        }
-        console.log(`[Update] ℹ️ Container ${appName} sans healthcheck, statut: Up`);
       }
       
-    } catch (checkError: any) {
-      throw new Error(`Vérification du container échouée: ${checkError.message}`);
+      if (!composeFile) {
+        return {
+          success: false,
+          message: `Aucun fichier docker-compose trouvé pour ${appName}`
+        };
+      }
+      
+      // Docker compose up -d --build
+      console.log(`[Update] Docker compose up -d --build pour ${appName}...`);
+      execSync(`docker compose -f ${composeFile} up -d --build`, {
+        cwd: appPath,
+        stdio: 'inherit'
+      });
+      
+      // Attendre 5 secondes que le container démarre
+      console.log(`[Update] Attente du démarrage du container (5 secondes)...`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Vérifier le statut du container
+      console.log(`[Update] Vérification du statut du container ${appName}...`);
+      
+      try {
+        // Récupérer le statut du container
+        const statusOutput = execSync(`docker ps -a --filter "name=${appName}" --format "{{.Status}}"`, { 
+          encoding: 'utf8' 
+        }).trim();
+        
+        console.log(`[Update] Container ${appName} - Status: ${statusOutput}`);
+        
+        // Vérifier si le container est exited (erreur)
+        if (statusOutput.toLowerCase().includes('exited')) {
+          throw new Error(`Le container ${appName} s'est arrêté (exited) pendant la mise à jour`);
+        }
+        
+        // Vérifier le health status si disponible
+        try {
+          const healthOutput = execSync(
+            `docker inspect --format='{{.State.Health.Status}}' $(docker ps -aq --filter "name=${appName}")`, 
+            { encoding: 'utf8' }
+          ).trim();
+          
+          console.log(`[Update] Container ${appName} - Health: ${healthOutput}`);
+          
+          if (healthOutput === 'unhealthy') {
+            throw new Error(`Le container ${appName} est en état unhealthy`);
+          }
+          
+          if (healthOutput === 'healthy') {
+            console.log(`[Update] ✅ Container ${appName} est healthy`);
+          } else if (healthOutput === 'starting') {
+            console.log(`[Update] ⏳ Container ${appName} est en cours de démarrage`);
+          }
+        } catch (healthError: any) {
+          // Pas de healthcheck configuré, on vérifie juste que le container est Up
+          if (!statusOutput.toLowerCase().includes('up')) {
+            throw new Error(`Le container ${appName} n'est pas démarré`);
+          }
+          console.log(`[Update] ℹ️ Container ${appName} sans healthcheck, statut: Up`);
+        }
+        
+      } catch (checkError: any) {
+        throw new Error(`Vérification du container échouée: ${checkError.message}`);
+      }
     }
     
     console.log(`[Update] ✅ ${appName} mis à jour avec succès`);

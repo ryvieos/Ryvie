@@ -40,12 +40,12 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
           setMessage(updateStatus.message);
           setProgress(updateStatus.progress || 0);
           
-          // Quand la mise à jour atteint 100% (fichiers prêts), passer en mode "restarting"
-          if (updateStatus.progress >= 100 || updateStatus.step === 'completed') {
+          // Quand le script indique 'restarting', passer en mode health check
+          if (updateStatus.step === 'restarting' || updateStatus.progress >= 95) {
             stopStatusPolling();
             setStatus('restarting');
-            setMessage('Redémarrage en cours...');
-            setProgress(100);
+            setMessage('Redémarrage du système en cours...');
+            setProgress(95);
             
             // Commencer le health check
             startHealthPolling();

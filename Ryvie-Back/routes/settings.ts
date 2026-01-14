@@ -213,8 +213,35 @@ router.post('/settings/update-app', verifyToken, isAdmin, async (req: any, res: 
   }
 });
 
-// GET /api/settings/ryvie-domains - Récupérer les domaines publics Netbird (local uniquement, sans token)
-router.get('/settings/ryvie-domains', (req: any, res: any) => {
+// GET /api/machine-id - Public endpoint returning the Ryvie machine ID
+router.get('/machine-id', (req: any, res: any) => {
+  try {
+    const settings = loadSettings();
+    const ryvieId = settings?.id;
+
+    if (!ryvieId) {
+      console.error('[settings] Impossible de récupérer l\'ID Ryvie (non défini)');
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to retrieve machine ID'
+      });
+    }
+
+    return res.json({
+      success: true,
+      ryvieId
+    });
+  } catch (error: any) {
+    console.error('[settings] Erreur lors de la récupération de l\'ID Ryvie:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Unable to retrieve machine ID'
+    });
+  }
+});
+
+// GET /api/settings/ryvie-domains - Récupérer les domaines publics Netbird (nécessite authentification)
+router.get('/settings/ryvie-domains', verifyToken, (req: any, res: any) => {
   try {
     const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
     const clientIPRaw = xff || req.ip || req.connection.remoteAddress || '';
@@ -236,7 +263,10 @@ router.get('/settings/ryvie-domains', (req: any, res: any) => {
     // IPv6 privé (ULA fc00::/7 => fc.. ou fd..), link-local fe80::/10
     const isPrivateIPv6 = cleanIP.startsWith('fc') || cleanIP.startsWith('fd') || cleanIP.startsWith('fe80:');
 
-    const isLocal = isLocalHost || isLoopback || isPrivateIPv4 || isPrivateIPv6;
+    // Netbird tunnel IPs (plage 100.0.0.0/8)
+    const isNetbirdTunnel = cleanIP.startsWith('100.');
+
+    const isLocal = isLocalHost || isLoopback || isPrivateIPv4 || isPrivateIPv6 || isNetbirdTunnel;
 
     // Refuser explicitement l'accès si la requête passe par un domaine public Netbird
     try {
@@ -261,7 +291,7 @@ router.get('/settings/ryvie-domains', (req: any, res: any) => {
       return res.status(403).json({ error: 'Accès refusé: cette API est uniquement accessible en local' });
     }
     
-    console.log(`[settings] Accès autorisé à ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP})`);
+    console.log(`[settings] Accès autorisé à ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP}) - Utilisateur: ${req.user?.username || req.user?.uid}`);
     
     // Charger settings pour récupérer l'id de l'instance
     const settings = loadSettings();
