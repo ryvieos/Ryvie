@@ -910,71 +910,106 @@ async function updateAppFromStore(appId) {
     
     console.log(`[Update] ✅ ${appId} téléchargé dans ${appDir}`);
 
-    // 4. Trouver et exécuter docker-compose
-    console.log('[Update] 🔎 Étape courante: docker-compose-up');
+    // 4. Vérifier la présence d'un script install.sh
+    console.log('[Update] 🔎 Étape courante: installation-check');
+    const installScriptPath = path.join(appDir, 'install.sh');
+    let hasInstallScript = false;
     
-    // Détecter le fichier docker-compose
-    const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
-    let composeFile = null;
-
-    for (const file of composeFiles) {
-      try {
-        await fs.access(path.join(appDir, file));
-        composeFile = file;
-        break;
-      } catch {}
-    }
-
-    if (!composeFile) {
-      throw new Error(`Aucun fichier docker-compose trouvé`);
-    }
-    
-    // Vérifier la présence du fichier .env
-    const envPath = path.join(appDir, '.env');
     try {
-      await fs.access(envPath);
-      console.log('[Update] ✅ Fichier .env présent');
+      await fs.access(installScriptPath);
+      hasInstallScript = true;
+      console.log('[Update] ✅ Script install.sh détecté');
     } catch {
-      console.log('[Update] ⚠️ Aucun fichier .env (peut être normal pour certaines apps)');
+      console.log('[Update] ℹ️ Aucun script install.sh, utilisation de docker-compose');
     }
+    
+    sendProgressUpdate(appId, 75, 'Lancement de l\'installation...', 'installation');
+    
+    if (hasInstallScript) {
+      // Utiliser le script install.sh
+      console.log('[Update] 🚀 Exécution du script install.sh...');
+      console.log(`[Update] 📂 Dossier de travail: ${appDir}`);
+      
+      try {
+        // Rendre le script exécutable
+        execSync(`chmod +x "${installScriptPath}"`, { stdio: 'pipe' });
+        
+        // Exécuter le script install.sh
+        execSync(`bash "${installScriptPath}"`, { 
+          cwd: appDir, 
+          stdio: 'inherit',
+          env: { ...process.env, APP_ID: appId }
+        });
+        console.log('[Update] ✅ Script install.sh exécuté avec succès');
+      } catch (installError: any) {
+        console.error('[Update] ❌ Erreur lors de l\'exécution du script install.sh:', installError.message);
+        throw new Error(`Échec de l'exécution du script install.sh: ${installError.message}`);
+      }
+    } else {
+      // Utiliser docker-compose classique
+      console.log('[Update] 🔎 Étape courante: docker-compose-up');
+      
+      // Détecter le fichier docker-compose
+      const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
+      let composeFile = null;
 
-    sendProgressUpdate(appId, 75, 'Lancement des containers...', 'installation');
-    
-    // Nettoyer les containers arrêtés de cette app avant de lancer (évite les conflits de namespaces)
-    console.log('[Update] 🧹 Nettoyage des anciens containers...');
-    try {
-      // Utiliser -p pour spécifier le nom du projet (basé sur appId)
-      execSync(`docker compose -p ${appId} -f ${composeFile} down 2>/dev/null || true`, { 
-        cwd: appDir, 
-        stdio: 'pipe'
-      });
-    } catch (cleanupError: any) {
-      // Non bloquant - l'app n'existe peut-être pas encore
-      console.log('[Update] ℹ️ Aucun container existant à nettoyer');
-    }
-    
-    // Lancer docker compose
-    console.log('[Update] 🚀 Lancement des containers...');
-    console.log(`[Update] 📂 Dossier de travail: ${appDir}`);
-    console.log(`[Update] 📄 Fichier compose: ${composeFile}`);
-    
-    try {
-      // Utiliser -p pour spécifier le nom du projet (basé sur appId)
-      execSync(`docker compose -p ${appId} -f ${composeFile} up -d`, { 
-        cwd: appDir, 
-        stdio: 'inherit'
-      });
-      console.log('[Update] ✅ Containers lancés avec succès');
-    } catch (composeError: any) {
-      console.error('[Update] ❌ Erreur lors du lancement docker compose:', composeError.message);
-      console.error('[Update] 📋 Vérification du fichier docker-compose.yml...');
+      for (const file of composeFiles) {
+        try {
+          await fs.access(path.join(appDir, file));
+          composeFile = file;
+          break;
+        } catch {}
+      }
+
+      if (!composeFile) {
+        throw new Error(`Aucun fichier docker-compose trouvé`);
+      }
       
-      // Afficher le contenu du fichier modifié pour debug
-      const modifiedContent = await fs.readFile(path.join(appDir, composeFile), 'utf8');
-      console.error('[Update] 📄 Contenu du docker-compose.yml modifié:');
-      console.error(modifiedContent.substring(0, 1000)); // Premiers 1000 caractères
+      // Vérifier la présence du fichier .env
+      const envPath = path.join(appDir, '.env');
+      try {
+        await fs.access(envPath);
+        console.log('[Update] ✅ Fichier .env présent');
+      } catch {
+        console.log('[Update] ⚠️ Aucun fichier .env (peut être normal pour certaines apps)');
+      }
       
-      throw new Error(`Échec du lancement docker compose: ${composeError.message}`);
+      // Nettoyer les containers arrêtés de cette app avant de lancer (évite les conflits de namespaces)
+      console.log('[Update] 🧹 Nettoyage des anciens containers...');
+      try {
+        // Utiliser -p pour spécifier le nom du projet (basé sur appId)
+        execSync(`docker compose -p ${appId} -f ${composeFile} down 2>/dev/null || true`, { 
+          cwd: appDir, 
+          stdio: 'pipe'
+        });
+      } catch (cleanupError: any) {
+        // Non bloquant - l'app n'existe peut-être pas encore
+        console.log('[Update] ℹ️ Aucun container existant à nettoyer');
+      }
+      
+      // Lancer docker compose
+      console.log('[Update] 🚀 Lancement des containers...');
+      console.log(`[Update] 📂 Dossier de travail: ${appDir}`);
+      console.log(`[Update] 📄 Fichier compose: ${composeFile}`);
+      
+      try {
+        // Utiliser -p pour spécifier le nom du projet (basé sur appId)
+        execSync(`docker compose -p ${appId} -f ${composeFile} up -d`, { 
+          cwd: appDir, 
+          stdio: 'inherit'
+        });
+        console.log('[Update] ✅ Containers lancés avec succès');
+      } catch (composeError: any) {
+        console.error('[Update] ❌ Erreur lors du lancement docker compose:', composeError.message);
+        console.error('[Update] 📋 Vérification du fichier docker-compose.yml...');
+        
+        // Afficher le contenu du fichier modifié pour debug
+        const modifiedContent = await fs.readFile(path.join(appDir, composeFile), 'utf8');
+        console.error('[Update] 📄 Contenu du docker-compose.yml modifié:');
+        console.error(modifiedContent.substring(0, 1000)); // Premiers 1000 caractères
+        
+        throw new Error(`Échec du lancement docker compose: ${composeError.message}`);
+      }
     }
     
     // Attendre que les containers démarrent avec progression
