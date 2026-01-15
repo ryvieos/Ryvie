@@ -1074,9 +1074,74 @@ async function updateAppFromStore(appId) {
       throw new Error(`Vérification du container échouée: ${checkError.message}`);
     }
     
+    sendProgressUpdate(appId, 93, 'Finalisation de l\'installation...', 'finalization');
+    
+    // 5. Vérifier et mettre à jour le reverse proxy si nécessaire
+    currentStep = 'reverse-proxy-update';
+    console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
+    try {
+      console.log(`[Update] 🔍 Vérification de la configuration proxy pour ${appId}...`);
+      const reverseProxyService = require('./reverseProxyService');
+      const proxyConfigResult = await reverseProxyService.readAppProxyConfig(appId);
+      
+      if (proxyConfigResult.success && proxyConfigResult.proxy) {
+        console.log(`[Update] 📦 Configuration proxy détectée pour ${appId}`);
+        sendProgressUpdate(appId, 94, 'Mise à jour du reverse proxy...', 'proxy-config');
+        
+        const fs = require('fs').promises;
+        const path = require('path');
+        const { execSync } = require('child_process');
+        
+        // Générer le fichier .env pour l'app avec les variables dynamiques
+        console.log(`[Update] 📝 Génération du fichier .env pour ${appId}...`);
+        const envResult = await reverseProxyService.generateAppEnvFile(appId, proxyConfigResult.proxy);
+        if (envResult.success) {
+          console.log(`[Update] ✅ Fichier .env créé: ${envResult.path}`);
+        }
+        
+        // Régénérer le docker-compose.yml de Caddy avec les ports
+        console.log(`[Update] 🔧 Mise à jour docker-compose.yml de Caddy...`);
+        const composeContent = await reverseProxyService.generateCaddyDockerCompose();
+        const composePath = '/data/config/reverse-proxy/docker-compose.yml';
+        await fs.writeFile(composePath, composeContent);
+        console.log(`[Update] ✅ docker-compose.yml de Caddy mis à jour`);
+        
+        // Régénérer le Caddyfile avec les nouvelles configs
+        const caddyfileContent = await reverseProxyService.generateFullCaddyfileContent();
+        const caddyfilePath = '/data/config/reverse-proxy/Caddyfile';
+        await fs.writeFile(caddyfilePath, caddyfileContent);
+        console.log(`[Update] ✅ Caddyfile mis à jour avec la config de ${appId}`);
+        
+        // Redémarrer Caddy pour appliquer les changements (down + up pour recréer avec les nouveaux ports)
+        console.log(`[Update] 🔄 Redémarrage de Caddy avec les nouveaux ports...`);
+        try {
+          execSync('docker compose down', { cwd: '/data/config/reverse-proxy', stdio: 'pipe' });
+          execSync('docker compose up -d', { cwd: '/data/config/reverse-proxy', stdio: 'pipe' });
+          console.log(`[Update] ✅ Caddy redémarré avec succès`);
+        } catch (restartError: any) {
+          console.warn(`[Update] ⚠️ Échec du redémarrage de Caddy:`, restartError.message);
+        }
+        
+        // Redémarrer l'app pour prendre en compte le nouveau .env
+        console.log(`[Update] 🔄 Redémarrage de ${appId} pour appliquer les variables...`);
+        try {
+          const appPath = `/data/apps/${appId}`;
+          execSync('docker compose restart', { cwd: appPath, stdio: 'pipe' });
+          console.log(`[Update] ✅ ${appId} redémarré avec succès`);
+        } catch (appRestartError: any) {
+          console.warn(`[Update] ⚠️ Échec du redémarrage de ${appId}:`, appRestartError.message);
+        }
+      } else {
+        console.log(`[Update] ℹ️ Pas de configuration proxy pour ${appId}`);
+      }
+    } catch (proxyError: any) {
+      console.warn(`[Update] ⚠️ Erreur lors de la mise à jour du reverse proxy:`, proxyError.message);
+      // Non bloquant - on continue l'installation
+    }
+    
     sendProgressUpdate(appId, 95, 'Finalisation de l\'installation...', 'finalization');
     
-    // 5. Régénérer le manifest uniquement pour cette app
+    // 6. Régénérer le manifest uniquement pour cette app
     currentStep = 'manifest-regeneration';
     console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
     try {
