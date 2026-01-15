@@ -5,6 +5,7 @@ const path = require('path');
 const Docker = require('dockerode');
 const { getLocalIP, getPrivateIP } = require('../utils/network');
 const { REVERSE_PROXY_DIR } = require('../config/paths');
+const yaml = require('js-yaml');
 
 const execPromise = util.promisify(exec);
 const docker = new Docker();
@@ -19,7 +20,11 @@ const RYVIE_RDRIVE_ENV_PATH = '/data/apps/Ryvie-rDrive/tdrive/.env';
 const RYVIE_RDRIVE_COMPOSE_PATH = '/data/apps/Ryvie-rDrive/tdrive/docker-compose.yml';
 
 // Templates de configuration
-const DOCKER_COMPOSE_TEMPLATE = `version: "3.8"
+function generateDockerComposeTemplate(ports = []) {
+  const defaultPorts = ['80:80', '443:443'];
+  const allPorts = [...defaultPorts, ...ports];
+  
+  let template = `version: "3.8"
 services:
   caddy:
     image: caddy:latest
@@ -28,13 +33,21 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
+`;
+  
+  for (const port of allPorts) {
+    template += `      - "${port}"
+`;
+  }
+  
+  template += `    volumes:
       - /data/config/reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - /data/config/reverse-proxy/data:/data
       - /data/config/reverse-proxy/config:/config
 `;
+  
+  return template;
+}
 
 
 /**
@@ -195,12 +208,258 @@ async function ensurePrivateIPInRyvieDrive() {
 }
 
 /**
+ * Génère le fichier .env pour une application avec les variables dynamiques
+ */
+async function generateAppEnvFile(appId, proxyConfig) {
+  try {
+    const appDir = `/data/apps/${appId}`;
+    const envPath = path.join(appDir, '.env');
+    
+    // Utiliser l'IP locale au lieu du hostname pour plus de flexibilité
+    const localIP = getLocalIP();
+    
+    // Générer uniquement LOCAL_IP - les apps construiront leurs variables à partir de celle-ci
+    let envContent = `# Fichier .env généré automatiquement par Ryvie
+# Ne pas modifier manuellement - sera régénéré lors des mises à jour
+
+# IP locale du serveur
+LOCAL_IP=${localIP}
+`;
+    
+    await fs.writeFile(envPath, envContent);
+    console.log(`[reverseProxyService] ✅ Fichier .env créé pour ${appId} avec IP ${localIP}`);
+    
+    return { success: true, path: envPath };
+  } catch (error) {
+    console.error(`[reverseProxyService] ❌ Erreur création .env pour ${appId}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Lit le fichier .env d'une app et extrait LOCAL_IP
+ */
+async function readAppEnv(appId) {
+  try {
+    const envPath = `/data/apps/${appId}/.env`;
+    const content = await fs.readFile(envPath, 'utf8');
+    return { success: true, content };
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      return { success: false, notFound: true };
+    }
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Parse le fichier .env et extrait LOCAL_IP
+ */
+function parseEnvLocalIP(envContent: string) {
+  const match = envContent.match(/^LOCAL_IP=(.*)$/m);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Redémarre une app (non-bloquant)
+ */
+async function restartApp(appId) {
+  try {
+    console.log(`[reverseProxyService] 🔄 Redémarrage de ${appId} en arrière-plan...`);
+    
+    exec(
+      'docker compose up -d',
+      { cwd: `/data/apps/${appId}` },
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error(`[reverseProxyService] ❌ Erreur redémarrage ${appId}:`, error.message);
+        } else {
+          console.log(`[reverseProxyService] ✅ ${appId} redémarré`);
+        }
+      }
+    );
+    
+    return { success: true, async: true };
+  } catch (error: any) {
+    console.error(`[reverseProxyService] ❌ Erreur redémarrage ${appId}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Vérifie et met à jour les .env de toutes les apps si l'IP locale a changé
+ * (Même logique que ensurePrivateIPInRyvieDrive mais pour LOCAL_IP)
+ */
+async function ensureLocalIPInApps() {
+  try {
+    console.log('[reverseProxyService] 🔍 Vérification IP locale dans les apps...');
+    
+    const currentLocalIP = getLocalIP();
+    console.log('[reverseProxyService] 📍 IP locale détectée:', currentLocalIP);
+    
+    // Récupérer toutes les apps avec proxy
+    const appsResult = await getAllAppProxyConfigs();
+    
+    if (!appsResult.success || appsResult.configs.length === 0) {
+      console.log('[reverseProxyService] ℹ️  Aucune app avec proxy trouvée');
+      return { success: true, updated: 0 };
+    }
+    
+    let updatedCount = 0;
+    const updates = [];
+    
+    for (const { appId, config } of appsResult.configs) {
+      // Lire le .env de l'app
+      const envResult = await readAppEnv(appId);
+      
+      if (!envResult.success) {
+        if (envResult.notFound) {
+          console.log(`[reverseProxyService] ⚠️  .env de ${appId} non trouvé, création...`);
+          await generateAppEnvFile(appId, config);
+          await restartApp(appId);
+          updatedCount++;
+          updates.push({ appId, created: true });
+        }
+        continue;
+      }
+      
+      // Parser l'IP existante
+      const existingIP = parseEnvLocalIP(envResult.content!);
+      
+      if (existingIP === currentLocalIP) {
+        console.log(`[reverseProxyService] ✅ IP de ${appId} déjà à jour`);
+        continue;
+      }
+      
+      // Mettre à jour le .env
+      console.log(`[reverseProxyService] 🔄 Mise à jour IP de ${appId}: ${existingIP} → ${currentLocalIP}`);
+      await generateAppEnvFile(appId, config);
+      await restartApp(appId);
+      updatedCount++;
+      updates.push({ appId, oldIP: existingIP, newIP: currentLocalIP });
+    }
+    
+    if (updatedCount > 0) {
+      console.log(`[reverseProxyService] ✅ ${updatedCount} app(s) mise(s) à jour avec la nouvelle IP`);
+    }
+    
+    return { success: true, updated: updatedCount, updates };
+  } catch (error: any) {
+    console.error('[reverseProxyService] ❌ Erreur lors de la vérification des IPs:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Lit la configuration proxy depuis le fichier ryvie-app.yml d'une application
+ */
+async function readAppProxyConfig(appId) {
+  try {
+    const appDir = `/data/apps/${appId}`;
+    const ryvieAppPath = path.join(appDir, 'ryvie-app.yml');
+    
+    const content = await fs.readFile(ryvieAppPath, 'utf8');
+    const config = yaml.load(content);
+    
+    if (config && config.proxy && config.proxy.enabled) {
+      console.log(`[reverseProxyService] ✅ Configuration proxy trouvée pour ${appId}`);
+      return {
+        success: true,
+        proxy: config.proxy,
+        port: config.port // Port pour le frontend
+      };
+    }
+    
+    return { success: false, reason: 'no_proxy_config' };
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return { success: false, reason: 'file_not_found' };
+    }
+    console.error(`[reverseProxyService] ❌ Erreur lecture config proxy ${appId}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Scanne tous les apps installés et récupère leurs configurations proxy
+ */
+async function getAllAppProxyConfigs() {
+  try {
+    const appsDir = '/data/apps';
+    const apps = await fs.readdir(appsDir);
+    const proxyConfigs = [];
+    
+    for (const appId of apps) {
+      const appPath = path.join(appsDir, appId);
+      const stat = await fs.stat(appPath);
+      
+      if (stat.isDirectory()) {
+        const proxyResult = await readAppProxyConfig(appId);
+        if (proxyResult.success && proxyResult.proxy) {
+          proxyConfigs.push({
+            appId,
+            config: proxyResult.proxy,
+            port: proxyResult.port
+          });
+        }
+      }
+    }
+    
+    console.log(`[reverseProxyService] 📦 ${proxyConfigs.length} app(s) avec proxy détectée(s)`);
+    return { success: true, configs: proxyConfigs };
+  } catch (error) {
+    console.error('[reverseProxyService] ❌ Erreur scan apps proxy:', error.message);
+    return { success: false, error: error.message, configs: [] };
+  }
+}
+
+/**
+ * Génère la configuration Caddyfile pour une application avec proxy
+ */
+function generateAppProxyConfig(appId, proxyConfig) {
+  const { port, https, target } = proxyConfig;
+  const targetPort = target.port;
+  
+  let config = '';
+  
+  if (https) {
+    // Configuration HTTPS avec wildcard et on_demand
+    config = `
+# --- ${appId.toUpperCase()} (HTTPS - Port ${port}) ---
+:${port} {
+  tls internal {
+    on_demand
+  }
+  
+  reverse_proxy host.docker.internal:${targetPort} {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+  }
+}
+`;
+  } else {
+    // Configuration HTTP simple
+    config = `
+# --- ${appId.toUpperCase()} (HTTP - Port ${port}) ---
+:${port} {
+  reverse_proxy host.docker.internal:${targetPort} {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+  }
+}
+`;
+  }
+  
+  return config;
+}
+
+/**
  * Génère le contenu du Caddyfile avec host.docker.internal (same-origin setup)
  * Utilise host.docker.internal car Caddy tourne dans Docker et doit accéder à l'hôte
  */
 function generateCaddyfileContent() {
   return `{
-  auto_https off
+  local_certs
 }
 
 # Rediriger HTTPS -> HTTP (évite le forçage HTTPS local)
@@ -236,6 +495,47 @@ http://ryvie.local {
 }
 
 /**
+ * Génère le Caddyfile complet avec les configurations des apps
+ */
+async function generateFullCaddyfileContent() {
+  // Contenu de base
+  let content = generateCaddyfileContent();
+  
+  // Récupérer les configs proxy des apps
+  const appsResult = await getAllAppProxyConfigs();
+  
+  if (appsResult.success && appsResult.configs.length > 0) {
+    for (const { appId, config } of appsResult.configs) {
+      const appConfig = generateAppProxyConfig(appId, config);
+      content += appConfig;
+    }
+  }
+  
+  return content;
+}
+
+/**
+ * Génère le docker-compose.yml pour Caddy avec les ports des apps
+ */
+async function generateCaddyDockerCompose() {
+  // Récupérer les configs proxy des apps
+  const appsResult = await getAllAppProxyConfigs();
+  
+  // Collecter les ports nécessaires
+  const ports = [];
+  
+  if (appsResult.success && appsResult.configs.length > 0) {
+    for (const { config } of appsResult.configs) {
+      if (config.port) {
+        ports.push(`${config.port}:${config.port}`);
+      }
+    }
+  }
+  
+  return generateDockerComposeTemplate(ports);
+}
+
+/**
  * Crée le dossier de configuration et les fichiers s'ils n'existent pas
  */
 async function ensureConfigFiles() {
@@ -265,7 +565,8 @@ async function ensureConfigFiles() {
     try {
       await fs.access(EXPECTED_CONFIG.composeFile);
     } catch {
-      await fs.writeFile(EXPECTED_CONFIG.composeFile, DOCKER_COMPOSE_TEMPLATE);
+      const composeContent = await generateCaddyDockerCompose();
+      await fs.writeFile(EXPECTED_CONFIG.composeFile, composeContent);
       console.log('[reverseProxyService] ✅ docker-compose.yml créé');
       filesCreated = true;
     }
@@ -274,7 +575,7 @@ async function ensureConfigFiles() {
     try {
       await fs.access(EXPECTED_CONFIG.caddyfile);
     } catch {
-      const caddyfileContent = generateCaddyfileContent();
+      const caddyfileContent = await generateFullCaddyfileContent();
       await fs.writeFile(EXPECTED_CONFIG.caddyfile, caddyfileContent);
       console.log('[reverseProxyService] ✅ Caddyfile créé avec IP:', getLocalIP());
       filesCreated = true;
@@ -346,7 +647,7 @@ async function checkCaddyfile() {
     const content = await fs.readFile(EXPECTED_CONFIG.caddyfile, 'utf8');
     
     // Générer le contenu attendu
-    const expectedContent = generateCaddyfileContent();
+    const expectedContent = await generateFullCaddyfileContent();
     
     // Comparer le contenu exact (en normalisant les espaces/retours à la ligne)
     const normalizeContent = (str: string) => str.trim().replace(/\r\n/g, '\n');
@@ -481,7 +782,7 @@ async function startCaddy() {
  */
 async function updateCaddyfileIP() {
   try {
-    const caddyfileContent = generateCaddyfileContent();
+    const caddyfileContent = await generateFullCaddyfileContent();
     
     await fs.writeFile(EXPECTED_CONFIG.caddyfile, caddyfileContent);
     console.log('[reverseProxyService] ✅ Caddyfile mis à jour avec localhost');
@@ -539,6 +840,12 @@ async function ensureCaddyRunning() {
       }
     }
     
+    // 0.1. Vérifier et mettre à jour l'IP locale dans les apps avec proxy
+    const localIPResult = await ensureLocalIPInApps();
+    if (localIPResult.success && localIPResult.updated > 0) {
+      console.log(`[reverseProxyService] ✅ ${localIPResult.updated} app(s) mise(s) à jour avec la nouvelle IP locale`);
+    }
+    
     // 1. Créer les fichiers de configuration s'ils n'existent pas
     const configResult = await ensureConfigFiles();
     if (!configResult.success) {
@@ -591,7 +898,7 @@ async function ensureCaddyRunning() {
       }
       
       // Recréer le Caddyfile
-      const caddyfileContent = generateCaddyfileContent();
+      const caddyfileContent = await generateFullCaddyfileContent();
       await fs.writeFile(EXPECTED_CONFIG.caddyfile, caddyfileContent);
       console.log('[reverseProxyService] ✅ Nouveau Caddyfile créé avec IP:', getLocalIP());
       
@@ -617,7 +924,7 @@ async function ensureCaddyRunning() {
       console.log(`[reverseProxyService] 🔄 Migration détectée: IP (${hostInfo.value}) → localhost`);
       
       // Mettre à jour le Caddyfile pour utiliser localhost
-      const caddyfileContent = generateCaddyfileContent();
+      const caddyfileContent = await generateFullCaddyfileContent();
       await fs.writeFile(EXPECTED_CONFIG.caddyfile, caddyfileContent);
       console.log('[reverseProxyService] ✅ Caddyfile mis à jour pour utiliser localhost');
       
@@ -755,5 +1062,9 @@ export = {
   restartCaddy,
   updateCaddyfileIP,
   ensurePrivateIPInRyvieDrive,
-  getPrivateIP
+  getPrivateIP,
+  readAppProxyConfig,
+  generateFullCaddyfileContent,
+  generateCaddyDockerCompose,
+  generateAppEnvFile
 };
