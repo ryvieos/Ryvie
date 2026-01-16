@@ -5,8 +5,8 @@ const { getServerUrl } = urlsConfig;
 
 const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
   const [status, setStatus] = useState('updating'); // updating, restarting, waiting_health, success, error
-  const [message, setMessage] = useState('Téléchargement et application de la mise à jour...');
-  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState('Initialisation de la mise à jour...');
+  const [progress, setProgress] = useState(5);
   const statusPollingRef = useRef(null);
   const healthPollingRef = useRef(null);
   const startTimeRef = useRef(null);
@@ -16,10 +16,20 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
 
     startTimeRef.current = Date.now();
     
+    // Empêcher la navigation pendant la mise à jour
+    const preventNavigation = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    
+    window.addEventListener('beforeunload', preventNavigation);
+    
     // Polling du fichier de statut pour suivre la progression réelle
     startStatusPolling();
 
     return () => {
+      window.removeEventListener('beforeunload', preventNavigation);
       stopStatusPolling();
       stopHealthPolling();
     };
@@ -27,6 +37,9 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
 
   // Polling du fichier de statut de mise à jour
   const startStatusPolling = () => {
+    let lastProgress = 5;
+    let backendDownDetected = false;
+    
     statusPollingRef.current = setInterval(async () => {
       try {
         const serverUrl = getServerUrl(accessMode);
@@ -37,8 +50,14 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
         const updateStatus = response.data;
         
         if (updateStatus.step && updateStatus.message) {
-          setMessage(updateStatus.message);
-          setProgress(updateStatus.progress || 0);
+          const newProgress = updateStatus.progress || lastProgress;
+          
+          // Ne jamais revenir en arrière dans la progression
+          if (newProgress >= lastProgress) {
+            setMessage(updateStatus.message);
+            setProgress(newProgress);
+            lastProgress = newProgress;
+          }
           
           // Quand le script indique 'restarting', passer en mode health check
           if (updateStatus.step === 'restarting' || updateStatus.progress >= 95) {
@@ -46,13 +65,32 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
             setStatus('restarting');
             setMessage('Redémarrage du système en cours...');
             setProgress(95);
+            backendDownDetected = false;
             
-            // Commencer le health check
-            startHealthPolling();
+            // Commencer le health check après un délai pour laisser le backend redémarrer
+            setTimeout(() => {
+              startHealthPolling();
+            }, 3000);
           }
         }
+        
+        // Si on reçoit une réponse, le backend est encore up
+        backendDownDetected = false;
       } catch (error) {
-        // Le backend peut être arrêté pendant l'update, continuer le polling
+        // Le backend peut être arrêté pendant l'update
+        if (!backendDownDetected && lastProgress >= 60) {
+          // Backend down détecté pendant la phase de build/restart
+          backendDownDetected = true;
+          setStatus('restarting');
+          setMessage('Application de la mise à jour et redémarrage...');
+          setProgress(Math.max(lastProgress, 85));
+          
+          // Passer au health check après un délai
+          stopStatusPolling();
+          setTimeout(() => {
+            startHealthPolling();
+          }, 5000);
+        }
       }
     }, 1000); // Poll toutes les secondes pour suivre la progression
   };
@@ -60,51 +98,83 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
   // Polling du health check après que les fichiers soient prêts
   const startHealthPolling = () => {
     let attempts = 0;
-    const maxAttempts = 120; // 120 tentatives = 4 minutes max
+    const maxAttempts = 150; // 150 tentatives = 5 minutes max
     let consecutiveReady = 0;
-    const requiredConsecutiveReady = 3;
+    const requiredConsecutiveReady = 2; // Réduit à 2 pour plus de réactivité
+    let progressValue = 95;
+
+    setMessage('Attente du redémarrage du serveur...');
+    setProgress(95);
 
     healthPollingRef.current = setInterval(async () => {
       attempts++;
+      
+      // Progression visuelle pendant l'attente (95% -> 99%)
+      if (progressValue < 99) {
+        progressValue = Math.min(99, 95 + (attempts * 0.1));
+        setProgress(Math.floor(progressValue));
+      }
 
       try {
         const serverUrl = getServerUrl(accessMode);
 
-        // Check health
+        // Vérifier d'abord le health endpoint (plus léger)
         const health = await axios.get(`${serverUrl}/api/health`, {
-          timeout: 3000,
-          validateStatus: (status) => status === 200
-        });
-
-        // Check endpoint authentifié
-        const authed = await axios.get(`${serverUrl}/api/user/preferences`, {
           timeout: 4000,
           validateStatus: (status) => status === 200
         });
 
-        if (health.status === 200 && authed.status === 200) {
+        if (health.status === 200) {
           consecutiveReady += 1;
+          setMessage(`Serveur en ligne, vérification finale... (${consecutiveReady}/${requiredConsecutiveReady})`);
+          
+          if (consecutiveReady >= requiredConsecutiveReady) {
+            // Vérifier un endpoint authentifié pour s'assurer que tout fonctionne
+            try {
+              await axios.get(`${serverUrl}/api/user/preferences`, {
+                timeout: 4000,
+                validateStatus: (status) => status === 200 || status === 401
+              });
+            } catch (authError) {
+              // Même si l'auth échoue, si le serveur répond, c'est OK
+              console.log('[UpdateModal] Auth check failed but server is responding');
+            }
+            
+            // Backend prêt, recharger la page
+            stopHealthPolling();
+            setStatus('success');
+            setMessage('Mise à jour terminée avec succès!');
+            setProgress(100);
+            
+            // Attendre un peu pour que l'utilisateur voie le message de succès
+            setTimeout(() => {
+              // Force reload pour obtenir la nouvelle version
+              window.location.href = window.location.href.split('#')[0] + '#/home';
+              window.location.reload(true);
+            }, 1500);
+          }
         } else {
           consecutiveReady = 0;
         }
-
-        if (consecutiveReady >= requiredConsecutiveReady) {
-          // Backend prêt, recharger la page
-          stopHealthPolling();
-          setStatus('success');
-          setMessage('Mise à jour terminée avec succès!');
-          
-          setTimeout(() => {
-            window.location.reload();
-          }, 1500);
-        }
       } catch (error) {
         consecutiveReady = 0;
+        
+        // Afficher un message d'attente plus informatif
+        if (attempts < 30) {
+          setMessage('Redémarrage en cours, veuillez patienter...');
+        } else if (attempts < 60) {
+          setMessage('Installation des dépendances et compilation...');
+        } else if (attempts < 90) {
+          setMessage('Finalisation du démarrage...');
+        } else {
+          setMessage('Le serveur prend plus de temps que prévu...');
+        }
+        
         // Backend pas encore prêt, continuer le polling
         if (attempts >= maxAttempts) {
           stopHealthPolling();
           setStatus('error');
-          setMessage('Le redémarrage prend plus de temps que prévu. Veuillez rafraîchir la page manuellement.');
+          setMessage('Le redémarrage prend plus de temps que prévu. Veuillez rafraîchir la page manuellement dans quelques instants.');
         }
       }
     }, 2000); // Poll toutes les 2 secondes

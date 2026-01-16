@@ -17,6 +17,8 @@ import { handleAuthError } from './services/authService';
 import faviconUrl from './icons/ryvielogo0.png';
 import { SocketProvider } from './contexts/SocketContext';
 import { CachedRoutes } from './components/CachedRoutes';
+import { UpdateProvider } from './contexts/UpdateContext';
+import GlobalUpdateModal from './components/GlobalUpdateModal';
 
 // Composant de redirection conditionnelle (Web et Electron)
 const ProtectedRoute = ({ children }) => {
@@ -54,8 +56,9 @@ const App = () => {
   }, []);
 
   return (
-    <SocketProvider>
-      <Router>
+    <UpdateProvider>
+      <SocketProvider>
+        <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/first-time-setup" element={<FirstTimeSetup />} />
@@ -104,8 +107,10 @@ const App = () => {
             </ProtectedRoute>} />
           <Route path="/server-restarting" element={<ServerRestarting />} />
         </Routes>
-      </Router>
-    </SocketProvider>
+        </Router>
+        <GlobalUpdateModal />
+      </SocketProvider>
+    </UpdateProvider>
   );
 };
 
