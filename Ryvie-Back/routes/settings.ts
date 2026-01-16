@@ -134,6 +134,61 @@ router.get('/settings/updates', verifyToken, async (req: any, res: any) => {
   }
 });
 
+// POST /api/settings/start-update-monitor - Démarrer le service de monitoring
+router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: any, res: any) => {
+  try {
+    const { spawn, execSync } = require('child_process');
+    const path = require('path');
+    const fs = require('fs');
+    
+    // Créer un dossier temporaire pour le service de monitoring
+    const tmpDir = '/tmp/ryvie-update-monitor';
+    const monitorScript = path.join(tmpDir, 'monitor.js');
+    const templateScript = path.join(__dirname, '../../scripts/update-monitor-template.js');
+    
+    console.log('[settings] Création du dossier temporaire:', tmpDir);
+    
+    // Supprimer l'ancien dossier s'il existe
+    if (fs.existsSync(tmpDir)) {
+      execSync(`rm -rf ${tmpDir}`);
+    }
+    
+    // Créer le nouveau dossier
+    fs.mkdirSync(tmpDir, { recursive: true });
+    
+    // Copier le template du service de monitoring
+    if (fs.existsSync(templateScript)) {
+      fs.copyFileSync(templateScript, monitorScript);
+      console.log('[settings] Template copié vers:', monitorScript);
+    } else {
+      throw new Error('Template de monitoring introuvable: ' + templateScript);
+    }
+    
+    // Démarrer le service en arrière-plan (détaché du processus parent)
+    const monitor = spawn('node', [monitorScript], {
+      detached: true,
+      stdio: ['ignore', 'ignore', 'ignore'],
+      cwd: tmpDir
+    });
+    
+    monitor.unref();
+    
+    console.log('[settings] Service de monitoring démarré (PID:', monitor.pid, ')');
+    console.log('[settings] Le service tournera sur le port 3005');
+    console.log('[settings] Il se supprimera automatiquement après la mise à jour');
+    
+    res.json({ 
+      success: true, 
+      message: 'Service de monitoring démarré',
+      pid: monitor.pid,
+      port: 3005
+    });
+  } catch (error: any) {
+    console.error('[settings] Erreur démarrage service monitoring:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // POST /api/settings/update-ryvie - Mettre à jour Ryvie
 router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req: any, res: any) => {
   try {
