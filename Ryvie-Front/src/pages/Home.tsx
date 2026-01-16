@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import '../styles/Home.css';
 import '../styles/Transitions.css';
@@ -628,6 +628,8 @@ const Home = () => {
 
   const [mounted, setMounted] = useState(false);
   const { socket, isConnected: socketConnected, serverStatus, setServerStatus } = useSocket();
+  const [displayServerStatus, setDisplayServerStatus] = useState(true); // État d'affichage avec délai
+  const disconnectionTimeoutRef = useRef(null); // Ref pour le timeout de déconnexion
   const [updateNotificationShown, setUpdateNotificationShown] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState(null);
@@ -747,7 +749,9 @@ const Home = () => {
       console.log('[Home] 🔄 Rafraîchissement des icônes du bureau...', { mode });
       const config = await generateAppConfigFromManifests(mode);
       
-      if (Object.keys(config).length > 0) {
+      // Vérifier que la config contient au moins une app (hors taskbar)
+      const appKeys = Object.keys(config).filter(k => k.startsWith('app-'));
+      if (appKeys.length > 0) {
         console.log('[Home] ✅ Config rechargée:', Object.keys(config).length, 'apps');
         setAppsConfig(config);
         StorageManager.setItem('appsConfig_cache', config);
@@ -922,9 +926,13 @@ const Home = () => {
         } catch (appsError) {
           console.warn('[Home] ⚠️ Impossible de récupérer les statuts des apps:', appsError.message);
         }
+      } else {
+        console.warn('[Home] ⚠️ Config vide reçue, conservation de la config actuelle');
       }
     } catch (error) {
       console.error('[Home] ❌ Erreur lors du rafraîchissement des icônes:', error);
+      console.warn('[Home] ⚠️ Conservation de la config actuelle en raison de l\'erreur');
+      // Ne rien faire - conserver la config actuelle au lieu de la vider
     }
   }, [accessMode, launcherLayout, launcherAnchors, widgets]);
   
@@ -1047,8 +1055,8 @@ const Home = () => {
             });
           }, 500);
           
-          // Rafraîchir les icônes du bureau pour afficher la nouvelle app
-          console.log('[Home] Installation terminée, rafraîchissement des icônes');
+          // Rafraîchir immédiatement les icônes - le manifest est généré AVANT 100%
+          console.log('[Home] Installation terminée, rafraîchissement immédiat des icônes');
           refreshDesktopIcons();
         }
         
@@ -1191,27 +1199,40 @@ const Home = () => {
                 if (data.progress >= 100 || data.stage === 'complete') {
                   console.log(`[Home] Installation de ${appId} terminée via SSE`);
                   eventSource.close();
-                  setTimeout(() => {
-                    removeInstallation(appId);
-                    setInstallingApps(prev => {
-                      const updated = { ...prev };
-                      delete updated[appId];
-                      return updated;
-                    });
-                    refreshDesktopIcons();
-                  }, 1000);
-                }
-                
-                // Si erreur
-                if (data.stage === 'error') {
-                  console.error(`[Home] Erreur installation ${appId}:`, data.message);
-                  eventSource.close();
+                  // Rafraîchir immédiatement car le manifest est généré AVANT 100%
                   removeInstallation(appId);
                   setInstallingApps(prev => {
                     const updated = { ...prev };
                     delete updated[appId];
                     return updated;
                   });
+                  refreshDesktopIcons();
+                }
+                
+                // Si erreur
+                if (data.stage === 'error') {
+                  console.error(`[Home] Erreur installation ${appId}:`, data.message);
+                  eventSource.close();
+                  
+                  // Récupérer le nom de l'app depuis le state
+                  const appName = savedInstalls[appId]?.appName || appId;
+                  
+                  removeInstallation(appId);
+                  setInstallingApps(prev => {
+                    const updated = { ...prev };
+                    delete updated[appId];
+                    return updated;
+                  });
+                  
+                  // Afficher une notification d'erreur
+                  setNotification({
+                    show: true,
+                    message: `Échec de l'installation de ${appName}: ${data.message || 'Erreur inconnue'}`,
+                    type: 'error'
+                  });
+                  setTimeout(() => {
+                    setNotification({ show: false, message: '', type: 'info' });
+                  }, 6000);
                 }
               } catch (error) {
                 console.warn(`[Home] Erreur parsing SSE pour ${appId}:`, error);
@@ -1369,7 +1390,9 @@ const Home = () => {
       promises.push(
         generateAppConfigFromManifests(accessMode)
           .then(config => {
-            if (Object.keys(config).length > 0) {
+            // Vérifier que la config contient au moins une app (hors taskbar)
+            const appKeys = Object.keys(config).filter(k => k.startsWith('app-'));
+            if (appKeys.length > 0) {
               console.log('[Home] Config chargée:', Object.keys(config).length, 'apps');
               setAppsConfig(config);
               StorageManager.setItem('appsConfig_cache', config);
@@ -1383,9 +1406,33 @@ const Home = () => {
               });
               setIconImages(newIconImages);
               StorageManager.setItem('iconImages_cache', newIconImages);
+            } else {
+              console.warn('[Home] Config vide reçue lors du chargement initial, utilisation du cache');
+              // Essayer de charger depuis le cache
+              const cachedConfig = StorageManager.getItem('appsConfig_cache');
+              const cachedImages = StorageManager.getItem('iconImages_cache');
+              if (cachedConfig) {
+                setAppsConfig(cachedConfig);
+                console.log('[Home] Config restaurée depuis le cache:', Object.keys(cachedConfig).length, 'apps');
+              }
+              if (cachedImages) {
+                setIconImages(cachedImages);
+              }
             }
           })
-          .catch(err => console.error('[Home] Erreur config manifests:', err))
+          .catch(err => {
+            console.error('[Home] Erreur config manifests:', err);
+            // En cas d'erreur, essayer de charger depuis le cache
+            const cachedConfig = StorageManager.getItem('appsConfig_cache');
+            const cachedImages = StorageManager.getItem('iconImages_cache');
+            if (cachedConfig) {
+              setAppsConfig(cachedConfig);
+              console.log('[Home] Config restaurée depuis le cache après erreur:', Object.keys(cachedConfig).length, 'apps');
+            }
+            if (cachedImages) {
+              setIconImages(cachedImages);
+            }
+          })
       );
       
       // Attendre toutes les requêtes en parallèle
@@ -1936,18 +1983,34 @@ const Home = () => {
     return () => setMounted(false);
   }, []);
 
-  // Surveiller les changements de serverStatus pour recharger la page si reconnexion après >2s de déconnexion
+  // Gérer l'affichage du statut de connexion avec délai de 3s avant d'afficher "Déconnecté"
   useEffect(() => {
     if (!serverStatus) {
-      // Serveur déconnecté: enregistrer le timestamp si pas déjà fait
+      // Serveur déconnecté: attendre 3s avant d'afficher "Déconnecté"
+      if (!disconnectionTimeoutRef.current) {
+        console.log('[Home] Serveur déconnecté, attente de 3s avant affichage...');
+        disconnectionTimeoutRef.current = setTimeout(() => {
+          console.log('[Home] 3s écoulées, affichage "Déconnecté"');
+          setDisplayServerStatus(false);
+          disconnectionTimeoutRef.current = null;
+        }, 3000);
+      }
+      
+      // Enregistrer le timestamp si pas déjà fait
       if (!disconnectedSince) {
-        console.log('[Home] Serveur déconnecté, début du compteur');
         setDisconnectedSince(Date.now());
         // Réinitialiser le flag de chargement pour éviter de sauvegarder des données obsolètes
         setLauncherLoadedFromBackend(false);
       }
     } else {
-      // Serveur connecté: vérifier si on était déconnecté pendant plus de 2s
+      // Serveur connecté: annuler le timeout et afficher "Connecté" immédiatement
+      if (disconnectionTimeoutRef.current) {
+        console.log('[Home] Reconnexion avant 3s, annulation du timeout');
+        clearTimeout(disconnectionTimeoutRef.current);
+        disconnectionTimeoutRef.current = null;
+      }
+      setDisplayServerStatus(true);
+      
       if (disconnectedSince) {
         const disconnectedDuration = Date.now() - disconnectedSince;
         console.log(`[Home] Serveur reconnecté après ${disconnectedDuration}ms de déconnexion`);
@@ -1961,6 +2024,14 @@ const Home = () => {
         }
       }
     }
+    
+    // Cleanup au démontage
+    return () => {
+      if (disconnectionTimeoutRef.current) {
+        clearTimeout(disconnectionTimeoutRef.current);
+        disconnectionTimeoutRef.current = null;
+      }
+    };
   }, [serverStatus, disconnectedSince]);
 
   // Charger et mettre en cache le fond d'écran sélectionné comme dataURL pour un affichage hors-ligne
@@ -2374,9 +2445,9 @@ const Home = () => {
             className={`bg-layer visible`}
             style={{ backgroundImage: bgUrl || undefined }}
           />
-          <div className={`server-status ${serverStatus ? 'connected' : 'disconnected'}`}>
+          <div className={`server-status ${displayServerStatus ? 'connected' : 'disconnected'}`}>
             <span className="status-text">
-              {serverStatus ? 'Connecté' : 'Déconnecté'}
+              {displayServerStatus ? 'Connecté' : 'Déconnecté'}
             </span>
             <span className="mode-indicator">
               {accessMode === 'private' ? 'Local' : 'Remote'}
