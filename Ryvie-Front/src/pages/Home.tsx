@@ -12,7 +12,7 @@ import { loadInstallState, saveInstallState, updateInstallation, removeInstallat
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
 import { endSession, getCurrentUser, getCurrentUserRole, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
 import urlsConfig from '../config/urls';
-const { getServerUrl, getAppUrl, setLocalIP } = urlsConfig;
+const { getServerUrl, getAppUrl, setLocalIP, registerAppPort } = urlsConfig;
 import { 
   generateAppConfigFromManifests,
   generateDefaultAppsList,
@@ -913,7 +913,8 @@ const Home = () => {
           const response = await axios.get(`${serverUrl}/api/apps`, { timeout: 30000 });
           const apps = response.data.map(app => ({
             ...app,
-            port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
+            // Utiliser mainPort (port du proxy) au lieu de ports[0] (port interne du container)
+            port: app.mainPort || (app.ports && app.ports.length > 0 ? app.ports[0] : null),
             autostart: false
           }));
           setApplications(apps);
@@ -1548,9 +1549,26 @@ const Home = () => {
         const response = await axios.get(`${appsBase}/api/apps`, { timeout: 30000 });
         const apps = response.data.map(app => ({
           ...app,
-          port: app.ports && app.ports.length > 0 ? app.ports[0] : null,
+          // Utiliser mainPort (port du proxy) au lieu de ports[0] (port interne du container)
+          port: app.mainPort || (app.ports && app.ports.length > 0 ? app.ports[0] : null),
           autostart: false
         }));
+        
+        // Enregistrer les ports et infos HTTPS des applications
+        apps.forEach(app => {
+          if (app.id && app.port) {
+            const requiresHttps = app.requiresHttps || false;
+            try {
+              registerAppPort(app.id, app.port, requiresHttps);
+              if (requiresHttps) {
+                console.log(`[Home] ${app.id} nécessite HTTPS sur le port ${app.port}`);
+              }
+            } catch (e) {
+              console.warn(`[Home] Impossible d'enregistrer le port pour ${app.id}:`, e);
+            }
+          }
+        });
+        
         setApplications(apps);
         
         // Mettre à jour le statut des applications pour Home.js
@@ -1608,7 +1626,8 @@ const Home = () => {
             const existingApp = prevApps.find(app => app.id === updatedApp.id);
             return {
               ...updatedApp,
-              port: updatedApp.ports && updatedApp.ports.length > 0 ? updatedApp.ports[0] : null,
+              // Utiliser mainPort (port du proxy) au lieu de ports[0] (port interne du container)
+              port: updatedApp.mainPort || (updatedApp.ports && updatedApp.ports.length > 0 ? updatedApp.ports[0] : null),
               autostart: existingApp ? existingApp.autostart : false
             };
           });

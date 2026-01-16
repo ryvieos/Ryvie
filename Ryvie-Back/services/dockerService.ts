@@ -59,10 +59,13 @@ async function getAppStatus() {
         progress: app.progress,
         containersRunning: `${app.containersRunning}/${app.containersTotal}`,
         ports: app.ports,
+        mainPort: app.mainPort,
         containers: app.containers,
         icon: app.icon,
         category: app.category,
-        description: app.description
+        description: app.description,
+        requiresHttps: app.requiresHttps || false,
+        proxy: app.proxy
       }));
       
       // Mettre en cache
