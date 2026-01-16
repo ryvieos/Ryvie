@@ -29,6 +29,7 @@ export interface AppManifest {
   category: string;
   mainPort: number;
   ports: number[];
+  requiresHttps?: boolean;
 }
 
 export interface NetbirdData {

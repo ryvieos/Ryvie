@@ -25,19 +25,19 @@ async function listInstalledApps() {
 
     const apps = [];
 
-    for (const appId of appDirs) {
+    for (const appDirName of appDirs) {
       try {
-        const manifest = await getAppManifest(appId);
+        const manifest = await getAppManifest(appDirName);
         if (manifest) {
           // Enrichir avec le statut Docker
-          const dockerStatus = await getAppDockerStatus(appId);
+          const dockerStatus = await getAppDockerStatus(manifest.id);
           apps.push({
             ...manifest,
             ...dockerStatus
           });
         }
       } catch (error: any) {
-        console.error(`[appManager] Erreur lors de la lecture du manifest de ${appId}:`, error.message);
+        console.error(`[appManager] Erreur lors de la lecture du manifest de ${appDirName}:`, error.message);
       }
     }
 
@@ -50,9 +50,10 @@ async function listInstalledApps() {
 
 /**
  * Récupère le manifest d'une app
+ * @param appDirName - Le nom du dossier dans /data/config/manifests/ (peut différer de l'appId)
  */
-async function getAppManifest(appId) {
-  const manifestPath = path.join(MANIFESTS_DIR, appId, 'manifest.json');
+async function getAppManifest(appDirName) {
+  const manifestPath = path.join(MANIFESTS_DIR, appDirName, 'manifest.json');
   
   if (!fs.existsSync(manifestPath)) {
     return null;
@@ -60,9 +61,34 @@ async function getAppManifest(appId) {
 
   try {
     const manifestContent = fs.readFileSync(manifestPath, 'utf8');
-    return JSON.parse(manifestContent);
+    const manifest = JSON.parse(manifestContent);
+    
+    // Lire également le ryvie-app.yml pour obtenir la config proxy
+    // Utiliser sourceDir du manifest car le nom du dossier peut différer
+    const appSourceDir = manifest.sourceDir || path.join(APPS_SOURCE_DIR, appDirName);
+    const ryvieAppPath = path.join(appSourceDir, 'ryvie-app.yml');
+    
+    if (fs.existsSync(ryvieAppPath)) {
+      try {
+        const yaml = require('yaml');
+        const ryvieAppContent = fs.readFileSync(ryvieAppPath, 'utf8');
+        const ryvieAppConfig = yaml.parse(ryvieAppContent);
+        
+        // Ajouter les infos proxy au manifest si elles existent
+        if (ryvieAppConfig && ryvieAppConfig.proxy) {
+          manifest.proxy = ryvieAppConfig.proxy;
+          manifest.requiresHttps = ryvieAppConfig.proxy.https === true;
+        }
+      } catch (yamlError: any) {
+        console.warn(`[appManager] Impossible de lire ryvie-app.yml pour ${appDirName}:`, yamlError.message);
+      }
+    } else {
+      console.log(`[appManager] Fichier ryvie-app.yml non trouvé: ${ryvieAppPath}`);
+    }
+    
+    return manifest;
   } catch (error: any) {
-    console.error(`[appManager] Erreur lors de la lecture du manifest ${appId}:`, error.message);
+    console.error(`[appManager] Erreur lors de la lecture du manifest ${appDirName}:`, error.message);
     return null;
   }
 }
