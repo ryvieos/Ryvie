@@ -935,7 +935,7 @@ async function updateAppFromStore(appId) {
         execSync(`chmod +x "${installScriptPath}"`, { stdio: 'pipe' });
         
         // Exécuter le script install.sh
-        execSync(`bash "${installScriptPath}"`, { 
+        execSync(`sudo bash "${installScriptPath}"`, { 
           cwd: appDir, 
           stdio: 'inherit',
           env: { ...process.env, APP_ID: appId }
