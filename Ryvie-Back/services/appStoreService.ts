@@ -5,6 +5,7 @@ const os = require('os');
 const { execSync } = require('child_process');
 const { EventEmitter } = require('events');
 const { STORE_CATALOG, RYVIE_DIR, MANIFESTS_DIR, APPS_DIR } = require('../config/paths');
+const { getLocalIP } = require('../utils/network');
 
 // Configuration
 const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
@@ -965,13 +966,24 @@ async function updateAppFromStore(appId) {
         throw new Error(`Aucun fichier docker-compose trouvé`);
       }
       
-      // Vérifier la présence du fichier .env
+      // Générer le fichier .env avec LOCAL_IP avant de lancer docker compose
       const envPath = path.join(appDir, '.env');
+      const localIP = getLocalIP();
+      
       try {
+        // Vérifier si un .env existe déjà
         await fs.access(envPath);
-        console.log('[Update] ✅ Fichier .env présent');
+        console.log('[Update] ✅ Fichier .env déjà présent');
       } catch {
-        console.log('[Update] ⚠️ Aucun fichier .env (peut être normal pour certaines apps)');
+        // Créer le fichier .env avec LOCAL_IP
+        const envContent = `# Fichier .env généré automatiquement par Ryvie
+# Ne pas modifier manuellement - sera régénéré lors des mises à jour
+
+# IP locale du serveur
+LOCAL_IP=${localIP}
+`;
+        await fs.writeFile(envPath, envContent);
+        console.log(`[Update] ✅ Fichier .env créé avec LOCAL_IP=${localIP}`);
       }
       
       // Nettoyer les containers arrêtés de cette app avant de lancer (évite les conflits de namespaces)
@@ -1076,9 +1088,10 @@ async function updateAppFromStore(appId) {
     
     sendProgressUpdate(appId, 93, 'Finalisation de l\'installation...', 'finalization');
     
-    // 5. Vérifier et mettre à jour le reverse proxy si nécessaire
-    currentStep = 'reverse-proxy-update';
+    // 5. Préparer la configuration proxy (génération .env uniquement)
+    currentStep = 'reverse-proxy-prepare';
     console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
+    let proxyConfigData = null;
     try {
       console.log(`[Update] 🔍 Vérification de la configuration proxy pour ${appId}...`);
       const reverseProxyService = require('./reverseProxyService');
@@ -1086,11 +1099,9 @@ async function updateAppFromStore(appId) {
       
       if (proxyConfigResult.success && proxyConfigResult.proxy) {
         console.log(`[Update] 📦 Configuration proxy détectée pour ${appId}`);
-        sendProgressUpdate(appId, 94, 'Mise à jour du reverse proxy...', 'proxy-config');
+        sendProgressUpdate(appId, 94, 'Préparation de la configuration proxy...', 'proxy-prepare');
         
         const fs = require('fs').promises;
-        const path = require('path');
-        const { execSync } = require('child_process');
         
         // Générer le fichier .env pour l'app avec les variables dynamiques
         console.log(`[Update] 📝 Génération du fichier .env pour ${appId}...`);
@@ -1099,60 +1110,21 @@ async function updateAppFromStore(appId) {
           console.log(`[Update] ✅ Fichier .env créé: ${envResult.path}`);
         }
         
-        // Régénérer le docker-compose.yml de Caddy avec les ports
-        console.log(`[Update] 🔧 Mise à jour docker-compose.yml de Caddy...`);
-        const composeContent = await reverseProxyService.generateCaddyDockerCompose();
-        const composePath = '/data/config/reverse-proxy/docker-compose.yml';
-        await fs.writeFile(composePath, composeContent);
-        console.log(`[Update] ✅ docker-compose.yml de Caddy mis à jour`);
-        
-        // Régénérer le Caddyfile avec les nouvelles configs
-        const caddyfileContent = await reverseProxyService.generateFullCaddyfileContent();
-        const caddyfilePath = '/data/config/reverse-proxy/Caddyfile';
-        await fs.writeFile(caddyfilePath, caddyfileContent);
-        console.log(`[Update] ✅ Caddyfile mis à jour avec la config de ${appId}`);
-        
-        // Redémarrer Caddy pour appliquer les changements (down + up pour recréer avec les nouveaux ports)
-        console.log(`[Update] 🔄 Redémarrage de Caddy avec les nouveaux ports...`);
-        try {
-          execSync('docker compose down', { cwd: '/data/config/reverse-proxy', stdio: 'pipe' });
-          execSync('docker compose up -d', { cwd: '/data/config/reverse-proxy', stdio: 'pipe' });
-          console.log(`[Update] ✅ Caddy redémarré avec succès`);
-        } catch (restartError: any) {
-          console.warn(`[Update] ⚠️ Échec du redémarrage de Caddy:`, restartError.message);
-        }
-        
-        // Redémarrer l'app pour prendre en compte le nouveau .env
-        console.log(`[Update] 🔄 Redémarrage de ${appId} pour appliquer les variables...`);
-        try {
-          const appPath = `/data/apps/${appId}`;
-          execSync('docker compose restart', { cwd: appPath, stdio: 'pipe' });
-          console.log(`[Update] ✅ ${appId} redémarré avec succès`);
-        } catch (appRestartError: any) {
-          console.warn(`[Update] ⚠️ Échec du redémarrage de ${appId}:`, appRestartError.message);
-        }
+        // Sauvegarder les infos pour la mise à jour Caddy après 100%
+        proxyConfigData = {
+          reverseProxyService,
+          fs,
+          appId
+        };
       } else {
         console.log(`[Update] ℹ️ Pas de configuration proxy pour ${appId}`);
       }
     } catch (proxyError: any) {
-      console.warn(`[Update] ⚠️ Erreur lors de la mise à jour du reverse proxy:`, proxyError.message);
+      console.warn(`[Update] ⚠️ Erreur lors de la préparation du reverse proxy:`, proxyError.message);
       // Non bloquant - on continue l'installation
     }
     
     sendProgressUpdate(appId, 95, 'Finalisation de l\'installation...', 'finalization');
-    
-    // 6. Régénérer le manifest uniquement pour cette app
-    currentStep = 'manifest-regeneration';
-    console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
-    try {
-      console.log(`[Update] Régénération du manifest pour ${appId}...`);
-      const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
-      // Passer l'appId en paramètre pour ne générer que le manifest de cette app
-      execSync(`node ${manifestScript} ${appId}`, { stdio: 'inherit' });
-      console.log(`[Update] ✅ Manifest de ${appId} régénéré`);
-    } catch (manifestError: any) {
-      console.warn(`[Update] ⚠️ Impossible de régénérer le manifest de ${appId}:`, manifestError.message);
-    }
     
     // 5b. Actualiser le catalogue pour mettre à jour les statuts
     currentStep = 'catalog-refresh';
@@ -1188,29 +1160,55 @@ async function updateAppFromStore(appId) {
     sendProgressUpdate(appId, 97, 'Vérification du statut de l\'application...', 'verification');
     
     let appStatusVerified = false;
-    const maxStatusChecks = 10; // 10 tentatives max
-    const statusCheckInterval = 1000; // 1 seconde entre chaque tentative
+    const maxStatusChecks = 10; // 10 tentatives max (20 secondes au total)
+    const statusCheckInterval = 2000; // 2 secondes entre chaque tentative
     
     for (let attempt = 1; attempt <= maxStatusChecks; attempt++) {
       try {
         console.log(`[Update] 🔍 Tentative ${attempt}/${maxStatusChecks} de vérification du statut de ${appId}...`);
-        const dockerService = require('./dockerService');
-        const apps = await dockerService.getAppStatus();
-        const appStatus = apps.find((app: any) => app.id === appId);
         
-        if (appStatus) {
-          console.log(`[Update] 📊 Statut de ${appId}: ${appStatus.status}`);
+        // Vérifier directement avec docker ps au lieu des manifests
+        const { execSync } = require('child_process');
+        const appPath = `/data/apps/${appId}`;
+        
+        try {
+          // Utiliser docker compose ps pour vérifier l'état des containers
+          const psOutput = execSync('docker compose ps --format json', { 
+            cwd: appPath, 
+            encoding: 'utf8',
+            stdio: 'pipe'
+          });
           
-          // Accepter les statuts: running (vert) ou starting (jaune)
-          if (appStatus.status === 'running' || appStatus.status === 'starting') {
-            console.log(`[Update] ✅ ${appId} a un statut valide: ${appStatus.status}`);
-            appStatusVerified = true;
-            break;
+          if (psOutput && psOutput.trim()) {
+            const containers = psOutput.trim().split('\n').map((line: string) => {
+              try {
+                return JSON.parse(line);
+              } catch {
+                return null;
+              }
+            }).filter((c: any) => c !== null);
+            
+            console.log(`[Update] 📊 ${containers.length} container(s) trouvé(s) pour ${appId}`);
+            
+            // Vérifier si au moins un container est en running ou starting
+            const hasValidContainer = containers.some((c: any) => {
+              const state = c.State || '';
+              console.log(`[Update] 📦 Container ${c.Name}: ${state}`);
+              return state === 'running' || state.includes('starting') || state.includes('Up');
+            });
+            
+            if (hasValidContainer) {
+              console.log(`[Update] ✅ ${appId} a au moins un container démarré`);
+              appStatusVerified = true;
+              break;
+            } else {
+              console.log(`[Update] ⏳ Aucun container de ${appId} n'est encore démarré, attente...`);
+            }
           } else {
-            console.log(`[Update] ⏳ ${appId} a le statut '${appStatus.status}', attente...`);
+            console.log(`[Update] ⏳ Aucun container trouvé pour ${appId}, attente...`);
           }
-        } else {
-          console.log(`[Update] ⏳ ${appId} pas encore visible dans la liste des apps, attente...`);
+        } catch (dockerError: any) {
+          console.log(`[Update] ⏳ Erreur docker ps pour ${appId}: ${dockerError.message}`);
         }
         
         // Attendre avant la prochaine tentative (sauf à la dernière)
@@ -1241,9 +1239,124 @@ async function updateAppFromStore(appId) {
       console.warn('[Update] ⚠️ Impossible de diffuser les statuts:', e.message);
     }
     
+    // 6. Régénérer le manifest AVANT 100% pour affichage instantané de l'icône
+    currentStep = 'manifest-regeneration';
+    console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
+    try {
+      console.log(`[Update] Régénération du manifest pour ${appId}...`);
+      const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
+      // Passer l'appId en paramètre pour ne générer que le manifest de cette app
+      execSync(`node ${manifestScript} ${appId}`, { stdio: 'inherit' });
+      console.log(`[Update] ✅ Manifest de ${appId} régénéré`);
+    } catch (manifestError: any) {
+      console.warn(`[Update] ⚠️ Impossible de régénérer le manifest de ${appId}:`, manifestError.message);
+    }
+    
     sendProgressUpdate(appId, 100, 'Installation terminée avec succès !', 'completed');
     
-    // 6. Supprimer le snapshot si tout s'est bien passé
+    // 7. Forcer la réconciliation du layout pour placer l'icône AVANT de modifier Caddy
+    console.log('[Update] 🔄 Réconciliation du layout utilisateur...');
+    try {
+      const userPreferencesRouter = require('../routes/userPreferences');
+      if (userPreferencesRouter.reconcileAllUsersLayout) {
+        await userPreferencesRouter.reconcileAllUsersLayout();
+        console.log('[Update] ✅ Réconciliation du layout effectuée');
+      } else {
+        console.warn('[Update] ⚠️ Fonction reconcileAllUsersLayout non disponible');
+      }
+    } catch (reconcileError: any) {
+      console.warn('[Update] ⚠️ Erreur lors de la réconciliation:', reconcileError.message);
+    }
+    
+    // 8. Attendre 5 secondes pour laisser le temps au frontend d'afficher la notification
+    // avant de modifier Caddy (pour éviter rechargement de page)
+    console.log('[Update] ⏳ Attente de 10 secondes avant modification de Caddy...');
+    await new Promise(resolve => setTimeout(resolve, 10000));
+    
+    // 8. Mettre à jour Caddy si nécessaire (APRÈS 100% et délai de 5s)
+    if (proxyConfigData) {
+      currentStep = 'reverse-proxy-update';
+      console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
+      try {
+        const { reverseProxyService, fs, appId: proxyAppId } = proxyConfigData;
+        const path = require('path');
+        const { execSync } = require('child_process');
+        
+        console.log(`[Update] 🔧 Mise à jour de la configuration Caddy pour ${proxyAppId}...`);
+        
+        // Vérifier si les ports ont changé dans docker-compose.yml AVANT de modifier
+        console.log(`[Update] 🔍 Vérification des changements de ports Caddy...`);
+        const composeContent = await reverseProxyService.generateCaddyDockerCompose();
+        const composePath = '/data/config/reverse-proxy/docker-compose.yml';
+        
+        let needsRecreate = false;
+        try {
+          const currentCompose = await fs.readFile(composePath, 'utf8');
+          
+          // Si le docker-compose a changé, il faut recréer le container
+          if (currentCompose !== composeContent) {
+            console.log(`[Update] 📝 Ports Caddy modifiés, recréation du container nécessaire`);
+            needsRecreate = true;
+          } else {
+            console.log(`[Update] ℹ️ Ports Caddy inchangés, rechargement gracieux possible`);
+          }
+        } catch (e) {
+          console.log(`[Update] ℹ️ Fichier docker-compose.yml non trouvé, création nécessaire`);
+          needsRecreate = true;
+        }
+        
+        // Écrire les nouveaux fichiers
+        console.log(`[Update] 🔧 Mise à jour docker-compose.yml de Caddy...`);
+        await fs.writeFile(composePath, composeContent);
+        console.log(`[Update] ✅ docker-compose.yml de Caddy mis à jour`);
+        
+        console.log(`[Update] 🔧 Mise à jour Caddyfile...`);
+        const caddyfileContent = await reverseProxyService.generateFullCaddyfileContent();
+        const caddyfilePath = '/data/config/reverse-proxy/Caddyfile';
+        await fs.writeFile(caddyfilePath, caddyfileContent);
+        console.log(`[Update] ✅ Caddyfile mis à jour avec la config de ${proxyAppId}`);
+        
+        if (needsRecreate) {
+          // Recréer Caddy avec les nouveaux ports (down + up)
+          console.log(`[Update] 🔄 Recréation de Caddy avec les nouveaux ports...`);
+          try {
+            execSync('docker compose down', { cwd: '/data/config/reverse-proxy', stdio: 'pipe' });
+            execSync('docker compose up -d', { cwd: '/data/config/reverse-proxy', stdio: 'pipe' });
+            console.log(`[Update] ✅ Caddy recréé avec succès`);
+          } catch (restartError: any) {
+            console.warn(`[Update] ⚠️ Échec de la recréation de Caddy:`, restartError.message);
+          }
+        } else {
+          // Juste recharger la configuration sans interruption
+          console.log(`[Update] 🔄 Rechargement gracieux de la configuration Caddy...`);
+          try {
+            const reloadResult = await reverseProxyService.reloadCaddy();
+            if (reloadResult.success) {
+              console.log(`[Update] ✅ Configuration Caddy rechargée sans interruption`);
+            } else {
+              console.warn(`[Update] ⚠️ Échec du rechargement:`, reloadResult.error);
+            }
+          } catch (reloadError: any) {
+            console.warn(`[Update] ⚠️ Échec du rechargement de Caddy:`, reloadError.message);
+          }
+        }
+        
+        // Redémarrer l'app pour prendre en compte le nouveau .env
+        console.log(`[Update] 🔄 Redémarrage de ${proxyAppId} pour appliquer les variables...`);
+        try {
+          const appPath = `/data/apps/${proxyAppId}`;
+          execSync('docker compose restart', { cwd: appPath, stdio: 'pipe' });
+          console.log(`[Update] ✅ ${proxyAppId} redémarré avec succès`);
+        } catch (appRestartError: any) {
+          console.warn(`[Update] ⚠️ Échec du redémarrage de ${proxyAppId}:`, appRestartError.message);
+        }
+      } catch (proxyError: any) {
+        console.warn(`[Update] ⚠️ Erreur lors de la mise à jour du reverse proxy:`, proxyError.message);
+        // Non bloquant - l'installation est déjà terminée
+      }
+    }
+    
+    // 9. Supprimer le snapshot si tout s'est bien passé
     if (snapshotPath && snapshotPath !== 'none') {
       currentStep = 'snapshot-cleanup';
       console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
@@ -1725,6 +1838,95 @@ async function uninstallApp(appId) {
       }
     } catch (e: any) {
       console.warn('[Uninstall] ⚠️ Impossible de diffuser les statuts:', e.message);
+    }
+    
+    // Envoyer un message au processus principal pour émettre la notification Socket.IO
+    // MAINTENANT que tout est désinstallé (containers, images, manifest, catalogue)
+    if (process.send) {
+      console.log('[Uninstall] 📤 Envoi du message au processus principal pour émettre la notification...');
+      process.send({ type: 'emit-uninstalled', appId: appId });
+      console.log('[Uninstall] ✅ Message envoyé');
+    } else {
+      console.warn('[Uninstall] ⚠️ process.send non disponible');
+    }
+    
+    // Attendre 5 secondes pour que le frontend reçoive la notification et mette à jour le layout
+    console.log('[Uninstall] ⏳ Attente de 5 secondes pour la notification frontend...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // 10. Réconciliation du layout pour nettoyer l'icône désinstallée
+    console.log('[Uninstall] 🔄 Réconciliation du layout utilisateur...');
+    try {
+      const userPreferencesRouter = require('../routes/userPreferences');
+      if (userPreferencesRouter.reconcileAllUsersLayout) {
+        await userPreferencesRouter.reconcileAllUsersLayout();
+        console.log('[Uninstall] ✅ Réconciliation du layout effectuée');
+      } else {
+        console.warn('[Uninstall] ⚠️ Fonction reconcileAllUsersLayout non disponible');
+      }
+    } catch (reconcileError: any) {
+      console.warn('[Uninstall] ⚠️ Erreur lors de la réconciliation:', reconcileError.message);
+    }
+    
+
+
+    
+    // 11. Nettoyer la configuration Caddy en dernier (après notification frontend)
+    console.log('[Uninstall] 🔍 Nettoyage de la configuration proxy...');
+    try {
+      const reverseProxyService = require('./reverseProxyService');
+      
+      // Régénérer le Caddyfile sans l'app désinstallée
+      console.log('[Uninstall] 🔧 Mise à jour du Caddyfile...');
+      const caddyfileContent = await reverseProxyService.generateFullCaddyfileContent();
+      const caddyfilePath = '/data/config/reverse-proxy/Caddyfile';
+      await fs.writeFile(caddyfilePath, caddyfileContent);
+      console.log('[Uninstall] ✅ Caddyfile mis à jour');
+      
+      // Régénérer le docker-compose.yml de Caddy sans les ports de l'app
+      console.log('[Uninstall] 🔧 Mise à jour docker-compose.yml de Caddy...');
+      const composeContent = await reverseProxyService.generateCaddyDockerCompose();
+      const composePath = '/data/config/reverse-proxy/docker-compose.yml';
+      
+      // Vérifier si les ports ont changé
+      let needsRecreate = false;
+      try {
+        const currentCompose = await fs.readFile(composePath, 'utf8');
+        if (currentCompose !== composeContent) {
+          console.log('[Uninstall] 📝 Ports Caddy modifiés, recréation nécessaire');
+          needsRecreate = true;
+        }
+      } catch (e) {
+        needsRecreate = true;
+      }
+      
+      await fs.writeFile(composePath, composeContent);
+      console.log('[Uninstall] ✅ docker-compose.yml de Caddy mis à jour');
+      
+      // Recharger ou recréer Caddy selon les changements
+      if (needsRecreate) {
+        console.log('[Uninstall] 🔄 Recréation de Caddy avec les nouveaux ports...');
+        try {
+          execSync('docker compose down', { cwd: '/data/config/reverse-proxy', stdio: 'pipe' });
+          execSync('docker compose up -d', { cwd: '/data/config/reverse-proxy', stdio: 'pipe' });
+          console.log('[Uninstall] ✅ Caddy recréé avec succès');
+        } catch (caddyError: any) {
+          console.warn('[Uninstall] ⚠️ Échec de la recréation de Caddy:', caddyError.message);
+        }
+      } else {
+        console.log('[Uninstall] 🔄 Rechargement gracieux de Caddy...');
+        try {
+          const reloadResult = await reverseProxyService.reloadCaddy();
+          if (reloadResult.success) {
+            console.log('[Uninstall] ✅ Configuration Caddy rechargée sans interruption');
+          }
+        } catch (reloadError: any) {
+          console.warn('[Uninstall] ⚠️ Échec du rechargement de Caddy:', reloadError.message);
+        }
+      }
+    } catch (proxyError: any) {
+      console.warn('[Uninstall] ⚠️ Erreur lors du nettoyage du reverse proxy:', proxyError.message);
+      // Non bloquant - on continue la désinstallation
     }
     
     return {

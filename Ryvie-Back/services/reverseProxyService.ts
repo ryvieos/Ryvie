@@ -795,11 +795,40 @@ async function updateCaddyfileIP() {
 }
 
 /**
- * Redémarre Caddy (down puis up)
+ * Recharge la configuration de Caddy sans interruption (graceful reload)
+ * Utilise 'caddy reload' qui recharge la config sans couper les connexions
+ */
+async function reloadCaddy() {
+  try {
+    console.log('[reverseProxyService] 🔄 Rechargement gracieux de Caddy...');
+    
+    // Vérifier que Caddy est en cours d'exécution
+    const containerStatus = await checkCaddyContainer();
+    if (!containerStatus.running) {
+      console.warn('[reverseProxyService] ⚠️ Caddy n\'est pas en cours d\'exécution');
+      return { success: false, error: 'Caddy n\'est pas en cours d\'exécution' };
+    }
+    
+    // Utiliser 'docker exec' pour exécuter 'caddy reload' dans le container
+    // Cela recharge la config sans couper les connexions existantes
+    await execPromise('docker exec caddy caddy reload --config /etc/caddy/Caddyfile');
+    
+    console.log('[reverseProxyService] ✅ Configuration Caddy rechargée sans interruption');
+    return { success: true };
+  } catch (error: any) {
+    console.error('[reverseProxyService] ❌ Erreur lors du rechargement de Caddy:', error.message);
+    // Si le reload échoue, tenter un restart complet en dernier recours
+    console.log('[reverseProxyService] 🔄 Tentative de restart complet...');
+    return await restartCaddy();
+  }
+}
+
+/**
+ * Redémarre Caddy (down puis up) - à utiliser uniquement si reload échoue
  */
 async function restartCaddy() {
   try {
-    console.log('[reverseProxyService] 🔄 Redémarrage de Caddy...');
+    console.log('[reverseProxyService] 🔄 Redémarrage complet de Caddy...');
     
     // Arrêter Caddy
     const stopResult = await stopCaddy();
@@ -1060,6 +1089,7 @@ export = {
   startCaddy,
   stopCaddy,
   restartCaddy,
+  reloadCaddy,
   updateCaddyfileIP,
   ensurePrivateIPInRyvieDrive,
   getPrivateIP,

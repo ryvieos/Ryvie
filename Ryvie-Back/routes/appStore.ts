@@ -525,33 +525,34 @@ router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('uninst
       stdio: 'inherit'
     });
     
-    worker.on('exit', async (code) => {
-      console.log(`[appStore] 🔔 Worker exit callback appelé pour ${appId}, code:`, code);
-      
-      if (code === 0) {
-        console.log(`[appStore] ✅ Désinstallation de ${appId} terminée avec succès`);
-        
-        // Émettre un événement Socket.IO pour notifier tous les clients
+    // Écouter les messages du worker pour émettre Socket.IO au bon moment
+    worker.on('message', (message: any) => {
+      if (message.type === 'emit-uninstalled') {
         try {
           const io = (global as any).io;
-          console.log(`[appStore] 🔍 Socket.IO disponible:`, !!io);
-          
           if (io) {
             const payload = {
-              appId: appId,
+              appId: message.appId,
               success: true,
-              message: `${appId} désinstallé avec succès`
+              message: `${message.appId} désinstallé avec succès`
             };
             console.log(`[appStore] 📤 Émission de l'événement 'app-uninstalled' avec payload:`, payload);
             io.emit('app-uninstalled', payload);
             console.log(`[appStore] 📡 Notification de désinstallation envoyée via Socket.IO`);
           } else {
-            console.error(`[appStore] ❌ Socket.IO non disponible (global.io est undefined)`);
+            console.error(`[appStore] ❌ Socket.IO non disponible`);
           }
         } catch (e: any) {
           console.error('[appStore] ⚠️ Erreur lors de l\'envoi de la notification Socket.IO:', e.message);
-          console.error('[appStore] Stack trace:', e.stack);
         }
+      }
+    });
+    
+    worker.on('exit', async (code) => {
+      console.log(`[appStore] 🔔 Worker exit callback appelé pour ${appId}, code:`, code);
+      
+      if (code === 0) {
+        console.log(`[appStore] ✅ Désinstallation de ${appId} terminée avec succès`);
       } else {
         console.error(`[appStore] ❌ Désinstallation de ${appId} échouée avec le code ${code}`);
       }
