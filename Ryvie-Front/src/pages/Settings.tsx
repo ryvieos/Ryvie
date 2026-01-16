@@ -11,7 +11,7 @@ import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, testServerC
 import { useSocket } from '../contexts/SocketContext';
 import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo, endSession } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
-import UpdateModal from '../components/UpdateModal';
+import { useUpdate } from '../contexts/UpdateContext';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -230,9 +230,8 @@ const Settings = () => {
   const [updates, setUpdates] = useState(null);
   const [updatesLoading, setUpdatesLoading] = useState(false);
   const [updateInProgress, setUpdateInProgress] = useState(null); // 'ryvie' ou nom de l'app
-  // États pour le modal d'update
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [updateTargetVersion, setUpdateTargetVersion] = useState(null);
+  // Utiliser le contexte global pour la mise à jour
+  const { startUpdate } = useUpdate();
 
   useEffect(() => {
     // Restaurer la session depuis les paramètres URL si preserve_session=true
@@ -1144,9 +1143,8 @@ const Settings = () => {
       });
       
       if (response.data.success) {
-        // Afficher le modal avec spinner et polling
-        setUpdateTargetVersion(response.data.version || 'latest');
-        setShowUpdateModal(true);
+        // Démarrer la mise à jour via le contexte global
+        startUpdate(response.data.version || 'latest', accessMode);
         setUpdateInProgress(null);
       } else {
         await showConfirm(
@@ -3689,13 +3687,7 @@ const Settings = () => {
         }
       `}</style>
 
-      {/* Modal de mise à jour avec spinner et polling */}
-      <UpdateModal 
-        isOpen={showUpdateModal}
-        onClose={() => setShowUpdateModal(false)}
-        targetVersion={updateTargetVersion}
-        accessMode={accessMode}
-      />
+      {/* Le modal de mise à jour est maintenant géré globalement via GlobalUpdateModal */}
     </div>
   );
 };
