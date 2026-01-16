@@ -101,7 +101,9 @@ const fetchAppsFromManifests = async (accessMode: string): Promise<AppManifest[]
     return apps;
   } catch (error: any) {
     console.error('[appConfig] Erreur lors du chargement des manifests:', error.message);
-    return [];
+    // Lancer l'erreur au lieu de retourner un tableau vide
+    // Cela permet au code appelant de conserver la config précédente
+    throw error;
   }
 };
 

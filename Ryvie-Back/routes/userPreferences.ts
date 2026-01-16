@@ -91,6 +91,91 @@ async function getInstalledAppIds() {
   } catch (_: any) {}
   return apps;
 }
+
+/**
+ * Fonction de réconciliation du layout pour tous les utilisateurs
+ * À appeler après l'installation d'une nouvelle app
+ */
+async function reconcileAllUsersLayout() {
+  const fs = require('fs');
+  const path = require('path');
+  
+  try {
+    console.log('[reconcileAllUsersLayout] 🔄 Début de la réconciliation pour tous les utilisateurs');
+    
+    // Récupérer la liste des apps installées
+    const installed = await getInstalledAppIds();
+    
+    // Lire tous les fichiers de préférences
+    if (!fs.existsSync(PREFERENCES_DIR)) {
+      console.log('[reconcileAllUsersLayout] ℹ️ Aucun répertoire de préférences');
+      return;
+    }
+    
+    const files = fs.readdirSync(PREFERENCES_DIR).filter((f: string) => f.endsWith('.json'));
+    
+    for (const file of files) {
+      const username = file.replace('.json', '');
+      const filePath = path.join(PREFERENCES_DIR, file);
+      
+      try {
+        const preferences = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        
+        if (!preferences.launcher) continue;
+        
+        const existingApps = Array.isArray(preferences.launcher.apps) ? preferences.launcher.apps : [];
+        const missing = installed.filter(id => !existingApps.includes(id));
+        
+        if (missing.length > 0) {
+          const layout = preferences.launcher.layout || {};
+          const anchors = preferences.launcher.anchors || {};
+          
+          let maxAnchor = 0;
+          for (const a of Object.values(anchors)) {
+            if (typeof a === 'number') maxAnchor = Math.max(maxAnchor, (a as number));
+          }
+          
+          console.log(`[reconcileAllUsersLayout] 🆕 Placement de ${missing.length} app(s) pour ${username}:`, missing);
+          
+          missing.forEach((appId) => {
+            if (layout[appId]) return;
+            
+            const pos = findFreePosition(layout, 1, 1, 12);
+            if (pos) {
+              layout[appId] = pos;
+              console.log(`[reconcileAllUsersLayout] ✅ ${appId} placé à (${pos.col}, ${pos.row}) pour ${username}`);
+            } else {
+              const maxRow = Math.max(0, ...Object.values(layout).map((p: any) => (p.row || 0) + (p.h || 1)));
+              layout[appId] = { col: 0, row: maxRow + 1, w: 1, h: 1 };
+              console.log(`[reconcileAllUsersLayout] ⚠️ ${appId} placé à (0,${maxRow + 1}) pour ${username}`);
+            }
+            
+            if (typeof anchors[appId] !== 'number') {
+              const pos = layout[appId] as any;
+              const BASE_COLS = 12;
+              const anchorIndex = (pos.row || 0) * BASE_COLS + (pos.col || 0);
+              anchors[appId] = anchorIndex;
+              console.log(`[reconcileAllUsersLayout] 🔗 Ancre créée pour ${appId}: ${anchorIndex} (${username})`);
+            }
+          });
+          
+          preferences.launcher.layout = layout;
+          preferences.launcher.anchors = anchors;
+          preferences.launcher.apps = [...existingApps, ...missing];
+          
+          fs.writeFileSync(filePath, JSON.stringify(preferences, null, 2));
+          console.log(`[reconcileAllUsersLayout] 💾 ${username}: ${missing.length} app(s) ajoutée(s)`);
+        }
+      } catch (err: any) {
+        console.warn(`[reconcileAllUsersLayout] ⚠️ Erreur pour ${username}:`, err.message);
+      }
+    }
+    
+    console.log('[reconcileAllUsersLayout] ✅ Réconciliation terminée');
+  } catch (error: any) {
+    console.error('[reconcileAllUsersLayout] ❌ Erreur:', error.message);
+  }
+}
 if (!fs.existsSync(BACKGROUNDS_DIR)) {
   fs.mkdirSync(BACKGROUNDS_DIR, { recursive: true });
 }
@@ -947,5 +1032,8 @@ router.get('/geocode/:city', async (req: any, res: any) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
+// Attacher la fonction au router pour pouvoir l'exporter
+(router as any).reconcileAllUsersLayout = reconcileAllUsersLayout;
 
 export = router;
