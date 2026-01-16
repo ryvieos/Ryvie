@@ -118,7 +118,10 @@ const generateAppConfigFromManifests = async (accessMode: string): Promise<Recor
       const iconUrl = `${serverUrl}/api/apps/${app.id}/icon?t=${Date.now()}`;
 
       if (app.mainPort && Number.isInteger(app.mainPort)) {
-        try { registerAppPort(app.id, app.mainPort); } catch (_) {}
+        try { 
+          const requiresHttps = app.requiresHttps || false;
+          registerAppPort(app.id, app.mainPort, requiresHttps); 
+        } catch (_) {}
       }
       
       config[iconId] = {

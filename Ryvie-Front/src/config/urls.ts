@@ -22,6 +22,7 @@ let netbirdData: NetbirdData = {
 };
 
 const appPorts: Record<string, number> = {};
+const appHttpsRequired: Record<string, boolean> = {};
 
 let netbirdDataLoaded = false;
 let netbirdDataLoading = false;
@@ -117,11 +118,12 @@ const resolvePort = (appId: string, fallback: number): number => {
   return Number.isInteger(p) ? p : fallback;
 };
 
-const registerAppPort = (appId: string, port: number): void => {
+const registerAppPort = (appId: string, port: number, requiresHttps: boolean = false): void => {
   if (!appId || !Number.isInteger(port)) return;
   try {
     const id = String(appId).toLowerCase();
     appPorts[id] = port;
+    appHttpsRequired[id] = requiresHttps;
     if (BASE_URLS && BASE_URLS.APPS) {
       const domains = netbirdData?.domains || {};
       const domainsId = id;
@@ -172,11 +174,14 @@ const buildAppUrl = (appId: string, port: number): string => {
   const { hostname, protocol } = getCurrentLocation();
   const domains = netbirdData?.domains || {};
   const appDomain = domains[appId];
+  const requiresHttps = appHttpsRequired[appId] || false;
 
   if (hostname === 'ryvie.local') {
     if (cachedLocalIP && port) {
-      console.log(`[buildAppUrl] ${appId} → http://${cachedLocalIP}:${port}`);
-      return `http://${cachedLocalIP}:${port}`;
+      // Utiliser HTTPS si l'app le requiert
+      const scheme = requiresHttps ? 'https' : 'http';
+      console.log(`[buildAppUrl] ${appId} → ${scheme}://${cachedLocalIP}:${port}${requiresHttps ? ' (HTTPS requis)' : ''}`);
+      return `${scheme}://${cachedLocalIP}:${port}`;
     }
     console.log(`[buildAppUrl] ${appId} → http://ryvie.local (IP locale non disponible: ${cachedLocalIP})`);
     return 'http://ryvie.local';
@@ -190,7 +195,8 @@ const buildAppUrl = (appId: string, port: number): string => {
     return `https://${appDomain}`;
   }
 
-  const scheme = protocol === 'https:' ? 'https' : 'http';
+  // Forcer HTTPS si l'app le requiert
+  const scheme = requiresHttps ? 'https' : (protocol === 'https:' ? 'https' : 'http');
   
   if (scheme === 'http' && cachedLocalIP) {
     return `${scheme}://${cachedLocalIP}:${port}`;
