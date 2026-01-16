@@ -1033,9 +1033,28 @@ async function updateAppFromStore(appId) {
     console.log(`[Update] 🔎 Vérification du statut des containers pour ${appId}...`);
     
     try {
-      const containersOutput = execSync(`docker ps -a --filter "name=${appId}" --format "{{.Names}}:{{.Status}}"`, { 
-        encoding: 'utf8' 
+      const projectLabel = appId.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+      console.log(`[Update] 🔍 Vérification via label de projet: ${projectLabel}`);
+      let containersOutput = execSync(`docker ps -a --filter "label=com.docker.compose.project=${projectLabel}" --format "{{.Names}}:{{.Status}}"`, {
+        encoding: 'utf8'
       }).trim();
+
+      // Fallback sur le nom exact si aucun container n'est trouvé via le label
+      if (!containersOutput) {
+        console.log('[Update] 🔍 Aucun container via label, tentative sur le nom exact...');
+        containersOutput = execSync(`docker ps -a --filter "name=${appId}" --format "{{.Names}}:{{.Status}}"`, {
+          encoding: 'utf8'
+        }).trim();
+      }
+
+      // Dernier fallback: nom normalisé (ex: app-rdrive-*)
+      if (!containersOutput) {
+        const normalizedName = projectLabel;
+        console.log(`[Update] 🔍 Tentative finale avec le nom normalisé: ${normalizedName}`);
+        containersOutput = execSync(`docker ps -a --filter "name=${normalizedName}" --format "{{.Names}}:{{.Status}}"`, {
+          encoding: 'utf8'
+        }).trim();
+      }
       
       if (!containersOutput) {
         throw new Error(`Aucun container trouvé pour ${appId}`);
