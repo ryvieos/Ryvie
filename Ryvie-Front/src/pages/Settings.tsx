@@ -1143,9 +1143,41 @@ const Settings = () => {
       });
       
       if (response.data.success) {
-        // Démarrer la mise à jour via le contexte global
-        startUpdate(response.data.version || 'latest', accessMode);
-        setUpdateInProgress(null);
+        const version = response.data.version || 'latest';
+        
+        // Démarrer le service de monitoring
+        try {
+          console.log('[Settings] Démarrage du service de monitoring...');
+          await axios.post(`${serverUrl}/api/settings/start-update-monitor`);
+          console.log('[Settings] Service de monitoring démarré');
+          
+          // Attendre 2 secondes que le service soit prêt
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Vérifier que le service répond
+          const currentHost = window.location.hostname;
+          const monitorHealthUrl = `${window.location.protocol}//${currentHost}:3005/health`;
+          
+          try {
+            await axios.get(monitorHealthUrl, { timeout: 3000 });
+            console.log('[Settings] Service de monitoring prêt');
+          } catch (err) {
+            console.warn('[Settings] Service de monitoring pas encore prêt, redirection quand même');
+          }
+          
+          // Rediriger vers le service de monitoring
+          const monitorUrl = `${window.location.protocol}//${currentHost}:3005/?version=${encodeURIComponent(version)}&mode=${encodeURIComponent(accessMode)}&return=${encodeURIComponent('/#/home')}`;
+          console.log('[Settings] Redirection vers:', monitorUrl);
+          window.location.href = monitorUrl;
+          
+        } catch (err) {
+          console.error('[Settings] Erreur démarrage monitoring:', err);
+          await showConfirm(
+            '❌ Erreur',
+            'Impossible de démarrer le service de monitoring. La mise à jour a été lancée mais vous devrez rafraîchir la page manuellement.',
+            true
+          );
+        }
       } else {
         await showConfirm(
           '❌ Erreur de mise à jour',

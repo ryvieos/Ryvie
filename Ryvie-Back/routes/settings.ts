@@ -164,6 +164,22 @@ router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: 
       throw new Error('Template de monitoring introuvable: ' + templateScript);
     }
     
+    // Créer un lien symbolique vers node_modules du backend
+    const backendNodeModules = path.join(__dirname, '../../node_modules');
+    const tmpNodeModules = path.join(tmpDir, 'node_modules');
+    
+    if (fs.existsSync(backendNodeModules)) {
+      try {
+        fs.symlinkSync(backendNodeModules, tmpNodeModules, 'dir');
+        console.log('[settings] Lien symbolique node_modules créé');
+      } catch (err: any) {
+        // Si le lien existe déjà, ignorer l'erreur
+        if (err.code !== 'EEXIST') {
+          console.warn('[settings] Impossible de créer le lien symbolique:', err.message);
+        }
+      }
+    }
+    
     // Démarrer le service en arrière-plan (détaché du processus parent)
     const monitor = spawn('node', [monitorScript], {
       detached: true,
