@@ -141,6 +141,25 @@ router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: 
     const path = require('path');
     const fs = require('fs');
     
+    let clientOrigin = typeof req.body?.origin === 'string' ? req.body.origin.trim() : '';
+    if (!clientOrigin) {
+      const headerOrigin = (req.get('origin') || '').trim();
+      if (headerOrigin) {
+        clientOrigin = headerOrigin;
+      }
+    }
+    if (!clientOrigin) {
+      const referer = (req.get('referer') || '').trim();
+      if (referer) {
+        try {
+          const parsed = new URL(referer);
+          clientOrigin = parsed.origin;
+        } catch (_) {
+          // ignore
+        }
+      }
+    }
+    
     // Créer un dossier temporaire pour le service de monitoring
     const tmpDir = '/tmp/ryvie-update-monitor';
     const monitorScript = path.join(tmpDir, 'monitor.js');
@@ -180,23 +199,65 @@ router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: 
       }
     }
     
-    // Démarrer le service en arrière-plan (détaché du processus parent)
-    const monitor = spawn('node', [monitorScript], {
-      detached: true,
-      stdio: ['ignore', 'ignore', 'ignore'],
-      cwd: tmpDir
-    });
+    // Créer un fichier .env avec l'URL de retour pour garantir la bonne redirection
+    const envFile = path.join(tmpDir, '.env');
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const fallbackOrigin = `${protocol}://${host}`;
+    const returnUrl = clientOrigin && /^https?:\/\//.test(clientOrigin) ? clientOrigin : fallbackOrigin;
     
-    monitor.unref();
+    const envContent = `# Configuration du service Update Monitor
+RETURN_URL=${returnUrl}
+CREATED_AT=${new Date().toISOString()}
+`;
     
-    console.log('[settings] Service de monitoring démarré (PID:', monitor.pid, ')');
+    fs.writeFileSync(envFile, envContent);
+    console.log('[settings] Fichier .env créé avec URL de retour:', returnUrl);
+    
+    // Créer le dossier /data/logs s'il n'existe pas
+    const logsDir = '/data/logs';
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    
+    // Démarrer le service en arrière-plan avec nohup et setsid pour survivre au redémarrage PM2
+    // Rediriger les logs vers /data/logs/update-monitor.log pour debugging
+    const logFile = path.join(logsDir, 'update-monitor.log');
+    const startScript = path.join(tmpDir, 'start-monitor.sh');
+    const startScriptContent = `#!/bin/bash
+cd ${tmpDir}
+echo "=== Service Update Monitor démarré à $(date) ===" > ${logFile}
+echo "URL de retour: ${returnUrl}" >> ${logFile}
+nohup node ${monitorScript} >> ${logFile} 2>&1 &
+echo $!
+`;
+    
+    fs.writeFileSync(startScript, startScriptContent);
+    fs.chmodSync(startScript, '755');
+    
+    console.log('[settings] Script de démarrage créé:', startScript);
+    
+    // Lancer le script avec setsid pour créer une nouvelle session
+    const result = execSync(`setsid ${startScript}`, { encoding: 'utf8' }).trim();
+    const pid = parseInt(result);
+    
+    console.log('[settings] Service de monitoring démarré (PID:', pid, ')');
     console.log('[settings] Le service tournera sur le port 3005');
     console.log('[settings] Il se supprimera automatiquement après la mise à jour');
+    console.log('[settings] Le processus survivra au redémarrage PM2');
+    
+    // Vérifier que le processus est bien lancé
+    try {
+      execSync(`ps -p ${pid}`, { stdio: 'ignore' });
+      console.log('[settings] ✓ Processus confirmé actif');
+    } catch (e) {
+      throw new Error('Le processus de monitoring n\'a pas démarré correctement');
+    }
     
     res.json({ 
       success: true, 
       message: 'Service de monitoring démarré',
-      pid: monitor.pid,
+      pid: pid,
       port: 3005
     });
   } catch (error: any) {
