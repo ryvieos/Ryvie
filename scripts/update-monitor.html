@@ -256,7 +256,7 @@
             // Nettoyer le service après la redirection
             setTimeout(async () => {
               try {
-                await fetch('http://' + window.location.hostname + ':3005/cleanup', {
+                await fetch('http://' + window.location.hostname + ':3001/cleanup', {
                   method: 'POST'
                 });
                 console.log('[Monitor] Cleanup appelé');

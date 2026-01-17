@@ -1155,13 +1155,13 @@ const Settings = () => {
         
         // Vérifier que le service répond
         const currentHost = window.location.hostname;
-        const monitorHealthUrl = `${window.location.protocol}//${currentHost}:3005/health`;
+        const monitorHealthUrl = `${window.location.protocol}//${currentHost}:3001/health`;
         
         try {
           await axios.get(monitorHealthUrl, { timeout: 3000 });
           console.log('[Settings] ✓ Service de monitoring prêt et fonctionnel');
         } catch (healthErr) {
-          throw new Error('Le service de monitoring ne répond pas sur le port 3005');
+          throw new Error('Le service de monitoring ne répond pas sur le port 3001');
         }
         
       } catch (monitorErr) {
@@ -1186,7 +1186,7 @@ const Settings = () => {
         
         // ÉTAPE 3 : Rediriger vers le service de monitoring
         const currentHost = window.location.hostname;
-        const monitorUrl = `${window.location.protocol}//${currentHost}:3005/?version=${encodeURIComponent(version)}&mode=${encodeURIComponent(accessMode)}&return=${encodeURIComponent('/#/home')}`;
+        const monitorUrl = `${window.location.protocol}//${currentHost}:3001/?version=${encodeURIComponent(version)}&mode=${encodeURIComponent(accessMode)}&return=${encodeURIComponent('/#/home')}`;
         console.log('[Settings] ✓ Redirection vers:', monitorUrl);
         window.location.href = monitorUrl;
       } else {
