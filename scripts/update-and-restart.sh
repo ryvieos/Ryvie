@@ -418,8 +418,14 @@ cleanup
 # 12. Supprimer le snapshot si tout s'est bien passé
 if [[ -n "$SNAPSHOT_PATH" && -d "$SNAPSHOT_PATH" ]]; then
   log "🧹 Suppression du snapshot de sécurité..."
-  sudo btrfs subvolume delete "$SNAPSHOT_PATH"/* 2>/dev/null || true
-  sudo rmdir "$SNAPSHOT_PATH" 2>/dev/null || true
+  # Supprimer les sous-volumes enfants d'abord
+  if compgen -G "$SNAPSHOT_PATH/*" > /dev/null; then
+    log "  -> Suppression des sous-volumes BTRFS..."
+    sudo btrfs subvolume delete "$SNAPSHOT_PATH"/* 2>/dev/null || true
+  fi
+  # Supprimer l'archive du code et le dossier parent
+  log "  -> Suppression du dossier snapshot..."
+  sudo rm -rf "$SNAPSHOT_PATH" 2>/dev/null || true
   log "✅ Snapshot supprimé"
 fi
 
