@@ -20,7 +20,7 @@ fi
 
 RYVIE_DIR="/opt/Ryvie"
 TEMP_DIR="$RYVIE_DIR/.update-staging"
-GITHUB_REPO="maisonnavejul/Ryvie"
+GITHUB_REPO="ryvieos/Ryvie"
 SNAPSHOT_PATH=""
 
 # Créer le dossier de logs s'il n'existe pas
@@ -423,6 +423,9 @@ if [[ -n "$SNAPSHOT_PATH" && -d "$SNAPSHOT_PATH" ]]; then
   log "✅ Snapshot supprimé"
 fi
 
+log "⏳ Attente de 15s pour la stabilisation des services..."
+sleep 15
+update_status "done" "Mise à jour terminée avec succès" 100
 log "========================================="
 log "✅ Mise à jour terminée avec succès"
 log "   Version: $TARGET_VERSION"

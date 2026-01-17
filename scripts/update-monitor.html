@@ -201,76 +201,69 @@
       return window.location.origin;
     }
 
-    // Timer simple de 3 minutes avec progression fluide
-    function startUpdateTimer() {
-      console.log("[Monitor] Demarrage du timer de mise a jour (3 minutes)");
-      
-      // Mettre à jour la progression toutes les 500ms
-      const updateInterval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(99, Math.floor((elapsed / UPDATE_DURATION) * 100));
-        
-        // Messages selon la progression
-        let message = 'Mise à jour en cours...';
-        let step = 'Installation';
-        
-        if (progress < 20) {
-          message = 'Téléchargement des fichiers...';
-          step = 'Téléchargement';
-        } else if (progress < 40) {
-          message = 'Installation des composants...';
-          step = 'Installation';
-        } else if (progress < 60) {
-          message = 'Configuration du système...';
-          step = 'Configuration';
-        } else if (progress < 80) {
-          message = 'Redémarrage des services...';
-          step = 'Redémarrage';
-        } else if (progress < 95) {
-          message = 'Finalisation de la mise à jour...';
-          step = 'Finalisation';
-        } else {
-          message = 'Presque terminé...';
-          step = 'Finalisation';
-        }
-        
-        updateProgress(progress, message, step);
-        
-        // Si on a atteint ou dépassé 3 minutes
-        if (elapsed >= UPDATE_DURATION && !redirected) {
-          clearInterval(updateInterval);
-          
-          console.log("[Monitor] Mise a jour terminee, redirection imminente");
-          document.getElementById('spinner').style.display = 'none';
-          document.getElementById('successIcon').style.display = 'block';
-          updateProgress(100, "Mise a jour terminee. Attendez quelques secondes...", "Termine");
-          
-          // Rediriger après 2 secondes
-          setTimeout(() => {
-            const redirectOrigin = getRedirectOrigin();
-            const finalUrl = redirectOrigin + returnUrl;
-            console.log('[Monitor] Redirection vers:', finalUrl);
-            redirected = true;
-            window.location.href = finalUrl;
-            
-            // Nettoyer le service après la redirection
-            setTimeout(async () => {
-              try {
-                await fetch('http://' + window.location.hostname + ':3001/cleanup', {
-                  method: 'POST'
-                });
-                console.log('[Monitor] Cleanup appelé');
-              } catch (e) {
-                console.log('[Monitor] Cleanup appelé (erreur ignorée)');
-              }
-            }, 2000);
-          }, 2000);
-        }
-      }, 500);
+    function handleSuccess() {
+      if (redirected) return;
+      redirected = true;
+
+      console.log("[Monitor] Mise a jour terminee, redirection imminente");
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('successIcon').style.display = 'block';
+      updateProgress(100, "Mise a jour terminee. Redirection en cours...", "Termine");
+
+      setTimeout(() => {
+        const redirectOrigin = getRedirectOrigin();
+        const finalUrl = redirectOrigin + returnUrl;
+        console.log('[Monitor] Redirection vers:', finalUrl);
+        window.location.href = finalUrl;
+
+        setTimeout(async () => {
+          try {
+            await fetch('http://' + window.location.hostname + ':3001/cleanup', { method: 'POST' });
+            console.log('[Monitor] Cleanup appelé');
+          } catch (e) {
+            console.log('[Monitor] Cleanup appelé (erreur ignorée)');
+          }
+        }, 2000);
+      }, 2000);
     }
 
-    // Démarrer le timer
-    startUpdateTimer();
+    function startPolling() {
+      console.log("[Monitor] Démarrage du polling de statut");
+      const pollingInterval = setInterval(async () => {
+        try {
+          const response = await fetch('/status?t=' + new Date().getTime());
+          if (!response.ok) {
+            // Pas d'arrêt, on continue d'essayer
+            console.warn(`[Monitor] Erreur HTTP ${response.status} lors de la récupération du statut.`);
+            return;
+          }
+          const data = await response.json();
+
+          console.log('[Monitor] Statut reçu:', data);
+          updateProgress(data.progress, data.message, data.step);
+
+          if (data.progress >= 100) {
+            clearInterval(pollingInterval);
+            handleSuccess();
+          }
+
+        } catch (error) {
+          console.error('[Monitor] Erreur lors du polling:', error);
+        }
+      }, 2000); // Poll toutes les 2 secondes
+
+      // Sécurité: si après 3 minutes, rien ne s'est passé, on redirige quand même
+      setTimeout(() => {
+        if (!redirected) {
+            console.warn('[Monitor] Timeout de 3 minutes atteint, redirection forcée.');
+            clearInterval(pollingInterval);
+            handleSuccess();
+        }
+      }, UPDATE_DURATION);
+    }
+
+    // Démarrer le polling
+    startPolling();
   </script>
 </body>
 </html>
