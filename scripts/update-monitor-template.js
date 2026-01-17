@@ -191,8 +191,10 @@ app.get('/', (req, res) => {
 
     let statusPollingInterval = null;
     let healthPollingInterval = null;
+    let frontendCheckInterval = null;
     let lastProgress = 5;
     let healthCheckStarted = false;
+    let redirected = false;
 
     function updateProgress(progress, message, step) {
       document.getElementById('progressBar').style.width = progress + '%';
@@ -249,6 +251,121 @@ app.get('/', (req, res) => {
       }, 1000);
     }
 
+    // Polling du frontend pour vérifier qu'il est accessible avant redirection
+    function startFrontendCheck() {
+      let attempts = 0;
+      const maxAttempts = 150; // 150 * 2s = 5 minutes
+      let consecutiveFrontendReady = 0;
+      
+      updateProgress(95, 'Redémarrage en cours, veuillez patienter...', 'Redémarrage');
+      
+      frontendCheckInterval = setInterval(async () => {
+        attempts++;
+        
+        try {
+          const frontendUrl = window.location.protocol + '//' + window.location.hostname + 
+            (accessMode === 'private' ? ':3000' : '');
+          
+          console.log('[Monitor] Tentative ' + attempts + ' - Vérification frontend:', frontendUrl);
+          
+          // Vérifier que le frontend répond
+          const response = await fetch(frontendUrl, {
+            method: 'HEAD',
+            cache: 'no-cache',
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate'
+            }
+          });
+          
+          if (response.ok) {
+            consecutiveFrontendReady++;
+            console.log('[Monitor] Frontend répond! (' + consecutiveFrontendReady + '/2)');
+            updateProgress(98, 
+              'Presque terminé, vérification finale... (' + consecutiveFrontendReady + '/2)',
+              'Finalisation');
+            
+            if (consecutiveFrontendReady >= 2) {
+              clearInterval(frontendCheckInterval);
+              
+              // Frontend accessible, on peut rediriger
+              console.log('[Monitor] Frontend confirmé accessible, redirection imminente');
+              document.getElementById('spinner').style.display = 'none';
+              document.getElementById('successIcon').style.display = 'block';
+              updateProgress(100, 'Mise à jour terminée !', 'Terminé');
+              
+              // Rediriger immédiatement
+              const finalUrl = frontendUrl + returnUrl;
+              console.log('[Monitor] Redirection vers:', finalUrl);
+              redirected = true;
+              window.location.href = finalUrl;
+              
+              // Nettoyer le service APRÈS la redirection (avec un délai pour que la redirection se fasse)
+              setTimeout(async () => {
+                try {
+                  await fetch('http://' + window.location.hostname + ':3005/cleanup', {
+                    method: 'POST'
+                  });
+                  console.log('[Monitor] Cleanup appelé après redirection');
+                } catch (e) {
+                  console.log('[Monitor] Cleanup appelé (erreur ignorée)');
+                }
+              }, 2000);
+            }
+          } else {
+            consecutiveFrontendReady = 0;
+            console.log('[Monitor] Frontend pas encore prêt (status:', response.status, ')');
+            updateProgress(96, 'Préparation en cours...', 'Préparation');
+          }
+        } catch (error) {
+          consecutiveFrontendReady = 0;
+          console.log('[Monitor] Frontend pas encore accessible:', error.message);
+          
+          if (attempts < 30) {
+            updateProgress(96, 'Préparation de la mise à jour...', 'Préparation');
+          } else if (attempts < 60) {
+            updateProgress(96, 'Mise en place des composants...', 'Installation');
+          } else if (attempts < 90) {
+            updateProgress(97, 'Démarrage des services...', 'Démarrage');
+          } else if (attempts < 120) {
+            updateProgress(97, 'Cela prend un peu plus de temps que prévu...', 'Attente');
+          } else {
+            updateProgress(98, 'Patience, finalisation en cours... (' + attempts + '/150)', 'Attente');
+          }
+          
+          // Timeout de 5 minutes
+          if (attempts >= maxAttempts) {
+            clearInterval(frontendCheckInterval);
+            
+            if (!redirected) {
+              // Si on n'a pas encore redirigé après 5 minutes, forcer la redirection
+              console.warn('[Monitor] Timeout de 5 minutes atteint, redirection forcée');
+              document.getElementById('spinner').style.display = 'none';
+              document.getElementById('successIcon').style.display = 'block';
+              updateProgress(100, 'Ouverture de l’application...', 'Finalisation');
+              
+              const frontendUrl = window.location.protocol + '//' + window.location.hostname + 
+                (accessMode === 'private' ? ':3000' : '');
+              const finalUrl = frontendUrl + returnUrl;
+              redirected = true;
+              window.location.href = finalUrl;
+            }
+            
+            // Nettoyer le service dans tous les cas
+            setTimeout(async () => {
+              try {
+                await fetch('http://' + window.location.hostname + ':3005/cleanup', {
+                  method: 'POST'
+                });
+                console.log('[Monitor] Cleanup forcé après timeout');
+              } catch (e) {
+                console.log('[Monitor] Cleanup forcé (erreur ignorée)');
+              }
+            }, 2000);
+          }
+        }
+      }, 2000); // Vérifier toutes les 2 secondes
+    }
+
     // Polling du health check
     function startHealthPolling() {
       let attempts = 0;
@@ -256,7 +373,7 @@ app.get('/', (req, res) => {
       let consecutiveReady = 0;
       let progressValue = 90;
 
-      updateProgress(90, 'Attente du redémarrage du serveur...', 'Health check');
+      updateProgress(90, 'Redémarrage en cours, veuillez patienter...', 'Redémarrage');
 
       healthPollingInterval = setInterval(async () => {
         attempts++;
@@ -277,30 +394,15 @@ app.get('/', (req, res) => {
           if (response.ok) {
             consecutiveReady++;
             updateProgress(Math.floor(progressValue), 
-              'Serveur en ligne, vérification finale... (' + consecutiveReady + '/2)',
+              'Système en ligne, vérification finale... (' + consecutiveReady + '/2)',
               'Vérification');
 
             if (consecutiveReady >= 2) {
               clearInterval(healthPollingInterval);
               
-              document.getElementById('spinner').style.display = 'none';
-              document.getElementById('successIcon').style.display = 'block';
-              updateProgress(100, 'Mise à jour terminée avec succès!', 'Terminé');
-
-              // Nettoyer le service de monitoring
-              try {
-                await fetch('http://' + window.location.hostname + ':3005/cleanup', {
-                  method: 'POST'
-                });
-              } catch (e) {
-                console.log('[Monitor] Cleanup appelé');
-              }
-
-              // Recharger vers l'URL de retour après 1.5s
-              setTimeout(() => {
-                window.location.href = window.location.protocol + '//' + window.location.hostname + 
-                  (accessMode === 'private' ? ':3000' : '') + returnUrl;
-              }, 1500);
+              // Démarrer la vérification du frontend avant de rediriger
+              updateProgress(95, 'Préparation de l’application...', 'Préparation');
+              startFrontendCheck();
             }
           } else {
             consecutiveReady = 0;
@@ -311,9 +413,9 @@ app.get('/', (req, res) => {
           if (attempts < 30) {
             updateProgress(Math.floor(progressValue), 'Redémarrage en cours, veuillez patienter...', 'Redémarrage');
           } else if (attempts < 60) {
-            updateProgress(Math.floor(progressValue), 'Installation des dépendances...', 'Installation');
+            updateProgress(Math.floor(progressValue), 'Mise en place des composants...', 'Installation');
           } else if (attempts < 90) {
-            updateProgress(Math.floor(progressValue), 'Compilation du frontend...', 'Compilation');
+            updateProgress(Math.floor(progressValue), 'Finalisation...', 'Finalisation');
           } else {
             updateProgress(Math.floor(progressValue), 'Le serveur prend plus de temps que prévu...', 'Attente');
           }
