@@ -134,6 +134,146 @@ router.get('/settings/updates', verifyToken, async (req: any, res: any) => {
   }
 });
 
+// POST /api/settings/start-update-monitor - Démarrer le service de monitoring
+router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: any, res: any) => {
+  try {
+    const { spawn, execSync } = require('child_process');
+    const path = require('path');
+    const fs = require('fs');
+    
+    let clientOrigin = typeof req.body?.origin === 'string' ? req.body.origin.trim() : '';
+    if (!clientOrigin) {
+      const headerOrigin = (req.get('origin') || '').trim();
+      if (headerOrigin) {
+        clientOrigin = headerOrigin;
+      }
+    }
+    if (!clientOrigin) {
+      const referer = (req.get('referer') || '').trim();
+      if (referer) {
+        try {
+          const parsed = new URL(referer);
+          clientOrigin = parsed.origin;
+        } catch (_) {
+          // ignore
+        }
+      }
+    }
+    
+    // Créer un dossier temporaire pour le service de monitoring
+    const tmpDir = '/tmp/ryvie-update-monitor';
+    const monitorScript = path.join(tmpDir, 'monitor.js');
+    const monitorHtml = path.join(tmpDir, 'update-monitor.html');
+    const templateScript = path.join(__dirname, '../../../scripts/update-monitor-template.js');
+    const templateHtml = path.join(__dirname, '../../../scripts/update-monitor.html');
+    
+    console.log('[settings] Création du dossier temporaire:', tmpDir);
+    
+    // Supprimer l'ancien dossier s'il existe
+    if (fs.existsSync(tmpDir)) {
+      execSync(`rm -rf ${tmpDir}`);
+    }
+    
+    // Créer le nouveau dossier
+    fs.mkdirSync(tmpDir, { recursive: true });
+    
+    // Copier les fichiers du service de monitoring
+    if (fs.existsSync(templateScript)) {
+      fs.copyFileSync(templateScript, monitorScript);
+      console.log('[settings] Template JS copié vers:', monitorScript);
+    } else {
+      throw new Error('Template de monitoring introuvable: ' + templateScript);
+    }
+    if (fs.existsSync(templateHtml)) {
+      fs.copyFileSync(templateHtml, monitorHtml);
+      console.log('[settings] Template HTML copié vers:', monitorHtml);
+    } else {
+      throw new Error('Template HTML de monitoring introuvable: ' + templateHtml);
+    }
+    
+    // Créer un lien symbolique vers node_modules du backend
+    const backendNodeModules = path.join(__dirname, '../../node_modules');
+    const tmpNodeModules = path.join(tmpDir, 'node_modules');
+    
+    if (fs.existsSync(backendNodeModules)) {
+      try {
+        fs.symlinkSync(backendNodeModules, tmpNodeModules, 'dir');
+        console.log('[settings] Lien symbolique node_modules créé');
+      } catch (err: any) {
+        // Si le lien existe déjà, ignorer l'erreur
+        if (err.code !== 'EEXIST') {
+          console.warn('[settings] Impossible de créer le lien symbolique:', err.message);
+        }
+      }
+    }
+    
+    // Créer un fichier .env avec l'URL de retour pour garantir la bonne redirection
+    const envFile = path.join(tmpDir, '.env');
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const fallbackOrigin = `${protocol}://${host}`;
+    const returnUrl = clientOrigin && /^https?:\/\//.test(clientOrigin) ? clientOrigin : fallbackOrigin;
+    
+    const envContent = `# Configuration du service Update Monitor
+RETURN_URL=${returnUrl}
+CREATED_AT=${new Date().toISOString()}
+`;
+    
+    fs.writeFileSync(envFile, envContent);
+    console.log('[settings] Fichier .env créé avec URL de retour:', returnUrl);
+    
+    // Créer le dossier /data/logs s'il n'existe pas
+    const logsDir = '/data/logs';
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    
+    // Démarrer le service en arrière-plan avec nohup et setsid pour survivre au redémarrage PM2
+    // Rediriger les logs vers /data/logs/update-monitor.log pour debugging
+    const logFile = path.join(logsDir, 'update-monitor.log');
+    const startScript = path.join(tmpDir, 'start-monitor.sh');
+    const startScriptContent = `#!/bin/bash
+cd ${tmpDir}
+echo "=== Service Update Monitor démarré à $(date) ===" > ${logFile}
+echo "URL de retour: ${returnUrl}" >> ${logFile}
+nohup node ${monitorScript} > /dev/null 2>&1 &
+echo $!
+`;
+    
+    fs.writeFileSync(startScript, startScriptContent);
+    fs.chmodSync(startScript, '755');
+    
+    console.log('[settings] Script de démarrage créé:', startScript);
+    
+    // Lancer le script avec setsid pour créer une nouvelle session
+    const result = execSync(`setsid ${startScript}`, { encoding: 'utf8' }).trim();
+    const pid = parseInt(result);
+    
+    console.log('[settings] Service de monitoring démarré (PID:', pid, ')');
+    console.log('[settings] Le service tournera sur le port 3001');
+    console.log('[settings] Il se supprimera automatiquement après la mise à jour');
+    console.log('[settings] Le processus survivra au redémarrage PM2');
+    
+    // Vérifier que le processus est bien lancé
+    try {
+      execSync(`ps -p ${pid}`, { stdio: 'ignore' });
+      console.log('[settings] ✓ Processus confirmé actif');
+    } catch (e) {
+      throw new Error('Le processus de monitoring n\'a pas démarré correctement');
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Service de monitoring démarré',
+      pid: pid,
+      port: 3001
+    });
+  } catch (error: any) {
+    console.error('[settings] Erreur démarrage service monitoring:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // POST /api/settings/update-ryvie - Mettre à jour Ryvie
 router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req: any, res: any) => {
   try {
