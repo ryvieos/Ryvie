@@ -80,11 +80,25 @@ app.get('/health', (req, res) => {
 
 // Endpoint pour lire le fichier de statut (utilisé par d'anciennes versions, conservé pour compatibilité)
 app.get('/status', (req, res) => {
-  res.json({ 
-    step: 'initializing', 
-    progress: 5, 
-    message: 'Initialisation de la mise a jour...'
-  });
+  const statusFile = '/tmp/ryvie-update-status.json';
+  if (fs.existsSync(statusFile)) {
+    try {
+      const statusContent = fs.readFileSync(statusFile, 'utf8');
+      res.json(JSON.parse(statusContent));
+    } catch (e) {
+      res.json({ 
+        step: 'error',
+        progress: 0,
+        message: 'Erreur lecture statut.'
+      });
+    }
+  } else {
+    res.json({ 
+      step: 'initializing', 
+      progress: 5, 
+      message: 'Initialisation de la mise à jour...'
+    });
+  }
 });
 
 // Fonction de nettoyage et d'arrêt du service
