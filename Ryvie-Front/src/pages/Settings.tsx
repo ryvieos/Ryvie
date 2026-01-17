@@ -1137,15 +1137,58 @@ const Settings = () => {
     
     try {
       const serverUrl = getServerUrl(accessMode);
-      console.log('[Settings] Démarrage de la mise à jour de Ryvie...');
+      
+      // ÉTAPE 1 : Démarrer le service de monitoring AVANT la mise à jour
+      console.log('[Settings] 1/3 - Démarrage du service de monitoring...');
+      try {
+        const monitorResponse = await axios.post(`${serverUrl}/api/settings/start-update-monitor`, {}, { timeout: 10000 });
+        
+        if (!monitorResponse.data.success) {
+          throw new Error(monitorResponse.data.error || 'Échec du démarrage du service');
+        }
+        
+        console.log('[Settings] ✓ Service de monitoring démarré (PID:', monitorResponse.data.pid, ')');
+        
+        // Attendre 2 secondes que le service soit prêt
+        console.log('[Settings] 2/3 - Attente que le service soit prêt...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Vérifier que le service répond
+        const currentHost = window.location.hostname;
+        const monitorHealthUrl = `${window.location.protocol}//${currentHost}:3001/health`;
+        
+        try {
+          await axios.get(monitorHealthUrl, { timeout: 3000 });
+          console.log('[Settings] ✓ Service de monitoring prêt et fonctionnel');
+        } catch (healthErr) {
+          throw new Error('Le service de monitoring ne répond pas sur le port 3001');
+        }
+        
+      } catch (monitorErr) {
+        console.error('[Settings] ❌ Erreur démarrage monitoring:', monitorErr);
+        setUpdateInProgress(null);
+        await showConfirm(
+          '❌ Erreur',
+          `Impossible de démarrer le service de monitoring. La mise à jour a été annulée.\n\nDétails: ${monitorErr.message}`,
+          true
+        );
+        return; // ARRÊTER ICI - ne pas lancer la mise à jour
+      }
+      
+      // ÉTAPE 2 : Lancer la mise à jour (le service de monitoring est OK)
+      console.log('[Settings] 3/3 - Lancement de la mise à jour...');
       const response = await axios.post(`${serverUrl}/api/settings/update-ryvie`, {}, {
         timeout: 120000 // 120 secondes pour la création du snapshot
       });
       
       if (response.data.success) {
-        // Démarrer la mise à jour via le contexte global
-        startUpdate(response.data.version || 'latest', accessMode);
-        setUpdateInProgress(null);
+        const version = response.data.version || 'latest';
+        
+        // ÉTAPE 3 : Rediriger vers le service de monitoring
+        const currentHost = window.location.hostname;
+        const monitorUrl = `${window.location.protocol}//${currentHost}:3001/?version=${encodeURIComponent(version)}&mode=${encodeURIComponent(accessMode)}&return=${encodeURIComponent('/#/home')}`;
+        console.log('[Settings] ✓ Redirection vers:', monitorUrl);
+        window.location.href = monitorUrl;
       } else {
         await showConfirm(
           '❌ Erreur de mise à jour',
