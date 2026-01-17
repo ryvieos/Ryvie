@@ -163,7 +163,9 @@ router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: 
     // Créer un dossier temporaire pour le service de monitoring
     const tmpDir = '/tmp/ryvie-update-monitor';
     const monitorScript = path.join(tmpDir, 'monitor.js');
+    const monitorHtml = path.join(tmpDir, 'update-monitor.html');
     const templateScript = path.join(__dirname, '../../../scripts/update-monitor-template.js');
+    const templateHtml = path.join(__dirname, '../../../scripts/update-monitor.html');
     
     console.log('[settings] Création du dossier temporaire:', tmpDir);
     
@@ -175,12 +177,18 @@ router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: 
     // Créer le nouveau dossier
     fs.mkdirSync(tmpDir, { recursive: true });
     
-    // Copier le template du service de monitoring
+    // Copier les fichiers du service de monitoring
     if (fs.existsSync(templateScript)) {
       fs.copyFileSync(templateScript, monitorScript);
-      console.log('[settings] Template copié vers:', monitorScript);
+      console.log('[settings] Template JS copié vers:', monitorScript);
     } else {
       throw new Error('Template de monitoring introuvable: ' + templateScript);
+    }
+    if (fs.existsSync(templateHtml)) {
+      fs.copyFileSync(templateHtml, monitorHtml);
+      console.log('[settings] Template HTML copié vers:', monitorHtml);
+    } else {
+      throw new Error('Template HTML de monitoring introuvable: ' + templateHtml);
     }
     
     // Créer un lien symbolique vers node_modules du backend
