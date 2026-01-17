@@ -236,7 +236,7 @@ CREATED_AT=${new Date().toISOString()}
 cd ${tmpDir}
 echo "=== Service Update Monitor démarré à $(date) ===" > ${logFile}
 echo "URL de retour: ${returnUrl}" >> ${logFile}
-nohup node ${monitorScript} >> ${logFile} 2>&1 &
+nohup node ${monitorScript} > /dev/null 2>&1 &
 echo $!
 `;
     
@@ -250,7 +250,7 @@ echo $!
     const pid = parseInt(result);
     
     console.log('[settings] Service de monitoring démarré (PID:', pid, ')');
-    console.log('[settings] Le service tournera sur le port 3005');
+    console.log('[settings] Le service tournera sur le port 3001');
     console.log('[settings] Il se supprimera automatiquement après la mise à jour');
     console.log('[settings] Le processus survivra au redémarrage PM2');
     
@@ -266,7 +266,7 @@ echo $!
       success: true, 
       message: 'Service de monitoring démarré',
       pid: pid,
-      port: 3005
+      port: 3001
     });
   } catch (error: any) {
     console.error('[settings] Erreur démarrage service monitoring:', error);

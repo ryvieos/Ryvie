@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 3005;
+const PORT = 3001;
 const ENV_FILE = '/tmp/ryvie-update-monitor/.env';
 const LOG_FILE = '/data/logs/update-monitor.log';
 const HTML_FILE = '/tmp/ryvie-update-monitor/update-monitor.html';
@@ -87,26 +87,34 @@ app.get('/status', (req, res) => {
   });
 });
 
-// Endpoint de nettoyage - arrête le service et supprime les fichiers temporaires
-app.post('/cleanup', (req, res) => {
-  log("[Update Monitor] Nettoyage demande");
-  res.json({ success: true });
+// Fonction de nettoyage et d'arrêt du service
+const performCleanupAndShutdown = (reason) => {
+  log(`[Update Monitor] Nettoyage demande (${reason})`);
   
-  setTimeout(() => {
+  // Arrêter le serveur pour ne plus accepter de requêtes
+  server.close(() => {
+    log('[Update Monitor] Serveur arrete.');
     try {
-      log("[Update Monitor] Debut du nettoyage...");
+      log("[Update Monitor] Debut du nettoyage des fichiers...");
       const tmpDir = '/tmp/ryvie-update-monitor';
       if (fs.existsSync(tmpDir)) {
         fs.rmSync(tmpDir, { recursive: true, force: true });
         log(`[Update Monitor] Dossier temporaire supprime: ${tmpDir}`);
       }
-      log("[Update Monitor] Nettoyage termine, arret du service");
+      log("[Update Monitor] Nettoyage termine, arret du processus.");
       process.exit(0);
     } catch (error) {
       log(`[Update Monitor] Erreur nettoyage: ${error.message}`);
       process.exit(1);
     }
-  }, 1000);
+  });
+};
+
+// Endpoint de nettoyage - arrête le service et supprime les fichiers temporaires
+app.post('/cleanup', (req, res) => {
+  res.json({ success: true });
+  // Laisser un court délai pour que la réponse HTTP soit envoyée
+  setTimeout(() => performCleanupAndShutdown('API call'), 50);
 });
 
 // Démarrer le serveur
@@ -116,13 +124,14 @@ const server = app.listen(PORT, () => {
   log("[Update Monitor] Pret a recevoir des requetes");
 });
 
-// Gérer l'arrêt propre
+// Sécurité : arrêt automatique après 5 minutes
+setTimeout(() => {
+  performCleanupAndShutdown('Timeout de securite');
+}, 300000); // 5 minutes
+
+// Gérer l'arrêt propre en appelant la fonction de nettoyage complète
 const shutdown = (signal) => {
-  log(`[Update Monitor] ${signal} recu, arret...`);
-  server.close(() => {
-    log(`[Update Monitor] Serveur ferme suite a ${signal}`);
-    process.exit(0);
-  });
+  performCleanupAndShutdown(signal);
 };
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
