@@ -329,15 +329,19 @@ async function generateDefaultLauncher() {
       console.warn('[generateDefaultLauncher] Répertoire manifests non trouvé:', manifestsDir);
     }
     
-    // Placer les apps en grille à partir de col=2, row=2 (sous les widgets)
-    let col = 2;
-    const row = 2;
-    
+    // Placer les apps dans la zone à gauche du widget Storage (évite les collisions)
+    // Zone apps: cols 0..5 (6 colonnes), à partir de row=2, avec wrap sur les lignes suivantes
+    const APP_COL_START = 0;
+    const APP_COL_END = 5;
+    const APP_COLS = APP_COL_END - APP_COL_START + 1;
+    let i = 0;
+
     apps.forEach(appId => {
+      const col = APP_COL_START + (i % APP_COLS);
+      const row = 2 + Math.floor(i / APP_COLS);
       layout[appId] = { col, row, w: 1, h: 1 };
-      const anchor = row * maxCols + col;
-      anchors[appId] = anchor;
-      col += 1;
+      anchors[appId] = row * maxCols + col;
+      i += 1;
     });
     
     console.log('[generateDefaultLauncher] Généré avec', apps.length, 'apps et', defaultWidgets.length, 'widgets:', apps);

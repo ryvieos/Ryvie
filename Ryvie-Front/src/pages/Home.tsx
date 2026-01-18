@@ -687,11 +687,7 @@ const Home = () => {
   const DEFAULT_ANCHORS = React.useMemo(() => ({
     weather: 3, // row 0 * 12 + col 3
     'widget-cpu-ram-0': 6, // row 0 * 12 + col 6
-    'widget-storage-1': 30, // row 2 * 12 + col 6
-    'app-rdrive': 26, // row 2 * 12 + col 2
-    'app-rdrop': 39,
-    'app-rtransfer': 40,
-    'app-rpictures': 41
+    'widget-storage-1': 30 // row 2 * 12 + col 6
   }), []);
   // Générer dynamiquement un layout/apps/ancres par défaut à partir des apps disponibles
   const computeDefaults = React.useCallback((appIds = []) => {
@@ -702,10 +698,13 @@ const Home = () => {
       'widget-storage-1': { col: 6, row: 2, w: 2, h: 2 }
     };
     const anchors = { ...DEFAULT_ANCHORS };
-    // Placer les apps connues en ligne à partir de col=2, row=3 (sous les widgets)
-    let col = 2;
-    const row = 2;
-    let anchor = row * 12 + col; // 26
+    // Placer les apps dans la zone à gauche du widget Storage (évite les collisions)
+    // Zone apps: cols 0..5 (6 colonnes), à partir de row=2, avec wrap sur les lignes suivantes
+    const APP_COL_START = 0;
+    const APP_COL_END = 5;
+    const APP_COLS = APP_COL_END - APP_COL_START + 1;
+    let i = 0;
+    const rowStart = 2;
     const ordered = [];
     // Utiliser toutes les apps connues (triées par id)
     const sourceIds = Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-')).sort();
@@ -714,11 +713,12 @@ const Home = () => {
       if (appsConfig && Object.keys(appsConfig).length > 0 && !appsConfig[id]) return;
       // Ne pas ajouter météo ni widgets
       if (id === 'weather' || String(id).startsWith('widget-')) return;
+      const col = APP_COL_START + (i % APP_COLS);
+      const row = rowStart + Math.floor(i / APP_COLS);
       layout[id] = { col, row, w: 1, h: 1 };
-      anchors[id] = anchor;
+      anchors[id] = row * 12 + col;
       ordered.push(id);
-      col += 1;
-      anchor += 1;
+      i += 1;
     });
     return { layout, anchors, apps: ordered };
   }, [appsConfig, DEFAULT_ANCHORS]);
