@@ -460,10 +460,13 @@ async function fetchAppsFromRelease(release) {
 /**
  * Télécharge une app depuis le repo GitHub via l'API
  */
-async function downloadAppFromRepoArchive(release, appId) {
+async function downloadAppFromRepoArchive(release, appId, existingManifest = null) {
   console.log(`[appStore] 📥 Téléchargement de ${appId} via GitHub API...`);
   
-  const appDir = path.join(APPS_DIR, appId);
+  // Utiliser sourceDir du manifest existant si disponible (mise à jour)
+  // Sinon utiliser le chemin par défaut (nouvelle installation)
+  const appDir = existingManifest?.sourceDir || path.join(APPS_DIR, appId);
+  console.log(`[appStore] 📂 Dossier de destination: ${appDir}`);
   
   // Créer un sous-volume Btrfs au lieu d'un simple dossier pour permettre les snapshots
   try {
@@ -609,11 +612,22 @@ async function downloadAppFromRepoArchive(release, appId) {
     
     // 6. Vérifier que les fichiers requis sont présents
     sendProgressUpdate(appId, 63, 'Vérification des fichiers requis...', 'verification');
-    const requiredFiles = ['docker-compose.yml', 'ryvie-app.yml', 'icon.png'];
+    
+    // Déterminer le dossier où chercher les fichiers
+    // Si existingManifest a un dockerComposePath avec sous-dossier, chercher là
+    let checkDir = appDir;
+    if (existingManifest?.dockerComposePath && existingManifest.dockerComposePath.includes('/')) {
+      // Extraire le sous-dossier (ex: "tdrive/docker-compose.yml" → "tdrive")
+      const subDir = path.dirname(existingManifest.dockerComposePath);
+      checkDir = path.join(appDir, subDir);
+      console.log(`[appStore] 📂 Vérification dans le sous-dossier: ${subDir}`);
+    }
+    
+    const requiredFiles = ['docker-compose.yml', 'ryvie-app.yml'];
     const missingFiles = [];
     
     for (const requiredFile of requiredFiles) {
-      const filePath = path.join(appDir, requiredFile);
+      const filePath = path.join(checkDir, requiredFile);
       try {
         await fs.access(filePath);
         console.log(`[appStore] ✅ Fichier requis trouvé: ${requiredFile}`);
@@ -622,8 +636,23 @@ async function downloadAppFromRepoArchive(release, appId) {
       }
     }
     
+    // Vérifier l'icône (peut être .png ou .svg)
+    const iconExtensions = ['png', 'svg', 'jpg', 'jpeg'];
+    let iconFound = false;
+    for (const ext of iconExtensions) {
+      try {
+        await fs.access(path.join(checkDir, `icon.${ext}`));
+        console.log(`[appStore] ✅ Icône trouvée: icon.${ext}`);
+        iconFound = true;
+        break;
+      } catch {}
+    }
+    if (!iconFound) {
+      missingFiles.push('icon.png/svg');
+    }
+    
     if (missingFiles.length > 0) {
-      throw new Error(`Fichiers requis manquants: ${missingFiles.join(', ')}`);
+      throw new Error(`Fichiers requis manquants dans ${checkDir}: ${missingFiles.join(', ')}`);
     }
     
     sendProgressUpdate(appId, 65, 'Fichiers vérifiés avec succès', 'verification');
@@ -855,6 +884,7 @@ async function updateAppFromStore(appId) {
   let snapshotPath = null;
   let currentStep = 'initialisation';
   let appDir = null; // Pour nettoyer en cas d'échec
+  let existingManifest = null; // Manifest de l'installation existante
   
   try {
     console.log(`[Update] Début de la mise à jour/installation de ${appId} depuis l'App Store...`);
@@ -866,6 +896,22 @@ async function updateAppFromStore(appId) {
     
     sendProgressUpdate(appId, 2, 'Vérification des prérequis...', 'init');
     await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Vérifier si l'app est déjà installée en lisant le manifest existant
+    const manifestPath = path.join(MANIFESTS_DIR, appId, 'manifest.json');
+    try {
+      const manifestContent = await fs.readFile(manifestPath, 'utf8');
+      existingManifest = JSON.parse(manifestContent);
+      console.log(`[Update] ✅ Manifest existant trouvé pour ${appId}`);
+      console.log(`[Update] 📂 sourceDir: ${existingManifest.sourceDir}`);
+      console.log(`[Update] 📄 dockerComposePath: ${existingManifest.dockerComposePath}`);
+    } catch (manifestError: any) {
+      if (manifestError.code === 'ENOENT') {
+        console.log(`[Update] ℹ️ Aucun manifest existant, nouvelle installation`);
+      } else {
+        console.warn(`[Update] ⚠️ Erreur lors de la lecture du manifest:`, manifestError.message);
+      }
+    }
     
     // 1. Créer un snapshot avant la mise à jour (obligatoire pour la sécurité)
     currentStep = 'snapshot-creation';
@@ -912,7 +958,7 @@ async function updateAppFromStore(appId) {
     currentStep = 'app-archive-download';
     console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
     console.log(`[Update] 📥 Téléchargement de ${appId}...`);
-    appDir = await downloadAppFromRepoArchive(latestRelease, appId);
+    appDir = await downloadAppFromRepoArchive(latestRelease, appId, existingManifest);
     
     sendProgressUpdate(appId, 68, 'Application téléchargée, configuration en cours...', 'extraction');
     
@@ -957,16 +1003,33 @@ async function updateAppFromStore(appId) {
       // Utiliser docker-compose classique
       console.log('[Update] 🔎 Étape courante: docker-compose-up');
       
-      // Détecter le fichier docker-compose
-      const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
+      // Utiliser dockerComposePath du manifest existant si disponible
       let composeFile = null;
-
-      for (const file of composeFiles) {
+      
+      if (existingManifest?.dockerComposePath) {
+        composeFile = existingManifest.dockerComposePath;
+        console.log(`[Update] 📄 Utilisation du dockerComposePath du manifest: ${composeFile}`);
+        
+        // Vérifier que le fichier existe
         try {
-          await fs.access(path.join(appDir, file));
-          composeFile = file;
-          break;
-        } catch {}
+          await fs.access(path.join(appDir, composeFile));
+          console.log(`[Update] ✅ Fichier docker-compose trouvé: ${composeFile}`);
+        } catch {
+          console.warn(`[Update] ⚠️ Fichier ${composeFile} non trouvé, recherche automatique...`);
+          composeFile = null;
+        }
+      }
+      
+      // Si pas de manifest ou fichier non trouvé, détecter automatiquement
+      if (!composeFile) {
+        const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
+        for (const file of composeFiles) {
+          try {
+            await fs.access(path.join(appDir, file));
+            composeFile = file;
+            break;
+          } catch {}
+        }
       }
 
       if (!composeFile) {
