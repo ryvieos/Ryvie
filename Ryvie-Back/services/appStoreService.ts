@@ -110,12 +110,15 @@ async function loadInstalledVersionsFromManifests() {
           if (!normalizedId) return;
           
           // Vérifier que le dossier de l'app existe dans /data/apps/
-          const appDir = path.join(APPS_DIR, entry.name);
+          // Utiliser sourceDir du manifest si disponible, sinon fallback sur entry.name
+          const appDir = manifest.sourceDir || path.join(APPS_DIR, entry.name);
+          console.log(`[appStore] Vérification de ${normalizedId}: dossier=${appDir}, buildId=${manifest.buildId}`);
           try {
             await fs.access(appDir);
+            console.log(`[appStore] ✅ ${normalizedId}: dossier existe`);
           } catch {
             // Le dossier n'existe pas, l'app a été désinstallée manuellement
-            console.log(`[appStore] App ${normalizedId} détectée comme désinstallée (dossier absent)`);
+            console.log(`[appStore] ❌ ${normalizedId} détectée comme désinstallée (dossier absent: ${appDir})`);
             return;
           }
           
@@ -124,6 +127,9 @@ async function loadInstalledVersionsFromManifests() {
             : null;
           if (buildId !== null) {
             installed[normalizedId] = buildId;
+            console.log(`[appStore] ✅ ${normalizedId} ajouté avec buildId=${buildId}`);
+          } else {
+            console.log(`[appStore] ⚠️  ${normalizedId} ignoré (buildId=${manifest.buildId} n'est pas un nombre)`);
           }
         }
       } catch (manifestError: any) {
@@ -133,6 +139,7 @@ async function loadInstalledVersionsFromManifests() {
       }
     }));
 
+    console.log(`[appStore] Apps installées détectées:`, Object.keys(installed));
     return installed;
   } catch (error: any) {
     if (error.code !== 'ENOENT') {
