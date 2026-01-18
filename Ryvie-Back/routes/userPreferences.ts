@@ -280,18 +280,18 @@ async function generateDefaultLauncher() {
     { id: 'widget-storage-1', type: 'storage' }
   ];
   
-  // Layout par défaut: weather + cpu-ram + storage sur la ligne 1, apps sur la ligne 3
+  // Layout par défaut: weather + cpu-ram sur la ligne 0, storage et apps sur la ligne 2
   const layout: any = {
-    weather: { col: 3, row: 1, w: 3, h: 2 },
-    'widget-cpu-ram-0': { col: 6, row: 1, w: 2, h: 2 },
-    'widget-storage-1': { col: 6, row: 3, w: 2, h: 2 }
+    weather: { col: 3, row: 0, w: 3, h: 2 },
+    'widget-cpu-ram-0': { col: 6, row: 0, w: 2, h: 2 },
+    'widget-storage-1': { col: 6, row: 2, w: 2, h: 2 }
   };
   
   // Ancres calculées: row * maxCols + col
   const anchors: any = {
-    weather: 1 * maxCols + 3, // 15
-    'widget-cpu-ram-0': 1 * maxCols + 6, // 18
-    'widget-storage-1': 3 * maxCols + 6 // 42
+    weather: 0 * maxCols + 3, // 3
+    'widget-cpu-ram-0': 0 * maxCols + 6, // 6
+    'widget-storage-1': 2 * maxCols + 6 // 30
   };
   
   try {
@@ -329,9 +329,9 @@ async function generateDefaultLauncher() {
       console.warn('[generateDefaultLauncher] Répertoire manifests non trouvé:', manifestsDir);
     }
     
-    // Placer les apps en grille à partir de col=2, row=3 (sous les widgets)
+    // Placer les apps en grille à partir de col=2, row=2 (sous les widgets)
     let col = 2;
-    const row = 3;
+    const row = 2;
     
     apps.forEach(appId => {
       layout[appId] = { col, row, w: 1, h: 1 };
@@ -1029,6 +1029,50 @@ router.get('/geocode/:city', async (req: any, res: any) => {
     }
   } catch (error: any) {
     console.error('[userPreferences] Erreur géocodage:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// GET /api/user/onboarding-status - Vérifier si l'utilisateur a complété l'onboarding
+router.get('/user/onboarding-status', verifyToken, (req: any, res: any) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    const preferences = loadUserPreferences(username);
+    
+    const hasCompletedOnboarding = preferences?.hasCompletedOnboarding || false;
+    
+    res.json({ 
+      hasCompletedOnboarding,
+      isFirstLogin: !hasCompletedOnboarding
+    });
+  } catch (error: any) {
+    console.error('[userPreferences] Erreur onboarding-status:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/user/complete-onboarding - Marquer l'onboarding comme complété
+router.post('/user/complete-onboarding', verifyToken, (req: any, res: any) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] Marquage onboarding complété pour:', username);
+    
+    let preferences = loadUserPreferences(username) || {
+      zones: {},
+      theme: 'default',
+      language: 'fr'
+    };
+    
+    preferences.hasCompletedOnboarding = true;
+    
+    if (saveUserPreferences(username, preferences)) {
+      console.log('[userPreferences] Onboarding marqué comme complété pour', username);
+      res.json({ success: true, message: 'Onboarding complété' });
+    } else {
+      res.status(500).json({ error: 'Échec de la sauvegarde' });
+    }
+  } catch (error: any) {
+    console.error('[userPreferences] Erreur complete-onboarding:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });

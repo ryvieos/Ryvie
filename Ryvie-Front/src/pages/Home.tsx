@@ -20,6 +20,7 @@ import {
 } from '../config/appConfig';
 import GridLauncher from '../components/GridLauncher';
 import InstallIndicator from '../components/InstallIndicator';
+import OnboardingOverlay from '../components/OnboardingOverlay';
  
 
 // Fonction pour importer toutes les images du dossier weather_icons
@@ -656,6 +657,7 @@ const Home = () => {
   const taskbarTimeoutRef = React.useRef(null); // Timeout de secours pour forcer l'affichage
   const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
   const [bgUrl, setBgUrl] = useState(null);         // URL calculée courante
+  const [showOnboarding, setShowOnboarding] = useState(false); // Afficher l'overlay d'onboarding
   const [prevBgUrl, setPrevBgUrl] = useState(null); // URL précédente pour crossfade
   const [bgFadeKey, setBgFadeKey] = useState(0);    // clé pour relancer l'animation
   const [disconnectedSince, setDisconnectedSince] = useState(null); // Timestamp de début de déconnexion
@@ -683,10 +685,10 @@ const Home = () => {
   const widgetIdCounter = React.useRef(0); // Compteur pour générer des IDs uniques
   // Ancres par défaut si l'utilisateur n'a rien en backend (alignées avec le backend)
   const DEFAULT_ANCHORS = React.useMemo(() => ({
-    weather: 15, // row 1 * 12 + col 3
-    'widget-cpu-ram-0': 18, // row 1 * 12 + col 6
-    'widget-storage-1': 42, // row 3 * 12 + col 6
-    'app-rdrive': 38, // row 3 * 12 + col 2
+    weather: 3, // row 0 * 12 + col 3
+    'widget-cpu-ram-0': 6, // row 0 * 12 + col 6
+    'widget-storage-1': 30, // row 2 * 12 + col 6
+    'app-rdrive': 26, // row 2 * 12 + col 2
     'app-rdrop': 39,
     'app-rtransfer': 40,
     'app-rpictures': 41
@@ -695,15 +697,15 @@ const Home = () => {
   const computeDefaults = React.useCallback((appIds = []) => {
     // Layout par défaut avec widgets weather, cpu-ram et storage
     const layout = {
-      weather: { col: 3, row: 1, w: 3, h: 2 },
-      'widget-cpu-ram-0': { col: 6, row: 1, w: 2, h: 2 },
-      'widget-storage-1': { col: 6, row: 3, w: 2, h: 2 }
+      weather: { col: 3, row: 0, w: 3, h: 2 },
+      'widget-cpu-ram-0': { col: 6, row: 0, w: 2, h: 2 },
+      'widget-storage-1': { col: 6, row: 2, w: 2, h: 2 }
     };
     const anchors = { ...DEFAULT_ANCHORS };
     // Placer les apps connues en ligne à partir de col=2, row=3 (sous les widgets)
     let col = 2;
-    const row = 3;
-    let anchor = row * 12 + col; // 38
+    const row = 2;
+    let anchor = row * 12 + col; // 26
     const ordered = [];
     // Utiliser toutes les apps connues (triées par id)
     const sourceIds = Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-')).sort();
@@ -1312,6 +1314,26 @@ const Home = () => {
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
+  }, []);
+
+  // Vérifier si l'utilisateur doit voir l'onboarding
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      try {
+        const accessMode = getCurrentAccessMode() || 'private';
+        const serverUrl = getServerUrl(accessMode);
+        const response = await axios.get(`${serverUrl}/api/user/onboarding-status`);
+        
+        if (response.data && response.data.isFirstLogin) {
+          console.log('[Home] Premier login détecté - affichage de l\'onboarding');
+          setShowOnboarding(true);
+        }
+      } catch (error) {
+        console.error('[Home] Erreur vérification onboarding:', error);
+      }
+    };
+    
+    checkOnboarding();
   }, []);
 
   useEffect(() => {
@@ -2845,6 +2867,16 @@ const Home = () => {
             {notification.message}
           </span>
         </div>
+      )}
+
+      {/* Overlay d'onboarding pour les nouveaux utilisateurs */}
+      {showOnboarding && (
+        <OnboardingOverlay 
+          onComplete={() => {
+            setShowOnboarding(false);
+            console.log('[Home] Onboarding complété');
+          }}
+        />
       )}
     </div>
   );
