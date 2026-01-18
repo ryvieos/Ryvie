@@ -1238,7 +1238,7 @@ try {
                         {app.category}
                       </span>
                     )}
-                    {app.version && (
+                    {app.version && !(app?.id && installingApps.has(app.id)) && (
                       <span className="version-text">v{app.version}</span>
                     )}
                   </div>
@@ -1322,7 +1322,9 @@ try {
                     {selectedApp.category.charAt(0).toUpperCase() + selectedApp.category.slice(1)}
                   </p>
                 )}
-                <p className="modal-version">Version {selectedApp.version}</p>
+                {selectedApp.version && !(selectedApp?.id && installingApps.has(selectedApp.id)) && (
+                  <p className="modal-version">Version {selectedApp.version}</p>
+                )}
               </div>
               <div className="modal-header-actions">
                 {(() => {

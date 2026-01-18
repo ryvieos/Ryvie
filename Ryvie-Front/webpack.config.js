@@ -104,6 +104,11 @@ module.exports = {
           to: 'config/[name][ext]',
           noErrorOnMissing: true,
         },
+        {
+          from: 'public/images',
+          to: 'images',
+          noErrorOnMissing: true,
+        },
       ],
     }),
   ].filter(Boolean), // Filtrer les plugins null/undefined

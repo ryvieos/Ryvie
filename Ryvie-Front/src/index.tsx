@@ -11,6 +11,7 @@ import StorageSettings from './pages/StorageSettings';
 import Welcome from './pages/Welcome';
 import Userlogin from './pages/Connexion';
 import ServerRestarting from './pages/ServerRestarting';
+import Onboarding from './pages/Onboarding';
 import { initializeSession, isSessionActive, endSession } from './utils/sessionManager';
 import { isElectron } from './utils/platformUtils';
 import { handleAuthError } from './services/authService';
@@ -104,6 +105,10 @@ const App = () => {
           <Route path="/userlogin" element={
             <ProtectedRoute>
               <Userlogin />
+            </ProtectedRoute>} />
+          <Route path="/onboarding" element={
+            <ProtectedRoute>
+              <Onboarding />
             </ProtectedRoute>} />
           <Route path="/server-restarting" element={<ServerRestarting />} />
         </Routes>

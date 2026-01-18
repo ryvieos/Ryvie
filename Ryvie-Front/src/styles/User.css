@@ -2,9 +2,9 @@
 
 /* Variables CSS - Mode Clair (par défaut) */
 :root {
-  --user-primary: #3b82f6;
-  --user-primary-dark: #2563eb;
-  --user-secondary: #8b5cf6;
+  --user-primary: #1B6CFF;
+  --user-primary-dark: #0F4FE6;
+  --user-secondary: #00D4FF;
   --user-success: #22c55e;
   --user-danger: #ef4444;
   --user-warning: #f59e0b;
@@ -20,14 +20,14 @@
 
 /* Variables CSS - Mode Sombre */
 body.dark-mode {
-  --user-bg: #0f172a;
-  --user-bg-card: rgba(30, 41, 59, 0.8);
-  --user-bg-glass: rgba(255, 255, 255, 0.05);
-  --user-border: rgba(255, 255, 255, 0.1);
+  --user-bg: #050B1F;
+  --user-bg-card: rgba(15, 23, 42, 0.72);
+  --user-bg-glass: rgba(255, 255, 255, 0.06);
+  --user-border: rgba(255, 255, 255, 0.10);
   --user-text: #f1f5f9;
   --user-text-muted: #94a3b8;
-  --user-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  --user-shadow-hover: 0 20px 40px rgba(0, 0, 0, 0.3);
+  --user-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  --user-shadow-hover: 0 26px 70px rgba(0, 0, 0, 0.45);
 }
 
 .user-body {
@@ -45,7 +45,7 @@ body.dark-mode {
 
 /* Effet de fond en mode sombre uniquement */
 body.dark-mode .user-body {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  background: linear-gradient(135deg, #050B1F 0%, #071B3D 50%, #050B1F 100%);
   background-attachment: fixed;
 }
 
@@ -57,8 +57,8 @@ body.dark-mode .user-body::before {
   right: 0;
   bottom: 0;
   background-image: 
-    radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 75% 75%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+    radial-gradient(circle at 25% 25%, rgba(27, 108, 255, 0.14) 0%, transparent 55%),
+    radial-gradient(circle at 75% 75%, rgba(0, 212, 255, 0.12) 0%, transparent 55%);
   pointer-events: none;
   z-index: 0;
 }
@@ -355,7 +355,7 @@ body.dark-mode .user-card:hover {
 
 .user-card:hover .user-avatar {
   transform: scale(1.05);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 8px 20px rgba(27, 108, 255, 0.3);
 }
 
 .user-info {
@@ -413,15 +413,15 @@ body.dark-mode .role-badge.admin {
 }
 
 .role-badge.user {
-  background: rgba(59, 130, 246, 0.1);
-  color: #2563eb;
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(27, 108, 255, 0.1);
+  color: #1B6CFF;
+  border: 1px solid rgba(27, 108, 255, 0.2);
 }
 
 body.dark-mode .role-badge.user {
-  background: rgba(59, 130, 246, 0.15);
-  color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(27, 108, 255, 0.12);
+  color: #00D4FF;
+  border: 1px solid rgba(0, 212, 255, 0.18);
 }
 
 .role-badge.guest {
@@ -465,19 +465,19 @@ body.dark-mode .role-badge.guest {
 }
 
 .edit-button {
-  background: rgba(59, 130, 246, 0.1);
-  color: #2563eb;
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(27, 108, 255, 0.1);
+  color: #1B6CFF;
+  border: 1px solid rgba(27, 108, 255, 0.2);
 }
 
 body.dark-mode .edit-button {
-  background: rgba(59, 130, 246, 0.15);
-  color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(27, 108, 255, 0.12);
+  color: #00D4FF;
+  border: 1px solid rgba(0, 212, 255, 0.18);
 }
 
 .edit-button:hover {
-  background: rgba(59, 130, 246, 0.2);
+  background: rgba(27, 108, 255, 0.2);
   transform: translateY(-2px);
 }
 
@@ -629,7 +629,7 @@ body.dark-mode .modal-body select {
 .modal-body select:focus {
   outline: none;
   border-color: var(--user-primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px rgba(27, 108, 255, 0.18);
 }
 
 .modal-body input:disabled,
@@ -683,7 +683,7 @@ body.dark-mode .modal-body input[readonly] {
 .role-select:focus {
   outline: none;
   border-color: var(--user-primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px rgba(27, 108, 255, 0.18);
 }
 
 /* Message d'erreur dans le modal */
@@ -736,7 +736,7 @@ body.dark-mode .modal-error-message p {
 
 .submit-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 8px 25px rgba(27, 108, 255, 0.3);
 }
 
 .submit-btn:disabled {
@@ -845,7 +845,7 @@ body.dark-mode .admin-auth-buttons .cancel-btn:hover:not(:disabled) {
 }
 
 .admin-auth-buttons .submit-btn:hover:not(:disabled) {
-  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 8px 25px rgba(27, 108, 255, 0.3);
   transform: translateY(-2px);
 }
 
