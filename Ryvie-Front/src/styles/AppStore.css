@@ -325,8 +325,8 @@
 }
 
 .featured-install-btn {
-  background: rgba(255,255,255,0.92);
-  color: #111827;
+  background: linear-gradient(135deg, #1B6CFF, #00D4FF);
+  color: #ffffff;
   padding: 10px 16px;
   border: none;
   border-radius: 9999px;
@@ -412,14 +412,14 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  background: linear-gradient(135deg, #1B6CFF, #00D4FF);
   color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #1565c0;
+  background: #1B6CFF;
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(25, 118, 210, 0.35);
+  box-shadow: 0 6px 16px rgba(27, 108, 255, 0.35);
 }
 
 .btn-primary:disabled {
@@ -541,7 +541,7 @@
 }
 
 .category-chip.active {
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  background: linear-gradient(135deg, #1B6CFF, #00D4FF);
   color: white;
 }
 
@@ -710,8 +710,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  /* Bleu plus marqué pour bien voir le remplissage */
-  background: rgba(37, 99, 235, 0.7);
+  background: linear-gradient(90deg, rgba(27, 108, 255, 0.75), rgba(0, 212, 255, 0.75));
   transform-origin: left center;
   transform: scaleX(var(--progress, 0));
   transition: transform 0.25s ease-out;
@@ -1310,7 +1309,7 @@
 
 .install-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2563eb, #7c3aed);
+  background: linear-gradient(90deg, #1B6CFF, #00D4FF);
   border-radius: 9999px;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -1462,7 +1461,7 @@
 
 .install-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(90deg, #1B6CFF, #00D4FF);
   border-radius: 4px;
   transition: width 0.3s ease-out;
   position: relative;

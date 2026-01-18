@@ -20,6 +20,7 @@ import {
 } from '../config/appConfig';
 import GridLauncher from '../components/GridLauncher';
 import InstallIndicator from '../components/InstallIndicator';
+import OnboardingOverlay from '../components/OnboardingOverlay';
  
 
 // Fonction pour importer toutes les images du dossier weather_icons
@@ -656,6 +657,7 @@ const Home = () => {
   const taskbarTimeoutRef = React.useRef(null); // Timeout de secours pour forcer l'affichage
   const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
   const [bgUrl, setBgUrl] = useState(null);         // URL calculée courante
+  const [showOnboarding, setShowOnboarding] = useState(false); // Afficher l'overlay d'onboarding
   const [prevBgUrl, setPrevBgUrl] = useState(null); // URL précédente pour crossfade
   const [bgFadeKey, setBgFadeKey] = useState(0);    // clé pour relancer l'animation
   const [disconnectedSince, setDisconnectedSince] = useState(null); // Timestamp de début de déconnexion
@@ -683,27 +685,26 @@ const Home = () => {
   const widgetIdCounter = React.useRef(0); // Compteur pour générer des IDs uniques
   // Ancres par défaut si l'utilisateur n'a rien en backend (alignées avec le backend)
   const DEFAULT_ANCHORS = React.useMemo(() => ({
-    weather: 15, // row 1 * 12 + col 3
-    'widget-cpu-ram-0': 18, // row 1 * 12 + col 6
-    'widget-storage-1': 42, // row 3 * 12 + col 6
-    'app-rdrive': 38, // row 3 * 12 + col 2
-    'app-rdrop': 39,
-    'app-rtransfer': 40,
-    'app-rpictures': 41
+    weather: 3, // row 0 * 12 + col 3
+    'widget-cpu-ram-0': 6, // row 0 * 12 + col 6
+    'widget-storage-1': 30 // row 2 * 12 + col 6
   }), []);
   // Générer dynamiquement un layout/apps/ancres par défaut à partir des apps disponibles
   const computeDefaults = React.useCallback((appIds = []) => {
     // Layout par défaut avec widgets weather, cpu-ram et storage
     const layout = {
-      weather: { col: 3, row: 1, w: 3, h: 2 },
-      'widget-cpu-ram-0': { col: 6, row: 1, w: 2, h: 2 },
-      'widget-storage-1': { col: 6, row: 3, w: 2, h: 2 }
+      weather: { col: 3, row: 0, w: 3, h: 2 },
+      'widget-cpu-ram-0': { col: 6, row: 0, w: 2, h: 2 },
+      'widget-storage-1': { col: 6, row: 2, w: 2, h: 2 }
     };
     const anchors = { ...DEFAULT_ANCHORS };
-    // Placer les apps connues en ligne à partir de col=2, row=3 (sous les widgets)
-    let col = 2;
-    const row = 3;
-    let anchor = row * 12 + col; // 38
+    // Placer les apps dans la zone à gauche du widget Storage (évite les collisions)
+    // Zone apps: cols 0..5 (6 colonnes), à partir de row=2, avec wrap sur les lignes suivantes
+    const APP_COL_START = 0;
+    const APP_COL_END = 5;
+    const APP_COLS = APP_COL_END - APP_COL_START + 1;
+    let i = 0;
+    const rowStart = 2;
     const ordered = [];
     // Utiliser toutes les apps connues (triées par id)
     const sourceIds = Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-')).sort();
@@ -712,11 +713,12 @@ const Home = () => {
       if (appsConfig && Object.keys(appsConfig).length > 0 && !appsConfig[id]) return;
       // Ne pas ajouter météo ni widgets
       if (id === 'weather' || String(id).startsWith('widget-')) return;
+      const col = APP_COL_START + (i % APP_COLS);
+      const row = rowStart + Math.floor(i / APP_COLS);
       layout[id] = { col, row, w: 1, h: 1 };
-      anchors[id] = anchor;
+      anchors[id] = row * 12 + col;
       ordered.push(id);
-      col += 1;
-      anchor += 1;
+      i += 1;
     });
     return { layout, anchors, apps: ordered };
   }, [appsConfig, DEFAULT_ANCHORS]);
@@ -1312,6 +1314,26 @@ const Home = () => {
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
+  }, []);
+
+  // Vérifier si l'utilisateur doit voir l'onboarding
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      try {
+        const accessMode = getCurrentAccessMode() || 'private';
+        const serverUrl = getServerUrl(accessMode);
+        const response = await axios.get(`${serverUrl}/api/user/onboarding-status`);
+        
+        if (response.data && response.data.isFirstLogin) {
+          console.log('[Home] Premier login détecté - affichage de l\'onboarding');
+          setShowOnboarding(true);
+        }
+      } catch (error) {
+        console.error('[Home] Erreur vérification onboarding:', error);
+      }
+    };
+    
+    checkOnboarding();
   }, []);
 
   useEffect(() => {
@@ -2845,6 +2867,16 @@ const Home = () => {
             {notification.message}
           </span>
         </div>
+      )}
+
+      {/* Overlay d'onboarding pour les nouveaux utilisateurs */}
+      {showOnboarding && (
+        <OnboardingOverlay 
+          onComplete={() => {
+            setShowOnboarding(false);
+            console.log('[Home] Onboarding complété');
+          }}
+        />
       )}
     </div>
   );
