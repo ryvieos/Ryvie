@@ -59,28 +59,13 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
             Ryvie est votre espace personnel dans le cloud, conçu pour vous offrir 
             une expérience simple et intuitive.
           </p>
-          <div className="onboarding-features">
-            <div className="feature-item">
-              <div className="feature-icon">🚀</div>
-              <div className="feature-text">
-                <h4>Rapide et Performant</h4>
-                <p>Accédez à vos applications en un clic</p>
-              </div>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon">🔒</div>
-              <div className="feature-text">
-                <h4>Sécurisé</h4>
-                <p>Vos données restent sous votre contrôle</p>
-              </div>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon">🎨</div>
-              <div className="feature-text">
-                <h4>Personnalisable</h4>
-                <p>Adaptez Ryvie à vos besoins</p>
-              </div>
-            </div>
+          <div className="onboarding-hero-image">
+            <img
+              src="/images/assets/ryvie-interface.png"
+              alt="Interface Ryvie"
+              className="onboarding-clickable-image"
+              onClick={() => openLightbox('/images/assets/ryvie-interface.png', 'Interface Ryvie')}
+            />
           </div>
         </div>
       )
