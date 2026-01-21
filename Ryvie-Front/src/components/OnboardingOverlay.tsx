@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from '../utils/setupAxios';
 import '../styles/OnboardingOverlay.css';
 import urlsConfig from '../config/urls';
@@ -20,6 +20,27 @@ interface OnboardingOverlayProps {
 const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => {
   const [currentPage, setCurrentPage] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
+
+  const closeLightbox = () => setLightboxImage(null);
+  const openLightbox = (src: string, alt: string) => setLightboxImage({ src, alt });
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeLightbox();
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [lightboxImage]);
 
   const pages: OnboardingPage[] = [
     {
@@ -125,7 +146,8 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
                 <img 
                   src="/images/assets/ryvie-desktop.png" 
                   alt="Ryvie Desktop" 
-                  className="app-screenshot app-screenshot-desktop"
+                  className="app-screenshot app-screenshot-desktop onboarding-clickable-image"
+                  onClick={() => openLightbox('/images/assets/ryvie-desktop.png', 'Ryvie Desktop')}
                 />
                 <div className="app-info">
                   <h4>Ryvie Desktop</h4>
@@ -142,7 +164,8 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
                 <img 
                   src="/images/assets/ryvie-connect.png" 
                   alt="Ryvie Connect" 
-                  className="app-screenshot app-screenshot-mobile"
+                  className="app-screenshot app-screenshot-mobile onboarding-clickable-image"
+                  onClick={() => openLightbox('/images/assets/ryvie-connect.png', 'Ryvie Connect')}
                 />
                 <div className="app-info">
                   <h4>Ryvie Connect</h4>
@@ -155,14 +178,15 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
               <div className="ecosystem-app ecosystem-app-mobile">
                 <img 
                   src="/images/assets/rpictures.png" 
-                  alt="rPicture" 
-                  className="app-screenshot app-screenshot-mobile"
+                  alt="rPictures" 
+                  className="app-screenshot app-screenshot-mobile onboarding-clickable-image"
+                  onClick={() => openLightbox('/images/assets/rpictures.png', 'rPictures')}
                 />
                 <div className="app-info">
-                  <h4>rPicture</h4>
+                  <h4>rPictures</h4>
                   <p>
                     Sauvegardez automatiquement vos photos et vidéos sur votre Ryvie. 
-                    rPicture est également disponible dans l'App Store.
+                    rPictures est également disponible dans l'App Store.
                   </p>
                 </div>
               </div>
@@ -190,7 +214,8 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
               <img 
                 src="/images/assets/right-click-menu.png" 
                 alt="Menu clic droit" 
-                className="demo-screenshot"
+                className="demo-screenshot onboarding-clickable-image"
+                onClick={() => openLightbox('/images/assets/right-click-menu.png', 'Menu clic droit')}
               />
             </div>
             <div className="right-click-actions">
@@ -392,6 +417,23 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
           </div>
         </div>
       </div>
+
+      {lightboxImage && (
+        <div className="onboarding-lightbox" onClick={closeLightbox}>
+          <div className="onboarding-lightbox-backdrop" />
+          <div className="onboarding-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="onboarding-lightbox-close"
+              type="button"
+              onClick={closeLightbox}
+              aria-label="Fermer"
+            >
+              ×
+            </button>
+            <img src={lightboxImage.src} alt={lightboxImage.alt} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
