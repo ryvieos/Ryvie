@@ -57,11 +57,11 @@
   background: linear-gradient(
     180deg,
     rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0) 60%,
-    rgba(0, 0, 0, 0.01) 62%,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(0, 0, 0, 0.01) 58%,
     rgba(0, 0, 0, 0.03) 64%,
     rgba(0, 0, 0, 0.08) 68%,
-    rgba(0, 0, 0, 0.2) 72%,
+    rgba(0, 0, 0, 0.2) 75%,
     rgba(0, 0, 0, 0.80) 100%
   );
   pointer-events: none;
@@ -407,9 +407,15 @@
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   cursor: pointer;
   white-space: nowrap;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .featured-install-btn:hover { 
-  background: white; 
+  transform: scale(1.05);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.22);
+}
+
+.featured-install-btn:active {
+  transform: scale(1.02);
 }
 
 @media (max-width: 1023px) {
@@ -1044,6 +1050,15 @@
   border-radius: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.92em;
+}
+
+.description-content h3 {
+  margin: 14px 0 8px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .modal-footer {

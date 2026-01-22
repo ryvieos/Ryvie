@@ -25,23 +25,40 @@ const AppStore = () => {
   const renderDescription = (text = '') => {
     const urlRegex = /(https?:\/\/[\w.-]+(?:\/[\w\-._~:\/?#[\]@!$&'()*+,;=%]*)?)/gi;
     const paragraphs = String(text).split(/\n{2,}/);
+    const isFeaturesHeading = (line = '') => {
+      const v = String(line).trim();
+      return /^key\s*features\s*:$/i.test(v) || /^fonctionnalit(?:é|e)s\s+cl(?:é|e)s\s*:$/i.test(v);
+    };
     return (
       <div className="description-content">
-        {paragraphs.map((para, idx) => (
-          <p key={idx}>
-            {para.split(urlRegex).map((part, i) => {
-              if (urlRegex.test(part)) {
-                urlRegex.lastIndex = 0;
+        {paragraphs.map((para, idx) => {
+          const lines = String(para).split(/\n+/);
+          return (
+            <React.Fragment key={idx}>
+              {lines.map((line, lineIdx) => {
+                if (!String(line).trim()) return null;
+                if (isFeaturesHeading(line)) {
+                  return <h3 key={`${idx}-h-${lineIdx}`}>{String(line).trim()}</h3>;
+                }
                 return (
-                  <a key={i} href={part} target="_blank" rel="noopener noreferrer">
-                    {part}
-                  </a>
+                  <p key={`${idx}-p-${lineIdx}`}>
+                    {String(line).split(urlRegex).map((part, i) => {
+                      if (urlRegex.test(part)) {
+                        urlRegex.lastIndex = 0;
+                        return (
+                          <a key={i} href={part} target="_blank" rel="noopener noreferrer">
+                            {part}
+                          </a>
+                        );
+                      }
+                      return <span key={i}>{part}</span>;
+                    })}
+                  </p>
                 );
-              }
-              return <span key={i}>{part}</span>;
-            })}
-          </p>
-        ))}
+              })}
+            </React.Fragment>
+          );
+        })}
       </div>
     );
   };
