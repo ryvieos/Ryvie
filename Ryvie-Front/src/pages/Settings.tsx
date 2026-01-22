@@ -1739,7 +1739,6 @@ const Settings = () => {
           </div>
         </div>
       </section>
-
       {/* Section Statistiques */}
       <section className="settings-section stats-section">
         <h2>Vue d'ensemble du système</h2>
@@ -2051,6 +2050,54 @@ const Settings = () => {
           )}
           </>
         )}
+      </section>
+
+      {/* Section Langue */}
+      <section className="settings-section">
+        <h2>Langue de l'interface</h2>
+        <div className="settings-grid">
+          <div className="settings-card">
+            <div className="setting-item">
+              <select
+                value={settings.language || 'fr'}
+                onChange={async (e) => {
+                  const newLang = e.target.value;
+                  setSettings(prev => ({ ...prev, language: newLang }));
+                  
+                  try {
+                    const serverUrl = getServerUrl(accessMode);
+                    await axios.patch(`${serverUrl}/api/user/preferences/language`, { language: newLang });
+                    console.log('[Settings] Langue sauvegardée:', newLang);
+                    showToast(`Langue changée: ${newLang === 'fr' ? 'Français' : 'English'}`, 'success');
+                    
+                    // Mettre à jour le cache localStorage
+                    try {
+                      const currentUser = getCurrentUser();
+                      if (currentUser) {
+                        localStorage.setItem(`ryvie_language_${currentUser}`, newLang);
+                      }
+                    } catch {}
+                  } catch (error) {
+                    console.error('[Settings] Erreur sauvegarde langue:', error);
+                    showToast('Erreur lors du changement de langue', 'error');
+                  }
+                }}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  background: '#fff',
+                  width: '100%'
+                }}
+              >
+                <option value="fr">🇫🇷 Français</option>
+                <option value="en">🇬🇧 English</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Overlay Assistant Stockage */}

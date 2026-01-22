@@ -42,14 +42,39 @@ router.get('/appstore/cleaning-apps', verifyToken, (req: any, res: any) => {
 
 /**
  * GET /api/appstore/apps - Liste toutes les apps disponibles
+ * Query params: ?lang=fr|en (optionnel, défaut: fr)
  */
 router.get('/appstore/apps', async (req: any, res: any) => {
   try {
+    const lang = req.query.lang || 'fr';
     const apps = await getApps();
+    
+    // Localiser les apps selon la langue demandée
+    const localizedApps = apps.map(app => {
+      const localized = { ...app };
+      
+      // Localiser category si multilingue
+      if (app.category && typeof app.category === 'object') {
+        localized.category = app.category[lang] || app.category.fr || app.category.en || app.category;
+      }
+      
+      // Localiser description si multilingue
+      if (app.description && typeof app.description === 'object') {
+        localized.description = app.description[lang] || app.description.fr || app.description.en || app.description;
+      }
+      
+      // Localiser tagline si multilingue
+      if (app.tagline && typeof app.tagline === 'object') {
+        localized.tagline = app.tagline[lang] || app.tagline.fr || app.tagline.en || app.tagline;
+      }
+      
+      return localized;
+    });
+    
     res.json({
       success: true,
-      count: Array.isArray(apps) ? apps.length : 0,
-      data: apps || []
+      count: Array.isArray(localizedApps) ? localizedApps.length : 0,
+      data: localizedApps || []
     });
   } catch (error: any) {
     console.error('[appStore] Erreur lors de la récupération des apps:', error);
@@ -62,10 +87,12 @@ router.get('/appstore/apps', async (req: any, res: any) => {
 
 /**
  * GET /api/appstore/apps/:id - Récupère une app par son ID
+ * Query params: ?lang=fr|en (optionnel, défaut: fr)
  */
 router.get('/appstore/apps/:id', async (req: any, res: any) => {
   try {
     const appId = req.params.id;
+    const lang = req.query.lang || 'fr';
     const app = await getAppById(appId);
     
     if (!app) {
@@ -75,9 +102,27 @@ router.get('/appstore/apps/:id', async (req: any, res: any) => {
       });
     }
     
+    // Localiser l'app selon la langue demandée
+    const localized = { ...app };
+    
+    // Localiser category si multilingue
+    if (app.category && typeof app.category === 'object') {
+      localized.category = app.category[lang] || app.category.fr || app.category.en || app.category;
+    }
+    
+    // Localiser description si multilingue
+    if (app.description && typeof app.description === 'object') {
+      localized.description = app.description[lang] || app.description.fr || app.description.en || app.description;
+    }
+    
+    // Localiser tagline si multilingue
+    if (app.tagline && typeof app.tagline === 'object') {
+      localized.tagline = app.tagline[lang] || app.tagline.fr || app.tagline.en || app.tagline;
+    }
+    
     res.json({
       success: true,
-      data: app
+      data: localized
     });
   } catch (error: any) {
     console.error(`[appStore] Erreur lors de la récupération de l'app ${req.params.id}:`, error);

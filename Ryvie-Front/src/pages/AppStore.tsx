@@ -400,7 +400,23 @@ const AppStore = () => {
       }
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
-      const response = await axios.get(`${serverUrl}/api/appstore/apps`);
+      
+      // Récupérer la langue de l'utilisateur depuis localStorage ou préférences
+      let userLang = 'fr'; // Défaut français
+      try {
+        const sessionInfo = getSessionInfo();
+        if (sessionInfo?.user) {
+          const cachedLang = localStorage.getItem(`ryvie_language_${sessionInfo.user}`);
+          if (cachedLang && ['fr', 'en'].includes(cachedLang)) {
+            userLang = cachedLang;
+          }
+        }
+      } catch (e) {
+        console.warn('[AppStore] Impossible de récupérer la langue utilisateur:', e);
+      }
+      
+      // Ajouter le paramètre lang à la requête
+      const response = await axios.get(`${serverUrl}/api/appstore/apps?lang=${userLang}`);
       if (response.data.success) {
         setApps(response.data.data || []);
       }

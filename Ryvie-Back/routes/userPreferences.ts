@@ -597,7 +597,13 @@ router.patch('/user/preferences', verifyToken, (req: any, res: any) => {
     }
 
     // Copier les autres clés simples si fournies
-    ['zones','theme','language','backgroundImage','darkMode','weatherCity','autoTheme'].forEach(k => {
+    // Valider la langue si fournie
+    if ('language' in incoming) {
+      if (incoming.language && ['fr', 'en'].includes(incoming.language)) {
+        preferences.language = incoming.language;
+      }
+    }
+    ['zones','theme','backgroundImage','darkMode','weatherCity','autoTheme'].forEach(k => {
       if (k in incoming) preferences[k] = incoming[k];
     });
 
@@ -710,6 +716,39 @@ router.patch('/user/preferences/dark-mode', verifyToken, (req: any, res: any) =>
     }
   } catch (error: any) {
     console.error('[userPreferences] Erreur PATCH dark-mode:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// PATCH /api/user/preferences/language - Mettre à jour la langue de l'utilisateur
+router.patch('/user/preferences/language', verifyToken, (req: any, res: any) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    console.log('[userPreferences] PATCH language pour utilisateur:', username);
+    const { language } = req.body;
+    
+    if (!language || !['fr', 'en'].includes(language)) {
+      return res.status(400).json({ error: 'Langue invalide (fr ou en requis)' });
+    }
+    
+    // Charger les préférences existantes
+    let preferences = loadUserPreferences(username) || {
+      zones: {},
+      theme: 'default',
+      language: 'fr'
+    };
+    
+    // Mettre à jour la langue
+    preferences.language = language;
+    
+    if (saveUserPreferences(username, preferences)) {
+      console.log('[userPreferences] Langue sauvegardée:', language, 'pour', username);
+      res.json({ success: true, message: 'Langue sauvegardée', language });
+    } else {
+      res.status(500).json({ error: 'Échec de la sauvegarde' });
+    }
+  } catch (error: any) {
+    console.error('[userPreferences] Erreur PATCH language:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
