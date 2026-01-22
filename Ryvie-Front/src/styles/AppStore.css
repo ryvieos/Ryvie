@@ -2,6 +2,77 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* ==================== TITRE AVEC DÉGRADÉ ==================== */
+.appstore-header-title {
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 20px;
+}
+
+.appstore-title-gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+  font-size: 36px;
+  margin-bottom: 8px;
+  display: inline-block;
+}
+
+.appstore-subtitle {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+  font-weight: 400;
+}
+
+/* ==================== FONDS BLANCS POUR LOGOS ==================== */
+.app-icon,
+.featured-badge-icon,
+.modal-icon {
+  background-color: white !important;
+  border-radius: 8px;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.app-icon-placeholder,
+.featured-icon-placeholder,
+.modal-icon-placeholder {
+  background-color: white !important;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Full-image gradient overlay for featured preview cards */
+.featured-card-content {
+  position: relative;
+}
+
+.featured-gradient-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0) 60%,
+    rgba(0, 0, 0, 0.01) 62%,
+    rgba(0, 0, 0, 0.03) 64%,
+    rgba(0, 0, 0, 0.08) 68%,
+    rgba(0, 0, 0, 0.2) 72%,
+    rgba(0, 0, 0, 0.80) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.featured-overlay {
+  position: relative;
+  z-index: 2;
+}
+
 /* ==================== ANIMATIONS ==================== */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
@@ -280,6 +351,8 @@
   height: 92px;
   border-radius: 20px;
   object-fit: cover;
+  background-color: white !important;
+  padding: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   flex-shrink: 0;
 }

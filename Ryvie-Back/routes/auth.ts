@@ -259,7 +259,7 @@ router.get('/ldap/check-first-time', async (req: any, res: any) => {
 
 // POST /api/ldap/create-first-user - Créer le premier utilisateur admin
 router.post('/ldap/create-first-user', async (req: any, res: any) => {
-  const { uid, name, email, password } = req.body;
+  const { uid, name, email, password, language } = req.body;
 
   if (!uid || !name || !email || !password) {
     return res.status(400).json({ error: 'Tous les champs sont requis (uid, name, email, password)' });
@@ -306,7 +306,7 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
 
           // Créer l'utilisateur avec employeeType pour définir le rôle
           const userDN = `cn=${name},${ldapConfig.userSearchBase}`;
-          const userEntry = {
+          const userEntry: any = {
             objectClass: ['inetOrgPerson', 'posixAccount', 'shadowAccount'],
             uid,
             cn: name,
@@ -319,6 +319,11 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
             loginShell: '/bin/bash',
             employeeType: 'admins',  // Définit le rôle de l'utilisateur
           };
+
+          // Ajouter la langue si fournie
+          if (language) {
+            userEntry.preferredLanguage = language;
+          }
 
           ldapClient.add(userDN, userEntry, (err) => {
             if (err) {

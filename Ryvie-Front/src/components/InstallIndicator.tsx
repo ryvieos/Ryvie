@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import '../styles/InstallIndicator.css';
+import { useLanguage } from '../contexts/LanguageContext';
 
 /**
  * Indicateur d'installation individuel pour une app
  */
 const InstallIndicatorItem = ({ appName, progress, topPosition, isMinimized, onToggleMinimize }) => {
+  const { t } = useLanguage();
   // Calculer la largeur de la barre de progression
   const progressWidth = progress > 0 ? Math.min(progress, 100) : 5;
   
@@ -13,7 +15,7 @@ const InstallIndicatorItem = ({ appName, progress, topPosition, isMinimized, onT
       <button 
         className="install-indicator-minimized"
         onClick={onToggleMinimize}
-        title={`Afficher la progression de ${appName}`}
+        title={t('installIndicator.showProgress', { appName })}
         style={{ top: `${topPosition}px` }}
       >
         <div className="minimized-spinner"></div>
@@ -42,7 +44,7 @@ const InstallIndicatorItem = ({ appName, progress, topPosition, isMinimized, onT
         </div>
         
         <div className="install-indicator-info">
-          <span className="install-indicator-title">Installation en cours</span>
+          <span className="install-indicator-title">{t('installIndicator.installing')}</span>
           <span className="install-indicator-app">{appName || 'Application'}</span>
           <div className="install-indicator-progress-container">
             <div 
@@ -58,7 +60,7 @@ const InstallIndicatorItem = ({ appName, progress, topPosition, isMinimized, onT
         <button 
           className="install-indicator-hide"
           onClick={onToggleMinimize}
-          title="Masquer"
+          title={t('installIndicator.hide')}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />

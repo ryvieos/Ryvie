@@ -20,6 +20,7 @@ import { SocketProvider } from './contexts/SocketContext';
 import { CachedRoutes } from './components/CachedRoutes';
 import { UpdateProvider } from './contexts/UpdateContext';
 import GlobalUpdateModal from './components/GlobalUpdateModal';
+import { LanguageProvider } from './contexts/LanguageContext';
 
 // Composant de redirection conditionnelle (Web et Electron)
 const ProtectedRoute = ({ children }) => {
@@ -57,12 +58,13 @@ const App = () => {
   }, []);
 
   return (
-    <UpdateProvider>
-      <SocketProvider>
-        <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/first-time-setup" element={<FirstTimeSetup />} />
+    <LanguageProvider>
+      <UpdateProvider>
+        <SocketProvider>
+          <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/first-time-setup" element={<FirstTimeSetup />} />
           <Route path="/" element={
             isSessionActive() ? <Navigate to="/welcome" replace /> : <Navigate to="/login" replace />
           } />
@@ -116,6 +118,7 @@ const App = () => {
         <GlobalUpdateModal />
       </SocketProvider>
     </UpdateProvider>
+    </LanguageProvider>
   );
 };
 

@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import '../styles/WidgetAddButton.css';
+import { useLanguage } from '../contexts/LanguageContext';
 
 /**
  * Menu de sélection de widget rendu via portal
  */
-const WidgetMenuPortal = ({ x, y, onSelect, onClose }) => {
+const WidgetMenuPortal = ({ x, y, onSelect, onClose }: { x: number; y: number; onSelect: (id: string) => void; onClose: () => void }) => {
+  const { t } = useLanguage();
   const widgets = [
-    { id: 'cpu-ram', name: 'CPU & RAM', icon: '💻', description: 'Utilisation processeur et mémoire' },
-    { id: 'storage', name: 'Stockage', icon: '💾', description: 'Espace disque disponible' }
+    { id: 'cpu-ram', name: t('widgetAddButton.cpuRam.name'), icon: '💻', description: t('widgetAddButton.cpuRam.description') },
+    { id: 'storage', name: t('widgetAddButton.storage.name'), icon: '💾', description: t('widgetAddButton.storage.description') }
   ];
 
   const menu = (
@@ -31,7 +33,7 @@ const WidgetMenuPortal = ({ x, y, onSelect, onClose }) => {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="widget-menu-header">
-          <span>Ajouter un widget</span>
+          <span>{t('widgetAddButton.title')}</span>
           <button className="widget-menu-close" onClick={onClose}>✕</button>
         </div>
         <div className="widget-menu-items">
@@ -62,11 +64,12 @@ const WidgetMenuPortal = ({ x, y, onSelect, onClose }) => {
 /**
  * Bouton flottant en bas à droite pour ajouter des widgets
  */
-const WidgetAddButton = ({ onAddWidget }) => {
+const WidgetAddButton = ({ onAddWidget }: { onAddWidget: (widgetType: string) => void }) => {
+  const { t } = useLanguage();
   const [showMenu, setShowMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
 
-  const handleClick = (e) => {
+  const handleButtonClick = (e: React.MouseEvent) => {
     const button = e.currentTarget.getBoundingClientRect();
     
     // Positionner le menu au-dessus du bouton, aligné à droite
@@ -81,7 +84,7 @@ const WidgetAddButton = ({ onAddWidget }) => {
     setShowMenu(true);
   };
 
-  const handleSelect = (widgetType) => {
+  const handleSelectWidget = (widgetType: string) => {
     console.log('[WidgetAddButton] Widget sélectionné:', widgetType);
     onAddWidget(widgetType);
   };
@@ -90,8 +93,8 @@ const WidgetAddButton = ({ onAddWidget }) => {
     <>
       <button 
         className="widget-add-button"
-        onClick={handleClick}
-        title="Ajouter un widget"
+        onClick={handleButtonClick}
+        title={t('widgetAddButton.title')}
       >
         <span className="widget-add-icon">+</span>
       </button>
@@ -100,7 +103,7 @@ const WidgetAddButton = ({ onAddWidget }) => {
         <WidgetMenuPortal
           x={menuPosition.x}
           y={menuPosition.y}
-          onSelect={handleSelect}
+          onSelect={handleSelectWidget}
           onClose={() => setShowMenu(false)}
         />
       )}

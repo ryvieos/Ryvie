@@ -17,8 +17,10 @@ import {
 import '../styles/Transitions.css';
 import '../styles/AppStore.css';
 import { getSessionInfo } from '../utils/sessionManager';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const AppStore = () => {
+  const { t } = useLanguage();
   // Améliore le rendu de description: paragraphes + liens cliquables
   const renderDescription = (text = '') => {
     const urlRegex = /(https?:\/\/[\w.-]+(?:\/[\w\-._~:\/?#[\]@!$&'()*+,;=%]*)?)/gi;
@@ -157,8 +159,8 @@ const AppStore = () => {
       return newProgress;
     });
     
-    addLog(`⏹️ Installation de ${appName} annulée par l'utilisateur`, 'warning');
-    showToast(`Installation de ${appName} annulée`, 'info');
+    addLog(t('appStore.notifications.cancelledByUser').replace('{appName}', appName), 'warning');
+    showToast(t('appStore.notifications.cancelled').replace('{appName}', appName), 'info');
     
     // Notifier Home que l'installation a été annulée
     window.parent.postMessage({ 
@@ -170,7 +172,7 @@ const AppStore = () => {
     }, '*');
     
     // Rafraîchir le bureau pour supprimer l'app (le backend aura supprimé le manifest)
-    addLog(`🔄 Rafraîchissement du bureau pour supprimer ${appName}`, 'info');
+    addLog(t('appStore.notifications.refreshingDesktop').replace('{appName}', appName), 'info');
     setTimeout(() => {
       window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
     }, 1000);
@@ -619,11 +621,11 @@ try {
       addLog(`⚠️ ${errorMessage}`, 'warning');
       showToast(errorMessage, 'warning');
     } else {
-      showToast(`Erreur lors de l'installation: ${statusText}`, 'error');
+      showToast(t('appStore.notifications.errorWithStatus').replace('{status}', statusText), 'error');
     }
   } else {
     addLog(`❌ Erreur inattendue: ${requestError}`, 'error');
-    showToast('Erreur inattendue lors de l\'installation', 'error');
+    showToast(t('appStore.notifications.unexpectedError'), 'error');
   }
   
   // Nettoyer l'état
@@ -733,9 +735,9 @@ try {
         }
         // Si l'installation est terminée (100%), afficher la notification de succès
         else if (data.progress >= 100) {
-          addLog(`✅ Installation de ${appName} terminée avec succès !`, 'success');
+          addLog(t('appStore.notifications.completed').replace('{appName}', appName), 'success');
           addLog(`🏁 Processus terminé pour ${appName}`, 'info');
-          showToast(`${appName} installé avec succès !`, 'success');
+          showToast(t('appStore.notifications.installed').replace('{appName}', appName), 'success');
           
           // Fermer la connexion SSE
           eventSource.close();
@@ -841,9 +843,9 @@ try {
 
     if (response.data.success) {
       // Le serveur a lancé l'installation en arrière-plan
-      addLog(`🚀 Installation de ${appName} lancée en arrière-plan`, 'info');
+      addLog(t('appStore.notifications.launchedInBackground').replace('{appName}', appName), 'info');
       addLog(`📊 Suivez la progression ci-dessous...`, 'info');
-      showToast(`Installation de ${appName} en cours...`, 'info');
+      showToast(t('appStore.notifications.installing').replace('{appName}', appName), 'info');
       
       // Le backend ne crée le manifest qu'à la fin de l'installation
       // L'app apparaîtra sur le bureau quand l'installation sera terminée (progress >= 100)
@@ -851,12 +853,12 @@ try {
       // La vraie fin de l'installation sera signalée par le SSE à 100%
     } else {
       addLog(`❌ Échec du lancement: ${response.data.message || 'Erreur inconnue'}`, 'error');
-      showToast(response.data.message || 'Erreur lors du lancement de l\'installation', 'error');
+      showToast(response.data.message || t('appStore.notifications.launchError'), 'error');
     }
   } catch (error) {
     addLog(`💥 Erreur lors de l'installation/mise à jour de ${appName}: ${error.message}`, 'error');
     console.error(`Erreur lors de l'installation/mise à jour de ${appName}:`, error);
-    showToast('Erreur lors de l\'installation/mise à jour', 'error');
+    showToast(t('appStore.notifications.updateError'), 'error');
     
     // En cas d'erreur, nettoyer immédiatement
     setInstallingApps(prev => {
@@ -957,15 +959,15 @@ try {
     const isCurrentlyCleaning = appId ? cleaningApps.has(appId) : false;
     let label;
     if (isCurrentlyInstalling) {
-      label = 'Installation...';
+      label = t('appStore.installing');
     } else if (isCurrentlyCleaning) {
-      label = 'Nettoyage...';
+      label = t('appStore.cleaning');
     } else if (updateAvailable) {
-      label = 'Mettre à jour';
+      label = t('appStore.update');
     } else if (installed) {
-      label = 'À jour';
+      label = t('appStore.upToDate');
     } else {
-      label = 'Installer';
+      label = t('appStore.install');
     }
 
     return {
@@ -987,7 +989,7 @@ try {
           <span></span>
           <span></span>
         </div>
-        <p>Chargement du catalogue...</p>
+        <p>{t('appStore.loadingCatalog')}</p>
       </div>
     );
   }
@@ -1060,7 +1062,7 @@ try {
             <FontAwesomeIcon icon={faInfoCircle} className="banner-icon" />
             <div className="banner-content">
               <span>
-                {remainingInstalls}/{totalInstalls} installations restantes cette heure
+                {t('appStore.remainingInstalls', { remaining: remainingInstalls, total: totalInstalls })}
               </span>
             </div>
           </div>
@@ -1071,7 +1073,7 @@ try {
       {featuredApps.length > 0 && (
         <div className="featured-section">
           <div className="section-header-simple">
-            <h2 className="section-title-simple">Applications en vedette</h2>
+            <h2 className="section-title-simple">{t('appStore.featuredApps')}</h2>
           </div>
           <div 
             className="featured-carousel"
@@ -1090,13 +1092,16 @@ try {
                   className="featured-card-content"
                   style={(() => {
                     const base = getCategoryColor(app.category);
-                    const rgb = hexToRgb(base);
-                    const bg = app.previews && app.previews[0] ? `, url(${app.previews[0]})` : '';
+                    const bg = app.previews && app.previews[0] ? `url(${app.previews[0]})` : '';
                     return {
-                      backgroundImage: `linear-gradient(90deg, rgba(${rgb},0.55) 0%, rgba(17,24,39,0.35) 60%)${bg}`
+                      backgroundColor: base,
+                      backgroundImage: bg || undefined,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
                     };
                   })()}
                 >
+                  <div className="featured-gradient-overlay" />
                   <div className="featured-overlay">
                     <div className="featured-left">
                       {app.icon ? (
@@ -1270,7 +1275,7 @@ try {
                       }
 
                       // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
-                      if (label === 'Installer' || label === 'Mettre à jour') {
+                      if (label === t('appStore.install') || label === t('appStore.update')) {
                         installApp(app.id, app.name);
                       }
                     };
@@ -1357,7 +1362,7 @@ try {
                     }
 
                     // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
-                    if (label === 'Installer' || label === 'Mettre à jour') {
+                    if (label === t('appStore.install') || label === t('appStore.update')) {
                       if (selectedApp) {
                         installApp(selectedApp.id, selectedApp.name);
                       }

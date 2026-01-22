@@ -3,29 +3,31 @@ import axios from '../../utils/setupAxios';
 import BaseWidget from './BaseWidget';
 import urlsConfig from '../../config/urls';
 import '../../styles/CpuRamWidget.css';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;
 
 /**
  * Widget affichant l'utilisation CPU et RAM
  */
-const CpuRamWidget = ({ id, onRemove, accessMode }) => {
+const CpuRamWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: () => void; accessMode?: string }) => {
+  const { t } = useLanguage();
   const [data, setData] = useState({ cpu: 0, ram: 0, ramTotal: 0 });
   const [loading, setLoading] = useState(true);
   const [smoothed, setSmoothed] = useState({ cpu: 0, ram: 0 });
   const [displayed, setDisplayed] = useState({ cpu: 0, ram: 0 });
-  const cpuAnimRef = useRef(null);
-  const ramAnimRef = useRef(null);
+  const cpuAnimRef = useRef<number | null>(null);
+  const ramAnimRef = useRef<number | null>(null);
   
   // Historique des valeurs pour moyenne mobile (CasaOS-style)
-  const cpuHistoryRef = useRef([]);
-  const ramHistoryRef = useRef([]);
+  const cpuHistoryRef = useRef<number[]>([]);
+  const ramHistoryRef = useRef<number[]>([]);
   const HISTORY_SIZE = 6; // 6 échantillons = 1 minute (10s * 6)
 
   useEffect(() => {
     const fetchSystemStats = async () => {
       try {
-        const serverUrl = getServerUrl(accessMode);
+        const serverUrl = getServerUrl(accessMode || 'private');
         const response = await axios.get(`${serverUrl}/api/server-info`, {
           timeout: 30000
         });
@@ -91,7 +93,7 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     }
     
     // Fonction pour calculer la moyenne en ignorant les outliers extrêmes
-    const calculateSmartAverage = (values) => {
+    const calculateSmartAverage = (values: number[]) => {
       if (values.length === 0) return 0;
       if (values.length <= 2) return values.reduce((sum, val) => sum + val, 0) / values.length;
       
@@ -101,15 +103,15 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
       
       // Filtrer les valeurs qui sont trop éloignées de la médiane (>30% d'écart)
       const threshold = median * 0.3;
-      const filtered = values.filter(val => Math.abs(val - median) <= threshold);
+      const filtered = values.filter((val: number) => Math.abs(val - median) <= threshold);
       
       // Si on a filtré trop de valeurs, utiliser toutes les valeurs
       if (filtered.length < values.length / 2) {
-        return values.reduce((sum, val) => sum + val, 0) / values.length;
+        return values.reduce((sum: number, val: number) => sum + val, 0) / values.length;
       }
       
       // Calculer la moyenne des valeurs filtrées
-      return filtered.reduce((sum, val) => sum + val, 0) / filtered.length;
+      return filtered.reduce((sum: number, val: number) => sum + val, 0) / filtered.length;
     };
     
     // Calculer la moyenne intelligente
@@ -136,7 +138,7 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     const target = Math.round(Math.max(0, Math.min(100, smoothed.cpu)));
     if (current === target) return;
     let last = performance.now();
-    const step = (now) => {
+    const step = (now: number) => {
       if (now - last >= ANIM_INTERVAL_MS) {
         if (current < target) current += 1;
         else if (current > target) current -= 1;
@@ -168,7 +170,7 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
     const target = Math.round(Math.max(0, Math.min(100, smoothed.ram)));
     if (current === target) return;
     let last = performance.now();
-    const step = (now) => {
+    const step = (now: number) => {
       if (now - last >= ANIM_INTERVAL_MS) {
         if (current < target) current += 1;
         else if (current > target) current -= 1;
@@ -194,15 +196,15 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
   const RAM_BASE = '#23D780'; // vert
   const DANGER = '#dc3545';
 
-  const getCpuColor = (value) => {
+  const getCpuColor = (value: number) => {
     return value > 90 ? DANGER : CPU_BASE;
   };
 
-  const getRamColor = (value) => {
+  const getRamColor = (value: number) => {
     return value > 90 ? DANGER : RAM_BASE;
   };
 
-  const formatBytes = (bytes) => {
+  const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 GB';
     const gb = bytes / (1024 ** 3);
     return `${gb.toFixed(1)} GB`;
@@ -210,7 +212,7 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
 
   const usedRam = data.ramTotal > 0 ? (data.ramTotal * (data.ram / 100)) : 0;
 
-  const Gauge = ({ value = 0, color = '#22c55e', label = '', sub = '' }) => {
+  const Gauge = ({ value = 0, color = '#22c55e', label = '', sub = '' }: { value: number; color: string; label: string; sub: string }) => {
     const size = 80;
     const stroke = 10;
     const center = size / 2;
@@ -263,13 +265,13 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
   return (
     <BaseWidget 
       id={id} 
-      title="System status" 
+      title={t('cpuRamWidget.title')}
       icon="💻" 
       onRemove={onRemove} 
       w={2} 
       h={2}
       className="gradient"
-      action={<button className="widget-chevron" aria-label="Open">›</button>}
+      action={undefined}
     >
       {loading ? (
         <div className="cpu-ram-card">
@@ -296,12 +298,14 @@ const CpuRamWidget = ({ id, onRemove, accessMode }) => {
             <Gauge
               value={displayed.cpu}
               color={getCpuColor(displayed.cpu)}
-              label="CPU"
+              label={t('cpuRamWidget.cpu')}
+              sub=""
             />
             <Gauge
               value={displayed.ram}
               color={getRamColor(displayed.ram)}
-              label="RAM"
+              label={t('cpuRamWidget.ram')}
+              sub=""
             />
           </div>
         </div>
