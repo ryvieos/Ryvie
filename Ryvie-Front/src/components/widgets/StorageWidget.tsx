@@ -7,26 +7,28 @@ import '../../styles/StorageWidget.css';
 import '../../styles/StorageSettings.css';
 import storageIcon from '../../icons/storage-icon.png';
 import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;
 
 /**
  * Widget affichant l'utilisation du stockage
  */
-const StorageWidget = ({ id, onRemove, accessMode }) => {
-  const [data, setData] = useState([]);
+const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: () => void; accessMode?: string }) => {
+  const { t } = useLanguage();
+  const [data, setData] = useState<Array<{ device: string; mount: string; used: number; total: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [barProgress, setBarProgress] = useState(0); // animate from 0
   const [entered, setEntered] = useState(false); // fade-in flag
   const [showModal, setShowModal] = useState(false); // fenêtre flottante
-  const [storageDetail, setStorageDetail] = useState(null); // détail complet du stockage
+  const [storageDetail, setStorageDetail] = useState<any>(null); // détail complet du stockage
   const [storageDetailLoading, setStorageDetailLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchStorageStats = async () => {
       try {
-        const serverUrl = getServerUrl(accessMode);
+        const serverUrl = getServerUrl(accessMode || 'private');
         const response = await axios.get(`${serverUrl}/api/server-info`, {
           timeout: 30000
         });
@@ -84,13 +86,13 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
     }
   }, [loading, data]);
 
-  const getStatus = (value) => {
+  const getStatus = (value: number) => {
     if (value < 70) return 'ok';
     if (value < 90) return 'warn';
     return 'danger';
   };
 
-  const formatBytes = (bytes) => {
+  const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 GB';
     const gb = bytes / (1024 ** 3);
     if (gb < 1) {
@@ -118,13 +120,13 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
     console.log('[StorageWidget] Modal set to visible, fetching storage detail...');
     
     try {
-      const serverUrl = getServerUrl(accessMode);
+      const serverUrl = getServerUrl(accessMode || 'private');
       const response = await axios.get(`${serverUrl}/api/storage-detail`, { timeout: 120000 });
       console.log('[StorageWidget] Storage detail received:', response.data);
       setStorageDetail(response.data);
     } catch (error) {
       console.error('[StorageWidget] Error fetching storage detail:', error);
-      alert('Erreur lors de la récupération du détail du stockage: ' + (error.response?.data?.error || error.message));
+      alert('Erreur lors de la récupération du détail du stockage: ' + ((error as any).response?.data?.error || (error as any).message));
       setShowModal(false);
     } finally {
       setStorageDetailLoading(false);
@@ -148,7 +150,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
     <>
       <BaseWidget
         id={id}
-        title="Stockage"
+        title={t('storageWidget.title')}
         icon="💾"
         onRemove={onRemove}
         w={2}
@@ -167,7 +169,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
               e.stopPropagation();
               handleOpenModal();
             }}
-            title="Voir le détail du stockage"
+            title={t('storageWidget.viewDetails')}
           >
             ⌂
           </button>
@@ -189,7 +191,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
             </div>
           </div>
         ) : data.length === 0 ? (
-          <div className="widget-empty">Aucun disque détecté</div>
+          <div className="widget-empty">{t('storageWidget.noDisk')}</div>
         ) : (
           <div className="storage-content storage-clickable">
             {data.slice(0, 1).map((disk, index) => {
@@ -203,7 +205,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                     <img className="disk-icon-img" src={storageIcon} alt="" aria-hidden />
                     <div className="top-right">
                       <div className={`health-badge health-${status}`}> 
-                        {status === 'ok' ? 'Healthy' : status === 'warn' ? 'Warning' : 'Critical'}
+                        {status === 'ok' ? t('storageWidget.status.healthy') : status === 'warn' ? t('storageWidget.status.warning') : t('storageWidget.status.critical')}
                       </div>
                       <div className={`storage-percent percent-${status} ${entered ? 'enter-fade' : ''}`}>{usedPercent}%</div>
                     </div>
@@ -261,7 +263,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}>
-                <h2 className="storage-detail-title" style={{ margin: 0, fontSize: '24px', fontWeight: '600' }}>Stockage</h2>
+                <h2 className="storage-detail-title" style={{ margin: 0, fontSize: '24px', fontWeight: '600' }}>{t('storageWidget.title')}</h2>
                 <button
                   onClick={handleCloseModal}
                   style={{
@@ -283,7 +285,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
               </div>
               {storageDetail && (
                 <div className="storage-detail-subtitle" style={{ marginTop: '8px', fontSize: '14px' }}>
-                  {storageDetail.summary.usedFormatted} utilisés sur {storageDetail.summary.totalFormatted}
+                  {t('storageWidget.usedOnTotal').replace('{used}', storageDetail.summary.usedFormatted).replace('{total}', storageDetail.summary.totalFormatted)}
                 </div>
               )}
             </div>
@@ -301,10 +303,10 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                   margin: '0 auto 20px'
                 }}></div>
                 <div style={{ fontSize: '16px', color: '#666', marginBottom: '12px' }}>
-                  Analyse du stockage en cours...
+                  {t('storageWidget.analyzing')}
                 </div>
                 <div style={{ fontSize: '14px', color: '#999' }}>
-                  Cela peut prendre quelques secondes
+                  {t('storageWidget.analyzingSubtitle')}
                 </div>
               </div>
             ) : storageDetail ? (
@@ -351,7 +353,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                           borderRadius: '50%',
                           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
                         }} />
-                        <span style={{ fontSize: '14px' }}>Système</span>
+                        <span style={{ fontSize: '14px' }}>{t('storageWidget.system')}</span>
                       </div>
                       <span style={{ fontSize: '14px', fontWeight: '600' }}>
                         {storageDetail.summary.systemFormatted}
@@ -365,7 +367,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                           borderRadius: '50%',
                           background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
                         }} />
-                        <span style={{ fontSize: '14px' }}>Applications</span>
+                        <span style={{ fontSize: '14px' }}>{t('storageWidget.apps')}</span>
                       </div>
                       <span style={{ fontSize: '14px', fontWeight: '600' }}>
                         {storageDetail.summary.appsFormatted}
@@ -379,7 +381,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                           borderRadius: '50%',
                           background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
                         }} />
-                        <span style={{ fontSize: '14px' }}>Autres</span>
+                        <span style={{ fontSize: '14px' }}>{t('storageWidget.others')}</span>
                       </div>
                       <span style={{ fontSize: '14px', fontWeight: '600' }}>
                         {storageDetail.summary.othersFormatted}
@@ -398,7 +400,7 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                           borderRadius: '50%',
                           background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)'
                         }} />
-                        <span style={{ fontSize: '14px', fontWeight: '500' }}>Disponible</span>
+                        <span style={{ fontSize: '14px', fontWeight: '500' }}>{t('storageWidget.available')}</span>
                       </div>
                       <span style={{ fontSize: '14px', fontWeight: '600', color: '#11998e' }}>
                         {storageDetail.summary.availableFormatted}
@@ -412,11 +414,11 @@ const StorageWidget = ({ id, onRemove, accessMode }) => {
                   padding: '0 24px 24px'
                 }}>
                   <h3 style={{ margin: '16px 0 12px', fontSize: '18px', fontWeight: '600' }}>
-                    Applications ({storageDetail.apps.length})
+                    {t('storageWidget.applications')} ({storageDetail.apps.length})
                   </h3>
                   <div className="storage-detail-apps-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {storageDetail.apps.map((app, idx) => {
-                      const serverUrl = getServerUrl(accessMode);
+                    {storageDetail.apps.map((app: any, idx: number) => {
+                      const serverUrl = getServerUrl(accessMode || 'private');
                       return (
                         <div
                           key={app.id}

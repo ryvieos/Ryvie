@@ -5,14 +5,17 @@ import '../styles/Login.css';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const FirstTimeSetup = () => {
   const navigate = useNavigate();
+  const { language, setLanguage, t } = useLanguage();
   const [formData, setFormData] = useState({
     uid: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    language: language || 'fr'
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -58,19 +61,19 @@ const FirstTimeSetup = () => {
     
     // Validation
     if (!formData.uid || !formData.email || !formData.password) {
-      setMessage('Tous les champs sont requis');
+      setMessage(t('firstTimeSetup.allFieldsRequired'));
       setMessageType('error');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setMessage('Les mots de passe ne correspondent pas');
+      setMessage(t('firstTimeSetup.passwordMismatch'));
       setMessageType('error');
       return;
     }
 
     if (formData.password.length < 6) {
-      setMessage('Le mot de passe doit contenir au moins 6 caractères');
+      setMessage(t('firstTimeSetup.passwordTooShort'));
       setMessageType('error');
       return;
     }
@@ -82,22 +85,26 @@ const FirstTimeSetup = () => {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       
+      // Sauvegarder la langue globalement avant la création
+      setLanguage(formData.language);
+      
       const response = await axios.post(`${serverUrl}/api/ldap/create-first-user`, {
         uid: formData.uid,
         name: formData.uid,
         email: formData.email,
-        password: formData.password
+        password: formData.password,
+        language: formData.language
       });
 
       if (response.data && response.data.uid) {
-        setMessage('Premier utilisateur admin créé avec succès ! Redirection vers la page de connexion...');
+        setMessage(t('firstTimeSetup.successMessage'));
         setMessageType('success');
         
         setTimeout(() => {
           navigate('/login');
         }, 2000);
       } else {
-        setMessage('Erreur lors de la création de l\'utilisateur');
+        setMessage(t('firstTimeSetup.errorMessage'));
         setMessageType('error');
       }
     } catch (error) {
@@ -105,18 +112,18 @@ const FirstTimeSetup = () => {
       
       if (error.response) {
         if (error.response.status === 403) {
-          setMessage('Des utilisateurs existent déjà. Redirection vers la page de connexion...');
+          setMessage(t('firstTimeSetup.usersExist'));
           setMessageType('error');
           setTimeout(() => {
             navigate('/login');
           }, 2000);
         } else {
-          setMessage(error.response.data?.error || 'Erreur lors de la création de l\'utilisateur');
+          setMessage(error.response.data?.error || t('firstTimeSetup.errorMessage'));
         }
       } else if (error.request) {
-        setMessage('Serveur inaccessible. Vérifiez votre connexion.');
+        setMessage(t('firstTimeSetup.serverUnavailable'));
       } else {
-        setMessage(`Erreur: ${error.message}`);
+        setMessage(`${t('common.error')}: ${error.message}`);
       }
       setMessageType('error');
     } finally {
@@ -131,7 +138,7 @@ const FirstTimeSetup = () => {
         <div className="login-card">
           <div className="login-header">
             <h1>Ryvie</h1>
-            <p>Vérification...</p>
+            <p>{t('firstTimeSetup.checking')}</p>
           </div>
         </div>
       </div>
@@ -143,7 +150,7 @@ const FirstTimeSetup = () => {
       <div className="login-card">
         <div className="login-header">
           <h1>Ryvie</h1>
-          <p>Configuration initiale - Création du premier utilisateur</p>
+          <p>{t('firstTimeSetup.subtitle')}</p>
         </div>
         
         {message && (
@@ -154,7 +161,33 @@ const FirstTimeSetup = () => {
         
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
-            <label htmlFor="uid">Nom d'utilisateur *</label>
+            <label htmlFor="language">{t('firstTimeSetup.language')} *</label>
+            <select
+              id="language"
+              name="language"
+              value={formData.language}
+              onChange={(e) => {
+                handleChange(e);
+                setLanguage(e.target.value);
+              }}
+              disabled={loading}
+              style={{
+                padding: '10px 14px',
+                borderRadius: '8px',
+                border: '1px solid #ddd',
+                fontSize: '14px',
+                cursor: 'pointer',
+                background: '#fff',
+                width: '100%'
+              }}
+            >
+              <option value="fr">🇫🇷 Français</option>
+              <option value="en">🇬🇧 English</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="uid">{t('firstTimeSetup.username')} *</label>
             <input
               type="text"
               id="uid"
@@ -163,12 +196,12 @@ const FirstTimeSetup = () => {
               onChange={handleChange}
               disabled={loading}
               autoFocus
-              placeholder="nom d'utilisateur"
+              placeholder={t('firstTimeSetup.usernamePlaceholder')}
             />
           </div>
           
           <div className="form-group">
-            <label htmlFor="email">Email *</label>
+            <label htmlFor="email">{t('firstTimeSetup.email')} *</label>
             <input
               type="email"
               id="email"
@@ -176,12 +209,12 @@ const FirstTimeSetup = () => {
               value={formData.email}
               onChange={handleChange}
               disabled={loading}
-              placeholder="email@example.com"
+              placeholder={t('firstTimeSetup.emailPlaceholder')}
             />
           </div>
           
           <div className="form-group">
-            <label htmlFor="password">Mot de passe *</label>
+            <label htmlFor="password">{t('firstTimeSetup.password')} *</label>
             <input
               type="password"
               id="password"
@@ -189,12 +222,12 @@ const FirstTimeSetup = () => {
               value={formData.password}
               onChange={handleChange}
               disabled={loading}
-              placeholder="mot de passe"
+              placeholder={t('firstTimeSetup.passwordPlaceholder')}
             />
           </div>
           
           <div className="form-group">
-            <label htmlFor="confirmPassword">Confirmer le mot de passe *</label>
+            <label htmlFor="confirmPassword">{t('firstTimeSetup.confirmPassword')} *</label>
             <input
               type="password"
               id="confirmPassword"
@@ -202,7 +235,7 @@ const FirstTimeSetup = () => {
               value={formData.confirmPassword}
               onChange={handleChange}
               disabled={loading}
-              placeholder="confirmer le mot de passe"
+              placeholder={t('firstTimeSetup.confirmPasswordPlaceholder')}
             />
           </div>
           
@@ -211,7 +244,7 @@ const FirstTimeSetup = () => {
             className="login-button"
             disabled={loading}
           >
-            {loading ? 'Création en cours...' : 'Créer l\'administrateur'}
+            {loading ? t('firstTimeSetup.creating') : t('firstTimeSetup.createButton')}
           </button>
         </form>
       </div>

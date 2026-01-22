@@ -6,9 +6,11 @@ import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 import { isSessionActive, startSession } from '../utils/sessionManager';
 import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode, testServerConnectivity } from '../utils/detectAccessMode';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -100,11 +102,11 @@ const Login = () => {
     };
   }, [accessMode]);
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!username || !password) {
-      setMessage("Veuillez entrer un nom d'utilisateur et un mot de passe");
+      setMessage(t('login.allFieldsRequired'));
       setMessageType('error');
       return;
     }
@@ -130,7 +132,7 @@ const Login = () => {
           userEmail: response.data.user.email || ''
         });
 
-        setMessage('Connexion réussie. Redirection...');
+        setMessage(t('login.success'));
         setMessageType('success');
         
         // Rediriger vers la page de bienvenue pour éviter la boucle sur /login
@@ -138,28 +140,28 @@ const Login = () => {
           navigate('/welcome');
         }, 300);
       } else {
-        setMessage('Réponse incorrecte du serveur');
+        setMessage(t('login.serverError'));
         setMessageType('error');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur d\'authentification:', error);
       
       // Gestion détaillée des erreurs
       if (error.response) {
         // Le serveur a répondu avec un code d'erreur
         if (error.response.status === 401) {
-          setMessage('Identifiants incorrects. Veuillez réessayer.');
+          setMessage(t('login.invalidCredentials'));
         } else if (error.response.status === 429) {
-          setMessage('Trop de tentatives de connexion. Veuillez réessayer plus tard.');
+          setMessage(t('login.tooManyAttempts'));
         } else {
-          setMessage(`Erreur d'authentification: ${error.response.data?.error || 'Erreur serveur'}`);
+          setMessage(`${t('login.authError')}: ${error.response.data?.error || t('login.serverError')}`);
         }
       } else if (error.request) {
         // La requête a été faite mais pas de réponse
-        setMessage('Serveur inaccessible. Vérifiez votre connexion.');
+        setMessage(t('login.serverUnavailable'));
       } else {
         // Erreur lors de la configuration de la requête
-        setMessage(`Erreur: ${error.message}`);
+        setMessage(`${t('common.error')}: ${error.message}`);
       }
       setMessageType('error');
     } finally {
@@ -171,13 +173,13 @@ const Login = () => {
     const newMode = accessMode === 'private' ? 'remote' : 'private';
     
     // Tester la connectivité avant de rediriger
-    setMessage(`Test de connectivité vers le mode ${newMode === 'remote' ? 'Remote' : 'Privé'}...`);
+    setMessage(t('login.testingConnectivity').replace('{{mode}}', newMode === 'remote' ? 'Remote' : 'Privé'));
     setMessageType('info');
     
     const isAccessible = await testServerConnectivity(newMode, 3000);
     
     if (!isAccessible) {
-      setMessage(`❌ Impossible d'accéder au serveur en mode ${newMode === 'remote' ? 'Remote' : 'Privé'}. Vérifiez votre connexion.`);
+      setMessage(t('login.accessModeError').replace('{{mode}}', newMode === 'remote' ? 'Remote' : 'Privé'));
       setMessageType('error');
       console.error(`[Login] Serveur non accessible en mode ${newMode}`);
       return;
@@ -187,7 +189,7 @@ const Login = () => {
     setAccessMode(newMode);
     persistAccessMode(newMode);
     
-    setMessage(`✓ Connexion réussie, redirection...`);
+    setMessage(t('login.connecting'));
     setMessageType('success');
     
     // Rediriger vers l'URL correspondante
@@ -208,7 +210,7 @@ const Login = () => {
       <div className="login-card">
         <div className="login-header">
           <h1>Ryvie</h1>
-          <p>Connectez-vous pour accéder à votre espace personnel</p>
+          <p>{t('login.subtitle')}</p>
         </div>
         
         {message && (
@@ -219,7 +221,7 @@ const Login = () => {
         
         <form onSubmit={handleLogin} className="login-form">
           <div className="form-group">
-            <label htmlFor="username">Nom d'utilisateur ou Email</label>
+            <label htmlFor="username">{t('login.username')}</label>
             <input
               type="text"
               id="username"
@@ -227,19 +229,19 @@ const Login = () => {
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
               autoFocus
-              placeholder="nom d'utilisateur ou email"
+              placeholder={t('login.usernamePlaceholder')}
             />
           </div>
           
           <div className="form-group">
-            <label htmlFor="password">Mot de passe</label>
+            <label htmlFor="password">{t('login.password')}</label>
             <input
               type="password"
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
-              placeholder="mot de passe"
+              placeholder={t('login.passwordPlaceholder')}
             />
           </div>
           
@@ -248,12 +250,12 @@ const Login = () => {
             className="login-button"
             disabled={loading}
           >
-            {loading ? 'Connexion en cours...' : 'Se connecter'}
+            {loading ? t('login.signingIn') : t('login.signIn')}
           </button>
         </form>
         
         <div className="access-mode-toggle">
-          <span>Mode d'accès: </span>
+          <span>{t('login.accessMode')}: </span>
           <button 
             onClick={toggleAccessMode}
             className={`toggle-button ${accessMode === 'remote' ? 'toggle-remote' : 'toggle-private'}`}
