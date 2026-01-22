@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { useDrag } from 'react-dnd';
 import axios from '../utils/setupAxios';
 import urlsConfig from '../config/urls';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;
 const ItemTypes = { ICON: 'icon' };
@@ -33,6 +34,7 @@ const ContextMenuPortal = ({ children, x, y }) => {
 
 // Composant Icon avec React.memo pour éviter les re-renders inutiles
 const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons }) => {
+  const { t } = useLanguage();
   const appConfig = appsConfig[id] || {};
   const [imgSrc, setImgSrc] = React.useState(src);
   const [imgError, setImgError] = React.useState(false);
@@ -215,8 +217,8 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
       setConfirmModal({
         show: true,
         type: 'error',
-        title: 'Erreur',
-        message: `Erreur lors de la désinstallation de ${appName}: ${errorMsg}`,
+        title: t('icon.error'),
+        message: t('icon.uninstallError').replace('{appName}', appName).replace('{error}', errorMsg),
         onConfirm: () => setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null })
       });
     } finally {
@@ -358,7 +360,7 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
       console.error(`[Icon] ❌ Action ${action} impossible: appConfig.id manquant`);
       console.error('[Icon] ID de l\'icône:', id);
       console.error('[Icon] Config:', appConfig);
-      alert(`Erreur: ID de l'application manquant pour ${appConfig.name || id}`);
+      alert(t('icon.errorMissingAppId').replace('{id}', appConfig.name || id));
       return;
     }
 
@@ -373,8 +375,8 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
       setConfirmModal({
         show: true,
         type: 'danger',
-        title: `Désinstaller ${appName} ?`,
-        message: `Toutes les données seront supprimées définitivement.`,
+        title: t('icon.confirmUninstallTitle').replace('{appName}', appName),
+        message: t('icon.confirmUninstallMessage'),
         onConfirm: () => {
           setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null });
           executeUninstall(appId, appName, appKey);
@@ -487,7 +489,7 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
         errorMsg = 'Erreur serveur interne';
       }
       
-      alert(`Erreur ${action} de ${appName}:\n${errorMsg}`);
+      alert(t('icon.actionError').replace('{action}', action).replace('{appName}', appName).replace('{error}', errorMsg));
     }
   };
 
@@ -539,7 +541,7 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
                     <rect x="6" y="6" width="12" height="12" rx="3" ry="3" />
                   </svg>
                 </span>
-                <span>Arrêter</span>
+                <span>{t('icon.stop')}</span>
               </div>
               <div className="context-menu-separator" role="separator" />
               <div 
@@ -557,7 +559,7 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
                     <polyline points="21 3 21 9 15 9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </span>
-                <span>Redémarrer</span>
+                <span>{t('icon.restart')}</span>
               </div>
               <div className="context-menu-separator" role="separator" />
               <div 
@@ -575,7 +577,7 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </span>
-                <span>Désinstaller</span>
+                <span>{t('icon.uninstall')}</span>
               </div>
             </>
           ) : (
@@ -594,7 +596,7 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
                     <polygon points="9 6 19 12 9 18 9 6" />
                   </svg>
                 </span>
-                <span>Démarrer</span>
+                <span>{t('icon.start')}</span>
               </div>
               <div className="context-menu-separator" role="separator" />
               <div 
@@ -612,7 +614,7 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </span>
-                <span>Désinstaller</span>
+                <span>{t('icon.uninstall')}</span>
               </div>
             </>
           )}

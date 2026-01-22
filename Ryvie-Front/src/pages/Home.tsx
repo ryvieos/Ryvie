@@ -18,6 +18,7 @@ import {
   generateDefaultAppsList,
   images 
 } from '../config/appConfig';
+import { useLanguage } from '../contexts/LanguageContext';
 import GridLauncher from '../components/GridLauncher';
 import InstallIndicator from '../components/InstallIndicator';
 import OnboardingOverlay from '../components/OnboardingOverlay';
@@ -219,7 +220,7 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
     if (!appConfig.id) {
       console.error(`[Icon] Impossible d'effectuer ${action}: appConfig.id manquant pour`, id);
       console.error('[Icon] appConfig:', appConfig);
-      alert(`Erreur: ID de l'application manquant (${id})`);
+      alert(t('home.errorMissingAppId', { id }));
       return;
     }
     
@@ -227,7 +228,7 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
     
     // Confirmation pour la désinstallation
     if (action === 'uninstall') {
-      const confirmMsg = `Êtes-vous sûr de vouloir désinstaller "${appConfig.name}" ?\n\nCette action supprimera :\n- Les containers Docker\n- Les données de l'application\n- Les fichiers de configuration\n\nCette action est irréversible.`;
+      const confirmMsg = t('home.confirmUninstall', { appName: appConfig.name });
       if (!window.confirm(confirmMsg)) {
         console.log(`[Icon] Désinstallation de ${appConfig.name} annulée par l'utilisateur`);
         return;
@@ -304,7 +305,7 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
       
       // Si désinstallation, recharger la page
       if (action === 'uninstall') {
-        alert(`${appConfig.name} a été désinstallé avec succès.`);
+        alert(t('home.uninstallSuccess', { appName: appConfig.name }));
         console.log('[Icon] 🔄 Rechargement de la page (F5)...');
         window.location.reload();
       }
@@ -328,9 +329,9 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
       // Message d'erreur plus détaillé
       let errorMsg = error.response?.data?.message || error.message;
       if (error.code === 'ECONNABORTED') {
-        errorMsg = 'Timeout dépassé - l\'opération prend plus de 2 minutes';
+        errorMsg = t('home.timeoutError');
       }
-      alert(`Erreur lors du ${action} de ${appConfig.name}: ${errorMsg}`);
+      alert(t('home.actionError', { action, appName: appConfig.name, error: errorMsg }));
     }
   };
 
@@ -375,24 +376,24 @@ const Icon = ({ id, src, zoneId, handleClick, showName, appStatusData, appsConfi
           {appStatusData?.status === 'running' ? (
             <>
               <div className="context-menu-item" onClick={() => handleAppAction('stop')}>
-                ⏹️ Arrêter
+                ⏹️ {t('home.stop')}
               </div>
               <div className="context-menu-item" onClick={() => handleAppAction('restart')}>
-                🔄 Redémarrer
+                🔄 {t('home.restart')}
               </div>
               <div className="context-menu-separator"></div>
               <div className="context-menu-item context-menu-item-danger" onClick={() => handleAppAction('uninstall')}>
-                🗑️ Désinstaller
+                🗑️ {t('home.uninstall')}
               </div>
             </>
           ) : (
             <>
               <div className="context-menu-item" onClick={() => handleAppAction('start')}>
-                ▶️ Démarrer
+                ▶️ {t('home.start')}
               </div>
               <div className="context-menu-separator"></div>
               <div className="context-menu-item context-menu-item-danger" onClick={() => handleAppAction('uninstall')}>
-                🗑️ Désinstaller
+                🗑️ {t('home.uninstall')}
               </div>
             </>
           )}
@@ -560,6 +561,7 @@ const Taskbar = React.memo(({ handleClick, appsConfig, onLoaded }) => {
 // Composant principal
 const Home = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [accessMode, setAccessMode] = useState(null); 
   const [currentUserName, setCurrentUserName] = useState('');
   const [userRole, setUserRole] = useState('User');
@@ -596,7 +598,7 @@ const Home = () => {
     // Charger depuis le cache au démarrage
     const cached = StorageManager.getItem('weather_cache');
     return cached || {
-      location: 'Loading...',
+      location: t('home.loading'),
       temperature: null,
       description: '',
       icon: 'sunny.png',
@@ -619,7 +621,7 @@ const Home = () => {
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [overlayUrl, setOverlayUrl] = useState('');
   const [closingOverlay, setClosingOverlay] = useState(false);
-  const [overlayTitle, setOverlayTitle] = useState('App Store');
+  const [overlayTitle, setOverlayTitle] = useState(t('home.appStore'));
   const [appStoreMounted, setAppStoreMounted] = useState(false);
   const [appStoreInstalling, setAppStoreInstalling] = useState(false);
   // Map des installations en cours: { appId: { appName, progress } }
@@ -1229,7 +1231,7 @@ const Home = () => {
                   // Afficher une notification d'erreur
                   setNotification({
                     show: true,
-                    message: `Échec de l'installation de ${appName}: ${data.message || 'Erreur inconnue'}`,
+                    message: t('appStore.notifications.uninstall.error').replace('{appName}', appName).replace('{error}', data.message || t('common.errorUnknown')),
                     type: 'error'
                   });
                   setTimeout(() => {
@@ -1759,7 +1761,7 @@ const Home = () => {
           // Afficher la notification toast
           setNotification({
             show: true,
-            message: data.message || `${data.appId} désinstallé avec succès`,
+            message: t('appStore.notifications.uninstall.success').replace('{appId}', data.appId),
             type: 'success'
           });
           setTimeout(() => {
@@ -1827,7 +1829,7 @@ const Home = () => {
         if (!latitude || !longitude) {
           const getPosition = () =>
             new Promise((resolve, reject) => {
-              if (!navigator.geolocation) return reject(new Error('Geolocation non disponible'));
+              if (!navigator.geolocation) return reject(new Error(t('home.geolocationUnavailable')));
               navigator.geolocation.getCurrentPosition(
                 (pos) => resolve(pos),
                 (err) => reject(err),
@@ -2349,7 +2351,7 @@ const Home = () => {
           setAppStoreMounted(true);
         }
         
-        setOverlayTitle('App Store');
+        setOverlayTitle(t('home.appStore'));
         setOverlayVisible(true);
         setPendingUnmount(false); // Annuler tout démontage en attente
       } catch (e) {
@@ -2469,13 +2471,13 @@ const Home = () => {
           />
           <div className={`server-status ${displayServerStatus ? 'connected' : 'disconnected'}`}>
             <span className="status-text">
-              {displayServerStatus ? 'Connecté' : 'Déconnecté'}
+              {displayServerStatus ? t('home.connectionStatus.connected') : t('home.connectionStatus.disconnected')}
             </span>
             <span className="mode-indicator">
-              {accessMode === 'private' ? 'Local' : 'Remote'}
+              {accessMode === 'private' ? t('home.connectionStatus.local') : t('home.connectionStatus.remote')}
             </span>
             {!isElectron() && (
-              <span className="platform-indicator">Web</span>
+              <span className="platform-indicator">{t('home.connectionStatus.web')}</span>
             )}
           </div>
 
@@ -2500,7 +2502,7 @@ const Home = () => {
             }}
           />
           {currentUserName && (
-            <div className="user-chip" title="Utilisateur connecté">
+            <div className="user-chip" title={t('home.connectedUser')}>
               <div className="avatar">{String(currentUserName).charAt(0).toUpperCase()}</div>
               <div className="name">{currentUserName}</div>
             </div>
@@ -2556,7 +2558,7 @@ const Home = () => {
                       letterSpacing: '-0.01em'
                     }}
                   >
-                    Mise à jour disponible
+                    {t('home.updateAvailable')}
                   </div>
                   <div
                     style={{
@@ -2566,7 +2568,7 @@ const Home = () => {
                       letterSpacing: '-0.005em'
                     }}
                   >
-                    Version {availableUpdate.latestVersion} est maintenant disponible
+                    {t('home.versionAvailable', { version: availableUpdate.latestVersion })}
                   </div>
                 </div>
                 <button
@@ -2598,7 +2600,7 @@ const Home = () => {
                     e.currentTarget.style.background = 'transparent';
                     e.currentTarget.style.color = 'rgba(15, 23, 42, 0.4)';
                   }}
-                  title="Fermer"
+                  title={t('home.close')}
                 >
                   ✕
                 </button>
@@ -2631,7 +2633,7 @@ const Home = () => {
                   e.currentTarget.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.15)';
                 }}
               >
-                Mettre à jour
+                {t('home.updateNow')}
               </button>
             </div>
           )}
@@ -2675,9 +2677,9 @@ const Home = () => {
             />
           </div>
           {/* Bouton de déconnexion fixe en bas à gauche */}
-          <button className="logout-fab" onClick={handleLogout} title="Déconnexion">
+          <button className="logout-fab" onClick={handleLogout} title={t('home.logout')}>
             <span className="icon">⎋</span>
-            <span className="label">Déconnexion</span>
+            <span className="label">{t('home.logout')}</span>
           </button>
         </div>
       
@@ -2752,15 +2754,15 @@ const Home = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="weather-modal-header">
-              <h3>Choisir la ville pour la météo</h3>
-              <p>Vous pouvez utiliser votre position actuelle (automatique) ou définir une ville.</p>
+              <h3>{t('home.chooseWeatherCity')}</h3>
+              <p>{t('home.weatherCityDescription')}</p>
             </div>
             <div className="weather-modal-body">
-              <label htmlFor="city-input">Ville</label>
+              <label htmlFor="city-input">{t('home.city')}</label>
               <input
                 id="city-input"
                 type="text"
-                placeholder="Ex: Lille, Lyon, Marseille"
+                placeholder={t('home.cityPlaceholder')}
                 value={tempCity}
                 onChange={(e) => setTempCity(e.target.value)}
                 autoFocus
@@ -2787,9 +2789,9 @@ const Home = () => {
                   } finally { setSavingWeatherCity(false); }
                 }}
                 disabled={savingWeatherCity}
-                title="Utiliser la position actuelle (autoriser la géolocalisation)"
+                  title={t('home.useCurrentPosition')}
               >
-                {savingWeatherCity ? 'En cours…' : 'Utiliser ma position (auto)'}
+                {savingWeatherCity ? t('home.inProgress') : t('home.useMyPosition')}
               </button>
               <div className="spacer" />
               <button
@@ -2803,7 +2805,7 @@ const Home = () => {
                   }, 220);
                 }}
                 disabled={savingWeatherCity}
-              >Annuler</button>
+              >{t('home.cancel')}</button>
               <button
                 className="btn primary"
                 onClick={async () => {
@@ -2823,7 +2825,7 @@ const Home = () => {
                   } finally { setSavingWeatherCity(false); }
                 }}
                 disabled={savingWeatherCity || !tempCity.trim()}
-              >Enregistrer</button>
+              >{t('home.save')}</button>
             </div>
           </div>
         </div>

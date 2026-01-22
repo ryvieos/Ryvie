@@ -7,9 +7,11 @@ const { getServerUrl } = urlsConfig;
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import { getCurrentUserRole, getCurrentUser, getSessionInfo } from '../utils/sessionManager';
 import { sessionManager } from '../utils/sessionManager';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const User = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   // Liste des utilisateurs récupérée depuis l'API
   const [users, setUsers] = useState([]);
@@ -577,7 +579,7 @@ const User = () => {
               <span></span>
               <span></span>
             </div>
-            <p>Chargement des utilisateurs...</p>
+            <p>{t('userManagement.loading')}</p>
           </div>
         </div>
       </div>
@@ -590,10 +592,10 @@ const User = () => {
         <div className="user-container">
           <div className="error-container">
             <div className="error-icon">⚠️</div>
-            <h3>Une erreur est survenue</h3>
+            <h3>{t('userManagement.error')}</h3>
             <p>{error}</p>
             <button className="retry-button" onClick={fetchUsers}>
-              🔄 Réessayer
+              🔄 {t('userManagement.retry')}
             </button>
           </div>
         </div>
@@ -608,17 +610,17 @@ const User = () => {
         <div ref={topBarRef} className="top-bar">
           <div className="back-btn-container">
             <button className="back-btn" onClick={() => navigate('/home')}>
-              ← Retour
+              ← {t('userManagement.back')}
             </button>
           </div>
           <div className="top-bar-content">
-            <h1>👥 Gestion des utilisateurs</h1>
-            <p>Gérez les comptes et les permissions de votre équipe</p>
+            <h1>👥 {t('userManagement.title')}</h1>
+            <p>{t('userManagement.subtitle')}</p>
           </div>
           {isAdmin && (
             <div className="add-user-btn">
               <button type="button" onClick={openAddUserForm}>
-                <span>➕</span> Nouvel utilisateur
+                <span>➕</span> {t('userManagement.newUser')}
               </button>
             </div>
           )}
@@ -637,7 +639,7 @@ const User = () => {
           <div ref={userFormRef} className="modal-overlay" onMouseDown={() => setFormOpen(false)}>
             <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>{editUser ? 'Modifier un utilisateur' : 'Ajouter un utilisateur'}</h2>
+                <h2>{editUser ? t('userManagement.editUser') : t('userManagement.addUser')}</h2>
                 <button type="button" className="close-btn" onClick={() => setFormOpen(false)}>
                   ✖
                 </button>
@@ -652,7 +654,7 @@ const User = () => {
                 
                 <input
                   type="text"
-                  placeholder={editUser ? "Nom" : "Nom (sera l'UID)"}
+                  placeholder={editUser ? t('userManagement.name') : t('userManagement.nameAsUid')}
                   value={newUser.name}
                   onChange={(e) => {
                     const nameVal = e.target.value;
@@ -667,17 +669,17 @@ const User = () => {
                 {editUser && (
                   <input
                     type="text"
-                    placeholder="Identifiant (uid)"
+                    placeholder={t('userManagement.uid')}
                     value={newUser.uid}
                     onChange={(e) => setNewUser({ ...newUser, uid: e.target.value })}
                     disabled={!!editUser}
                     readOnly={!!editUser}
-                    title={editUser ? "L'identifiant (uid) ne peut pas être modifié" : undefined}
+                    title={editUser ? t('userManagement.uidCannotBeChanged') : undefined}
                   />
                 )}
                 <input
                   type="email"
-                  placeholder="Email"
+                  placeholder={t('userManagement.email')}
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value, mail: e.target.value })}
                 />
@@ -686,19 +688,19 @@ const User = () => {
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                   className="role-select"
                 >
-                  <option value="User">User</option>
-                  <option value="Admin">Admin</option>
-                  <option value="Guest">Guest</option>
+                  <option value="User">{t('userManagement.user')}</option>
+                  <option value="Admin">{t('userManagement.admin')}</option>
+                  <option value="Guest">{t('userManagement.guest')}</option>
                 </select>
                 <input
                   type="password"
-                  placeholder="Mot de passe"
+                  placeholder={t('userManagement.password')}
                   value={newUser.password}
                   onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                 />
                 <input
                   type="password"
-                  placeholder="Confirmer le mot de passe"
+                  placeholder={t('userManagement.confirmPassword')}
                   value={newUser.confirmPassword}
                   onChange={(e) => setNewUser({ ...newUser, confirmPassword: e.target.value })}
                 />
@@ -707,7 +709,7 @@ const User = () => {
                   className="submit-btn" 
                   onClick={editUser ? handleUpdateUser : handleAddUser}
                 >
-                  {editUser ? 'Modifier' : 'Ajouter'}
+                  {editUser ? t('userManagement.edit') : t('userManagement.addUser')}
                 </button>
               </div>
             </div>
@@ -719,13 +721,13 @@ const User = () => {
           <div className="modal-overlay" onMouseDown={() => !isSubmitting && setShowAdminAuthModal(false)}>
             <div className="modal-content admin-auth-modal" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Authentification Administrateur</h2>
+                <h2>{t('userManagement.authAdmin')}</h2>
                 <button type="button" className="close-btn" onClick={() => !isSubmitting && setShowAdminAuthModal(false)}>
                   ✖
                 </button>
               </div>
               <div className="modal-body">
-                <p>Veuillez vous authentifier en tant qu'administrateur pour ajouter un nouvel utilisateur</p>
+                <p>{t('userManagement.authAdminAdd')}</p>
                 
                 {/* Affichage du message d'erreur dans le modal */}
                 {message && messageType === 'error' && (
@@ -760,7 +762,7 @@ const User = () => {
                     }}
                     disabled={isSubmitting}
                   >
-                    Annuler
+                    {t('userManagement.cancel')}
                   </button>
                   <button 
                     type="button"
@@ -768,7 +770,7 @@ const User = () => {
                     onClick={submitUserWithAdminAuth}
                     disabled={isSubmitting}
                   >
-                    {isSubmitting ? 'Traitement en cours...' : 'Confirmer'}
+                    {isSubmitting ? t('userManagement.processing') : t('userManagement.confirm')}
                   </button>
                 </div>
               </div>
@@ -780,14 +782,14 @@ const User = () => {
         {confirmDelete && (
           <div className="modal-overlay" onMouseDown={() => setConfirmDelete(null)}>
             <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
-              <h3>Confirmer la suppression</h3>
-              <p>Êtes-vous sûr de vouloir supprimer {confirmDelete.name} ?</p>
+              <h3>{t('userManagement.confirmDelete')}</h3>
+              <p>{t('userManagement.confirmDeleteMessage').replace('{name}', confirmDelete.name)}</p>
               <div className="modal-actions">
                 <button type="button" className="cancel-btn" onClick={() => setConfirmDelete(null)}>
-                  Annuler
+                  {t('userManagement.cancel')}
                 </button>
                 <button type="button" className="delete-btn" onClick={handleDeleteUser}>
-                  Supprimer
+                  {t('userManagement.delete')}
                 </button>
               </div>
             </div>
@@ -799,13 +801,13 @@ const User = () => {
           <div className="modal-overlay" onMouseDown={() => !isSubmitting && setShowDeleteAuthModal(false)}>
             <div className="modal-content admin-auth-modal" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Authentification Administrateur</h2>
+                <h2>{t('userManagement.authAdmin')}</h2>
                 <button type="button" className="close-btn" onClick={() => !isSubmitting && setShowDeleteAuthModal(false)}>
                   ✖
                 </button>
               </div>
               <div className="modal-body">
-                <p>Veuillez vous authentifier en tant qu'administrateur pour supprimer l'utilisateur <strong>{userToDelete?.name}</strong></p>
+                <p>{t('userManagement.authAdminDelete').replace('{name}', userToDelete?.name || '')}</p>
                 
                 {/* Affichage du message d'erreur dans le modal */}
                 {message && messageType === 'error' && (
@@ -841,7 +843,7 @@ const User = () => {
                     }}
                     disabled={isSubmitting}
                   >
-                    Annuler
+                    {t('userManagement.cancel')}
                   </button>
                   <button 
                     type="button"
@@ -849,7 +851,7 @@ const User = () => {
                     onClick={deleteUserWithAdminAuth}
                     disabled={isSubmitting}
                   >
-                    {isSubmitting ? 'Traitement en cours...' : 'Confirmer la suppression'}
+                    {isSubmitting ? t('userManagement.processing') : t('userManagement.confirmDeletion')}
                   </button>
                 </div>
               </div>
@@ -862,8 +864,8 @@ const User = () => {
           {users.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">👥</div>
-              <h3>Aucun utilisateur</h3>
-              <p>Il n'y a pas encore d'utilisateurs enregistrés.</p>
+              <h3>{t('userManagement.noUsers')}</h3>
+              <p>{t('userManagement.noUsersDescription')}</p>
             </div>
           ) : (
             users.map((user, index) => {
@@ -886,9 +888,9 @@ const User = () => {
               // Icône du rôle
               const getRoleIcon = (role) => {
                 switch ((role || '').toLowerCase()) {
-                  case 'admin': return '👑';
+                  case 'admin': return '';
                   case 'guest': return '👤';
-                  default: return '✨';
+                  default: return '';
                 }
               };
 
@@ -905,7 +907,7 @@ const User = () => {
                     <div className="user-info">
                       <h3 className="user-name" title={user.name}>
                         {user.name}
-                        {isCurrentUser && ' (vous)'}
+                        {isCurrentUser && t('userManagement.you')}
                       </h3>
                       <p className="user-email" title={user.email}>{user.email}</p>
                     </div>
@@ -922,20 +924,20 @@ const User = () => {
                         type="button"
                         className="action-button edit-button"
                         onClick={() => openEditUserForm(user)}
-                        title="Modifier cet utilisateur"
+                        title={t('userManagement.editUserTitle')}
                       >
                         <span className="action-icon">✏️</span>
-                        Modifier
+                        {t('userManagement.edit')}
                       </button>
                       <button 
                         type="button"
                         className="action-button delete-button"
                         onClick={() => confirmDeleteUser(user)}
                         disabled={isCurrentUser}
-                        title={isCurrentUser ? "Vous ne pouvez pas supprimer votre propre compte" : "Supprimer cet utilisateur"}
+                        title={isCurrentUser ? t('userManagement.cannotDeleteOwnAccountTitle') : t('userManagement.deleteUserTitle')}
                       >
                         <span className="action-icon">🗑️</span>
-                        Supprimer
+                        {t('userManagement.delete')}
                       </button>
                     </div>
                   )}

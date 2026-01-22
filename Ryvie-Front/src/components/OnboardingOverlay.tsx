@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from '../utils/setupAxios';
 import '../styles/OnboardingOverlay.css';
 import urlsConfig from '../config/urls';
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;
 
@@ -18,13 +19,35 @@ interface OnboardingOverlayProps {
 }
 
 const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => {
+  const { t } = useLanguage();
   const [currentPage, setCurrentPage] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
+
+  const closeLightbox = () => setLightboxImage(null);
+  const openLightbox = (src: string, alt: string) => setLightboxImage({ src, alt });
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeLightbox();
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [lightboxImage]);
 
   const pages: OnboardingPage[] = [
     {
-      title: 'Bienvenue dans Ryvie',
-      subtitle: 'Votre cloud personnel',
+      title: t('onboarding.welcome.title'),
+      subtitle: t('onboarding.welcome.subtitle'),
       icon: (
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -38,35 +61,20 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
             Ryvie est votre espace personnel dans le cloud, conçu pour vous offrir 
             une expérience simple et intuitive.
           </p>
-          <div className="onboarding-features">
-            <div className="feature-item">
-              <div className="feature-icon">🚀</div>
-              <div className="feature-text">
-                <h4>Rapide et Performant</h4>
-                <p>Accédez à vos applications en un clic</p>
-              </div>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon">🔒</div>
-              <div className="feature-text">
-                <h4>Sécurisé</h4>
-                <p>Vos données restent sous votre contrôle</p>
-              </div>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon">🎨</div>
-              <div className="feature-text">
-                <h4>Personnalisable</h4>
-                <p>Adaptez Ryvie à vos besoins</p>
-              </div>
-            </div>
+          <div className="onboarding-hero-image">
+            <img
+              src="/images/assets/ryvie-interface.png"
+              alt="Interface Ryvie"
+              className="onboarding-clickable-image"
+              onClick={() => openLightbox('/images/assets/ryvie-interface.png', 'Interface Ryvie')}
+            />
           </div>
         </div>
       )
     },
     {
-      title: 'Découvrez l\'App Store',
-      subtitle: 'Installez vos applications préférées',
+      title: t('onboarding.appStore.title'),
+      subtitle: t('onboarding.appStore.subtitle'),
       icon: (
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
@@ -76,28 +84,28 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
       content: (
         <div className="onboarding-content">
           <p className="onboarding-main-text">
-            L'App Store vous permet d'installer facilement toutes vos applications favorites.
+            {t('onboarding.appStore.description')}
           </p>
           <div className="onboarding-steps">
             <div className="step-item">
               <div className="step-number">1</div>
               <div className="step-text">
-                <h4>Parcourez le catalogue</h4>
-                <p>Découvrez des centaines d'applications disponibles</p>
+                <h4>{t('onboarding.appStore.step1.title')}</h4>
+                <p>{t('onboarding.appStore.step1.description')}</p>
               </div>
             </div>
             <div className="step-item">
               <div className="step-number">2</div>
               <div className="step-text">
-                <h4>Installez en un clic</h4>
-                <p>Chaque application s'installe automatiquement</p>
+                <h4>{t('onboarding.appStore.step2.title')}</h4>
+                <p>{t('onboarding.appStore.step2.description')}</p>
               </div>
             </div>
             <div className="step-item">
               <div className="step-number">3</div>
               <div className="step-text">
-                <h4>Lancez et profitez</h4>
-                <p>Vos applications apparaissent sur votre écran d'accueil</p>
+                <h4>{t('onboarding.appStore.step3.title')}</h4>
+                <p>{t('onboarding.appStore.step3.description')}</p>
               </div>
             </div>
           </div>
@@ -105,8 +113,8 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
       )
     },
     {
-      title: 'L\'Écosystème Ryvie',
-      subtitle: 'Accédez à votre cloud depuis n\'importe où',
+      title: t('onboarding.ecosystem.title'),
+      subtitle: t('onboarding.ecosystem.subtitle'),
       icon: (
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2"/>
@@ -125,14 +133,13 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
                 <img 
                   src="/images/assets/ryvie-desktop.png" 
                   alt="Ryvie Desktop" 
-                  className="app-screenshot app-screenshot-desktop"
+                  className="app-screenshot app-screenshot-desktop onboarding-clickable-image"
+                  onClick={() => openLightbox('/images/assets/ryvie-desktop.png', 'Ryvie Desktop')}
                 />
                 <div className="app-info">
-                  <h4>Ryvie Desktop</h4>
+                  <h4>{t('onboarding.ecosystem.desktop.title')}</h4>
                   <p>
-                    Accédez à votre Ryvie depuis n'importe où dans le monde. 
-                    Ryvie Desktop établit une connexion ultra-sécurisée entre votre appareil 
-                    et votre serveur personnel, où que vous soyez.
+                    {t('onboarding.ecosystem.desktop.description')}
                   </p>
                 </div>
               </div>
@@ -142,7 +149,8 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
                 <img 
                   src="/images/assets/ryvie-connect.png" 
                   alt="Ryvie Connect" 
-                  className="app-screenshot app-screenshot-mobile"
+                  className="app-screenshot app-screenshot-mobile onboarding-clickable-image"
+                  onClick={() => openLightbox('/images/assets/ryvie-connect.png', 'Ryvie Connect')}
                 />
                 <div className="app-info">
                   <h4>Ryvie Connect</h4>
@@ -155,14 +163,14 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
               <div className="ecosystem-app ecosystem-app-mobile">
                 <img 
                   src="/images/assets/rpictures.png" 
-                  alt="rPicture" 
-                  className="app-screenshot app-screenshot-mobile"
+                  alt={t('onboarding.ecosystem.rpictures.alt')} 
+                  className="app-screenshot app-screenshot-mobile onboarding-clickable-image"
+                  onClick={() => openLightbox('/images/assets/rpictures.png', t('onboarding.ecosystem.rpictures.alt'))}
                 />
                 <div className="app-info">
-                  <h4>rPicture</h4>
+                  <h4>{t('onboarding.ecosystem.rpictures.title')}</h4>
                   <p>
-                    Sauvegardez automatiquement vos photos et vidéos sur votre Ryvie. 
-                    rPicture est également disponible dans l'App Store.
+                    {t('onboarding.ecosystem.rpictures.description')}
                   </p>
                 </div>
               </div>
@@ -172,8 +180,8 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
       )
     },
     {
-      title: 'Gérez Vos Applications',
-      subtitle: 'Contrôlez facilement vos apps installées',
+      title: t('onboarding.manageApps.title'),
+      subtitle: t('onboarding.manageApps.subtitle'),
       icon: (
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -183,36 +191,37 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
       content: (
         <div className="onboarding-content">
           <p className="onboarding-main-text">
-            Un simple clic droit sur une application vous donne accès à toutes les options de gestion.
+            {t('onboarding.manageApps.description')}
           </p>
           <div className="onboarding-right-click">
             <div className="right-click-demo">
               <img 
                 src="/images/assets/right-click-menu.png" 
-                alt="Menu clic droit" 
-                className="demo-screenshot"
+                alt={t('onboarding.manageApps.image.alt')} 
+                className="demo-screenshot onboarding-clickable-image"
+                onClick={() => openLightbox('/images/assets/right-click-menu.png', t('onboarding.manageApps.image.alt'))}
               />
             </div>
             <div className="right-click-actions">
               <div className="action-item">
                 <div className="action-icon">▶️</div>
                 <div className="action-text">
-                  <h4>Démarrer / Arrêter</h4>
-                  <p>Contrôlez l'état de vos applications en un clic</p>
+                  <h4>{t('onboarding.manageApps.step1.title')}</h4>
+                  <p>{t('onboarding.manageApps.step1.description')}</p>
                 </div>
               </div>
               <div className="action-item">
                 <div className="action-icon">🔄</div>
                 <div className="action-text">
-                  <h4>Redémarrer</h4>
-                  <p>Relancez une application qui ne répond plus</p>
+                  <h4>{t('onboarding.manageApps.step2.title')}</h4>
+                  <p>{t('onboarding.manageApps.step2.description')}</p>
                 </div>
               </div>
               <div className="action-item">
                 <div className="action-icon">🗑️</div>
                 <div className="action-text">
-                  <h4>Désinstaller</h4>
-                  <p>Supprimez les applications dont vous n'avez plus besoin</p>
+                  <h4>{t('onboarding.manageApps.step3.title')}</h4>
+                  <p>{t('onboarding.manageApps.step3.description')}</p>
                 </div>
               </div>
             </div>
@@ -221,8 +230,8 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
       )
     },
     {
-      title: 'Personnalisez Votre Espace',
-      subtitle: 'Faites de Ryvie votre chez-vous',
+      title: t('onboarding.personalize.title'),
+      subtitle: t('onboarding.personalize.subtitle'),
       icon: (
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
@@ -232,35 +241,35 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
       content: (
         <div className="onboarding-content">
           <p className="onboarding-main-text">
-            Personnalisez votre expérience pour qu'elle vous ressemble.
+            {t('onboarding.personalize.description')}
           </p>
           <div className="onboarding-customization">
             <div className="custom-item">
               <div className="custom-icon">🖼️</div>
               <div className="custom-text">
-                <h4>Fond d'écran</h4>
-                <p>Choisissez parmi nos fonds ou importez le vôtre</p>
+                <h4>{t('onboarding.personalize.step1.title')}</h4>
+                <p>{t('onboarding.personalize.step1.description')}</p>
               </div>
             </div>
             <div className="custom-item">
               <div className="custom-icon">🌓</div>
               <div className="custom-text">
-                <h4>Mode sombre</h4>
-                <p>Activez le thème sombre pour plus de confort</p>
+                <h4>{t('onboarding.personalize.step2.title')}</h4>
+                <p>{t('onboarding.personalize.step2.description')}</p>
               </div>
             </div>
             <div className="custom-item">
               <div className="custom-icon">📍</div>
               <div className="custom-text">
-                <h4>Organisation</h4>
-                <p>Déplacez et organisez vos applications comme vous le souhaitez</p>
+                <h4>{t('onboarding.personalize.step3.title')}</h4>
+                <p>{t('onboarding.personalize.step3.description')}</p>
               </div>
             </div>
             <div className="custom-item">
               <div className="custom-icon">🌤️</div>
               <div className="custom-text">
-                <h4>Widgets</h4>
-                <p>Ajoutez des widgets météo, stockage, et plus encore</p>
+                <h4>{t('onboarding.personalize.step4.title')}</h4>
+                <p>{t('onboarding.personalize.step4.description')}</p>
               </div>
             </div>
           </div>
@@ -268,8 +277,8 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
       )
     },
     {
-      title: 'Vous êtes prêt !',
-      subtitle: 'Commencez votre aventure avec Ryvie',
+      title: t('onboarding.ready.title'),
+      subtitle: t('onboarding.ready.subtitle'),
       icon: (
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M22 11.08V12C21.9988 14.1564 21.3005 16.2547 20.0093 17.9818C18.7182 19.7088 16.9033 20.9725 14.8354 21.5839C12.7674 22.1953 10.5573 22.1219 8.53447 21.3746C6.51168 20.6273 4.78465 19.2461 3.61096 17.4371C2.43727 15.628 1.87979 13.4881 2.02168 11.3363C2.16356 9.18455 2.99721 7.13631 4.39828 5.49706C5.79935 3.85781 7.69279 2.71537 9.79619 2.24013C11.8996 1.7649 14.1003 1.98232 16.07 2.85999" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -279,21 +288,21 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
       content: (
         <div className="onboarding-content">
           <p className="onboarding-main-text">
-            Vous avez maintenant toutes les clés pour profiter pleinement de Ryvie !
+            {t('onboarding.ready.description')}
           </p>
           <div className="onboarding-final">
             <div className="final-tips">
-              <h4>Quelques conseils pour bien démarrer :</h4>
+              <h4>{t('onboarding.ready.tipsTitle')}</h4>
               <ul>
-                <li>Explorez l'App Store pour installer vos premières applications</li>
-                <li>Personnalisez votre fond d'écran dans les paramètres</li>
-                <li>Organisez vos applications en les déplaçant sur l'écran</li>
-                <li>Consultez la documentation si vous avez des questions</li>
+                <li>{t('onboarding.ready.tip1')}</li>
+                <li>{t('onboarding.ready.tip2')}</li>
+                <li>{t('onboarding.ready.tip3')}</li>
+                <li>{t('onboarding.ready.tip4')}</li>
               </ul>
             </div>
             <div className="final-cta">
               <p className="final-message">
-                Prêt à découvrir votre nouvel espace personnel ?
+                {t('onboarding.ready.readyMessage')}
               </p>
             </div>
           </div>
@@ -373,12 +382,12 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
           <div className="onboarding-actions">
             {currentPage > 0 && (
               <button className="onboarding-btn secondary" onClick={handlePrevious}>
-                Précédent
+                {t('onboarding.previous')}
               </button>
             )}
             {!isLastPage ? (
               <button className="onboarding-btn primary" onClick={handleNext}>
-                Suivant
+                {t('onboarding.next')}
               </button>
             ) : (
               <button 
@@ -386,12 +395,29 @@ const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => 
                 onClick={handleComplete}
                 disabled={isCompleting}
               >
-                {isCompleting ? 'Chargement...' : 'Commencer'}
+                {isCompleting ? t('onboarding.loading') : t('onboarding.start')}
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {lightboxImage && (
+        <div className="onboarding-lightbox" onClick={closeLightbox}>
+          <div className="onboarding-lightbox-backdrop" />
+          <div className="onboarding-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="onboarding-lightbox-close"
+              type="button"
+              onClick={closeLightbox}
+              aria-label={t('onboarding.close')}
+            >
+              ×
+            </button>
+            <img src={lightboxImage.src} alt={lightboxImage.alt} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

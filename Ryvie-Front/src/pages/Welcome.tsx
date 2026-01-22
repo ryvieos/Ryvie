@@ -9,9 +9,11 @@ import { generateAppConfigFromManifests } from '../config/appConfig';
 import { StorageManager } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
+import { useLanguage } from '../contexts/LanguageContext';
 
 const Welcome = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [unlocked, setUnlocked] = useState(false);
   const [serverIP, setServerIP] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -192,7 +194,7 @@ const Welcome = () => {
     
     // Centralized access mode
     setGlobalAccessMode('private');
-    setPreloadStatus('Configuration du mode privé...');
+    setPreloadStatus(t('welcome.loading'));
     
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
@@ -224,7 +226,7 @@ const Welcome = () => {
       const serverUrl = getServerUrl(accessMode);
       const user = getCurrentUser();
       
-      setPreloadStatus('Chargement des applications...');
+      setPreloadStatus(t('welcome.loading'));
       
       // 1. Précharger appsConfig et icônes
       try {
@@ -259,7 +261,7 @@ const Welcome = () => {
           });
           
           // Attendre que toutes les icônes soient chargées
-          setPreloadStatus(`Chargement des icônes (${iconPromises.length})...`);
+          setPreloadStatus(t('welcome.loading'));
           await Promise.all(iconPromises);
           
           StorageManager.setItem('iconImages_cache', iconImages);
@@ -270,7 +272,7 @@ const Welcome = () => {
       }
       
       // 2. Vérifier la connectivité serveur (pour badge Connecté/Déconnecté)
-      setPreloadStatus('Vérification du serveur...');
+      setPreloadStatus(t('welcome.loading'));
       try {
         const statusResponse = await axios.get(`${serverUrl}/api/apps/manifests`, { timeout: 3000 });
         if (statusResponse.status === 200) {
@@ -290,7 +292,7 @@ const Welcome = () => {
       
       // 3. Précharger les préférences utilisateur (layout, anchors, widgets, etc.)
       if (user) {
-        setPreloadStatus('Chargement de vos préférences...');
+        setPreloadStatus(t('welcome.preloading'));
         try {
           const res = await axios.get(`${serverUrl}/api/user/preferences`);
           
@@ -334,7 +336,7 @@ const Welcome = () => {
     
     // Centralized access mode
     setGlobalAccessMode('remote');
-    setPreloadStatus('Configuration du mode remote...');
+    setPreloadStatus(t('welcome.loading'));
     
     // Update the session partition without creating a new window
     if (window.electronAPI && currentUser) {
@@ -359,12 +361,12 @@ const Welcome = () => {
     <div className={`welcome-body ${isPreloading ? 'preloading' : ''}`}>
       <div className={`welcome-overlay ${isPreloading ? 'preloading' : ''}`}>
         <div className="welcome-text-container">
-          <h1>Bonjour {currentUser} !</h1>
+          <h1>{t('welcome.title')} {currentUser} !</h1>
         </div>
         {isPreloading && (
           <div className="preload-spinner-overlay">
             <div className="preload-spinner"></div>
-            <p className="preload-status">{preloadStatus || 'Préparation de votre espace...'}</p>
+            <p className="preload-status">{preloadStatus || t('welcome.preloading')}</p>
           </div>
         )}
         <div className={`welcome-container ${unlocked ? 'welcome-hidden' : ''}`}>
@@ -374,14 +376,14 @@ const Welcome = () => {
                 <div className="welcome-loading"></div>
               </div>
               <div className="welcome-research-server">
-                <p aria-live="polite">Recherche d'un serveur Ryvie en cours...</p>
+                <p aria-live="polite">{t('welcome.loading')}</p>
               </div>
             </>
           ) : serverIP ? (
             <div className="welcome-server-found">
               <img src={serverIcon} alt="Icône de serveur Ryvie" className="welcome-server-icon" />
               <div className="welcome-server-info">
-                <p className="welcome-server-text">Connexion Ryvie établie</p>
+                <p className="welcome-server-text">{t('welcome.ready')}</p>
                 <p className="welcome-server-ip">{serverIP}</p>
               </div>
             </div>
@@ -398,22 +400,22 @@ const Welcome = () => {
               className="welcome-button network-button"
               onClick={handlePrivateAccess}
               disabled={!serverIP}
-              aria-label={serverIP ? 'Accès depuis la maison' : 'En attente de connexion...'}
+              aria-label={serverIP ? t('welcome.localNetworkSubtitle') : 'En attente de connexion...'}
             >
               <svg className="button-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M3 12L5 10M5 10L12 3L19 10M5 10V20C5 20.5523 5.44772 21 6 21H9M19 10L21 12M19 10V20C19 20.5523 18.5523 21 18 21H15M9 21C9.55228 21 10 20.5523 10 20V16C10 15.4477 10.4477 15 11 15H13C13.5523 15 14 15.4477 14 16V20C14 20.5523 14.4477 21 15 21M9 21H15" 
                   stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               <div className="button-content">
-                <span>Réseau Local</span>
-                <span className="button-subtitle">Accès depuis la maison</span>
+                <span>{t('welcome.localNetwork')}</span>
+                <span className="button-subtitle">{t('welcome.localNetworkSubtitle')}</span>
               </div>
             </button>
           ) : currentAccessMode === 'remote' ? (
             <button
               className="welcome-button network-button"
               onClick={handlePublicAccess}
-              aria-label="Accès distant"
+              aria-label={t('welcome.remoteNetworkSubtitle')}
             >
               <svg className="button-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" 
@@ -423,8 +425,8 @@ const Welcome = () => {
                   stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               <div className="button-content">
-                <span>Réseau Externe</span>
-                <span className="button-subtitle">Accès depuis l'extérieur</span>
+                <span>{t('welcome.remoteNetwork')}</span>
+                <span className="button-subtitle">{t('welcome.remoteNetworkSubtitle')}</span>
               </div>
             </button>
           ) : (
@@ -434,21 +436,21 @@ const Welcome = () => {
                 className="welcome-button network-button"
                 onClick={handlePrivateAccess}
                 disabled={!serverIP}
-                aria-label={serverIP ? 'Accès depuis la maison' : 'En attente de connexion...'}
+                aria-label={serverIP ? t('welcome.localNetworkSubtitle') : 'En attente de connexion...'}
               >
                 <svg className="button-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M3 12L5 10M5 10L12 3L19 10M5 10V20C5 20.5523 5.44772 21 6 21H9M19 10L21 12M19 10V20C19 20.5523 18.5523 21 18 21H15M9 21C9.55228 21 10 20.5523 10 20V16C10 15.4477 10.4477 15 11 15H13C13.5523 15 14 15.4477 14 16V20C14 20.5523 14.4477 21 15 21M9 21H15" 
                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 <div className="button-content">
-                  <span>Réseau Local</span>
-                  <span className="button-subtitle">Accès depuis la maison</span>
+                  <span>{t('welcome.localNetwork')}</span>
+                  <span className="button-subtitle">{t('welcome.localNetworkSubtitle')}</span>
                 </div>
               </button>
               <button
                 className="welcome-button network-button"
                 onClick={handlePublicAccess}
-                aria-label="Accès distant"
+                aria-label={t('welcome.remoteNetworkSubtitle')}
               >
                 <svg className="button-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" 
@@ -458,8 +460,8 @@ const Welcome = () => {
                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 <div className="button-content">
-                  <span>Réseau Externe</span>
-                  <span className="button-subtitle">Accès depuis l'extérieur</span>
+                  <span>{t('welcome.remoteNetwork')}</span>
+                  <span className="button-subtitle">{t('welcome.remoteNetworkSubtitle')}</span>
                 </div>
               </button>
             </>
