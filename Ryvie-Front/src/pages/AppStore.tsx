@@ -220,7 +220,7 @@ const AppStore = () => {
     }, '*');
   }, [installingApps]);
 
-  // Déboucer la recherche pour fluidifier la saisie
+  // Débouncer la recherche pour fluidifier la saisie
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(searchQuery), 200);
     return () => clearTimeout(t);

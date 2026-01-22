@@ -375,6 +375,41 @@ async function updateApp(appName) {
 
 
 /**
+ * Télécharge apps.json depuis raw.githubusercontent.com (sans API REST)
+ */
+async function fetchAppsFromRaw(tag) {
+  const axios = require('axios');
+  const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
+  
+  try {
+    const url = `https://raw.githubusercontent.com/${GITHUB_REPO}/${tag}/apps.json`;
+    console.log(`[Update] Téléchargement de apps.json depuis: ${url}`);
+    
+    const response = await axios.get(url, {
+      timeout: 300000,
+      headers: {
+        'User-Agent': 'Ryvie-App-Store'
+      }
+    });
+    
+    if (!Array.isArray(response.data)) {
+      throw new Error('apps.json invalide: doit être un tableau');
+    }
+    
+    console.log(`[Update] ✅ apps.json récupéré (${response.data.length} apps)`);
+    return response.data;
+  } catch (error: any) {
+    console.error('[Update] Erreur lors du téléchargement de apps.json:', error.message);
+    
+    if (error.response?.status === 404) {
+      throw new Error(`apps.json non trouvé pour le tag ${tag}`);
+    }
+    
+    throw error;
+  }
+}
+
+/**
  * Met à jour le catalogue d'apps du store
  */
 async function updateStoreCatalog() {
@@ -421,11 +456,15 @@ async function updateStoreCatalog() {
     
     console.log(`[Update] Mise à jour du catalogue: ${checkResult.currentVersion || 'aucune'} → ${checkResult.latestVersion}`);
     
-    // Récupérer la dernière release
-    const latestRelease = await appStoreService.getLatestRelease();
+    // Le tag est déjà disponible dans checkResult, pas besoin d'appeler à nouveau
+    const finalTag = checkResult.latestVersion;
     
-    // Télécharger apps.json depuis la release
-    const data = await appStoreService.fetchAppsFromRelease(latestRelease);
+    if (!finalTag) {
+      throw new Error('Impossible de récupérer le tag du catalogue');
+    }
+    
+    // Télécharger apps.json depuis raw.githubusercontent.com (sans API REST)
+    const data = await fetchAppsFromRaw(finalTag);
     
     // Sauvegarder le catalogue pur depuis GitHub (sans enrichissement)
     // L'enrichissement se fera automatiquement en mémoire lors de l'appel à getApps()
@@ -446,16 +485,16 @@ async function updateStoreCatalog() {
     }
     
     // Mettre à jour les métadonnées
-    appStoreService.metadata.releaseTag = latestRelease.tag;
+    appStoreService.metadata.releaseTag = finalTag;
     appStoreService.metadata.lastCheck = Date.now();
     await appStoreService.saveMetadata();
     
-    console.log(`[Update] ✅ Catalogue mis à jour vers ${latestRelease.tag}`);
+    console.log(`[Update] ✅ Catalogue mis à jour vers ${finalTag}`);
     
     return {
       success: true,
-      message: `Catalogue mis à jour vers ${latestRelease.tag}`,
-      version: latestRelease.tag,
+      message: `Catalogue mis à jour vers ${finalTag}`,
+      version: finalTag,
       appsCount: Array.isArray(data) ? data.length : 0,
       updated: true,
       updates: detectedUpdates

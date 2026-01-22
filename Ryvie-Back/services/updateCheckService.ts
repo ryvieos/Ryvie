@@ -63,9 +63,9 @@ async function getLatestGitHubReleaseForBranch(owner, repo, branch) {
     if (GITHUB_TOKEN) headers['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
     headers['Accept'] = 'application/vnd.github+json';
 
-    // Récupérer les releases (paginer jusqu'à 100 suffisant pour la plupart des cas)
+    // Récupérer la dernière release
     const resp = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`,
+      `https://api.github.com/repos/${owner}/${repo}/releases?per_page=1`, // page=1 à modif si on applique des release egalement à la branche dev
       { headers, timeout: 10000 }
     );
 
@@ -185,7 +185,52 @@ function getRemoteLatestTag(dir) {
       return 0;
     });
     return sorted[sorted.length - 1] || null;
-  } catch (_: any) {
+  } catch (error: any) {
+    console.error('[updateCheck] Erreur lors de la récupération du tag distant:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Récupère le dernier tag du catalogue App Store via ls-remote (sans API REST)
+ */
+function getLatestCatalogTag() {
+  try {
+    const repoUrl = 'https://github.com/ryvieos/Ryvie-Apps.git';
+    console.log('[updateCheck] Récupération du dernier tag du catalogue via ls-remote...');
+    
+    const out = execSync(`git ls-remote --tags --refs ${repoUrl}`, { encoding: 'utf8' });
+    const tags = out
+      .split('\n')
+      .map(l => (l.split('\t')[1] || '').replace('refs/tags/', '').trim())
+      .filter(Boolean);
+    
+    if (tags.length === 0) {
+      console.log('[updateCheck] Aucun tag trouvé pour le catalogue');
+      return null;
+    }
+    
+    // Filtrer uniquement les tags SemVer valides
+    const versionTags = tags.filter(t => /^v?\d+(\.\d+){1,3}(-[0-9A-Za-z.+-]+)?$/.test(t));
+    if (versionTags.length === 0) {
+      console.log('[updateCheck] Aucun tag SemVer valide trouvé pour le catalogue');
+      return null;
+    }
+    
+    // Trier avec compareVersions
+    const sorted = versionTags.sort((a, b) => {
+      const res = compareVersions(a, b);
+      if (res === null) return 0;
+      if (res === 'update-available') return -1;
+      if (res === 'ahead') return 1;
+      return 0;
+    });
+    
+    const latestTag = sorted[sorted.length - 1] || null;
+    console.log(`[updateCheck] Dernier tag du catalogue: ${latestTag}`);
+    return latestTag;
+  } catch (error: any) {
+    console.error('[updateCheck] Erreur lors de la récupération du tag du catalogue:', error.message);
     return null;
   }
 }
@@ -234,6 +279,7 @@ function getAppManifest(appDir) {
     const lines = content.split('\n');
     const manifest: any = {};
     
+    // Parser le manifest
     for (const line of lines) {
       if (line.includes('repository:')) {
         manifest.repository = line.split('repository:')[1].trim().replace(/['"]/g, '');
@@ -264,7 +310,7 @@ function getAppCurrentVersion(appDir) {
     }).trim();
     return tag;
   } catch (error: any) {
-    // Pas de tag Git, essayer de lire depuis le manifest ou autre
+    // Pas de tag Git
     return null;
   }
 }
@@ -360,13 +406,26 @@ async function checkStoreCatalogUpdate() {
   
   try {
     console.log('[updateCheck] Vérification de nouvelle release du catalogue...');
-    const latestRelease = await appStoreService.getLatestRelease();
+    // Utiliser ls-remote au lieu de l'API REST GitHub
+    const latestTag = getLatestCatalogTag();
+    
+    if (!latestTag) {
+      console.log('[updateCheck] Impossible de récupérer le dernier tag du catalogue');
+      return {
+        name: 'App Store Catalog',
+        repo: process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps',
+        currentVersion: null,
+        latestVersion: null,
+        updateAvailable: false,
+        status: 'error',
+        error: 'Impossible de récupérer les tags du catalogue'
+      };
+    }
     
     // Charger les métadonnées locales
     const localMetadata = await appStoreService.loadMetadata();
     
     const currentTag = localMetadata.releaseTag;
-    const latestTag = latestRelease.tag;
     
     const updateAvailable = currentTag !== latestTag;
     
