@@ -103,9 +103,7 @@ function getCurrentRyvieVersion() {
   }
 }
 
-/**
- * Compare deux versions (supporte v0.0.1 et 0.0.1)
- */
+// Compare deux versions (supporte v0.0.1 et 0.0.1, ainsi que les pré-versions)
 function compareVersions(current, latest) {
   if (!current || !latest) return null;
   
@@ -115,16 +113,56 @@ function compareVersions(current, latest) {
   
   if (cleanCurrent === cleanLatest) return 'up-to-date';
   
-  // Comparer les versions
-  const currentParts = cleanCurrent.split('.').map(Number);
-  const latestParts = cleanLatest.split('.').map(Number);
-  
-  for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-    const curr = currentParts[i] || 0;
-    const lat = latestParts[i] || 0;
+  // Extraire les parties de version principales et les pré-versions
+  const parseVersion = (version) => {
+    // Séparer la version principale de la pré-version
+    const mainMatch = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+    if (!mainMatch) return { major: 0, minor: 0, patch: 0, prerelease: '' };
     
-    if (lat > curr) return 'update-available';
-    if (lat < curr) return 'ahead';
+    const prerelease = version.substring(mainMatch[0].length);
+    return {
+      major: parseInt(mainMatch[1]),
+      minor: parseInt(mainMatch[2]),
+      patch: parseInt(mainMatch[3]),
+      prerelease: prerelease.replace(/^[_-]/, '') // Enlever le premier _ ou -
+    };
+  };
+  
+  const curr = parseVersion(cleanCurrent);
+  const lat = parseVersion(cleanLatest);
+  
+  // Comparer les versions principales d'abord
+  if (lat.major > curr.major) return 'update-available';
+  if (lat.major < curr.major) return 'ahead';
+  
+  if (lat.minor > curr.minor) return 'update-available';
+  if (lat.minor < curr.minor) return 'ahead';
+  
+  if (lat.patch > curr.patch) return 'update-available';
+  if (lat.patch < curr.patch) return 'ahead';
+  
+  // Si les versions principales sont identiques, comparer les pré-versions
+  // Une version sans pré-version est plus récente qu'une version avec pré-version
+  if (!curr.prerelease && lat.prerelease) return 'update-available';
+  if (curr.prerelease && !lat.prerelease) return 'ahead';
+  
+  // Si les deux ont des pré-versions, les comparer
+  if (curr.prerelease && lat.prerelease) {
+    // Gérer les pré-versions numériques (ex: dev.4, dev.2)
+    const currPreMatch = curr.prerelease.match(/(\d+)$/);
+    const latPreMatch = lat.prerelease.match(/(\d+)$/);
+    
+    if (currPreMatch && latPreMatch) {
+      const currPreNum = parseInt(currPreMatch[1]);
+      const latPreNum = parseInt(latPreMatch[1]);
+      
+      if (latPreNum > currPreNum) return 'update-available';
+      if (latPreNum < currPreNum) return 'ahead';
+    }
+    
+    // Comparaison lexicographique en dernier recours
+    if (lat.prerelease > curr.prerelease) return 'update-available';
+    if (lat.prerelease < curr.prerelease) return 'ahead';
   }
   
   return 'up-to-date';
@@ -193,11 +231,27 @@ function getRemoteLatestTag(dir) {
 
 /**
  * Récupère le dernier tag du catalogue App Store via ls-remote (sans API REST)
+ * En dev: récupère le dernier tag de pré-release
+ * En prod: récupère le dernier tag stable
  */
 function getLatestCatalogTag() {
   try {
+    // 1. Détecter le mode actuel (dev ou prod)
+    let mode = 'prod';
+    try {
+      const pm2List = execSync('pm2 list', { encoding: 'utf8' });
+      // Vérifier si "dev" est présent dans n'importe quel nom de processus
+      if (pm2List.toLowerCase().includes('dev')) {
+        mode = 'dev';
+      }
+    } catch (_) {
+      mode = 'prod';
+    }
+    
+    console.log(`[updateCheck] Mode détecté: ${mode}`);
+    
     const repoUrl = 'https://github.com/ryvieos/Ryvie-Apps.git';
-    console.log('[updateCheck] Récupération du dernier tag du catalogue via ls-remote...');
+    console.log('[updateCheck] Récupération des tags du catalogue via ls-remote...');
     
     const out = execSync(`git ls-remote --tags --refs ${repoUrl}`, { encoding: 'utf8' });
     const tags = out
@@ -210,24 +264,53 @@ function getLatestCatalogTag() {
       return null;
     }
     
-    // Filtrer uniquement les tags SemVer valides
-    const versionTags = tags.filter(t => /^v?\d+(\.\d+){1,3}(-[0-9A-Za-z.+-]+)?$/.test(t));
-    if (versionTags.length === 0) {
-      console.log('[updateCheck] Aucun tag SemVer valide trouvé pour le catalogue');
-      return null;
+    console.log(`[updateCheck] ${tags.length} tags trouvés`);
+    
+    // 2. Filtrer selon le mode
+    let targetTags;
+    if (mode === 'dev') {
+      // En dev: chercher les tags de pré-release (contenant 'dev' ou se terminant par un suffixe de pré-release)
+      targetTags = tags.filter(t => 
+        /-dev\.?\d*|alpha|beta|rc/.test(t) || 
+        t.toLowerCase().includes('dev')
+      );
+      console.log(`[updateCheck] Mode dev: recherche de pré-release (${targetTags.length} trouvées)`);
+    } else {
+      // En prod: chercher les tags stables (version SemVer standard)
+      targetTags = tags.filter(t => 
+        /^v?\d+\.\d+\.\d+$/.test(t) && 
+        !/-dev|alpha|beta|rc/.test(t)
+      );
+      console.log(`[updateCheck] Mode prod: recherche de release stable (${targetTags.length} trouvées)`);
     }
     
-    // Trier avec compareVersions
-    const sorted = versionTags.sort((a, b) => {
+    // 3. Fallback si rien trouvé
+    if (targetTags.length === 0) {
+      if (mode === 'dev') {
+        console.log(`[updateCheck] Aucun tag de pré-release trouvé en dev, retourne null`);
+        return null;
+      } else {
+        console.log(`[updateCheck] Aucun tag stable trouvé en prod, retourne null`);
+        return null;
+      }
+    }
+    
+    // 4. Trier les tags valides avec compareVersions
+    const sorted = targetTags.sort((a, b) => {
       const res = compareVersions(a, b);
       if (res === null) return 0;
-      if (res === 'update-available') return -1;
-      if (res === 'ahead') return 1;
+      if (res === 'update-available') return -1; // b > a => a avant b
+      if (res === 'ahead') return 1; // b < a => a après b
       return 0;
     });
     
     const latestTag = sorted[sorted.length - 1] || null;
-    console.log(`[updateCheck] Dernier tag du catalogue: ${latestTag}`);
+    console.log(`[updateCheck] Dernier tag du catalogue (${mode}): ${latestTag}`);
+    
+    // Log pour indiquer la branche qui serait utilisée
+    const branchForMode = mode === 'dev' ? 'dev' : 'main';
+    console.log(`[updateCheck] Branche utilisée pour le mode ${mode}: ${branchForMode}`);
+    
     return latestTag;
   } catch (error: any) {
     console.error('[updateCheck] Erreur lors de la récupération du tag du catalogue:', error.message);

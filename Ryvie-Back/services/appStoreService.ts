@@ -7,6 +7,8 @@ const { execSync } = require('child_process');
 const { EventEmitter } = require('events');
 const { STORE_CATALOG, RYVIE_DIR, MANIFESTS_DIR, APPS_DIR } = require('../config/paths');
 const { getLocalIP } = require('../utils/network');
+// Importer compareVersions depuis updateCheckService pour un tri cohérent
+const { compareVersions } = require('./updateCheckService');
 
 // Configuration
 const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
@@ -327,35 +329,44 @@ async function getLatestRelease() {
     console.log(`[appStore] ${tags.length} tags trouvés`);
     
     // 3. Filtrer selon le mode
-    let targetTag;
+    let targetTags;
     if (mode === 'dev') {
       // En dev: chercher les tags de pré-release (contenant 'dev' ou se terminant par un suffixe de pré-release)
-      const devTags = tags.filter(t => 
+      targetTags = tags.filter(t => 
         /-dev\.?\d*|alpha|beta|rc/.test(t) || 
         t.toLowerCase().includes('dev')
       );
-      targetTag = devTags[0];
-      console.log(`[appStore] Mode dev: recherche de pré-release (${devTags.length} trouvées)`);
+      console.log(`[appStore] Mode dev: recherche de pré-release (${targetTags.length} trouvées)`);
     } else {
       // En prod: chercher les tags stables (version SemVer standard)
-      const stableTags = tags.filter(t => 
+      targetTags = tags.filter(t => 
         /^v?\d+\.\d+\.\d+$/.test(t) && 
         !/-dev|alpha|beta|rc/.test(t)
       );
-      targetTag = stableTags[0];
-      console.log(`[appStore] Mode prod: recherche de release stable (${stableTags.length} trouvées)`);
+      console.log(`[appStore] Mode prod: recherche de release stable (${targetTags.length} trouvées)`);
     }
     
-    // 4. Fallback si rien trouvé
+    // 4. Trier les tags avec compareVersions pour un ordre correct
+    const sorted = targetTags.sort((a, b) => {
+      const res = compareVersions(a, b);
+      if (res === null) return 0;
+      if (res === 'update-available') return -1; // b > a => a avant b
+      if (res === 'ahead') return 1; // b < a => a après b
+      return 0;
+    });
+    
+    // 5. Prendre le tag le plus récent
+    let targetTag = sorted[sorted.length - 1];
+    
+    // 6. Fallback si rien trouvé
     if (!targetTag) {
       if (mode === 'dev') {
-        console.log(`[appStore] Aucun tag stable trouvé en dev, utilisation de la branche dev`);
-          targetTag = 'dev';
+        console.log(`[appStore] Aucun tag de pré-release trouvé en dev, utilisation de la branche dev`);
+        targetTag = 'dev';
       } else {
-        // En prod: s'assurer de ne prendre qu'un tag stable
-          console.log(`[appStore] Aucun tag stable trouvé en prod, utilisation de main`);
-          targetTag = 'main';
-        }
+        console.log(`[appStore] Aucun tag stable trouvé en prod, utilisation de main`);
+        targetTag = 'main';
+      }
     }
     
     console.log(`[appStore] Tag sélectionné: ${targetTag}`);
@@ -541,7 +552,9 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
   // Configuration du repo
   const repoOwner = 'ryvieos';
   const repoName = 'Ryvie-Apps';
-  const branch = release?.tag || 'main';
+  const tag = release?.tag || 'main';
+  
+  console.log(`[appStore] 📋 Téléchargement depuis le tag: ${tag}`);
   
   try {
     // 1. Lister les fichiers via API REST (une seule requête)
@@ -562,7 +575,7 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
     const listAllFiles = async (path: string = ''): Promise<string[]> => {
       const url = path ? `${apiUrl}/${path}` : apiUrl;
       const response = await axios.get(url, {
-        params: { ref: branch },
+        params: { ref: tag },
         headers,
         timeout: 30000
       });
@@ -600,7 +613,7 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
       
       try {
         // Construire l'URL raw
-        const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/${appId}/${filePath}`;
+        const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${tag}/${appId}/${filePath}`;
         
         // Télécharger le fichier
         const fileResponse = await axios.get(rawUrl, {
