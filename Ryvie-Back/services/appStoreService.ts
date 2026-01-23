@@ -10,6 +10,7 @@ const { getLocalIP } = require('../utils/network');
 
 // Configuration
 const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
+const repoUrl = `https://github.com/${GITHUB_REPO}.git`;
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
@@ -285,21 +286,36 @@ async function enrichAppsWithInstalledVersions(apps) {
 }
 
 /**
- * Récupère la dernière version depuis git ls-remote (sans API REST)
- * Réutilise la fonction getLatestCatalogTag du service updateCheckService
+ * Récupère la dernière version depuis git ls-remote
+ * En dev: récupère le dernier tag de pré-release (ex: v1.0.0-dev.1)
+ * En prod: récupère le dernier tag stable (ex: v1.0.0)
  */
 async function getLatestRelease() {
   try {
-    console.log('[appStore] Récupération de la dernière version avec git ls-remote...');
+    // 1. Détecter le mode actuel (dev ou prod)
+    let mode = 'prod';
+    try {
+      const pm2List = execSync('pm2 list', { encoding: 'utf8' });
+      // Vérifier si "dev" est présent dans n'importe quel nom de processus
+      if (pm2List.toLowerCase().includes('dev')) {
+        mode = 'dev';
+      }
+    } catch (_) {
+      mode = 'prod';
+    }
     
-    // Importer la fonction existante
-    const { getLatestCatalogTag } = require('./updateCheckService');
+    console.log(`[appStore] Mode détecté: ${mode}`);
     
-    // Réutiliser la fonction qui fait déjà le travail
-    const latestTag = getLatestCatalogTag();
+    // 2. Récupérer tous les tags avec git ls-remote
+    console.log('[appStore] Récupération des tags via ls-remote...');
+    const out = execSync(`git ls-remote --tags --refs ${repoUrl}`, { encoding: 'utf8' });
+    const tags = out
+      .split('\n')
+      .map(l => (l.split('\t')[1] || '').replace('refs/tags/', '').trim())
+      .filter(Boolean);
     
-    if (!latestTag) {
-      console.log('[appStore] Aucun tag de version trouvé, utilisation de main');
+    if (tags.length === 0) {
+      console.log('[appStore] Aucun tag trouvé, utilisation de main');
       return {
         tag: 'main',
         name: 'main',
@@ -308,11 +324,45 @@ async function getLatestRelease() {
       };
     }
     
-    console.log(`[appStore] Dernière version trouvée: ${latestTag}`);
+    console.log(`[appStore] ${tags.length} tags trouvés`);
+    
+    // 3. Filtrer selon le mode
+    let targetTag;
+    if (mode === 'dev') {
+      // En dev: chercher les tags de pré-release (contenant 'dev' ou se terminant par un suffixe de pré-release)
+      const devTags = tags.filter(t => 
+        /-dev\.?\d*|alpha|beta|rc/.test(t) || 
+        t.toLowerCase().includes('dev')
+      );
+      targetTag = devTags[0];
+      console.log(`[appStore] Mode dev: recherche de pré-release (${devTags.length} trouvées)`);
+    } else {
+      // En prod: chercher les tags stables (version SemVer standard)
+      const stableTags = tags.filter(t => 
+        /^v?\d+\.\d+\.\d+$/.test(t) && 
+        !/-dev|alpha|beta|rc/.test(t)
+      );
+      targetTag = stableTags[0];
+      console.log(`[appStore] Mode prod: recherche de release stable (${stableTags.length} trouvées)`);
+    }
+    
+    // 4. Fallback si rien trouvé
+    if (!targetTag) {
+      if (mode === 'dev') {
+        console.log(`[appStore] Aucun tag stable trouvé en dev, utilisation de la branche dev`);
+          targetTag = 'dev';
+      } else {
+        // En prod: s'assurer de ne prendre qu'un tag stable
+          console.log(`[appStore] Aucun tag stable trouvé en prod, utilisation de main`);
+          targetTag = 'main';
+        }
+    }
+    
+    console.log(`[appStore] Tag sélectionné: ${targetTag}`);
     
     return {
-      tag: latestTag,
-      name: latestTag,
+      tag: targetTag,
+      name: targetTag,
       publishedAt: new Date().toISOString(), // git ls-remote ne donne pas la date
       assets: []
     };
