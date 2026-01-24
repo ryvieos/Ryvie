@@ -36,6 +36,7 @@ const verifyToken = async (req: any, res: any, next: any) => {
   const token = authHeader && authHeader.split(' ')[1]; // Format: "Bearer TOKEN"
 
   if (!token) {
+    console.log(`[auth] ❌ Pas de token pour ${req.path}`);
     return res.status(401).json({ 
       error: 'Accès refusé. Authentification requise.' 
     });
@@ -55,8 +56,10 @@ const verifyToken = async (req: any, res: any, next: any) => {
       const key = `access:token:${token}`;
       const exists = await redisClient.exists(key);
       if (!exists) {
+        console.log(`[auth] ❌ Token non trouvé dans Redis allowlist pour ${decoded.uid} sur ${req.path}`);
         return res.status(401).json({ error: 'Token révoqué ou inconnu' });
       }
+      console.log(`[auth] ✅ Token valide pour ${decoded.uid} (${decoded.role}) sur ${req.path}`);
     } catch (e: any) {
       // If Redis is down, fail open to avoid outage, but warn
       console.warn('[auth middleware] Redis unavailable, skipping allowlist check');
