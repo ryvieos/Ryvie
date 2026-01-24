@@ -1,14 +1,18 @@
 const axios = require('axios');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const { EventEmitter } = require('events');
 const { STORE_CATALOG, RYVIE_DIR, MANIFESTS_DIR, APPS_DIR } = require('../config/paths');
 const { getLocalIP } = require('../utils/network');
+// Importer compareVersions depuis updateCheckService pour un tri cohérent
+const { compareVersions } = require('./updateCheckService');
 
 // Configuration
 const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
+const repoUrl = `https://github.com/${GITHUB_REPO}.git`;
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
@@ -34,6 +38,7 @@ let rateLimitInfo = {
 
 /**
  * Log et met à jour les informations de rate limit GitHub
+ * Utilise l'endpoint /rate_limit qui ne consomme pas de requête
  */
 function logRateLimit(headers, context = 'API call') {
   if (!headers) return;
@@ -240,24 +245,33 @@ async function enrichAppsWithInstalledVersions(apps) {
     return { apps, updates: [] };
   }
 
+  console.log('[appStore] 🔍 Chargement des versions installées...');
   const installedBuildIds = await loadInstalledVersions();
+  console.log(`[appStore] 📋 Versions installées trouvées:`, Object.keys(installedBuildIds));
   const updates = [];
 
   const enriched = apps.map(app => {
     const installedBuildId = installedBuildIds?.[app.id];
+    console.log(`[appStore] 📊 App ${app.id}:`);
+    console.log(`[appStore]   - installedBuildId: ${installedBuildId}`);
+    console.log(`[appStore]   - app.buildId: ${app.buildId}`);
+    
     if (installedBuildId === null || installedBuildId === undefined) {
       // App non installée : supprimer les champs installedBuildId, updateAvailable et installed
       const { installedBuildId: _, updateAvailable: __, installed: ___, ...cleanApp } = app;
+      console.log(`[appStore]   -> Non installée`);
       return { ...cleanApp, installed: false };
     }
 
     const status = compareBuildIds(installedBuildId, app.buildId);
+    console.log(`[appStore]   - status: ${status}`);
     const enhancedApp = {
       ...app,
       installedBuildId,
       updateAvailable: status === 'update-available',
       installed: true
     };
+    console.log(`[appStore]   -> updateAvailable: ${enhancedApp.updateAvailable}`);
 
     if (status === 'update-available') {
       updates.push({
@@ -274,60 +288,106 @@ async function enrichAppsWithInstalledVersions(apps) {
 }
 
 /**
- * Récupère la dernière release depuis GitHub
+ * Récupère la dernière version depuis git ls-remote
+ * En dev: récupère le dernier tag de pré-release (ex: v1.0.0-dev.1)
+ * En prod: récupère le dernier tag stable (ex: v1.0.0)
  */
 async function getLatestRelease() {
   try {
-    const headers = {
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'Ryvie-App-Store'
-    };
-    
-    if (GITHUB_TOKEN) {
-      headers['Authorization'] = `token ${GITHUB_TOKEN}`;
+    // 1. Détecter le mode actuel (dev ou prod)
+    let mode = 'prod';
+    try {
+      const pm2List = execSync('pm2 list', { encoding: 'utf8' });
+      // Vérifier si "dev" est présent dans n'importe quel nom de processus
+      if (pm2List.toLowerCase().includes('dev')) {
+        mode = 'dev';
+      }
+    } catch (_) {
+      mode = 'prod';
     }
-
     
-    const response = await axios.get(GITHUB_API_URL, {
-      timeout: 300000,
-      headers
+    console.log(`[appStore] Mode détecté: ${mode}`);
+    
+    // 2. Récupérer tous les tags avec git ls-remote
+    console.log('[appStore] Récupération des tags via ls-remote...');
+    const out = execSync(`git ls-remote --tags --refs ${repoUrl}`, { encoding: 'utf8' });
+    const tags = out
+      .split('\n')
+      .map(l => (l.split('\t')[1] || '').replace('refs/tags/', '').trim())
+      .filter(Boolean);
+    
+    if (tags.length === 0) {
+      console.log('[appStore] Aucun tag trouvé, utilisation de main');
+      return {
+        tag: 'main',
+        name: 'main',
+        publishedAt: new Date().toISOString(),
+        assets: []
+      };
+    }
+    
+    console.log(`[appStore] ${tags.length} tags trouvés`);
+    
+    // 3. Filtrer selon le mode
+    let targetTags;
+    if (mode === 'dev') {
+      // En dev: chercher les tags de pré-release (contenant 'dev' ou se terminant par un suffixe de pré-release)
+      targetTags = tags.filter(t => 
+        /-dev\.?\d*|alpha|beta|rc/.test(t) || 
+        t.toLowerCase().includes('dev')
+      );
+      console.log(`[appStore] Mode dev: recherche de pré-release (${targetTags.length} trouvées)`);
+    } else {
+      // En prod: chercher les tags stables (version SemVer standard)
+      targetTags = tags.filter(t => 
+        /^v?\d+\.\d+\.\d+$/.test(t) && 
+        !/-dev|alpha|beta|rc/.test(t)
+      );
+      console.log(`[appStore] Mode prod: recherche de release stable (${targetTags.length} trouvées)`);
+    }
+    
+    // 4. Trier les tags avec compareVersions pour un ordre correct
+    const sorted = targetTags.sort((a, b) => {
+      const res = compareVersions(a, b);
+      if (res === null) return 0;
+      if (res === 'update-available') return -1; // b > a => a avant b
+      if (res === 'ahead') return 1; // b < a => a après b
+      return 0;
     });
-    console.log('GITHUB_API_URL:', GITHUB_API_URL);
     
-    // Log rate limit après chaque requête API
-    logRateLimit(response.headers, 'getLatestRelease');
+    // 5. Prendre le tag le plus récent
+    let targetTag = sorted[sorted.length - 1];
+    
+    // 6. Fallback si rien trouvé
+    if (!targetTag) {
+      if (mode === 'dev') {
+        console.log(`[appStore] Aucun tag de pré-release trouvé en dev, utilisation de la branche dev`);
+        targetTag = 'dev';
+      } else {
+        console.log(`[appStore] Aucun tag stable trouvé en prod, utilisation de main`);
+        targetTag = 'main';
+      }
+    }
+    
+    console.log(`[appStore] Tag sélectionné: ${targetTag}`);
     
     return {
-      tag: response.data.tag_name,
-      name: response.data.name,
-      publishedAt: response.data.published_at,
-      assets: response.data.assets
+      tag: targetTag,
+      name: targetTag,
+      publishedAt: new Date().toISOString(), // git ls-remote ne donne pas la date
+      assets: []
     };
   } catch (error: any) {
-    console.error('[appStore] Erreur lors de la récupération de la dernière release:', error.message);
+    console.error('[appStore] Erreur lors de la récupération de la version:', error.message);
     
-    // Vérifier si c'est une erreur de rate limit GitHub
-    if (error.response?.status === 403 && error.response.data?.message?.includes('rate limit')) {
-      const resetTime = error.response.headers?.['x-ratelimit-reset'];
-      const remaining = error.response.headers?.['x-ratelimit-remaining'] || 0;
-      const limit = error.response.headers?.['x-ratelimit-limit'] || 60;
-      
-      let waitMessage = '';
-      if (resetTime) {
-        const resetDate = new Date(parseInt(resetTime) * 1000);
-        const resetTimeFormatted = resetDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-        waitMessage = ` Réinitialisation à ${resetTimeFormatted}.`;
-      }
-      
-      throw new Error(
-        `Quota d'installations atteint (${remaining}/${limit} requêtes restantes).${waitMessage} ` +
-        `Veuillez patienter avant de réessayer. ` +
-        `💡 Astuce: Ajoutez un GITHUB_TOKEN dans votre fichier .env pour augmenter le quota à 5000 requêtes/heure.`
-      );
-    }
-    
-    // Propager l'erreur réelle
-    throw error;
+    // En cas d'erreur, retourner main par défaut
+    console.log('[appStore] Utilisation de la branche main par défaut');
+    return {
+      tag: 'main',
+      name: 'main',
+      publishedAt: new Date().toISOString(),
+      assets: []
+    };
   }
 }
 
@@ -458,10 +518,10 @@ async function fetchAppsFromRelease(release) {
 }
 
 /**
- * Télécharge une app depuis le repo GitHub via l'API
+ * Télécharge une app depuis le repo GitHub via raw content (sans clone complet)
  */
 async function downloadAppFromRepoArchive(release, appId, existingManifest = null) {
-  console.log(`[appStore] 📥 Téléchargement de ${appId} via GitHub API...`);
+  console.log(`[appStore] 📥 Téléchargement de ${appId} via raw content...`);
   
   // Utiliser sourceDir du manifest existant si disponible (mise à jour)
   // Sinon utiliser le chemin par défaut (nouvelle installation)
@@ -492,132 +552,106 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
   // Configuration du repo
   const repoOwner = 'ryvieos';
   const repoName = 'Ryvie-Apps';
-  const branch = 'main';
+  const tag = release?.tag || 'main';
   
-  // URL de base de l'API GitHub pour le dossier de l'app
-  const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${appId}`;
-  
-  const headers = {
-    'Accept': 'application/vnd.github.v3+json',
-    'User-Agent': 'Ryvie-App-Store'
-  };
-  
-  if (GITHUB_TOKEN) {
-    headers['Authorization'] = `token ${GITHUB_TOKEN}`;
-  }
+  console.log(`[appStore] 📋 Téléchargement depuis le tag: ${tag}`);
   
   try {
-    // 1. Récupérer la liste des fichiers du dossier de l'app
-    console.log(`[appStore] 🔍 Récupération de la liste des fichiers pour ${appId}...`);
+    // 1. Lister les fichiers via API REST (une seule requête)
+    console.log(`[appStore] 🔍 Listing des fichiers de ${appId}...`);
     sendProgressUpdate(appId, 3, 'Récupération de la liste des fichiers...', 'preparation');
     
-    const response = await axios.get(apiUrl, {
-      params: { ref: branch },
-      headers,
-      timeout: 300000
-    });
+    const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${appId}`;
+    const headers = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'Ryvie-App-Store'
+    };
     
-    logRateLimit(response.headers, `downloadApp: ${appId}`);
-    const allItems = response.data;
-    
-    if (!Array.isArray(allItems) || allItems.length === 0) {
-      throw new Error(`Le dossier ${appId} est vide ou n'existe pas dans le repo`);
+    if (GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${GITHUB_TOKEN}`;
     }
     
-    // Séparer les fichiers des dossiers
-    const files = allItems.filter(item => item.type === 'file');
-    const directories = allItems.filter(item => item.type === 'dir');
+    // Fonction récursive pour lister tous les fichiers
+    const listAllFiles = async (path: string = ''): Promise<string[]> => {
+      const url = path ? `${apiUrl}/${path}` : apiUrl;
+      const response = await axios.get(url, {
+        params: { ref: tag },
+        headers,
+        timeout: 30000
+      });
+      
+      logRateLimit(response.headers, `listFiles: ${appId}/${path || 'root'}`);
+      const items = response.data;
+      const files: string[] = [];
+      
+      for (const item of items) {
+        const itemPath = path ? `${path}/${item.name}` : item.name;
+        
+        if (item.type === 'file') {
+          files.push(itemPath);
+        } else if (item.type === 'dir') {
+          // Récursion pour les sous-dossiers
+          const subFiles = await listAllFiles(itemPath);
+          files.push(...subFiles);
+        }
+      }
+      
+      return files;
+    };
     
-    console.log(`[appStore] 📋 ${files.length} fichier(s) et ${directories.length} dossier(s) trouvé(s)`);
+    const allFiles = await listAllFiles();
+    console.log(`[appStore] 📋 ${allFiles.length} fichier(s) trouvé(s)`);
+    sendProgressUpdate(appId, 5, `Téléchargement des fichiers...`, 'download');
     
-    // 2. Calculer la taille totale estimée (en utilisant les tailles GitHub)
-    const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
-    console.log(`[appStore] 📏 Taille totale estimée: ${(totalSize / 1024).toFixed(2)} Ko`);
-    
-    sendProgressUpdate(appId, 5, `Préparation du téléchargement (${files.length} fichiers)...`, 'preparation');
-    
-    // 3. Télécharger chaque fichier avec mise à jour de progression
-    let downloadedSize = 0;
+    // 2. Télécharger tous les fichiers via raw content
     let downloadedCount = 0;
     
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const fileName = file.name;
-      const filePath = path.join(appDir, fileName);
-      
-      const progressPercent = 5 + (i / files.length) * 55; // 5% -> 60%
-      sendProgressUpdate(appId, progressPercent, `Téléchargement: ${fileName}...`, 'download');
+    for (let i = 0; i < allFiles.length; i++) {
+      const filePath = allFiles[i];
+      const progressPercent = 5 + (i / allFiles.length) * 60;
+      sendProgressUpdate(appId, progressPercent, `Téléchargement: ${filePath}...`, 'download');
       
       try {
-        // Télécharger le contenu du fichier
-        const fileResponse = await axios.get(file.download_url, {
+        // Construire l'URL raw
+        const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${tag}/${appId}/${filePath}`;
+        
+        // Télécharger le fichier
+        const fileResponse = await axios.get(rawUrl, {
           responseType: 'arraybuffer',
           headers: { 'User-Agent': 'Ryvie-App-Store' },
           timeout: 300000
         });
         
-        // Sauvegarder le fichier
-        await fs.writeFile(filePath, fileResponse.data);
+        // Construire le chemin local
+        const localFilePath = path.join(appDir, filePath);
         
-        // Mettre à jour la progression
-        downloadedSize += fileResponse.data.length;
+        // Créer le répertoire si nécessaire
+        const localDir = path.dirname(localFilePath);
+        if (!fsSync.existsSync(localDir)) {
+          await fs.mkdir(localDir, { recursive: true });
+        }
+        
+        // Sauvegarder le fichier
+        await fs.writeFile(localFilePath, fileResponse.data);
         downloadedCount++;
         
-        const actualProgress = 5 + (downloadedSize / totalSize) * 55; // 5% -> 60%
-        sendProgressUpdate(appId, Math.min(60, actualProgress), 
-          `${fileName} téléchargé (${(fileResponse.data.length / 1024).toFixed(2)} Ko)`, 'download');
-        
-        console.log(`[appStore] ✅ ${fileName} téléchargé (${(fileResponse.data.length / 1024).toFixed(2)} Ko)`);
-        
-      } catch (fileError: any) {
-        console.error(`[appStore] ❌ Erreur lors du téléchargement de ${fileName}:`, fileError.message);
-        throw new Error(`Échec du téléchargement de ${fileName}`);
+        console.log(`[appStore] ✅ ${filePath} téléchargé`);
+      } catch (error: any) {
+        console.error(`[appStore] ❌ Erreur lors du téléchargement de ${filePath}:`, error.message);
+        if (error.response?.status === 404) {
+          console.log(`[appStore] ⚠️ Fichier ${filePath} non trouvé, passage au suivant`);
+          continue;
+        }
+        throw new Error(`Échec du téléchargement de ${filePath}`);
       }
     }
     
-    // 4. Télécharger le fichier .env s'il existe (optionnel mais critique)
-    sendProgressUpdate(appId, 60, 'Vérification du fichier .env...', 'download');
-    console.log(`[appStore] 🔍 Recherche du fichier .env pour ${appId}...`);
-    
-    try {
-      const envFileUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/${appId}/.env`;
-      const envResponse = await axios.get(envFileUrl, {
-        headers: { 'User-Agent': 'Ryvie-App-Store' },
-        timeout: 10000,
-        validateStatus: (status) => status === 200 || status === 404
-      });
-      
-      if (envResponse.status === 200 && envResponse.data) {
-        const envFilePath = path.join(appDir, '.env');
-        await fs.writeFile(envFilePath, envResponse.data);
-        console.log(`[appStore] ✅ Fichier .env téléchargé et sauvegardé`);
-        sendProgressUpdate(appId, 61, 'Fichier .env téléchargé', 'download');
-      } else {
-        console.log(`[appStore] ℹ️ Aucun fichier .env trouvé (optionnel)`);
-      }
-    } catch (envError: any) {
-      // Le fichier .env est optionnel, on ne bloque pas l'installation
-      if (envError.response?.status === 404) {
-        console.log(`[appStore] ℹ️ Aucun fichier .env disponible pour ${appId} (optionnel)`);
-      } else {
-        console.warn(`[appStore] ⚠️ Erreur lors du téléchargement du .env:`, envError.message);
-      }
-    }
-    
-    // 5. Télécharger les sous-dossiers récursivement
-    for (const dir of directories) {
-      sendProgressUpdate(appId, 62, `Téléchargement du dossier: ${dir.name}...`, 'download');
-      await downloadDirectoryRecursive(dir.url, path.join(appDir, dir.name), branch, headers);
-    }
-    
-    // 6. Vérifier que les fichiers requis sont présents
-    sendProgressUpdate(appId, 63, 'Vérification des fichiers requis...', 'verification');
+    // 3. Vérifier que les fichiers requis sont présents
+    sendProgressUpdate(appId, 65, 'Vérification des fichiers requis...', 'verification');
     
     // Déterminer le dossier où chercher les fichiers
-    // Si existingManifest a un dockerComposePath avec sous-dossier, chercher là
     let checkDir = appDir;
     if (existingManifest?.dockerComposePath && existingManifest.dockerComposePath.includes('/')) {
-      // Extraire le sous-dossier (ex: "tdrive/docker-compose.yml" → "tdrive")
       const subDir = path.dirname(existingManifest.dockerComposePath);
       checkDir = path.join(appDir, subDir);
       console.log(`[appStore] 📂 Vérification dans le sous-dossier: ${subDir}`);
@@ -636,7 +670,7 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
       }
     }
     
-    // Vérifier l'icône (peut être .png ou .svg)
+    // Vérifier l'icône
     const iconExtensions = ['png', 'svg', 'jpg', 'jpeg'];
     let iconFound = false;
     for (const ext of iconExtensions) {
@@ -700,82 +734,6 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
     }
     
     throw new Error(`Échec du téléchargement de ${appId}: ${error.message}`);
-  }
-}
-
-/**
- * Télécharge récursivement un sous-dossier depuis GitHub
- * (Utilisé si votre app contient des sous-dossiers)
- */
-async function downloadDirectoryRecursive(apiUrl, destinationPath, branch, headers) {
-  try {
-    const response = await axios.get(apiUrl, {
-      params: { ref: branch },
-      headers,
-      timeout: 30000
-    });
-    
-    logRateLimit(response.headers, `downloadDirectory: ${destinationPath.split('/').pop()}`);
-    const items = response.data;
-    
-    // Créer le dossier de destination
-    await fs.mkdir(destinationPath, { recursive: true });
-    
-    // Télécharger chaque élément
-    for (const item of items) {
-      const itemPath = path.join(destinationPath, item.name);
-      
-      if (item.type === 'file') {
-        console.log(`[appStore] ⬇️  Téléchargement: ${item.name}...`);
-        const fileResponse = await axios.get(item.download_url, {
-          responseType: 'arraybuffer',
-          headers: { 'User-Agent': 'Ryvie-App-Store' },
-          timeout: 300000
-        });
-        await fs.writeFile(itemPath, fileResponse.data);
-        console.log(`[appStore] ✅ ${item.name} téléchargé`);
-        
-      } else if (item.type === 'dir') {
-        // Récursion pour les sous-dossiers
-        await downloadDirectoryRecursive(item.url, itemPath, branch, headers);
-      }
-    }
-    
-    // Vérifier et télécharger le fichier .env s'il existe dans ce dossier (optionnel)
-    // L'API GitHub Contents peut ne pas retourner les fichiers cachés dans certains cas
-    const folderPathInRepo = destinationPath.split('/data/apps/')[1]; // Extraire le chemin relatif
-    if (folderPathInRepo) {
-      try {
-        const envFileUrl = `https://raw.githubusercontent.com/ryvieos/Ryvie-Apps/main/${folderPathInRepo}/.env`;
-        const envResponse = await axios.get(envFileUrl, {
-          headers: { 'User-Agent': 'Ryvie-App-Store' },
-          timeout: 10000,
-          validateStatus: (status) => status === 200 || status === 404
-        });
-        
-        if (envResponse.status === 200 && envResponse.data) {
-          const envFilePath = path.join(destinationPath, '.env');
-          await fs.writeFile(envFilePath, envResponse.data);
-          console.log(`[appStore] ✅ Fichier .env téléchargé dans ${folderPathInRepo}`);
-        }
-      } catch (envError: any) {
-        // Le fichier .env est optionnel, on ne bloque pas
-        if (envError.response?.status !== 404) {
-          console.warn(`[appStore] ⚠️ Erreur lors du téléchargement du .env dans ${folderPathInRepo}:`, envError.message);
-        }
-      }
-    }
-    
-    // Définir les permissions sur le dossier téléchargé
-    try {
-      execSync(`chmod -R 775 "${destinationPath}"`, { stdio: 'pipe' });
-    } catch (chmodError: any) {
-      console.warn(`[appStore] ⚠️ Impossible de définir les permissions sur ${destinationPath}`);
-    }
-    
-  } catch (error: any) {
-    console.error(`[appStore] ❌ Erreur lors du téléchargement récursif:`, error.message);
-    throw error;
   }
 }
 
@@ -913,31 +871,36 @@ async function updateAppFromStore(appId) {
       }
     }
     
-    // 1. Créer un snapshot avant la mise à jour (obligatoire pour la sécurité)
-    currentStep = 'snapshot-creation';
-    console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
-    console.log('[Update] 📸 Création du snapshot de sécurité...');
-    sendProgressUpdate(appId, 3, 'Création du snapshot de sécurité...', 'snapshot');
-    
-    try {
-      const snapshotOutput = execSync(`sudo /opt/Ryvie/scripts/snapshot-app.sh ${appId}`, { encoding: 'utf8' });
-      console.log(`[Update] Snapshot output: ${snapshotOutput.substring(0, 100)}...`);
+    // 1. Créer un snapshot SEULEMENT si c'est une mise à jour (app déjà installée)
+    if (existingManifest) {
+      currentStep = 'snapshot-creation';
+      console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
+      console.log('[Update] 📸 Création du snapshot de sécurité...');
+      sendProgressUpdate(appId, 3, 'Création du snapshot de sécurité...', 'snapshot');
       
-      // Extraire le chemin du snapshot
-      const match = snapshotOutput.match(/SNAPSHOT_PATH=(.+)/);
-      console.log(`[Update] Snapshot path match:`, match);
-      
-      if (match) {
-        snapshotPath = match[1].trim();
-        console.log(`[Update] Snapshot créé: ${snapshotPath}`);
-        sendProgressUpdate(appId, 4, 'Snapshot de sécurité créé', 'snapshot');
-      } else {
-        console.error('[Update] ❌ Impossible d\'extraire le chemin du snapshot depuis la sortie');
-        throw new Error('Impossible d\'extraire le chemin du snapshot depuis la sortie');
+      try {
+        const snapshotOutput = execSync(`sudo /opt/Ryvie/scripts/snapshot-app.sh ${appId}`, { encoding: 'utf8' });
+        console.log(`[Update] Snapshot output: ${snapshotOutput.substring(0, 100)}...`);
+        
+        // Extraire le chemin du snapshot
+        const match = snapshotOutput.match(/SNAPSHOT_PATH=(.+)/);
+        console.log(`[Update] Snapshot path match:`, match);
+        
+        if (match) {
+          snapshotPath = match[1].trim();
+          console.log(`[Update] Snapshot créé: ${snapshotPath}`);
+          sendProgressUpdate(appId, 4, 'Snapshot de sécurité créé', 'snapshot');
+        } else {
+          console.error('[Update] ❌ Impossible d\'extraire le chemin du snapshot depuis la sortie');
+          throw new Error('Impossible d\'extraire le chemin du snapshot depuis la sortie');
+        }
+      } catch (snapError: any) {
+        console.error('[Update] ❌ Impossible de créer le snapshot:', snapError.message);
+        throw new Error(`Création du snapshot échouée: ${snapError.message}. Mise à jour annulée pour des raisons de sécurité.`);
       }
-    } catch (snapError: any) {
-      console.error('[Update] ❌ Impossible de créer le snapshot:', snapError.message);
-      throw new Error(`Création du snapshot échouée: ${snapError.message}. Mise à jour annulée pour des raisons de sécurité.`);
+    } else {
+      console.log('[Update] ℹ️ Nouvelle installation, pas de snapshot nécessaire');
+      sendProgressUpdate(appId, 3, 'Nouvelle installation...', 'init');
     }
 
     // 2. Récupérer la dernière release depuis GitHub
@@ -1222,7 +1185,19 @@ LOCAL_IP=${localIP}
       console.log('[Update] 🔄 Actualisation du catalogue...');
       const localApps = await loadAppsFromFile();
       if (Array.isArray(localApps)) {
+        console.log(`[Update] 📋 ${localApps.length} apps trouvées dans le catalogue`);
         const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(localApps);
+        console.log(`[Update] 📋 ${enrichedApps.length} apps après enrichissement`);
+        
+        // Vérifier le statut de l'app mise à jour
+        const updatedApp = enrichedApps.find(app => app.id === appId);
+        if (updatedApp) {
+          console.log(`[Update] 📊 Statut de ${appId}:`);
+          console.log(`[Update]   - installedVersion: ${updatedApp.installedVersion}`);
+          console.log(`[Update]   - latestVersion: ${updatedApp.latestVersion}`);
+          console.log(`[Update]   - updateAvailable: ${updatedApp.updateAvailable}`);
+        }
+        
         await saveAppsToFile(enrichedApps);
         console.log('[Update] ✅ Catalogue actualisé');
       }
@@ -1445,7 +1420,36 @@ LOCAL_IP=${localIP}
       }
     }
     
-    // 9. Supprimer le snapshot si tout s'est bien passé
+    // 9. Mettre à jour le buildId dans apps-versions.json
+    console.log('[Update] 📝 Mise à jour du buildId dans apps-versions.json...');
+    try {
+      let installedVersions = {};
+      try {
+        const raw = await fs.readFile(APPS_VERSIONS_FILE, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          installedVersions = parsed;
+        }
+      } catch (e: any) {
+        console.log('[Update] ℹ️ apps-versions.json non trouvé, création...');
+      }
+      
+      // Récupérer le buildId depuis le catalogue
+      const localApps = await loadAppsFromFile();
+      const appInfo = localApps.find(app => app.id === appId);
+      if (appInfo && appInfo.buildId) {
+        installedVersions[appId] = appInfo.buildId;
+        await fs.writeFile(APPS_VERSIONS_FILE, JSON.stringify(installedVersions, null, 2));
+        console.log(`[Update] ✅ BuildId ${appInfo.buildId} sauvegardé pour ${appId}`);
+      } else {
+        console.warn(`[Update] ⚠️ Impossible de trouver le buildId pour ${appId}`);
+      }
+    } catch (versionError: any) {
+      console.warn('[Update] ⚠️ Erreur lors de la mise à jour du buildId:', versionError.message);
+    }
+    
+    
+    // 10. Supprimer le snapshot si tout s'est bien passé
     if (snapshotPath && snapshotPath !== 'none') {
       currentStep = 'snapshot-cleanup';
       console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
@@ -1473,30 +1477,53 @@ LOCAL_IP=${localIP}
     // Envoyer le message d'erreur détaillé au frontend via progressEmitter
     sendProgressUpdate(appId, 0, error.message, 'error');
     
-    // Nettoyer le dossier de l'app en cas d'échec
-    if (appDir) {
-      console.log(`[Update] 🧹 Nettoyage du dossier ${appDir}...`);
-      try {
-        // Utiliser sudo rm car les fichiers Docker peuvent appartenir à root
-        execSync(`sudo rm -rf "${appDir}"`, { stdio: 'inherit' });
-        console.log(`[Update] ✅ Dossier ${appDir} supprimé`);
-      } catch (cleanupError: any) {
-        console.warn(`[Update] ⚠️ Impossible de supprimer ${appDir}:`, cleanupError.message);
-      }
-    }
-    
-    // Rollback automatique si un snapshot existe
+    // Rollback automatique si un snapshot existe (AVANT de nettoyer)
     if (snapshotPath && snapshotPath !== 'none') {
       console.error('[Update] 🔄 Rollback en cours...');
+      console.error(`[Update] 📸 Snapshot path: ${snapshotPath}`);
+      console.error(`[Update] 📂 App dir: ${appDir}`);
+      
+      // Si appDir est null (erreur avant création), utiliser le chemin par défaut
+      const targetDir = appDir || path.join(APPS_DIR, appId);
+      console.error(`[Update] 🎯 Target dir pour rollback: ${targetDir}`);
+      
+      // Vérifier que le snapshot existe bien
       try {
-        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback-app.sh "${snapshotPath}" "${appDir}"`, { encoding: 'utf8' });
-        console.log(rollbackOutput);
-        console.log('[Update] ✅ Rollback terminé');
+        const snapshotExists = execSync(`sudo btrfs subvolume show "${snapshotPath}"`, { 
+          encoding: 'utf8',
+          stdio: 'pipe'
+        });
+        console.error('[Update] ✅ Snapshot trouvé sur le système de fichiers');
+        console.error(`[Update] 📄 Snapshot info: ${snapshotExists.substring(0, 200)}...`);
+      } catch (checkError: any) {
+        console.error('[Update] ❌ Snapshot non trouvé:', checkError.message);
+        // Continuer quand même, le script rollback gérera l'erreur
+      }
+      
+      try {
+        console.error(`[Update] 🚀 Exécution du rollback: sudo /opt/Ryvie/scripts/rollback-app.sh "${snapshotPath}" "${targetDir}"`);
+        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback-app.sh "${snapshotPath}" "${targetDir}"`, { 
+          encoding: 'utf8',
+          stdio: 'pipe'  // Capturer la sortie pour les logs
+        });
+        console.error('[Update] 📤 Rollback output:');
+        console.error(rollbackOutput);
+        console.error('[Update] ✅ Rollback terminé');
+        
+        // Vérifier que le dossier a bien été restauré
+        try {
+          const restoredFiles = execSync(`ls -la "${targetDir}"`, { encoding: 'utf8' });
+          console.error('[Update] 📁 Fichiers restaurés:');
+          console.error(restoredFiles);
+        } catch (lsError: any) {
+          console.error('[Update] ❌ Impossible de lister les fichiers restaurés:', lsError.message);
+        }
         
         // Supprimer le snapshot après rollback réussi
         try {
+          console.error(`[Update] 🧹 Suppression du snapshot: ${snapshotPath}`);
           execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
-          console.log('[Update] 🧹 Snapshot supprimé après rollback');
+          console.error('[Update] 🧹 Snapshot supprimé après rollback');
         } catch (delError: any) {
           console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
         }
@@ -1507,10 +1534,48 @@ LOCAL_IP=${localIP}
         };
       } catch (rollbackError: any) {
         console.error('[Update] ❌ Échec du rollback:', rollbackError.message);
+        console.error('[Update] 📤 Rollback stderr:', rollbackError.stderr);
+        console.error('[Update] 📤 Rollback stdout:', rollbackError.stdout);
+        
+        // Si le rollback échoue, nettoyer le dossier partiel seulement s'il existe
+        if (targetDir && targetDir !== path.join(APPS_DIR, appId)) {
+          console.log(`[Update] 🧹 Nettoyage du dossier ${targetDir} suite à l'échec du rollback...`);
+          try {
+            execSync(`sudo rm -rf "${targetDir}"`, { stdio: 'inherit' });
+            console.log(`[Update] ✅ Dossier ${targetDir} supprimé`);
+          } catch (cleanupError: any) {
+            console.warn(`[Update] ⚠️ Impossible de supprimer ${targetDir}:`, cleanupError.message);
+          }
+        }
+        
+        // SUPPRIMER LE SNAPSHOT DANS TOUS LES CAS (même si rollback échoue)
+        console.error(`[Update] 🧹 SUPPRESSION FORCÉE du snapshot: ${snapshotPath}`);
+        try {
+          execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
+          console.error('[Update] 🧹 Snapshot supprimé de force (sécurité)');
+        } catch (delError: any) {
+          console.error('[Update] ❌ CRITIQUE: Impossible de supprimer le snapshot:', delError.message);
+          console.error('[Update] 🚨 ALERTE: Un snapshot non supprimé peut causer des problèmes de sécurité!');
+        }
+        
         return {
           success: false,
-          message: `Erreur: ${error.message}. Échec du rollback: ${rollbackError.message}. Snapshot conservé: ${snapshotPath}`
+          message: `Erreur: ${error.message}. Échec du rollback: ${rollbackError.message}.`
         };
+      }
+    } else {
+      console.error('[Update] ❌ Aucun snapshot disponible pour le rollback');
+      console.error(`[Update] 📸 snapshotPath: ${snapshotPath}`);
+    }
+    
+    // Nettoyer le dossier de l'app en cas d'échec seulement si pas de snapshot
+    if (appDir && !snapshotPath) {
+      console.log(`[Update] 🧹 Nettoyage du dossier ${appDir}...`);
+      try {
+        execSync(`sudo rm -rf "${appDir}"`, { stdio: 'inherit' });
+        console.log(`[Update] ✅ Dossier ${appDir} supprimé`);
+      } catch (cleanupError: any) {
+        console.warn(`[Update] ⚠️ Impossible de supprimer ${appDir}:`, cleanupError.message);
       }
     }
     
