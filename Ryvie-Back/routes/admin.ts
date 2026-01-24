@@ -77,8 +77,8 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
       return res.status(500).json({ error: 'Erreur de connexion LDAP initiale' });
     }
 
-    // 2) Find admin DN
-    const adminFilter = `(&(uid=${adminUid})${ldapConfig.userFilter})`;
+    // 2) Find admin DN (accept either uid or mail)
+    const adminFilter = `(&(|(uid=${adminUid})(mail=${adminUid}))${ldapConfig.userFilter})`;
     ldapClient.search(ldapConfig.userSearchBase, { filter: adminFilter, scope: 'sub', attributes: ['dn'] }, (err, ldapRes) => {
       if (err) {
         console.error('Erreur recherche admin :', err);
@@ -161,24 +161,36 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                     employeeType,
                   };
 
-                  adminAuthClient.add(newUserDN, entry, (err) => {
+                  // Utiliser les credentials admin LDAP pour créer l'utilisateur
+                  const ldapAdminClient = ldap.createClient({ url: ldapConfig.url });
+                  ldapAdminClient.bind(ldapConfig.adminBindDN, ldapConfig.adminBindPassword, (err) => {
                     if (err) {
-                      console.error('Erreur ajout utilisateur LDAP :', err);
+                      console.error('Erreur bind LDAP admin:', err);
                       ldapClient.unbind();
                       adminAuthClient.unbind();
-                      return res.status(500).json({ error: 'Erreur ajout utilisateur LDAP' });
+                      return res.status(500).json({ error: 'Erreur de connexion LDAP admin' });
                     }
 
-                    // 7) Add to role group
-                    const roleGroup = { Admin: ldapConfig.adminGroup, User: ldapConfig.userGroup, Guest: ldapConfig.guestGroup }[role];
-                    if (!roleGroup) {
-                      ldapClient.unbind();
-                      adminAuthClient.unbind();
-                      return res.status(400).json({ error: `Rôle inconnu : ${role}` });
-                    }
+                    ldapAdminClient.add(newUserDN, entry, (err) => {
+                      if (err) {
+                        console.error('Erreur ajout utilisateur LDAP :', err);
+                        ldapClient.unbind();
+                        adminAuthClient.unbind();
+                        ldapAdminClient.unbind();
+                        return res.status(500).json({ error: 'Erreur ajout utilisateur LDAP' });
+                      }
 
-                    const groupClient = ldap.createClient({ url: ldapConfig.url });
-                    groupClient.bind(adminDN, adminPassword, (err) => {
+                      // 7) Add to role group
+                      const roleGroup = { Admin: ldapConfig.adminGroup, User: ldapConfig.userGroup, Guest: ldapConfig.guestGroup }[role];
+                      if (!roleGroup) {
+                        ldapClient.unbind();
+                        adminAuthClient.unbind();
+                        ldapAdminClient.unbind();
+                        return res.status(400).json({ error: `Rôle inconnu : ${role}` });
+                      }
+
+                      const groupClient = ldap.createClient({ url: ldapConfig.url });
+                      groupClient.bind(ldapConfig.adminBindDN, ldapConfig.adminBindPassword, (err) => {
                       if (err) {
                         console.error('Échec bind admin pour ajout au groupe');
                         ldapClient.unbind();
@@ -210,6 +222,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                             groupClient.add(roleGroup, groupEntry, (err) => {
                               ldapClient.unbind();
                               adminAuthClient.unbind();
+                              ldapAdminClient.unbind();
                               groupClient.unbind();
 
                               if (err) {
@@ -230,6 +243,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                           } else {
                             ldapClient.unbind();
                             adminAuthClient.unbind();
+                            ldapAdminClient.unbind();
                             groupClient.unbind();
                             console.error(`[add-user] Erreur recherche groupe ${role}:`, err);
                             return res.status(500).json({ error: `Erreur lors de la vérification du groupe ${role}`, details: err.message });
@@ -244,6 +258,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                             groupClient.modify(roleGroup, change, (err) => {
                               ldapClient.unbind();
                               adminAuthClient.unbind();
+                              ldapAdminClient.unbind();
                               groupClient.unbind();
 
                               if (err && err.name !== 'AttributeOrValueExistsError') {
@@ -273,6 +288,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
       });
     });
   });
+  });
 });
 
 // POST /api/delete-user (kept for backward compatibility)
@@ -295,7 +311,7 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
       return res.status(500).json({ error: 'Connexion LDAP échouée' });
     }
 
-    const adminFilter = `(&(uid=${adminUid})${ldapConfig.userFilter})`;
+    const adminFilter = `(&(|(uid=${adminUid})(mail=${adminUid}))${ldapConfig.userFilter})`;
 
     ldapClient.search(
       ldapConfig.userSearchBase,
@@ -515,8 +531,8 @@ router.put('/update-user', verifyToken, isAdmin, async (req: any, res: any) => {
       return res.status(500).json({ error: 'Erreur de connexion LDAP initiale' });
     }
 
-    // Step 2: Find admin user DN
-    const adminFilter = `(&(uid=${adminUid})${ldapConfig.userFilter})`;
+    // Step 2: Find admin user DN (accept either uid or mail)
+    const adminFilter = `(&(|(uid=${adminUid})(mail=${adminUid}))${ldapConfig.userFilter})`;
     ldapClient.search(ldapConfig.userSearchBase, { filter: adminFilter, scope: 'sub', attributes: ['dn'] }, (err, ldapRes) => {
       if (err) {
         console.error('Erreur recherche admin :', err);
@@ -682,8 +698,7 @@ router.put('/update-user', verifyToken, isAdmin, async (req: any, res: any) => {
                           syncLdapWithApps()
                             .catch(() => {})
                             .finally(() => {
-                              res.json({ message: `Utilisateur "${targetUid}" mis à jour avec succès`, user: { name, email, role, uid: targetUid } });
-                            });
+                              res.json({ message: `Utilisateur "${targetUid}" mis à jour avec succès`, user: { name, email, role, uid: targetUid } });                            });
                         });
                       }
                     }
