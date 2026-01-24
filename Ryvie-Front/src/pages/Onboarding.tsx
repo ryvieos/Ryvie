@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import '../styles/Onboarding.css';
@@ -18,6 +18,27 @@ const Onboarding = () => {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
+
+  const closeLightbox = () => setLightboxImage(null);
+  const openLightbox = (src: string, alt: string) => setLightboxImage({ src, alt });
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeLightbox();
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [lightboxImage]);
 
   const pages: OnboardingPage[] = [
     {
@@ -36,28 +57,13 @@ const Onboarding = () => {
             Ryvie est votre espace personnel dans le cloud, conçu pour vous offrir 
             une expérience simple et intuitive.
           </p>
-          <div className="onboarding-features">
-            <div className="feature-item">
-              <div className="feature-icon">🚀</div>
-              <div className="feature-text">
-                <h4>Rapide et Performant</h4>
-                <p>Accédez à vos applications en un clic</p>
-              </div>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon">🔒</div>
-              <div className="feature-text">
-                <h4>Sécurisé</h4>
-                <p>Vos données restent sous votre contrôle</p>
-              </div>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon">🎨</div>
-              <div className="feature-text">
-                <h4>Personnalisable</h4>
-                <p>Adaptez Ryvie à vos besoins</p>
-              </div>
-            </div>
+          <div className="onboarding-hero-image">
+            <img
+              src="/images/assets/ryvie-interface.png"
+              alt="Interface Ryvie"
+              className="onboarding-clickable-image"
+              onClick={() => openLightbox('/images/assets/ryvie-interface.png', 'Interface Ryvie')}
+            />
           </div>
         </div>
       )
@@ -115,14 +121,15 @@ const Onboarding = () => {
       content: (
         <div className="onboarding-content onboarding-ecosystem-content">
           <p className="onboarding-main-text">
-            Découvrez les applications qui étendent les capacités de Ryvie.
-          </p>
+            Découvrez les applications qui étendent les capacités de votre Ryvie.
+          </p> 
           <div className="onboarding-apps-ecosystem">
             <div className="ecosystem-app">
               <img 
                 src="/images/assets/ryvie-desktop.png" 
                 alt="Ryvie Desktop" 
-                className="app-screenshot app-screenshot-desktop"
+                className="app-screenshot app-screenshot-desktop onboarding-clickable-image"
+                onClick={() => openLightbox('/images/assets/ryvie-desktop.png', 'Ryvie Desktop')}
               />
               <div className="app-info">
                 <h4>Ryvie Desktop</h4>
@@ -137,7 +144,8 @@ const Onboarding = () => {
               <img 
                 src="/images/assets/ryvie-connect.png" 
                 alt="Ryvie Connect" 
-                className="app-screenshot app-screenshot-mobile"
+                className="app-screenshot app-screenshot-mobile onboarding-clickable-image"
+                onClick={() => openLightbox('/images/assets/ryvie-connect.png', 'Ryvie Connect')}
               />
               <div className="app-info">
                 <h4>Ryvie Connect</h4>
@@ -151,13 +159,14 @@ const Onboarding = () => {
               <img 
                 src="/images/assets/rpictures.png" 
                 alt="rPictures" 
-                className="app-screenshot app-screenshot-mobile"
+                className="app-screenshot app-screenshot-mobile onboarding-clickable-image"
+                onClick={() => openLightbox('/images/assets/rpictures.png', 'rPictures')}
               />
               <div className="app-info">
                 <h4>rPictures</h4>
                 <p>
                   Sauvegardez automatiquement vos photos et vidéos sur votre Ryvie. 
-                  rPicture est également disponible dans l'App Store.
+                  rPictures est également disponible dans l'App Store.
                 </p>
               </div>
             </div>
@@ -184,7 +193,8 @@ const Onboarding = () => {
               <img 
                 src="/images/assets/right-click-menu.png" 
                 alt="Menu clic droit" 
-                className="demo-screenshot"
+                className="demo-screenshot onboarding-clickable-image"
+                onClick={() => openLightbox('/images/assets/right-click-menu.png', 'Menu clic droit')}
               />
             </div>
             <div className="right-click-actions">
@@ -385,6 +395,23 @@ const Onboarding = () => {
           </div>
         </div>
       </div>
+
+      {lightboxImage && (
+        <div className="onboarding-lightbox" onClick={closeLightbox}>
+          <div className="onboarding-lightbox-backdrop" />
+          <div className="onboarding-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="onboarding-lightbox-close"
+              type="button"
+              onClick={closeLightbox}
+              aria-label="Fermer"
+            >
+              ×
+            </button>
+            <img src={lightboxImage.src} alt={lightboxImage.alt} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

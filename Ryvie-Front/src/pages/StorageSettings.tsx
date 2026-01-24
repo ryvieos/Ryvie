@@ -17,9 +17,11 @@ import {
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 import { getCurrentAccessMode, connectRyvieSocket } from '../utils/detectAccessMode';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const StorageSettings = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const logsEndRef = useRef(null);
 
   // États pour les données
@@ -644,7 +646,7 @@ const StorageSettings = () => {
 
   // Arrêter la resynchronisation en cours
   const handleStopResync = async () => {
-    if (!window.confirm('Êtes-vous sûr de vouloir arrêter la resynchronisation en cours ?')) {
+    if (!window.confirm(t('storageSettings.confirmStopResync'))) {
       return;
     }
 
@@ -671,11 +673,11 @@ const StorageSettings = () => {
           loadInventory();
         }, 1000);
       } else {
-        alert('Erreur: ' + (response.data.error || 'Impossible d\'arrêter la resynchronisation'));
+        alert(t('storageSettings.error') + ': ' + (response.data.error || t('storageSettings.cannotStopResync')));
       }
     } catch (error) {
       console.error('Error stopping resync:', error);
-      alert('Erreur lors de l\'arrêt de la resynchronisation: ' + (error.response?.data?.error || error.message));
+      alert(t('storageSettings.errorStoppingResync') + ': ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -706,15 +708,15 @@ const StorageSettings = () => {
     <div className="storage-settings-container">
       <div className="storage-header">
         <h1>
-          <FontAwesomeIcon icon={faHdd} /> Assistant RAID
+          <FontAwesomeIcon icon={faHdd} /> {t('storageSettings.raidAssistant')}
         </h1>
-        <p className="subtitle">Ajouter des disques au RAID1 /dev/md0</p>
+        <p className="subtitle">{t('storageSettings.addDisksToRaid')}</p>
       </div>
 
       {loading ? (
         <div className="loading-container">
           <FontAwesomeIcon icon={faSpinner} spin size="3x" />
-          <p>Chargement des disques...</p>
+          <p>{t('storageSettings.loadingDisks')}</p>
         </div>
       ) : (
         <>
@@ -725,12 +727,12 @@ const StorageSettings = () => {
                 <FontAwesomeIcon icon={faHdd} />
               </div>
               <div className="source-info">
-                <div className="source-label">Volume /data (source)</div>
+                <div className="source-label">{t('storageSettings.dataVolumeSource')}</div>
                 <div className="source-device">{dataSource.device}</div>
                 <div className="source-meta">{dataSource.size} · {dataSource.fstype}</div>
               </div>
               <div className="source-badge">
-                <FontAwesomeIcon icon={faCheck} /> Détecté
+                <FontAwesomeIcon icon={faCheck} /> {t('storageSettings.detected')}
               </div>
             </div>
           )}
@@ -739,7 +741,7 @@ const StorageSettings = () => {
             <div className="alert-warning">
               <FontAwesomeIcon icon={faExclamationTriangle} />
               <div>
-                <strong>Info :</strong> Aucun RAID mdadm détecté sur /data. Assurez-vous que /dev/md0 est monté sur /data.
+                <strong>{t('storageSettings.info')}:</strong> {t('storageSettings.noRaidDetected')}
               </div>
             </div>
           )}
@@ -749,14 +751,14 @@ const StorageSettings = () => {
             <>
               <div className="raid-status-card">
                 <div className="raid-status-title">
-                  <FontAwesomeIcon icon={faCheckCircle} /> RAID mdadm actif
+                  <FontAwesomeIcon icon={faCheckCircle} /> {t('storageSettings.raidMdadmActive')}
                 </div>
                 <div className="raid-status-meta">
-                  <span className="raid-badge">Array: /dev/md0</span>
-                  <span className={`raid-badge raid-badge-state`}>État: {raidStatus.state}</span>
-                  <span className="raid-badge">Membres: {raidStatus.deviceCount}/{raidStatus.totalDevices}</span>
+                  <span className="raid-badge">{t('storageSettings.arrayMd0')}</span>
+                  <span className={`raid-badge raid-badge-state`}>{t('storageSettings.state')}: {raidStatus.state}</span>
+                  <span className="raid-badge">{t('storageSettings.members')}: {raidStatus.deviceCount}/{raidStatus.totalDevices}</span>
                   {raidStatus.syncProgress !== null && (
-                    <span className="raid-badge">Resync: {raidStatus.syncProgress.toFixed(1)}%</span>
+                    <span className="raid-badge">{t('storageSettings.resync')}: {raidStatus.syncProgress.toFixed(1)}%</span>
                   )}
                 </div>
               </div>
@@ -766,7 +768,7 @@ const StorageSettings = () => {
                 <div className="alert-warning" style={{ marginTop: '1rem' }}>
                   <FontAwesomeIcon icon={faExclamationTriangle} />
                   <div>
-                    <strong>Suggestion intelligente :</strong>
+                    <strong>{t('storageSettings.smartSuggestion')}:</strong>
                     <p style={{ margin: '0.5rem 0 0 0' }}>{stripEmojis(smartSuggestion.message)}</p>
                     <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
                       Action recommandée : Retirez <strong>{smartSuggestion.smallestMember.device}</strong> du RAID, 
@@ -780,9 +782,9 @@ const StorageSettings = () => {
 
           {/* Sélection du disque à ajouter */}
           <div className="targets-section">
-            <h2>Sélectionnez un disque à ajouter au RAID</h2>
+            <h2>{t('storageSettings.selectDiskToAdd')}</h2>
             <p className="section-subtitle">
-              Le disque sera effacé, partitionné (GPT), et ajouté comme membre du RAID /dev/md0
+              {t('storageSettings.diskWillBeErased')}
             </p>
             
             <div className="disks-grid">
@@ -842,10 +844,10 @@ const StorageSettings = () => {
                     <div className="disk-size">{formatBytes(displaySizeBytes)}</div>
                     
                     <div className="disk-status">
-                      {diskHasRaidPartition && disk.isSystemDisk && <span className="storage-badge-system">Système</span>}
-                      {(!diskHasRaidPartition) && disk.isSystemDisk && <span className="storage-badge-system">Système</span>}
-                      {(!diskHasRaidPartition) && disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-mounted">Monté ({disk.mountInfo})</span>}
-                      {(!diskHasRaidPartition) && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">Disponible</span>}
+                      {diskHasRaidPartition && disk.isSystemDisk && <span className="storage-badge-system">{t('storageSettings.system')}</span>}
+                      {(!diskHasRaidPartition) && disk.isSystemDisk && <span className="storage-badge-system">{t('storageSettings.system')}</span>}
+                      {(!diskHasRaidPartition) && disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-mounted">{t('storageSettings.mounted')} ({disk.mountInfo})</span>}
+                      {(!diskHasRaidPartition) && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">{t('storageSettings.available')}</span>}
                     </div>
                   </div>
                 );
@@ -855,7 +857,7 @@ const StorageSettings = () => {
             {disks.length === 0 && (
               <div className="empty-state">
                 <FontAwesomeIcon icon={faHdd} size="3x" />
-                <p>Aucun disque détecté</p>
+                <p>{t('storageSettings.noDiskDetected')}</p>
               </div>
             )}
           </div>
@@ -920,7 +922,7 @@ const StorageSettings = () => {
                   >
                     {executionStatus === 'running' ? (
                       <>
-                        <FontAwesomeIcon icon={faSpinner} spin /> Ajout en cours...
+                        <FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.addingInProgress')}...
                       </>
                     ) : (
                       <>
@@ -977,7 +979,7 @@ const StorageSettings = () => {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>
-                  🔄 Resynchronisation en cours
+                  🔄 {t('storageSettings.resyncInProgress')}
                 </h3>
                 <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2196f3' }}>
                   {resyncProgress.percent.toFixed(1)}%
@@ -1065,7 +1067,7 @@ const StorageSettings = () => {
             <h2>Optimisation intelligente du RAID</h2>
             
             <div className="modal-section" style={{ background: '#e3f2fd', padding: '1rem', borderRadius: '6px', marginBottom: '1rem' }}>
-              <h3 style={{ color: '#1976d2', margin: '0 0 0.5rem 0' }}>Opportunité d'optimisation détectée</h3>
+              <h3 style={{ color: '#1976d2', margin: '0 0 0.5rem 0' }}>{t('storageSettings.optimizationOpportunity')}</h3>
               <p style={{ margin: '0', fontSize: '0.95rem' }}>{stripEmojis(smartOptimization.message)}</p>
             </div>
             
@@ -1120,7 +1122,7 @@ const StorageSettings = () => {
 
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowConfirmModal(false)}>
-                Annuler
+                {t('common.cancel')}
               </button>
               <button className="btn-primary" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }} onClick={executeSmartOptimization}>
                 Optimiser le RAID

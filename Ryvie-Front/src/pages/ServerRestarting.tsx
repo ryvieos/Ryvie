@@ -6,12 +6,14 @@ const { getServerUrl, getCurrentLocation } = urlsConfig;
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import '../styles/ServerRestarting.css';
 import ryvieLogo from '../icons/ryvielogo0.png';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const ServerRestarting = () => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [dots, setDots] = useState('');
   const [checkCount, setCheckCount] = useState(0);
-  const [statusMessage, setStatusMessage] = useState('Redémarrage en cours');
+  const [statusMessage, setStatusMessage] = useState(t('serverRestarting.restarting'));
 
   // Utiliser l'URL du serveur basée sur l'URL courante du navigateur
   const serverUrl = useMemo(() => getServerUrl(), []);
@@ -54,12 +56,12 @@ const ServerRestarting = () => {
     };
 
     const initialDelay = setTimeout(() => {
-      setStatusMessage('Vérification de la disponibilité du serveur');
+      setStatusMessage(t('serverRestarting.checking'));
       checkInterval = setInterval(async () => {
         setCheckCount(c => c + 1);
         const ok = await tryCheck();
         if (ok) {
-          setStatusMessage('Serveur disponible ! Redirection vers la connexion...');
+          setStatusMessage(t('serverRestarting.available'));
           clearInterval(checkInterval);
           // Rediriger vers la page de connexion puisque l'utilisateur a été déconnecté
           setTimeout(() => { window.location.href = '/#/login'; }, 1000);
@@ -69,7 +71,7 @@ const ServerRestarting = () => {
 
     const stopAfter = setTimeout(() => {
       if (checkInterval) clearInterval(checkInterval);
-      setStatusMessage('Le serveur met plus de temps que prévu. Vous pouvez essayer de vous reconnecter manuellement.');
+      setStatusMessage(t('serverRestarting.takingLonger'));
     }, 600000);
 
     return () => {
@@ -84,11 +86,11 @@ const ServerRestarting = () => {
       <img className="ryvie-logo" src={ryvieLogo} alt="Ryvie" />
       <div className="minimal-card">
         <div className="restarting-spinner simple" />
-        <h1 className="restarting-title">Votre Ryvie redémarre</h1>
-        <p className="restarting-message">Veuillez patienter quelques minutes{dots}</p>
+        <h1 className="restarting-title">{t('serverRestarting.title')}</h1>
+        <p className="restarting-message">{t('serverRestarting.message')}{dots}</p>
         <div className="restarting-status">{statusMessage}</div>
         {checkCount > 0 && (
-          <div className="restarting-info">Tentatives: {checkCount}</div>
+          <div className="restarting-info">{t('serverRestarting.attempts')}: {checkCount}</div>
         )}
       </div>
     </div>

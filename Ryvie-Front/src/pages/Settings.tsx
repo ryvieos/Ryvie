@@ -12,9 +12,11 @@ import { useSocket } from '../contexts/SocketContext';
 import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo, endSession } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
 import { useUpdate } from '../contexts/UpdateContext';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const Settings = () => {
   const navigate = useNavigate();
+  const { language, setLanguage, t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(() => {
     // Charger depuis le cache localStorage au démarrage
@@ -725,10 +727,10 @@ const Settings = () => {
       // Sauvegarder en arrière-plan
       axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: newBackground })
         .catch(err => console.warn('[Settings] Erreur patch background (async):', err?.message || err));
-      showToast('Fond d\'écran modifié', 'success');
+      showToast(t('settings.backgroundModified'), 'success');
     } catch (error) {
       console.error('[Settings] Erreur changement fond d\'écran:', error);
-      showToast('Erreur lors de la modification', 'error');
+      showToast(t('settings.backgroundModifyError'), 'error');
     }
   };
 
@@ -754,13 +756,13 @@ const Settings = () => {
     
     // Vérifier le type de fichier
     if (!file.type.startsWith('image/')) {
-      showToast('Veuillez sélectionner une image', 'error');
+      showToast(t('settings.selectImage'), 'error');
       return;
     }
     
     // Vérifier la taille (max 5MB)
     if (file.size > 10 * 1024 * 1024) {
-      showToast('Image trop grande (max 10MB)', 'error');
+      showToast(t('settings.imageTooLarge'), 'error');
       return;
     }
     
@@ -789,10 +791,10 @@ const Settings = () => {
         setCustomBackgrounds(backgroundsResponse.data.backgrounds);
       }
       
-      showToast(`${file.name} uploadé avec succès`, 'success');
+      showToast(t('settings.uploadSuccess', { fileName: file.name }), 'success');
     } catch (error) {
       console.error('[Settings] Erreur upload fond d\'écran:', error);
-      showToast('Erreur lors de l\'upload', 'error');
+      showToast(t('settings.uploadError'), 'error');
     } finally {
       setUploadingBackground(false);
     }
@@ -1566,7 +1568,7 @@ const Settings = () => {
     return (
       <div className="settings-loading">
         <div className="loading-spinner"></div>
-        <p>Chargement des paramètres...</p>
+        <p>{t('common.loading')}</p>
       </div>
     );
   }
@@ -1576,14 +1578,14 @@ const Settings = () => {
       {/* En-tête */}
       <div className="settings-header">
         <button className="back-btn" onClick={() => navigate('/home')}>
-          ← Retour
+          ← {t('common.back')}
         </button>
-        <h1>Paramètres du Cloud</h1>
+        <h1>{t('settings.title')}</h1>
       </div>
 
       {/* Section Personnalisation */}
       <section className="settings-section">
-        <h2>Personnalisation</h2>
+        <h2>{t('settings.customization')}</h2>
         <div className="settings-grid">
           <div 
             className="settings-card"
@@ -1613,9 +1615,9 @@ const Settings = () => {
                 📥
               </div>
             )}
-            <h3>Fond d'écran</h3>
+            <h3>{t('settings.backgroundImage')}</h3>
             <p className="setting-description">
-              Personnalisez l'arrière-plan de votre page d'accueil. Vous pouvez ajouter plusieurs fonds d'écran.
+              {t('settings.backgroundDescription')}
             </p>
             <div className="background-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '16px' }}>
               {/* Afficher les fonds prédéfinis depuis public/images/backgrounds */}
@@ -1722,7 +1724,7 @@ const Settings = () => {
                 ) : (
                   <>
                     <div style={{ fontSize: '32px', color: '#999' }}>+</div>
-                    <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>Ajouter</div>
+                    <div style={{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', textAlign: 'center' }}>{t('settings.addBackground')}</div>
                   </>
                 )}
               </div>
@@ -1739,10 +1741,9 @@ const Settings = () => {
           </div>
         </div>
       </section>
-
       {/* Section Statistiques */}
       <section className="settings-section stats-section">
-        <h2>Vue d'ensemble du système</h2>
+        <h2>{t('settings.systemOverview')}</h2>
         <div className="stats-grid">
           {/* Stockage */}
           <div 
@@ -1750,7 +1751,7 @@ const Settings = () => {
             style={{ cursor: 'pointer' }}
             onClick={fetchStorageDetail}
           >
-            <h3>Stockage</h3>
+            <h3>{t('settings.storage')}</h3>
             <div className="progress-container">
               <div 
                 className="progress-bar" 
@@ -1758,14 +1759,14 @@ const Settings = () => {
               ></div>
             </div>
             <div className="stat-details">
-              <span>{formatSize(stats.storageUsed)} utilisés</span>
+              <span>{formatSize(stats.storageUsed)} {t('settings.storageUsed')}</span>
               <span>sur {formatSize(stats.storageLimit)}</span>
             </div>
           </div>
 
           {/* Performance */}
           <div className="stat-card performance">
-            <h3>Performance</h3>
+            <h3>{t('settings.performance')}</h3>
             <div className="performance-stats">
               <div className="performance-item">
                 <span>CPU</span>
@@ -1792,14 +1793,14 @@ const Settings = () => {
 
           {/* Statistiques générales */}
           <div className="stat-card general">
-            <h3>Statistiques</h3>
+            <h3>{t('settings.statistics')}</h3>
             <div className="general-stats">
               <div className="stat-item">
-                <span>Utilisateurs actifs</span>
+                <span>{t('settings.activeUsers')}</span>
                 <strong>{stats.activeUsers}</strong>
               </div>
               <div className="stat-item">
-                <span>Applications</span>
+                <span>{t('settings.applications')}</span>
                 <strong>{stats.totalApps}</strong>
               </div>
             </div>
@@ -1807,11 +1808,11 @@ const Settings = () => {
 
           {/* Statut de la duplication RAID */}
           <div className="stat-card backup">
-            <h3>Duplication</h3>
+            <h3>{t('settings.duplication')}</h3>
             <div className="backup-info">
               <div className="backup-status">
                 <span className={`status-indicator ${stats.raidDuplication === 'actif' ? 'running' : 'pending'}`}></span>
-                <span>{stats.raidDuplication === 'actif' ? 'Duplication active' : 'Duplication inactive'}</span>
+                <span>{stats.raidDuplication === 'actif' ? t('settings.duplicationActive') : t('settings.duplicationInactive')}</span>
               </div>
             </div>
           </div>
@@ -1820,7 +1821,7 @@ const Settings = () => {
 
       {/* Section Applications - déplacée juste après la vue d'ensemble */}
       <section className="settings-section">
-        <h2>Gestion des Applications</h2>
+        <h2>{t('settings.appsManagement')}</h2>
         {/* Modal pour afficher les détails d'une application */}
         {selectedApp && (
           <div className="docker-app-details-modal">
@@ -1838,10 +1839,10 @@ const Settings = () => {
                   }`}>
                     <span className="docker-status-icon"></span>
                     <span className="docker-status-text">
-                      {selectedApp.status === 'running' && selectedApp.progress === 100 ? 'Opérationnel' : 
-                       selectedApp.status === 'starting' ? 'En train de démarrer...' :
-                       selectedApp.status === 'partial' ? 'Démarrage partiel' :
-                       'Arrêté'}
+                      {selectedApp.status === 'running' && selectedApp.progress === 100 ? t('settings.operational') : 
+                       selectedApp.status === 'starting' ? t('settings.startingUp') :
+                       selectedApp.status === 'partial' ? t('settings.partialStartup') :
+                       t('settings.stopped')}
                     </span>
                   </div>
                   <div className="docker-app-progress">
@@ -1855,7 +1856,7 @@ const Settings = () => {
                   </div>
                 </div>
                 <div className="docker-app-info-section">
-                  <h4>Ports</h4>
+                  <h4>{t('settings.ports')}</h4>
                   {selectedApp.ports && selectedApp.ports.length > 0 ? (
                     <div className="docker-ports-list">
                       {selectedApp.ports.map(port => (
@@ -1865,11 +1866,11 @@ const Settings = () => {
                       ))}
                     </div>
                   ) : (
-                    <p>Aucun port exposé</p>
+                    <p>{t('settings.noExposedPort')}</p>
                   )}
                 </div>
                 <div className="docker-app-info-section">
-                  <h4>Conteneurs</h4>
+                  <h4>{t('settings.containers')}</h4>
                   <div className="docker-containers-list">
                     {selectedApp.containers && selectedApp.containers.map(container => (
                       <div key={container.id} className="docker-container-item">
@@ -1887,21 +1888,21 @@ const Settings = () => {
                       className={`docker-action-btn-large ${selectedApp.status === 'running' && selectedApp.progress > 0 ? 'stop' : 'start'}`}
                       onClick={() => handleAppAction(selectedApp.id, (selectedApp.status === 'running' && selectedApp.progress > 0) ? 'stop' : 'start')}
                     >
-                      {(selectedApp.status === 'running' && selectedApp.progress > 0) ? '⏸️ Arrêter tous les conteneurs' : '▶️ Démarrer tous les conteneurs'}
+                      {(selectedApp.status === 'running' && selectedApp.progress > 0) ? '⏸️ ' + t('settings.stopAllContainers') : '▶️ ' + t('settings.startAllContainers')}
                     </button>
                     <button
                       className="docker-action-btn-large restart"
                       onClick={() => handleAppAction(selectedApp.id, 'restart')}
                       disabled={!(selectedApp.status === 'running' && selectedApp.progress > 0)}
                     >
-                      🔄 Redémarrer tous les conteneurs
+                      🔄 {t('settings.restartAllContainers')}
                     </button>
                     <button
                       className="docker-action-btn-large uninstall"
                       onClick={() => handleAppUninstall(selectedApp.id, selectedApp.name)}
-                      title="Désinstaller l'application"
+                      title={t('settings.uninstallApp')}
                     >
-                      🗑️ Désinstaller l'application
+                      🗑️ {t('settings.uninstallApp')}
                     </button>
                   </div>
                 )}
@@ -1912,16 +1913,16 @@ const Settings = () => {
         {appsLoading ? (
           <div className="docker-loading-container">
             <div className="docker-loading-spinner"></div>
-            <p>Chargement des applications...</p>
+            <p>{t('common.loading')}</p>
           </div>
         ) : appsError ? (
           <div className="docker-error-container">
             <p className="docker-error-message">{appsError}</p>
-            <button className="docker-retry-button" onClick={fetchApplications}>Réessayer</button>
+            <button className="docker-retry-button" onClick={fetchApplications}>{t('errors.tryAgain')}</button>
           </div>
         ) : applications.length === 0 ? (
           <div className="docker-empty-state">
-            <p>Aucune application Docker détectée.</p>
+            <p>{t('home.noApps')}</p>
           </div>
         ) : (
           <>
@@ -1957,10 +1958,10 @@ const Settings = () => {
                         app.status === 'starting' || app.status === 'partial' ? 'starting' : 
                         'stopped'
                       }`}>
-                        {app.status === 'running' && app.progress === 100 ? 'En cours' : 
-                         app.status === 'starting' ? 'Démarrage...' :
-                         app.status === 'partial' ? 'Partiel' :
-                         'Arrêté'}
+                        {app.status === 'running' && app.progress === 100 ? t('settings.running') : 
+                         app.status === 'starting' ? t('home.status.starting') :
+                         app.status === 'partial' ? t('home.status.partial') :
+                         t('home.status.stopped')}
                       </span>
                     </div>
                 {appActionStatus.show && appActionStatus.appId === app.id && (
@@ -1978,7 +1979,7 @@ const Settings = () => {
                           handleAppAction(app.id, (app.status === 'running' && app.progress > 0) ? 'stop' : 'start')
                         }}
                       >
-                        {(app.status === 'running' && app.progress > 0) ? 'Arrêter' : 'Démarrer'}
+                        {(app.status === 'running' && app.progress > 0) ? t('common.stop') : t('common.start')}
                       </button>
                       <button
                         className="docker-action-btn restart"
@@ -1988,7 +1989,7 @@ const Settings = () => {
                         }}
                         disabled={!(app.status === 'running' && app.progress > 0)}
                       >
-                        Redémarrer
+                        {t('common.restart')}
                       </button>
                     </div>
                     <button
@@ -1997,7 +1998,7 @@ const Settings = () => {
                         e.stopPropagation();
                         handleAppUninstall(app.id, app.name)
                       }}
-                      title="Désinstaller l'application"
+                      title={t('settings.uninstallApp')}
                     >
                       🗑️
                     </button>
@@ -2045,12 +2046,54 @@ const Settings = () => {
                   e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 120, 212, 0.3)';
                 }}
               >
-                {showAllApps ? '▲ Voir moins' : `▼ Voir toutes les applications (${applications.length})`}
+                {showAllApps ? '▲ ' + t('settings.showLess') : `▼ ${t('settings.showAllApps')} (${applications.length})`}
               </button>
             </div>
           )}
           </>
         )}
+      </section>
+
+      {/* Section Langue */}
+      <section className="settings-section">
+        <h2>{t('settings.language')}</h2>
+        <div className="settings-grid">
+          <div className="settings-card">
+            <div className="setting-item">
+              <select
+                value={language || 'fr'}
+                onChange={async (e) => {
+                  const newLang = e.target.value;
+                  
+                  // Mettre à jour le contexte global (propage partout)
+                  setLanguage(newLang);
+                  
+                  try {
+                    const serverUrl = getServerUrl(accessMode);
+                    await axios.patch(`${serverUrl}/api/user/preferences/language`, { language: newLang });
+                    console.log('[Settings] Langue sauvegardée:', newLang);
+                    showToast(t('settings.languageChanged') + `: ${newLang === 'fr' ? 'Français' : 'English'}`, 'success');
+                  } catch (error) {
+                    console.error('[Settings] Erreur sauvegarde langue:', error);
+                    showToast(t('settings.languageError'), 'error');
+                  }
+                }}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  background: '#fff',
+                  width: '100%'
+                }}
+              >
+                <option value="fr">🇫🇷 Français</option>
+                <option value="en">🇬🇧 English</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Overlay Assistant Stockage */}
@@ -2201,21 +2244,21 @@ const Settings = () => {
               <div className="disk-total-card">
                 <div className="disk-total-header">
                   <FontAwesomeIcon icon={faDatabase} className="disk-total-icon" />
-                  <h3>Stockage Total</h3>
+                  <h3>{t('settings.totalStorage')}</h3>
                 </div>
                 
                 <div className="disk-total-content">
                   <div className="disk-info-rows">
                     <div className="disk-info-row">
-                      <span>Capacité:</span>
+                      <span>{t('settings.capacity')}:</span>
                       <strong>{systemDisksInfo.total.size}</strong>
                     </div>
                     <div className="disk-info-row">
-                      <span>Utilisé:</span>
+                      <span>{t('settings.used')}:</span>
                       <strong>{systemDisksInfo.total.used}</strong>
                     </div>
                     <div className="disk-info-row">
-                      <span>Libre:</span>
+                      <span>{t('settings.free')}:</span>
                       <strong>{systemDisksInfo.total.free}</strong>
                     </div>
                   </div>
@@ -2229,7 +2272,7 @@ const Settings = () => {
                     return (
                       <div className="disk-usage-bar-container total">
                         <div className="disk-usage-label">
-                          <span>Utilisation globale:</span>
+                          <span>{t('settings.globalUsage')}:</span>
                           <strong>{totalUsedPercentage}%</strong>
                         </div>
                         <div className="disk-usage-bar">
@@ -2250,17 +2293,17 @@ const Settings = () => {
       
       {/* Section Téléchargements */}
       <section className="settings-section">
-        <h2>Configuration des téléchargements</h2>
+        <h2>{t('settings.downloadConfig')}</h2>
         <div className="settings-grid">
           <div className="setting-item">
             <div className="setting-info">
-              <h3>Dossier de téléchargement</h3>
-              <p>Emplacement où seront sauvegardés les fichiers téléchargés</p>
+              <h3>{t('settings.downloadFolder')}</h3>
+              <p>{t('settings.downloadFolderDescription')}</p>
               {changeStatus.show && (
                 <div className={`status-message ${changeStatus.success ? 'success' : 'error'}`}>
                   {changeStatus.success 
-                    ? "✓ Dossier modifié avec succès" 
-                    : "✗ Erreur lors du changement de dossier"}
+                    ? t('settings.downloadFolderSuccess') 
+                    : t('settings.downloadFolderError')}
                 </div>
               )}
             </div>
@@ -2270,7 +2313,7 @@ const Settings = () => {
                 className="setting-button"
               >
                 <span className="setting-value">{settings.downloadPath}</span>
-                <span className="setting-action">Modifier</span>
+                <span className="setting-action">{t('settings.modify')}</span>
               </button>
             </div>
           </div>
@@ -2279,25 +2322,25 @@ const Settings = () => {
       
       {/* Section Paramètres */}
       <section className="settings-section">
-        <h2>Configuration du Cloud</h2>
+        <h2>{t('settings.cloudConfig')}</h2>
         <div className="settings-grid">
           {/* Sécurité */}
           <div className="settings-card">
-            <h3>Sécurité</h3>
+            <h3>{t('settings.security')}</h3>
             {changeStatus.show && (
               <div className={`status-message ${changeStatus.success ? 'success' : 'error'}`} style={{ marginBottom: '12px' }}>
                 {changeStatus.message}
               </div>
             )}
             <div className="setting-item">
-              <label>Durée de session</label>
+              <label>{t('settings.sessionDuration')}</label>
               <select
                 value={tokenExpiration}
                 onChange={(e) => handleTokenExpirationChange(e.target.value)}
                 className="setting-select"
               >
                 <option value="5">5 minutes</option>
-                <option value="15">15 minutes (recommandé)</option>
+                <option value="15">15 minutes ({t('common.recommended')})</option>
                 <option value="30">30 minutes</option>
                 <option value="60">1 heure</option>
                 <option value="120">2 heures</option>
@@ -2306,11 +2349,11 @@ const Settings = () => {
                 <option value="1440">24 heures</option>
               </select>
               <p className="setting-hint" style={{ fontSize: '0.85em', color: '#666', marginTop: '4px' }}>
-                Reconnexion requise après {tokenExpiration} minute{tokenExpiration > 1 ? 's' : ''} d'inactivité
+                {t('settings.sessionDescription')}
               </p>
             </div>
             <div className="setting-item">
-              <label>Chiffrement des données</label>
+              <label>{t('settings.dataEncryption')}</label>
               <label className="switch">
                 <input
                   type="checkbox"
@@ -2321,7 +2364,7 @@ const Settings = () => {
               </label>
             </div>
             <div className="setting-item">
-              <label>Authentification à deux facteurs</label>
+              <label>{t('settings.twoFactorAuth')}</label>
               <label className="switch">
                 <input
                   type="checkbox"
@@ -2335,9 +2378,9 @@ const Settings = () => {
 
           {/* Préférences */}
           <div className="settings-card">
-            <h3>Préférences</h3>
+            <h3>{t('settings.preferences')}</h3>
             <div className="setting-item">
-              <label>Activer les notifications</label>
+              <label>{t('settings.enableNotifications')}</label>
               <label className="switch">
                 <input
                   type="checkbox"
@@ -2348,7 +2391,7 @@ const Settings = () => {
               </label>
             </div>
             <div className="setting-item">
-              <label>Thème automatique (suivre le système)</label>
+              <label>{t('settings.autoThemeSystem')}</label>
               <label className="switch">
                 <input
                   type="checkbox"
@@ -2360,7 +2403,7 @@ const Settings = () => {
             </div>
             {!settings.autoTheme && (
               <div className="setting-item">
-                <label>Mode sombre</label>
+                <label>{t('settings.darkMode')}</label>
                 <label className="switch">
                   <input
                     type="checkbox"
@@ -2376,8 +2419,8 @@ const Settings = () => {
           {/* Mode d'accès */}
           <div className="setting-item">
             <div className="setting-info">
-              <h3>Mode d'accès</h3>
-              <p>Définit comment l'application se connecte au serveur Ryvie</p>
+              <h3>{t('settings.accessMode')}</h3>
+              <p>{t('settings.accessModeDescription')}</p>
             </div>
             <div className="setting-control">
               <div className="toggle-buttons">
@@ -2385,7 +2428,7 @@ const Settings = () => {
                   className={`toggle-button ${accessMode === 'private' ? 'active' : ''}`}
                   onClick={() => handleAccessModeChange('private')}
                 >
-                  Privé (Local)
+                  {t('settings.privateLocal')}
                 </button>
                 <button 
                   className={`toggle-button ${accessMode === 'remote' ? 'active' : ''}`}
@@ -2401,7 +2444,7 @@ const Settings = () => {
 
       {/* Section Mises à Jour */}
       <section id="ryvie-updates" className="settings-section">
-        <h2>🔄 Mises à Jour</h2>
+        <h2>🔄 {t('settings.updatesSection')}</h2>
         <div className="settings-card" style={{ 
           background: settings.darkMode 
             ? 'linear-gradient(135deg, #1f2937 0%, #111827 100%)' 
@@ -2433,7 +2476,7 @@ const Settings = () => {
                   fontWeight: '600',
                   color: '#64748b'
                 }}>
-                  Vérification des mises à jour en cours...
+                  {t('settings.checkingUpdates')}...
                 </div>
               </div>
             ) : updates ? (
@@ -2511,7 +2554,7 @@ const Settings = () => {
                         ? '0 4px 12px rgba(251, 191, 36, 0.3)' 
                         : '0 4px 12px rgba(52, 211, 153, 0.3)'
                     }}>
-                      {updates.ryvie.updateAvailable ? '⚠️ MAJ Disponible' : '✓ À jour'}
+                      {updates.ryvie.updateAvailable ? t('settings.updateAvailableBadge') : t('settings.upToDateBadge')}
                     </div>
                   </div>
                   <div style={{ fontSize: '15px', color: settings.darkMode ? '#d1d5db' : '#374151', lineHeight: '1.6' }}>
@@ -2529,7 +2572,7 @@ const Settings = () => {
                         border: settings.darkMode ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.5)',
                         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
                       }}>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Version actuelle</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('settings.currentVersion')}</div>
                         <div style={{ fontSize: '20px', fontWeight: '800', color: settings.darkMode ? '#f8fafc' : '#111827', letterSpacing: '-0.5px' }}>
                           {updates.ryvie.currentVersion || 'N/A'}
                         </div>
@@ -2549,7 +2592,7 @@ const Settings = () => {
                         border: settings.darkMode ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.5)',
                         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
                       }}>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dernière version</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('settings.latestVersion')}</div>
                         <div style={{ fontSize: '20px', fontWeight: '800', color: settings.darkMode ? '#f8fafc' : '#111827', letterSpacing: '-0.5px' }}>
                           {updates.ryvie.latestVersion || 'N/A'}
                         </div>
@@ -2593,7 +2636,7 @@ const Settings = () => {
                               borderRadius: '50%',
                               animation: 'spin 0.8s linear infinite'
                             }}></div>
-                            Mise à jour en cours...
+                            {t('settings.updateInProgress')}
                           </>
                         ) : (
                           <>
@@ -2601,7 +2644,7 @@ const Settings = () => {
                               <path d="M21 12a9 9 0 11-6.219-8.56"/>
                               <polyline points="21 12 21 6 15 6"/>
                             </svg>
-                            Mettre à jour Ryvie
+                            {t('settings.updateRyvie')}
                           </>
                         )}
                       </button>
@@ -2628,7 +2671,7 @@ const Settings = () => {
                         <rect x="14" y="14" width="7" height="7" rx="1"/>
                         <rect x="3" y="14" width="7" height="7" rx="1"/>
                       </svg>
-                      Applications
+                      {t('settings.applications')}
                       <span style={{
                         marginLeft: '4px',
                         padding: '4px 10px',
@@ -2749,7 +2792,7 @@ const Settings = () => {
                                   ? '0 4px 12px rgba(251, 191, 36, 0.3)' 
                                   : '0 4px 12px rgba(52, 211, 153, 0.3)'
                               }}>
-                                {app.updateAvailable ? '⚠️ MAJ' : '✓ OK'}
+                                {app.updateAvailable ? t('settings.updateAvailableBadge') : t('settings.upToDateBadge')}
                               </div>
                               
                               {/* Bouton Mettre à jour pour l'app */}
@@ -2788,14 +2831,14 @@ const Settings = () => {
                                         borderRadius: '50%',
                                         animation: 'spin 0.8s linear infinite'
                                       }}></div>
-                                      MAJ...
+                                      {t('settings.updating')}
                                     </>
                                   ) : (
                                     <>
                                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                         <path d="M21 12a9 9 0 11-6.219-8.56"/>
                                       </svg>
-                                      Mettre à jour
+                                      {t('settings.updateNow')}
                                     </>
                                   )}
                                 </button>
@@ -2814,7 +2857,7 @@ const Settings = () => {
                 padding: '20px',
                 color: '#94a3b8'
               }}>
-                Aucune donnée de mise à jour disponible
+                {t('settings.noUpdateData')}
               </div>
             )}
           </div>
@@ -2823,7 +2866,7 @@ const Settings = () => {
 
       {/* Section Stockage (lecture seule + accès assistant) */}
       <section className="settings-section">
-        <h2>Configuration du Stockage</h2>
+        <h2>{t('settings.storageConfig')}</h2>
         <div style={{ marginBottom: 16 }}>
           <button
             className="setting-button raid-assistant-btn"
@@ -2845,27 +2888,27 @@ const Settings = () => {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>
               </svg>
-              Ouvrir l'assistant RAID
+              {t('settings.openRaidAssistant')}
             </span>
           </button>
         </div>
         <div className="storage-options">
           {/* Choix du stockage (comme avant) */}
           <div className="settings-card">
-            <h3>Choix du stockage</h3>
+            <h3>{t('settings.storageChoice')}</h3>
             <div className="setting-item">
-              <label>Stockage principal</label>
+              <label>{t('settings.primaryStorage')}</label>
               <select
                 value={settings.storageLocation}
                 onChange={(e) => handleSettingChange('storageLocation', e.target.value)}
               >
-                <option value="local">Serveur local</option>
+                <option value="local">{t('settings.localServer')}</option>
                 <option value="hybrid">Hybride</option>
               </select>
             </div>
             {settings.storageLocation === 'hybrid' && (
               <div className="ryvie-servers">
-                <h4>Serveurs Ryvie disponibles</h4>
+                <h4>{t('settings.availableRyvieServers')}</h4>
                 {ryvieServers.map(server => (
                   <div key={server.id} className="server-item">
                     <div className="server-info">
@@ -2886,11 +2929,11 @@ const Settings = () => {
 
           {/* Disques détectés (lecture seule) */}
           <div className="settings-card">
-            <h3>Disques détectés (lecture seule)</h3>
+            <h3>{t('settings.detectedDisks')}</h3>
             {storageError ? (
               <div className="docker-error-container"><p className="docker-error-message">{storageError}</p></div>
             ) : !storageInventory ? (
-              <p>Chargement de l'inventaire des disques...</p>
+              <p>{t('settings.loadingDiskInventory')}</p>
             ) : (
               <div className="disks-grid">
                 {(() => {
@@ -2933,7 +2976,7 @@ const Settings = () => {
                       });
                     }
                   });
-                  if (items.length === 0) return <div className="empty-state"><p>Aucun disque détecté</p></div>;
+                  if (items.length === 0) return <div className="empty-state"><p>{t('settings.noDiskDetected')}</p></div>;
                   return items.map(disk => (
                     <div key={disk.path} className={`disk-card ${disk.isMounted ? 'mounted' : 'unmounted'}`}>
                       <div className="disk-header">
@@ -2943,17 +2986,17 @@ const Settings = () => {
                             <h4>{disk.path}</h4>
                             <div className={`disk-status-badge ${disk.isMounted ? 'mounted' : 'unmounted'}`}>
                               <span className="status-dot"></span>
-                              {disk.isMounted ? `Monté (${disk.mountInfo})` : 'Démonté'}
+                              {disk.isMounted ? `${t('settings.mounted')} (${disk.mountInfo})` : t('settings.unmounted')}
                             </div>
                           </div>
                         </div>
                       </div>
                       <div className="disk-details">
                         <div className="disk-info-rows">
-                          <div className="disk-info-row"><span>Taille:</span><strong>{disk.size}</strong></div>
-                          <div className="disk-info-row"><span>RAID :</span><strong>{disk.inRaid ? 'Oui' : 'Non'}</strong></div>
+                          <div className="disk-info-row"><span>{t('settings.sizeLabel')}:</span><strong>{disk.size}</strong></div>
+                          <div className="disk-info-row"><span>RAID:</span><strong>{disk.inRaid ? t('common.yes') : t('common.no')}</strong></div>
                           {disk.isSystemDisk && (
-                            <div className="disk-info-row"><span>Rôle:</span><strong>Système</strong></div>
+                            <div className="disk-info-row"><span>{t('settings.roleLabel')}:</span><strong>{t('settings.systemLabel')}</strong></div>
                           )}
                         </div>
                       </div>
@@ -2971,10 +3014,10 @@ const Settings = () => {
         <section className="settings-section">
           <h2>
             <FontAwesomeIcon icon={faPlug} style={{ marginRight: '8px' }} />
-            Setup Key ( clé de connexion à distance )
+            {t('settings.setupKeyTitle')}
           </h2>
           <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
-            Clé de configuration pour connecter de nouveaux appareils à votre Ryvie depuis n'importe où dans le monde
+            {t('settings.setupKeyDescription')}
           </p>
           
           {!showSetupKey ? (
@@ -3000,7 +3043,7 @@ const Settings = () => {
                 onMouseOut={(e) => e.currentTarget.style.background = '#1976d2'}
               >
                 <FontAwesomeIcon icon={faPlug} />
-                Découvrir la Setup Key
+                {t('settings.discoverSetupKey')}
               </button>
             </div>
           ) : (
@@ -3018,7 +3061,7 @@ const Settings = () => {
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px', fontWeight: '600', textTransform: 'uppercase' }}>
-                      Setup Key
+                      {t('settings.setupKey')}
                     </div>
                     <code style={{
                       fontSize: '13px',
@@ -3078,10 +3121,10 @@ const Settings = () => {
                       transition: 'all 0.2s',
                       whiteSpace: 'nowrap'
                     }}
-                    title="Copier la Setup Key"
+                    title={t('settings.copySetupKey')}
                   >
                     <FontAwesomeIcon icon={copiedSetupKey ? faCheck : faCopy} />
-                    {copiedSetupKey ? 'Copié !' : 'Copier'}
+                    {copiedSetupKey ? t('settings.copied') : t('settings.copy')}
                   </button>
                 </div>
               </div>
@@ -3095,10 +3138,10 @@ const Settings = () => {
         <section className="settings-section">
           <h2>
             <FontAwesomeIcon icon={faGlobe} style={{ marginRight: '8px' }} />
-            Adresses Publiques
+            {t('settings.publicAddresses')}
           </h2>
           <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
-            Vos applications sont accessibles via ces adresses publiques
+            {t('settings.publicAddressesDescription')}
           </p>
           
           {!showPublicAddresses ? (
@@ -3124,7 +3167,7 @@ const Settings = () => {
                 onMouseOut={(e) => e.currentTarget.style.background = '#1976d2'}
               >
                 <FontAwesomeIcon icon={faGlobe} />
-                Découvrir les adresses
+                {t('settings.discoverAddresses')}
               </button>
             </div>
           ) : (
@@ -3314,10 +3357,10 @@ const Settings = () => {
                   margin: '0 auto 20px'
                 }}></div>
                 <div style={{ fontSize: '16px', color: '#666', marginBottom: '12px' }}>
-                  Analyse du stockage en cours...
+                  {t('settings.analyzingStorage')}
                 </div>
                 <div style={{ fontSize: '14px', color: '#999' }}>
-                  Cela peut prendre quelques secondes
+                  {t('settings.thisMayTakeFewSeconds')}
                 </div>
               </div>
             ) : storageDetail ? (
@@ -3425,7 +3468,7 @@ const Settings = () => {
               padding: '0 24px 24px'
             }}>
               <h3 style={{ margin: '16px 0 12px', fontSize: '18px', fontWeight: '600' }}>
-                Applications ({storageDetail.apps.length})
+                {t('settings.applications')} ({storageDetail.apps.length})
               </h3>
               <div className="storage-detail-apps-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {storageDetail.apps.map((app, idx) => {
@@ -3478,13 +3521,13 @@ const Settings = () => {
         <section className="settings-section" style={{ marginTop: '40px', marginBottom: '40px' }}>
           <h2 style={{ color: '#d32f2f', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FontAwesomeIcon icon={faServer} />
-            Zone Dangereuse
+            {t('settings.dangerZone')}
           </h2>
           <div className="settings-card">
             <div style={{ padding: '20px' }}>
-              <h3 style={{ marginTop: 0, color: '#d32f2f' }}>Redémarrer le Système</h3>
+              <h3 style={{ marginTop: 0, color: '#d32f2f' }}>{t('settings.restartSystem')}</h3>
               <p className="setting-description" style={{ marginBottom: '20px' }}>
-                Cette action effectuera un redémarrage complet du système (reboot). Tous les services seront interrompus pendant quelques minutes.
+                {t('settings.restartSystemDescription')}
               </p>
               <button
                 onClick={handleServerRestart}
@@ -3513,7 +3556,7 @@ const Settings = () => {
                 }}
               >
                 <FontAwesomeIcon icon={faServer} />
-                Redémarrer le Système (Reboot)
+                {t('settings.restartSystemButton')}
               </button>
             </div>
           </div>
@@ -3656,7 +3699,7 @@ const Settings = () => {
                   e.currentTarget.style.borderColor = '#e5e7eb';
                 }}
               >
-                Annuler
+                {t('common.cancel')}
               </button>
               <button
                 onClick={confirmDialog.onConfirm}
@@ -3681,7 +3724,7 @@ const Settings = () => {
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
                 }}
               >
-                OK
+                {t('common.ok')}
               </button>
             </div>
           </div>

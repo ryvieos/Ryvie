@@ -7,9 +7,11 @@ import { isElectron, WindowManager } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 import { startSession, getCurrentUser, getCurrentUserRole, getSessionInfo } from '../utils/sessionManager';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const Userlogin = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info'); // 'info', 'success', 'error'
   const [users, setUsers] = useState([]);
@@ -295,14 +297,14 @@ const Userlogin = () => {
   return (
     <div className="container">
       <div className="login-card">
-        <h1 className="title-connexion">Ouvrir une nouvelle session</h1>
+        <h1 className="title-connexion">{t('connexion.openNewSession')}</h1>
         
         <div className="access-mode-indicator">
           <span className={`mode-badge ${accessMode}`}>
-            Mode: {accessMode === 'private' ? 'Local' : 'Remote'}
+            {t('connexion.mode')}: {accessMode === 'private' ? t('connexion.local') : t('connexion.remote')}
           </span>
           {!isElectron() && (
-            <span className="platform-badge">Web</span>
+            <span className="platform-badge">{t('connexion.web')}</span>
           )}
         </div>
         
@@ -311,10 +313,10 @@ const Userlogin = () => {
             <div className="inline-loading">
               <div className="spinner"></div>
               <p className="loading-text">
-                {detectingMode ? 'Détection du mode d\'accès...' : 'Chargement des utilisateurs...'}
+                {detectingMode ? t('connexion.detectingAccessMode') : t('connexion.loadingUsers')}
               </p>
               {!isElectron() && detectingMode && (
-                <p className="loading-subtext">Test de connectivité au serveur local...</p>
+                <p className="loading-subtext">{t('connexion.testingConnectivity')}</p>
               )}
             </div>
           </div>

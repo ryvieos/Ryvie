@@ -17,29 +17,64 @@ import {
 import '../styles/Transitions.css';
 import '../styles/AppStore.css';
 import { getSessionInfo } from '../utils/sessionManager';
+import { useLanguage } from '../contexts/LanguageContext';
+
+ type AppStoreApp = {
+   id: string;
+   name: string;
+   category?: string;
+   description?: string;
+   tagline?: string;
+   developer?: string;
+   version?: string;
+   icon?: string;
+   previews?: string[];
+   repo?: string;
+   website?: string;
+   installedBuildId?: string | null;
+   updateAvailable?: boolean | string | number;
+ };
 
 const AppStore = () => {
+  const { t } = useLanguage();
   // Améliore le rendu de description: paragraphes + liens cliquables
   const renderDescription = (text = '') => {
     const urlRegex = /(https?:\/\/[\w.-]+(?:\/[\w\-._~:\/?#[\]@!$&'()*+,;=%]*)?)/gi;
     const paragraphs = String(text).split(/\n{2,}/);
+    const isFeaturesHeading = (line = '') => {
+      const v = String(line).trim();
+      return /^key\s*features\s*:$/i.test(v) || /^fonctionnalit(?:é|e)s\s+cl(?:é|e)s\s*:$/i.test(v);
+    };
     return (
       <div className="description-content">
-        {paragraphs.map((para, idx) => (
-          <p key={idx}>
-            {para.split(urlRegex).map((part, i) => {
-              if (urlRegex.test(part)) {
-                urlRegex.lastIndex = 0;
+        {paragraphs.map((para, idx) => {
+          const lines = String(para).split(/\n+/);
+          return (
+            <React.Fragment key={idx}>
+              {lines.map((line, lineIdx) => {
+                if (!String(line).trim()) return null;
+                if (isFeaturesHeading(line)) {
+                  return <h3 key={`${idx}-h-${lineIdx}`}>{String(line).trim()}</h3>;
+                }
                 return (
-                  <a key={i} href={part} target="_blank" rel="noopener noreferrer">
-                    {part}
-                  </a>
+                  <p key={`${idx}-p-${lineIdx}`}>
+                    {String(line).split(urlRegex).map((part, i) => {
+                      if (urlRegex.test(part)) {
+                        urlRegex.lastIndex = 0;
+                        return (
+                          <a key={i} href={part} target="_blank" rel="noopener noreferrer">
+                            {part}
+                          </a>
+                        );
+                      }
+                      return <span key={i}>{part}</span>;
+                    })}
+                  </p>
                 );
-              }
-              return <span key={i}>{part}</span>;
-            })}
-          </p>
-        ))}
+              })}
+            </React.Fragment>
+          );
+        })}
       </div>
     );
   };
@@ -47,12 +82,12 @@ const AppStore = () => {
   // États locaux pour suivre les données, la recherche et les retours utilisateurs
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [apps, setApps] = useState([]);
-  const [filteredApps, setFilteredApps] = useState([]);
+  const [apps, setApps] = useState<AppStoreApp[]>([]);
+  const [filteredApps, setFilteredApps] = useState<AppStoreApp[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedApp, setSelectedApp] = useState(null);
+  const [selectedApp, setSelectedApp] = useState<AppStoreApp | null>(null);
   const [isModalClosing, setIsModalClosing] = useState(false);
   const [catalogHealth, setCatalogHealth] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -61,11 +96,11 @@ const AppStore = () => {
   const [cleaningApps, setCleaningApps] = useState(new Set());
   const [enlargedImage, setEnlargedImage] = useState(null);
   const [closingImage, setClosingImage] = useState(false);
-  const [featuredApps, setFeaturedApps] = useState([]);
-  const featuredRef = useRef(null);
+  const [featuredApps, setFeaturedApps] = useState<AppStoreApp[]>([]);
+  const featuredRef = useRef<HTMLDivElement | null>(null);
   const [featuredHovered, setFeaturedHovered] = useState(false);
   const [featuredPage, setFeaturedPage] = useState(0);
-  const previewRef = useRef(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
   const [previewHovered, setPreviewHovered] = useState(false);
   const activeEventSources = useRef({}); // Stocke les EventSources actifs pour pouvoir les annuler
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
@@ -157,8 +192,8 @@ const AppStore = () => {
       return newProgress;
     });
     
-    addLog(`⏹️ Installation de ${appName} annulée par l'utilisateur`, 'warning');
-    showToast(`Installation de ${appName} annulée`, 'info');
+    addLog(t('appStore.notifications.cancelledByUser').replace('{appName}', appName), 'warning');
+    showToast(t('appStore.notifications.cancelled').replace('{appName}', appName), 'info');
     
     // Notifier Home que l'installation a été annulée
     window.parent.postMessage({ 
@@ -170,7 +205,7 @@ const AppStore = () => {
     }, '*');
     
     // Rafraîchir le bureau pour supprimer l'app (le backend aura supprimé le manifest)
-    addLog(`🔄 Rafraîchissement du bureau pour supprimer ${appName}`, 'info');
+    addLog(t('appStore.notifications.refreshingDesktop').replace('{appName}', appName), 'info');
     setTimeout(() => {
       window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
     }, 1000);
@@ -220,7 +255,7 @@ const AppStore = () => {
     }, '*');
   }, [installingApps]);
 
-  // Déboucer la recherche pour fluidifier la saisie
+  // Débouncer la recherche pour fluidifier la saisie
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(searchQuery), 200);
     return () => clearTimeout(t);
@@ -400,14 +435,30 @@ const AppStore = () => {
       }
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
-      const response = await axios.get(`${serverUrl}/api/appstore/apps`);
+      
+      // Récupérer la langue de l'utilisateur depuis localStorage ou préférences
+      let userLang = 'fr'; // Défaut français
+      try {
+        const sessionInfo = getSessionInfo();
+        if (sessionInfo?.user) {
+          const cachedLang = localStorage.getItem(`ryvie_language_${sessionInfo.user}`);
+          if (cachedLang && ['fr', 'en'].includes(cachedLang)) {
+            userLang = cachedLang;
+          }
+        }
+      } catch (e) {
+        console.warn('[AppStore] Impossible de récupérer la langue utilisateur:', e);
+      }
+      
+      // Ajouter le paramètre lang à la requête
+      const response = await axios.get(`${serverUrl}/api/appstore/apps?lang=${userLang}`);
       if (response.data.success) {
         setApps(response.data.data || []);
       }
     } catch (error) {
       console.error('Erreur lors du chargement des apps:', error);
       if (!silent) {
-        showToast('Erreur lors du chargement du catalogue', 'error');
+        showToast(t('appStore.catalogLoadError'), 'error');
       }
     } finally {
       if (!silent) {
@@ -441,13 +492,13 @@ const AppStore = () => {
       setUpdateInfo(response.data);
       
       if (response.data.updateAvailable) {
-        showToast(`Mise à jour disponible: ${response.data.latestVersion}`, 'info');
+        showToast(t('appStore.updateAvailableWithVersion', { version: response.data.latestVersion }), 'info');
       } else {
-        showToast('Catalogue déjà à jour', 'success');
+        showToast(t('appStore.catalogUpToDate'), 'success');
       }
     } catch (error) {
       console.error('Erreur lors de la vérification:', error);
-      showToast('Erreur lors de la vérification des mises à jour', 'error');
+      showToast(t('appStore.updateError'), 'error');
     }
   };
 
@@ -464,8 +515,8 @@ const AppStore = () => {
       if (response.data.success) {
         showToast(
           response.data.updated 
-            ? `Catalogue mis à jour vers ${response.data.version}` 
-            : 'Catalogue déjà à jour',
+            ? t('appStore.catalogUpdated') + ` vers ${response.data.version}` 
+            : t('appStore.catalogUpToDate'),
           'success'
         );
         
@@ -475,11 +526,11 @@ const AppStore = () => {
           await fetchCatalogHealth();
         }
       } else {
-        showToast(response.data.message || 'Erreur lors de la mise à jour', 'error');
+        showToast(response.data.message || t('appStore.notifications.error'), 'error');
       }
     } catch (error) {
       console.error('Erreur lors de la mise à jour:', error);
-      showToast('Erreur lors de la mise à jour du catalogue', 'error');
+      showToast(t('appStore.notifications.error'), 'error');
     } finally {
       setIsUpdating(false);
     }
@@ -499,7 +550,7 @@ const AppStore = () => {
     
     if (!sessionInfo?.isActive || !sessionInfo?.token) {
       addLog(`❌ Erreur: Utilisateur non connecté`, 'error');
-      showToast('Vous devez être connecté pour installer des applications', 'error');
+      showToast(t('appStore.notifications.mustBeConnected'), 'error');
       return;
     }
 
@@ -519,7 +570,7 @@ const AppStore = () => {
       addLog(`✅ Token valide, expiration: ${new Date(payload.exp * 1000).toLocaleString()}`, 'success');
     } catch (tokenError) {
       addLog(`❌ Erreur de validation du token: ${tokenError.message}`, 'error');
-      showToast('Votre session a expiré. Veuillez vous reconnecter.', 'error');
+      showToast(t('appStore.notifications.sessionExpired'), 'error');
       return;
     }
 
@@ -599,15 +650,15 @@ try {
     
     // Gérer spécifiquement le cas de la limite d'installations atteinte
     if (status === 429) {
-      const errorMessage = errorResponse?.data?.message || 'Maximum 2 installations simultanées autorisées';
+      const errorMessage = errorResponse?.data?.message || t('appStore.notifications.maxInstallationsReached');
       addLog(`⚠️ ${errorMessage}`, 'warning');
       showToast(errorMessage, 'warning');
     } else {
-      showToast(`Erreur lors de l'installation: ${statusText}`, 'error');
+      showToast(t('appStore.notifications.errorWithStatus').replace('{status}', statusText), 'error');
     }
   } else {
     addLog(`❌ Erreur inattendue: ${requestError}`, 'error');
-    showToast('Erreur inattendue lors de l\'installation', 'error');
+    showToast(t('appStore.notifications.unexpectedError'), 'error');
   }
   
   // Nettoyer l'état
@@ -680,7 +731,7 @@ try {
         // Si une erreur est survenue (rollback, etc.)
         if (data.stage === 'error') {
           addLog(`❌ Erreur lors de l'installation/mise à jour de ${appName}`, 'error');
-          showToast(`Erreur: ${data.message}`, 'error');
+          showToast(t('appStore.notifications.installationError', { message: data.message }), 'error');
           
           // Fermer la connexion SSE
           eventSource.close();
@@ -717,9 +768,9 @@ try {
         }
         // Si l'installation est terminée (100%), afficher la notification de succès
         else if (data.progress >= 100) {
-          addLog(`✅ Installation de ${appName} terminée avec succès !`, 'success');
+          addLog(t('appStore.notifications.completed').replace('{appName}', appName), 'success');
           addLog(`🏁 Processus terminé pour ${appName}`, 'info');
-          showToast(`${appName} installé avec succès !`, 'success');
+          showToast(t('appStore.notifications.installed').replace('{appName}', appName), 'success');
           
           // Fermer la connexion SSE
           eventSource.close();
@@ -788,7 +839,7 @@ try {
         // L'erreur sera gérée par le message d'erreur du backend
         addLog('❌ Erreur lors de l\'installation', 'error');
       } else {
-        addLog('❌ Erreur de connexion aux mises à jour de progression', 'error');
+        addLog(t('appStore.notifications.installationConnectionError'), 'error');
       }
       
       eventSource.close();
@@ -825,9 +876,9 @@ try {
 
     if (response.data.success) {
       // Le serveur a lancé l'installation en arrière-plan
-      addLog(`🚀 Installation de ${appName} lancée en arrière-plan`, 'info');
+      addLog(t('appStore.notifications.launchedInBackground').replace('{appName}', appName), 'info');
       addLog(`📊 Suivez la progression ci-dessous...`, 'info');
-      showToast(`Installation de ${appName} en cours...`, 'info');
+      showToast(t('appStore.notifications.installing').replace('{appName}', appName), 'info');
       
       // Le backend ne crée le manifest qu'à la fin de l'installation
       // L'app apparaîtra sur le bureau quand l'installation sera terminée (progress >= 100)
@@ -835,12 +886,12 @@ try {
       // La vraie fin de l'installation sera signalée par le SSE à 100%
     } else {
       addLog(`❌ Échec du lancement: ${response.data.message || 'Erreur inconnue'}`, 'error');
-      showToast(response.data.message || 'Erreur lors du lancement de l\'installation', 'error');
+      showToast(response.data.message || t('appStore.notifications.launchError'), 'error');
     }
   } catch (error) {
     addLog(`💥 Erreur lors de l'installation/mise à jour de ${appName}: ${error.message}`, 'error');
     console.error(`Erreur lors de l'installation/mise à jour de ${appName}:`, error);
-    showToast('Erreur lors de l\'installation/mise à jour', 'error');
+    showToast(t('appStore.notifications.updateError'), 'error');
     
     // En cas d'erreur, nettoyer immédiatement
     setInstallingApps(prev => {
@@ -941,15 +992,15 @@ try {
     const isCurrentlyCleaning = appId ? cleaningApps.has(appId) : false;
     let label;
     if (isCurrentlyInstalling) {
-      label = 'Installation...';
+      label = t('appStore.installing');
     } else if (isCurrentlyCleaning) {
-      label = 'Nettoyage...';
+      label = t('appStore.cleaning');
     } else if (updateAvailable) {
-      label = 'Mettre à jour';
+      label = t('appStore.update');
     } else if (installed) {
-      label = 'À jour';
+      label = t('appStore.upToDate');
     } else {
-      label = 'Installer';
+      label = t('appStore.install');
     }
 
     return {
@@ -971,7 +1022,7 @@ try {
           <span></span>
           <span></span>
         </div>
-        <p>Chargement du catalogue...</p>
+        <p>{t('appStore.loadingCatalog')}</p>
       </div>
     );
   }
@@ -990,7 +1041,7 @@ try {
       <div className="appstore-container">
         <div className="search-bar" style={{opacity:0.5}}>
           <FontAwesomeIcon icon={faSearch} className="search-icon" />
-          <input type="text" className="search-input" placeholder="Rechercher une application..." disabled />
+          <input type="text" className="search-input" placeholder={t('appStore.search')} disabled />
         </div>
         <div className="apps-grid">
           {Array.from({length:8}).map((_,i)=> (
@@ -1025,10 +1076,9 @@ try {
           <div className="rate-limit-banner critical">
             <FontAwesomeIcon icon={faExclamationTriangle} className="banner-icon" />
             <div className="banner-content">
-              <strong>Limite d'installations presque atteinte</strong>
+              <strong>{t('appStore.notifications.installLimitNearlyReached')}</strong>
               <span>
-                Seulement {remainingInstalls} installation{remainingInstalls > 1 ? 's' : ''} possible{remainingInstalls > 1 ? 's' : ''} restante{remainingInstalls > 1 ? 's' : ''} cette heure. 
-                Réinitialisation dans {rateLimit.minutesUntilReset} minute{rateLimit.minutesUntilReset > 1 ? 's' : ''}.
+                {t('appStore.notifications.installLimitMessage', { remaining: remainingInstalls, minutes: rateLimit.minutesUntilReset })}
               </span>
             </div>
           </div>
@@ -1044,7 +1094,7 @@ try {
             <FontAwesomeIcon icon={faInfoCircle} className="banner-icon" />
             <div className="banner-content">
               <span>
-                {remainingInstalls}/{totalInstalls} installations restantes cette heure
+                {t('appStore.remainingInstalls', { remaining: remainingInstalls, total: totalInstalls })}
               </span>
             </div>
           </div>
@@ -1055,7 +1105,7 @@ try {
       {featuredApps.length > 0 && (
         <div className="featured-section">
           <div className="section-header-simple">
-            <h2 className="section-title-simple">Applications en vedette</h2>
+            <h2 className="section-title-simple">{t('appStore.featuredApps')}</h2>
           </div>
           <div 
             className="featured-carousel"
@@ -1074,13 +1124,16 @@ try {
                   className="featured-card-content"
                   style={(() => {
                     const base = getCategoryColor(app.category);
-                    const rgb = hexToRgb(base);
-                    const bg = app.previews && app.previews[0] ? `, url(${app.previews[0]})` : '';
+                    const bg = app.previews && app.previews[0] ? `url(${app.previews[0]})` : '';
                     return {
-                      backgroundImage: `linear-gradient(90deg, rgba(${rgb},0.55) 0%, rgba(17,24,39,0.35) 60%)${bg}`
+                      backgroundColor: base,
+                      backgroundImage: bg || undefined,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
                     };
                   })()}
                 >
+                  <div className="featured-gradient-overlay" />
                   <div className="featured-overlay">
                     <div className="featured-left">
                       {app.icon ? (
@@ -1090,7 +1143,7 @@ try {
                       )}
                       <div className="featured-texts">
                         <h3 className="featured-title">{app.name}</h3>
-                        <p className="featured-subtitle">{app.description}</p>
+                        <p className="featured-subtitle">{app.tagline}</p>
                       </div>
                     </div>
                     {(() => {
@@ -1139,7 +1192,7 @@ try {
                     key={i}
                     className={`featured-dot ${i === featuredPage ? 'active' : ''}`}
                     onClick={() => scrollToPage(i)}
-                    aria-label={`Aller à la page ${i + 1}`}
+                    aria-label={t('appStore.notifications.goToPage', { page: i + 1 })}
                   />
                 ))}
               </div>
@@ -1153,7 +1206,7 @@ try {
         <FontAwesomeIcon icon={faSearch} className="search-icon" />
         <input
           type="text"
-          placeholder="Rechercher une application..."
+          placeholder={t('appStore.search')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="search-input"
@@ -1178,14 +1231,14 @@ try {
             }`}
             onClick={() => setSelectedCategory(category)}
           >
-            {category === 'all' ? 'Toutes' : category.charAt(0).toUpperCase() + category.slice(1)}
+            {category === 'all' ? t('appStore.all') : category.charAt(0).toUpperCase() + category.slice(1)}
           </button>
         ))}
       </div>
 
       {/* Titre de section */}
       <div className="section-header">
-        <p className="section-kicker">LES PLUS INSTALLÉES</p>
+        <p className="section-kicker">{t('appStore.mostInstalled')}</p>
         <h2 className="section-title">Apps</h2>
       </div>
 
@@ -1194,11 +1247,11 @@ try {
         {filteredApps.length === 0 ? (
           <div className="empty-state">
             <FontAwesomeIcon icon={faExclamationTriangle} size="3x" />
-            <h3>Aucune application trouvée</h3>
+            <h3>{t('appStore.notifications.noAppsFound')}</h3>
             <p>
               {searchQuery 
-                ? 'Essayez une autre recherche' 
-                : 'Le catalogue est vide'}
+                ? t('appStore.notifications.tryDifferentSearch') 
+                : t('appStore.notifications.catalogEmpty')}
             </p>
           </div>
         ) : (
@@ -1227,7 +1280,7 @@ try {
               </div>
               
               <div className="app-card-body">
-                <p className="app-description">{app.description}</p>
+                <p className="app-description">{app.tagline || app.description}</p>
                 <div className="app-footer">
                   <div className="app-meta">
                     {app.category && (
@@ -1254,7 +1307,7 @@ try {
                       }
 
                       // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
-                      if (label === 'Installer' || label === 'Mettre à jour') {
+                      if (label === t('appStore.install') || label === t('appStore.update')) {
                         installApp(app.id, app.name);
                       }
                     };
@@ -1274,7 +1327,7 @@ try {
                             <button 
                               className="cancel-install-btn"
                               onClick={(e) => { e.stopPropagation(); cancelInstall(app.id, app.name); }}
-                              title="Annuler l'installation"
+                              title={t('appStore.notifications.cancelInstallation')}
                             >
                               <FontAwesomeIcon icon={faTimes} />
                             </button>
@@ -1341,7 +1394,7 @@ try {
                     }
 
                     // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
-                    if (label === 'Installer' || label === 'Mettre à jour') {
+                    if (label === t('appStore.install') || label === t('appStore.update')) {
                       if (selectedApp) {
                         installApp(selectedApp.id, selectedApp.name);
                       }
@@ -1377,19 +1430,19 @@ try {
             <div className="modal-meta">
               {selectedApp.category && (
                 <div className="meta-item">
-                  <div className="meta-label">Catégorie</div>
+                  <div className="meta-label">{t('appStore.category')}</div>
                   <div className="meta-value">{selectedApp.category.charAt(0).toUpperCase() + selectedApp.category.slice(1)}</div>
                 </div>
               )}
               {selectedApp.developer && (
                 <div className="meta-item">
-                  <div className="meta-label">Développeur</div>
+                  <div className="meta-label">{t('appStore.developer')}</div>
                   <div className="meta-value">{selectedApp.developer}</div>
                 </div>
               )}
               {selectedApp.version && (
                 <div className="meta-item">
-                  <div className="meta-label">Version</div>
+                  <div className="meta-label">{t('appStore.version')}</div>
                   <div className="meta-value">{selectedApp.version}</div>
                 </div>
               )}
@@ -1499,7 +1552,7 @@ try {
         className="floating-refresh-btn"
         onClick={updateCatalog}
         disabled={isUpdating}
-        title="Actualiser le catalogue"
+        title={t('appStore.notifications.refreshCatalog')}
       >
         <FontAwesomeIcon icon={faSync} spin={isUpdating} />
       </button>
@@ -1508,7 +1561,7 @@ try {
       <button 
         className="floating-logs-btn"
         onClick={toggleLogs}
-        title={logsVisible ? "Masquer les logs" : "Afficher les logs"}
+        title={logsVisible ? t('appStore.notifications.hideLogs') : t('appStore.notifications.showLogs')}
         style={{
           position: 'fixed',
           bottom: '32px',
@@ -1537,11 +1590,11 @@ try {
       {logs.length > 0 && logsVisible && (
         <div className="logs-panel">
           <div className="logs-header">
-            <h3>Logs d'installation</h3>
+            <h3>{t('appStore.notifications.installationLogs')}</h3>
             <button 
               className="logs-clear-btn"
               onClick={clearLogs}
-              title="Effacer les logs"
+              title={t('appStore.notifications.clearLogs')}
             >
               <FontAwesomeIcon icon={faTimes} />
             </button>

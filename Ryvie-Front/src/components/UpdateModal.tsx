@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from '../utils/setupAxios';
 import urlsConfig from '../config/urls';
+import { useLanguage } from '../contexts/LanguageContext';
 const { getServerUrl } = urlsConfig;
 
-const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
+const UpdateModal = ({ isOpen, targetVersion, accessMode }: { isOpen: boolean; targetVersion: string; accessMode: string }) => {
+  const { t } = useLanguage();
   const [status, setStatus] = useState('updating'); // updating, restarting, waiting_health, success, error
-  const [message, setMessage] = useState('Initialisation de la mise à jour...');
+  const [message, setMessage] = useState(t('updateModal.initializing'));
   const [progress, setProgress] = useState(5);
-  const statusPollingRef = useRef(null);
-  const healthPollingRef = useRef(null);
-  const startTimeRef = useRef(null);
+  const statusPollingRef = useRef<NodeJS.Timeout | null>(null);
+  const healthPollingRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -17,7 +19,7 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
     startTimeRef.current = Date.now();
     
     // Empêcher la navigation pendant la mise à jour
-    const preventNavigation = (e) => {
+    const preventNavigation = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = '';
       return '';
@@ -63,7 +65,7 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
           if (updateStatus.step === 'restarting' || updateStatus.progress >= 95) {
             stopStatusPolling();
             setStatus('restarting');
-            setMessage('Redémarrage du système en cours...');
+            setMessage(t('updateModal.restartingSystem'));
             setProgress(95);
             backendDownDetected = false;
             
@@ -82,7 +84,7 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
           // Backend down détecté pendant la phase de build/restart
           backendDownDetected = true;
           setStatus('restarting');
-          setMessage('Application de la mise à jour et redémarrage...');
+          setMessage(t('updateModal.applyingUpdate'));
           setProgress(Math.max(lastProgress, 85));
           
           // Passer au health check après un délai
@@ -103,7 +105,7 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
     const requiredConsecutiveReady = 2; // Réduit à 2 pour plus de réactivité
     let progressValue = 95;
 
-    setMessage('Attente du redémarrage du serveur...');
+    setMessage(t('updateModal.waitingRestart'));
     setProgress(95);
 
     healthPollingRef.current = setInterval(async () => {
@@ -126,7 +128,7 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
 
         if (health.status === 200) {
           consecutiveReady += 1;
-          setMessage(`Serveur en ligne, vérification finale... (${consecutiveReady}/${requiredConsecutiveReady})`);
+          setMessage(t('updateModal.finalCheck').replace('{current}', consecutiveReady.toString()).replace('{total}', requiredConsecutiveReady.toString()));
           
           if (consecutiveReady >= requiredConsecutiveReady) {
             // Vérifier un endpoint authentifié pour s'assurer que tout fonctionne
@@ -143,14 +145,14 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
             // Backend prêt, recharger la page
             stopHealthPolling();
             setStatus('success');
-            setMessage('Mise à jour terminée avec succès!');
+            setMessage(t('updateModal.success'));
             setProgress(100);
             
             // Attendre un peu pour que l'utilisateur voie le message de succès
             setTimeout(() => {
               // Force reload pour obtenir la nouvelle version
               window.location.href = window.location.href.split('#')[0] + '#/home';
-              window.location.reload(true);
+              window.location.reload();
             }, 1500);
           }
         } else {
@@ -161,20 +163,20 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
         
         // Afficher un message d'attente plus informatif
         if (attempts < 30) {
-          setMessage('Redémarrage en cours, veuillez patienter...');
+          setMessage(t('updateModal.restarting'));
         } else if (attempts < 60) {
-          setMessage('Installation des dépendances et compilation...');
+          setMessage(t('updateModal.installingDependencies'));
         } else if (attempts < 90) {
-          setMessage('Finalisation du démarrage...');
+          setMessage(t('updateModal.finalizingStartup'));
         } else {
-          setMessage('Le serveur prend plus de temps que prévu...');
+          setMessage(t('updateModal.takingLonger'));
         }
         
         // Backend pas encore prêt, continuer le polling
         if (attempts >= maxAttempts) {
           stopHealthPolling();
           setStatus('error');
-          setMessage('Le redémarrage prend plus de temps que prévu. Veuillez rafraîchir la page manuellement dans quelques instants.');
+          setMessage(t('updateModal.restartTakingLong'));
         }
       }
     }, 2000); // Poll toutes les 2 secondes
@@ -293,10 +295,10 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
             fontWeight: '700'
           }}
         >
-          {status === 'success' ? 'Mise à jour réussie!' : 
-           status === 'error' ? 'Attention' :
-           status === 'restarting' ? 'Redémarrage...' : 
-           'Mise à jour en cours'}
+          {status === 'success' ? t('updateModal.updateSuccessful') : 
+           status === 'error' ? t('updateModal.updateFailed') :
+           status === 'restarting' ? t('updateModal.restarting') : 
+           t('updateModal.updating')}
         </h2>
 
         {/* Message */}
@@ -324,7 +326,7 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
               color: 'rgba(15, 23, 42, 0.85)'
             }}
           >
-            Version cible: {targetVersion}
+            {t('updateModal.targetVersion')}: {targetVersion}
           </div>
         )}
 
@@ -392,7 +394,7 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
               e.currentTarget.style.boxShadow = 'none';
             }}
           >
-            Rafraîchir la page
+            {t('updateModal.refreshPage')}
           </button>
         )}
 
@@ -406,18 +408,15 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
               fontStyle: 'italic'
             }}
           >
-            La page se rechargera automatiquement dès que le système sera prêt
+            {t('updateModal.autoReload')}
           </p>
         )}
       </div>
-
+      
       <style>{`
         :root {
           --ryvie-update-modal-bg: #ffffff;
           --ryvie-update-modal-fg: #0f172a;
-        }
-
-        :root {
           --ryvie-brand-1: #0ea5e9;
           --ryvie-brand-2: #22d3ee;
           --ryvie-brand-3: #38bdf8;
@@ -441,7 +440,7 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }) => {
             opacity: 0;
           }
           50% {
-            transform: scale(1.2);
+            transform: scale(1.1);
           }
           100% {
             transform: scale(1);
