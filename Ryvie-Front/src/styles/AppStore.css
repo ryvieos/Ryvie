@@ -341,7 +341,6 @@
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 1;
-  line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -374,6 +373,7 @@
   align-items: center;
   gap: 12px;
   min-width: 0; /* allow text truncation */
+  width: 100%;
 }
 
 .featured-badge-icon,
@@ -391,7 +391,8 @@
 }
 
 .featured-texts { 
-  min-width: 0; 
+  min-width: 0;
+  flex: 1;
 }
 .featured-texts .featured-title { 
   font-size: 22px; 
@@ -1516,7 +1517,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 100%;
 }
 
 .install-progress-container {

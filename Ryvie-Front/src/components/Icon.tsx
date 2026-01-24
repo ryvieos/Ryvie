@@ -322,13 +322,13 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
                   className="confirm-modal-btn confirm-modal-btn-cancel" 
                   onClick={(e) => { e.stopPropagation(); closeModal(); }}
                 >
-                  Annuler
+                  {t('common.cancel')}
                 </button>
                 <button 
                   className="confirm-modal-btn confirm-modal-btn-danger" 
                   onClick={(e) => { e.stopPropagation(); confirmModal.onConfirm(); }}
                 >
-                  Désinstaller
+                  {t('common.uninstall')}
                 </button>
               </>
             )}

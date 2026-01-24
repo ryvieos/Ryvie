@@ -727,10 +727,10 @@ const Settings = () => {
       // Sauvegarder en arrière-plan
       axios.patch(`${serverUrl}/api/user/preferences/background`, { backgroundImage: newBackground })
         .catch(err => console.warn('[Settings] Erreur patch background (async):', err?.message || err));
-      showToast('Fond d\'écran modifié', 'success');
+      showToast(t('settings.backgroundModified'), 'success');
     } catch (error) {
       console.error('[Settings] Erreur changement fond d\'écran:', error);
-      showToast('Erreur lors de la modification', 'error');
+      showToast(t('settings.backgroundModifyError'), 'error');
     }
   };
 
@@ -756,13 +756,13 @@ const Settings = () => {
     
     // Vérifier le type de fichier
     if (!file.type.startsWith('image/')) {
-      showToast('Veuillez sélectionner une image', 'error');
+      showToast(t('settings.selectImage'), 'error');
       return;
     }
     
     // Vérifier la taille (max 5MB)
     if (file.size > 10 * 1024 * 1024) {
-      showToast('Image trop grande (max 10MB)', 'error');
+      showToast(t('settings.imageTooLarge'), 'error');
       return;
     }
     
@@ -791,10 +791,10 @@ const Settings = () => {
         setCustomBackgrounds(backgroundsResponse.data.backgrounds);
       }
       
-      showToast(`${file.name} uploadé avec succès`, 'success');
+      showToast(t('settings.uploadSuccess', { fileName: file.name }), 'success');
     } catch (error) {
       console.error('[Settings] Erreur upload fond d\'écran:', error);
-      showToast('Erreur lors de l\'upload', 'error');
+      showToast(t('settings.uploadError'), 'error');
     } finally {
       setUploadingBackground(false);
     }
@@ -2364,7 +2364,7 @@ const Settings = () => {
               </label>
             </div>
             <div className="setting-item">
-              <label>Authentification à deux facteurs</label>
+              <label>{t('settings.twoFactorAuth')}</label>
               <label className="switch">
                 <input
                   type="checkbox"

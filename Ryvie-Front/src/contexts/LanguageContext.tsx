@@ -8,7 +8,7 @@ type Translations = Record<string, any>;
 interface LanguageContextType {
   language: string;
   setLanguage: (lang: string) => void;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
   translations: Translations;
 }
 
@@ -54,7 +54,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const t = (key: string): string => {
+  const t = (key: string, params?: Record<string, string | number>): string => {
     const keys = key.split('.');
     let value: any = translations[language] || translations.fr;
     
@@ -67,7 +67,13 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
     }
     
-    return typeof value === 'string' ? value : key;
+    if (typeof value !== 'string') return key;
+
+    if (!params) return value;
+
+    return Object.entries(params).reduce((acc, [paramKey, paramValue]) => {
+      return acc.replaceAll(`{${paramKey}}`, String(paramValue));
+    }, value);
   };
 
   useEffect(() => {
