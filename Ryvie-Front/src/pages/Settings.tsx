@@ -1127,8 +1127,8 @@ const Settings = () => {
   // Fonction pour mettre à jour Ryvie
   const handleUpdateRyvie = async () => {
     const confirmed = await showConfirm(
-      '🔄 Mettre à jour Ryvie',
-      'Êtes-vous sûr de vouloir mettre à jour Ryvie ? Le serveur va redémarrer automatiquement après la mise à jour.'
+      t('settings.confirmUpdateRyvie'),
+      t('settings.confirmUpdateRyvieMessage')
     );
     
     if (!confirmed) {
@@ -1170,7 +1170,7 @@ const Settings = () => {
         console.error('[Settings] ❌ Erreur démarrage monitoring:', monitorErr);
         setUpdateInProgress(null);
         await showConfirm(
-          '❌ Erreur',
+          t('settings.updateRyvieError'),
           `Impossible de démarrer le service de monitoring. La mise à jour a été annulée.\n\nDétails: ${monitorErr.message}`,
           true
         );
@@ -1193,7 +1193,7 @@ const Settings = () => {
         window.location.href = monitorUrl;
       } else {
         await showConfirm(
-          '❌ Erreur de mise à jour',
+          t('settings.updateRyvieError'),
           `Erreur: ${response.data.message}`,
           true
         );
@@ -1202,7 +1202,7 @@ const Settings = () => {
     } catch (error) {
       console.error('[Settings] Erreur lors de la mise à jour de Ryvie:', error);
       await showConfirm(
-        '❌ Erreur de mise à jour',
+        t('settings.updateRyvieError'),
         `Erreur lors de la mise à jour: ${error.response?.data?.message || error.message}`,
         true
       );
@@ -1213,8 +1213,8 @@ const Settings = () => {
   // Fonction pour mettre à jour une application
   const handleUpdateApp = async (appName) => {
     const confirmed = await showConfirm(
-      `🔄 Mettre à jour ${appName}`,
-      `Êtes-vous sûr de vouloir mettre à jour ${appName} ? L'application va redémarrer automatiquement après la mise à jour.`
+      t('settings.confirmUpdateApp', { appName }),
+      t('settings.confirmUpdateAppMessage', { appName })
     );
     
     if (!confirmed) {
