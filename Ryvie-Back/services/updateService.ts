@@ -3,11 +3,29 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const crypto = require('crypto');
+const { EventEmitter } = require('events');
 const { APPS_DIR, RYVIE_DIR } = require('../config/paths');
 require('dotenv').config();
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const TEMP_DIR = path.join(RYVIE_DIR, '.update-staging');
+
+// Système d'événements pour les mises à jour de progression
+const updateProgressEmitter = new EventEmitter();
+
+// Fonction pour envoyer des mises à jour de progression
+function sendUpdateProgress(appName, progress, message, stage = 'update') {
+  const update = {
+    appName,
+    progress: Math.round(progress),
+    message,
+    stage,
+    timestamp: new Date().toISOString()
+  };
+  
+  console.log(`[UpdateProgress] ${appName}: ${progress}% - ${message}`);
+  updateProgressEmitter.emit('progress', update);
+}
 
 /**
  * Récupère la version actuelle de Ryvie
@@ -191,8 +209,13 @@ async function updateApp(appName) {
     
     console.log(`[Update] Début de la mise à jour de ${appName}...`);
     
+    // Initialisation - envoyer la première mise à jour
+    sendUpdateProgress(appName, 0, 'Préparation de la mise à jour...', 'init');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
     // 1. Créer un snapshot avant la mise à jour
     console.log('[Update] 📸 Création du snapshot de sécurité...');
+    sendUpdateProgress(appName, 5, 'Création du snapshot de sécurité...', 'snapshot');
     try {
       const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
       console.log(snapshotOutput);
@@ -202,119 +225,117 @@ async function updateApp(appName) {
       if (match) {
         snapshotPath = match[1].trim();
         console.log(`[Update] Snapshot créé: ${snapshotPath}`);
+        sendUpdateProgress(appName, 10, 'Snapshot de sécurité créé', 'snapshot');
       }
     } catch (snapError: any) {
       console.error('[Update] ⚠️ Impossible de créer le snapshot:', snapError.message);
       console.log('[Update] Continuation sans snapshot...');
+      sendUpdateProgress(appName, 10, 'Continuation sans snapshot...', 'snapshot');
     }
     
     // 2. Fetch tags puis git pull
     console.log(`[Update] Récupération des tags distants pour ${appName}...`);
+    sendUpdateProgress(appName, 15, 'Récupération des mises à jour depuis GitHub...', 'download');
     execSync('git fetch --tags origin', {
       cwd: appPath,
       stdio: 'inherit'
     });
     
     console.log(`[Update] Git pull dans ${appPath}...`);
+    sendUpdateProgress(appName, 25, 'Téléchargement des fichiers mis à jour...', 'download');
     execSync('git pull', {
       cwd: appPath,
       stdio: 'inherit'
     });
+    sendUpdateProgress(appName, 40, 'Fichiers téléchargés avec succès', 'download');
 
-    const installScriptPath = path.join(appPath, 'install.sh');
-    const hasInstallScript = fs.existsSync(installScriptPath);
-
-    if (hasInstallScript) {
-      console.log(`[Update] install.sh détecté pour ${appName}, exécution du script...`);
-      try {
-        execSync(`chmod +x "${installScriptPath}"`, { stdio: 'pipe' });
-        execSync(`bash "${installScriptPath}"`, {
-          cwd: appPath,
-          stdio: 'inherit',
-          env: { ...process.env, APP_ID: appName }
-        });
-        console.log('[Update] ✅ Script install.sh exécuté avec succès');
-      } catch (scriptError: any) {
-        throw new Error(`Échec du script d'installation: ${scriptError.message}`);
-      }
-    } else {
-      // Trouver le docker-compose.yml
-      const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
-      let composeFile = null;
-      
-      for (const file of composeFiles) {
-        const filePath = path.join(appPath, file);
-        if (fs.existsSync(filePath)) {
-          composeFile = file;
-          break;
-        }
-      }
-      
-      if (!composeFile) {
-        return {
-          success: false,
-          message: `Aucun fichier docker-compose trouvé pour ${appName}`
-        };
-      }
-      
-      // Docker compose up -d --build
-      console.log(`[Update] Docker compose up -d --build pour ${appName}...`);
-      execSync(`docker compose -f ${composeFile} up -d --build`, {
-        cwd: appPath,
-        stdio: 'inherit'
-      });
-      
-      // Attendre 5 secondes que le container démarre
-      console.log(`[Update] Attente du démarrage du container (5 secondes)...`);
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      // Vérifier le statut du container
-      console.log(`[Update] Vérification du statut du container ${appName}...`);
-      
-      try {
-        // Récupérer le statut du container
-        const statusOutput = execSync(`docker ps -a --filter "name=${appName}" --format "{{.Status}}"`, { 
-          encoding: 'utf8' 
-        }).trim();
-        
-        console.log(`[Update] Container ${appName} - Status: ${statusOutput}`);
-        
-        // Vérifier si le container est exited (erreur)
-        if (statusOutput.toLowerCase().includes('exited')) {
-          throw new Error(`Le container ${appName} s'est arrêté (exited) pendant la mise à jour`);
-        }
-        
-        // Vérifier le health status si disponible
-        try {
-          const healthOutput = execSync(
-            `docker inspect --format='{{.State.Health.Status}}' $(docker ps -aq --filter "name=${appName}")`, 
-            { encoding: 'utf8' }
-          ).trim();
-          
-          console.log(`[Update] Container ${appName} - Health: ${healthOutput}`);
-          
-          if (healthOutput === 'unhealthy') {
-            throw new Error(`Le container ${appName} est en état unhealthy`);
-          }
-          
-          if (healthOutput === 'healthy') {
-            console.log(`[Update] ✅ Container ${appName} est healthy`);
-          } else if (healthOutput === 'starting') {
-            console.log(`[Update] ⏳ Container ${appName} est en cours de démarrage`);
-          }
-        } catch (healthError: any) {
-          // Pas de healthcheck configuré, on vérifie juste que le container est Up
-          if (!statusOutput.toLowerCase().includes('up')) {
-            throw new Error(`Le container ${appName} n'est pas démarré`);
-          }
-          console.log(`[Update] ℹ️ Container ${appName} sans healthcheck, statut: Up`);
-        }
-        
-      } catch (checkError: any) {
-        throw new Error(`Vérification du container échouée: ${checkError.message}`);
+    // Lors d'une mise à jour, toujours utiliser docker compose (ne jamais utiliser install.sh)
+    console.log(`[Update] 🔄 Mise à jour via docker compose (install.sh ignoré si présent)...`);
+    sendUpdateProgress(appName, 45, 'Préparation de la reconstruction...', 'build');
+    
+    // Trouver le docker-compose.yml
+    const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
+    let composeFile = null;
+    
+    for (const file of composeFiles) {
+      const filePath = path.join(appPath, file);
+      if (fs.existsSync(filePath)) {
+        composeFile = file;
+        break;
       }
     }
     
+    if (!composeFile) {
+      sendUpdateProgress(appName, 0, 'Aucun fichier docker-compose trouvé', 'error');
+      return {
+        success: false,
+        message: `Aucun fichier docker-compose trouvé pour ${appName}`
+      };
+    }
+    
+    // Docker compose up -d --build
+    console.log(`[Update] Docker compose up -d --build pour ${appName}...`);
+    sendUpdateProgress(appName, 50, 'Reconstruction des containers...', 'build');
+    execSync(`docker compose -f ${composeFile} up -d --build`, {
+      cwd: appPath,
+      stdio: 'inherit'
+    });
+    sendUpdateProgress(appName, 75, 'Containers reconstruits, démarrage...', 'starting');
+    
+    // Attendre 5 secondes que le container démarre
+    console.log(`[Update] Attente du démarrage du container (5 secondes)...`);
+    sendUpdateProgress(appName, 80, 'Attente du démarrage des containers...', 'starting');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Vérifier le statut du container
+    console.log(`[Update] Vérification du statut du container ${appName}...`);
+    sendUpdateProgress(appName, 85, 'Vérification du statut des containers...', 'verification');
+    
+    try {
+      // Récupérer le statut du container
+      const statusOutput = execSync(`docker ps -a --filter "name=${appName}" --format "{{.Status}}"`, { 
+        encoding: 'utf8' 
+      }).trim();
+      
+      console.log(`[Update] Container ${appName} - Status: ${statusOutput}`);
+      
+      // Vérifier si le container est exited (erreur)
+      if (statusOutput.toLowerCase().includes('exited')) {
+        throw new Error(`Le container ${appName} s'est arrêté (exited) pendant la mise à jour`);
+      }
+      
+      // Vérifier le health status si disponible
+      try {
+        const healthOutput = execSync(
+          `docker inspect --format='{{.State.Health.Status}}' $(docker ps -aq --filter "name=${appName}")`, 
+          { encoding: 'utf8' }
+        ).trim();
+        
+        console.log(`[Update] Container ${appName} - Health: ${healthOutput}`);
+        
+        if (healthOutput === 'unhealthy') {
+          throw new Error(`Le container ${appName} est en état unhealthy`);
+        }
+        
+        if (healthOutput === 'healthy') {
+          console.log(`[Update] ✅ Container ${appName} est healthy`);
+        } else if (healthOutput === 'starting') {
+          console.log(`[Update] ⏳ Container ${appName} est en cours de démarrage`);
+        }
+      } catch (healthError: any) {
+        // Pas de healthcheck configuré, on vérifie juste que le container est Up
+        if (!statusOutput.toLowerCase().includes('up')) {
+          throw new Error(`Le container ${appName} n'est pas démarré`);
+        }
+        console.log(`[Update] ℹ️ Container ${appName} sans healthcheck, statut: Up`);
+      }
+      
+    } catch (checkError: any) {
+      sendUpdateProgress(appName, 0, `Vérification échouée: ${checkError.message}`, 'error');
+      throw new Error(`Vérification du container échouée: ${checkError.message}`);
+    }
+    
+    sendUpdateProgress(appName, 95, 'Finalisation de la mise à jour...', 'finalization');
     console.log(`[Update] ✅ ${appName} mis à jour avec succès`);
     
     // 3. Supprimer le snapshot si tout s'est bien passé
@@ -329,12 +350,17 @@ async function updateApp(appName) {
       }
     }
     
+    sendUpdateProgress(appName, 100, 'Mise à jour terminée avec succès !', 'completed');
+    
     return {
       success: true,
       message: `${appName} mis à jour avec succès`
     };
   } catch (error: any) {
     console.error(`[Update] ❌ Erreur lors de la mise à jour de ${appName}:`, error.message);
+    
+    // Envoyer le message d'erreur au frontend
+    sendUpdateProgress(appName, 0, error.message, 'error');
     
     // Rollback si un snapshot existe
     if (snapshotPath) {
@@ -514,5 +540,6 @@ async function updateStoreCatalog() {
 export = {
   updateRyvie,
   updateApp,
-  updateStoreCatalog
+  updateStoreCatalog,
+  updateProgressEmitter
 };

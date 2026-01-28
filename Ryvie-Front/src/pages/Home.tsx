@@ -1033,22 +1033,27 @@ const Home = () => {
           }, 4000);
         }
       } else if (event.data && event.data.type === 'APPSTORE_INSTALL_STATUS') {
-        const { installing, appName, appId, progress } = event.data;
-        console.log('[Home] Réception du statut d\'installation:', installing, appName, appId);
+        const { installing, appName, appId, progress, error, cancelled } = event.data;
+        console.log('[Home] Réception du statut d\'installation:', installing, appName, appId, { progress, error, cancelled });
         setAppStoreInstalling(installing);
         
         if (installing && appId && appName) {
-          // Ajouter ou mettre à jour l'installation
+          // Ajouter ou mettre à jour l'installation - TOUJOURS maintenir l'état
           setInstallingApps(prev => {
             const updated = {
               ...prev,
-              [appId]: { appName, progress: progress || 0 }
+              [appId]: { 
+                appName, 
+                progress: progress || prev[appId]?.progress || 0 // Conserver la progression existante si pas de nouvelle valeur
+              }
             };
             saveInstallState(updated);
             return updated;
           });
         } else if (!installing && appId) {
-          // Installation terminée, supprimer après un délai
+          // Installation terminée, annulée ou échouée
+          // Attendre un peu avant de supprimer pour que l'utilisateur voie la notification finale
+          const delay = error || cancelled ? 3000 : 2000;
           setTimeout(() => {
             setInstallingApps(prev => {
               const newApps = { ...prev };
@@ -1057,7 +1062,7 @@ const Home = () => {
               removeInstallation(appId);
               return newApps;
             });
-          }, 500);
+          }, delay);
           
           // Rafraîchir immédiatement les icônes - le manifest est généré AVANT 100%
           console.log('[Home] Installation terminée, rafraîchissement immédiat des icônes');
@@ -1085,22 +1090,26 @@ const Home = () => {
         const { appId, appName, progress } = event.data;
         if (appId) {
           setInstallingApps(prev => {
+            // TOUJOURS maintenir l'entrée, même si la progression ne change pas
             let updated = prev;
             if (prev[appId]) {
+              // Mettre à jour la progression existante
               updated = {
                 ...prev,
-                [appId]: { ...prev[appId], progress: progress || 0 }
+                [appId]: { 
+                  ...prev[appId], 
+                  progress: typeof progress === 'number' ? progress : (prev[appId].progress || 0)
+                }
               };
             } else if (appName) {
-              // Nouvelle app pas encore enregistrée
+              // Nouvelle app pas encore enregistrée - l'ajouter immédiatement
               updated = {
                 ...prev,
                 [appId]: { appName, progress: progress || 0 }
               };
             }
-            if (updated !== prev) {
-              saveInstallState(updated);
-            }
+            // Toujours sauvegarder pour maintenir la persistance
+            saveInstallState(updated);
             return updated;
           });
         }
