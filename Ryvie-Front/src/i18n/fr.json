@@ -41,6 +41,10 @@
     "email": "Email",
     "password": "Mot de passe",
     "confirmPassword": "Confirmer le mot de passe",
+    "usernamePlaceholder": "nom d'utilisateur",
+    "emailPlaceholder": "email",
+    "passwordPlaceholder": "mot de passe",
+    "confirmPasswordPlaceholder": "confirmer le mot de passe",
     "createButton": "Créer le compte",
     "creating": "Création en cours...",
     "allFieldsRequired": "Tous les champs sont requis",
@@ -171,7 +175,12 @@
     "updating": "Mise à jour en cours",
     "targetVersion": "Version cible",
     "refreshPage": "Rafraîchir la page",
-    "autoReload": "La page se rechargera automatiquement dès que le système sera prêt."
+    "autoReload": "La page se rechargera automatiquement dès que le système sera prêt.",
+    "catalogUpdated": "Catalogue mis à jour",
+    "catalogUpToDate": "Catalogue déjà à jour",
+    "catalogLoadError": "Erreur lors du chargement du catalogue",
+    "updateAvailableWithVersion": "Mise à jour disponible: {version}",
+    "building": "compilation"
   },
   "storageWidget": {
     "viewDetails": "Voir le détail du stockage",

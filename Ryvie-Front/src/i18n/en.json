@@ -41,6 +41,10 @@
     "email": "Email",
     "password": "Password",
     "confirmPassword": "Confirm password",
+    "usernamePlaceholder": "username",
+    "emailPlaceholder": "email",
+    "passwordPlaceholder": "password",
+    "confirmPasswordPlaceholder": "confirm password",
     "createButton": "Create account",
     "creating": "Creating...",
     "allFieldsRequired": "All fields are required",
@@ -165,10 +169,12 @@
     "restartTakingLong": "Restart is taking longer than expected. Please refresh the page manually in a moment.",
     "updateSuccessful": "Update successful!",
     "updateFailed": "Update failed",
-    "updating": "Updating",
+    "updating": "Update in progress",
     "targetVersion": "Target version",
     "refreshPage": "Refresh page",
-    "autoReload": "The page will automatically reload as soon as the system is ready."
+    "autoReload": "The page will automatically reload as soon as the system is ready.",
+    "applyingUpdate": "Applying update and restarting...",
+    "building": "building"
   },
   "storageWidget": {
     "viewDetails": "View storage details",
