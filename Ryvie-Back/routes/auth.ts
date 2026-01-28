@@ -56,7 +56,7 @@ router.post('/authenticate', authLimiter, async (req: any, res: any) => {
     const userFilter = `(|${primaryFilter}${fallbackFilter}${emailFilter})`;
     const searchFilter = `(&${userFilter}${ldapConfig.userFilter})`;
 
-    ldapClient.search(ldapConfig.userSearchBase, { filter: searchFilter, scope: 'sub', attributes: ['dn', 'cn', 'mail', 'uid'] }, (err, ldapRes) => {
+    ldapClient.search(ldapConfig.userSearchBase, { filter: searchFilter, scope: 'sub', attributes: ['dn', 'cn', 'mail', 'uid', 'preferredLanguage'] }, (err, ldapRes) => {
       if (err) return res.status(500).json({ error: 'Erreur de recherche utilisateur' });
 
       let userEntry;
@@ -68,7 +68,7 @@ router.post('/authenticate', authLimiter, async (req: any, res: any) => {
           if (!fallbackTried) {
             fallbackTried = true;
             const altSearch = `(&${userFilter}${ldapConfig.userFilter})`;
-            return ldapClient.search(ldapConfig.userSearchBase, { filter: altSearch, scope: 'sub', attributes: ['dn','cn','mail','uid'] }, (err2, altRes) => {
+            return ldapClient.search(ldapConfig.userSearchBase, { filter: altSearch, scope: 'sub', attributes: ['dn','cn','mail','uid','preferredLanguage'] }, (err2, altRes) => {
               if (err2) {
                 ldapClient.unbind();
                 return res.status(500).json({ error: 'Erreur de recherche utilisateur' });
@@ -123,6 +123,7 @@ router.post('/authenticate', authLimiter, async (req: any, res: any) => {
               name: attrs.cn || uid,
               email: attrs.mail || `${uid}@${process.env.DEFAULT_EMAIL_DOMAIN || 'localhost'}`,
               role,
+              language: attrs.preferredLanguage || 'fr',
             };
             const token = signToken(user);
             console.log(`[authenticate] 🔐 Authentification réussie pour ${user.uid} (rôle: ${role})`);

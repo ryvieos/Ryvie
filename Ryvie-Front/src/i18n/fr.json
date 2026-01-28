@@ -87,7 +87,9 @@
     "localNetwork": "Réseau Local",
     "localNetworkSubtitle": "Accès depuis la maison",
     "remoteNetwork": "Réseau Externe",
-    "remoteNetworkSubtitle": "Accès depuis l'extérieur"
+    "remoteNetworkSubtitle": "Accès depuis l'extérieur",
+    "noServerDetected": "Aucun serveur détecté pour le moment.",
+    "waitingConnection": "En attente de connexion..."
   },
   "home": {
     "title": "Accueil",
@@ -149,6 +151,7 @@
   },
   "installIndicator": {
     "showProgress": "Afficher la progression de {appName}",
+    "installing": "Installation",
     "updateError": "Erreur lors de l'installation/mise à jour",
     "mustBeConnected": "Vous devez être connecté pour installer des applications",
     "sessionExpired": "Votre session a expiré. Veuillez vous reconnecter.",
