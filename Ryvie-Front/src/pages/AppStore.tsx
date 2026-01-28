@@ -506,6 +506,9 @@ const AppStore = () => {
  * Lance la mise à jour du catalogue et recharge les données en cas de succès.
  */
   const updateCatalog = async () => {
+    const startTime = Date.now();
+    const minDisplayTime = 2000;
+    
     try {
       setIsUpdating(true);
       const accessMode = getCurrentAccessMode() || 'private';
@@ -532,6 +535,13 @@ const AppStore = () => {
       console.error('Erreur lors de la mise à jour:', error);
       showToast(t('appStore.notifications.error'), 'error');
     } finally {
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, minDisplayTime - elapsed);
+      
+      if (remainingTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
+      
       setIsUpdating(false);
     }
   };
@@ -692,6 +702,8 @@ try {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log(`[AppStore] 📊 SSE reçu pour ${appId}:`, data.progress + '%', data.stage, data.message);
+        
         setInstallProgress(prev => ({ 
           ...prev, 
           [appId]: { 
@@ -730,6 +742,7 @@ try {
         
         // Si une erreur est survenue (rollback, etc.)
         if (data.stage === 'error') {
+          console.log(`[AppStore] ❌ Erreur détectée pour ${appId}, nettoyage immédiat`);
           addLog(`❌ Erreur lors de l'installation/mise à jour de ${appName}`, 'error');
           showToast(t('appStore.notifications.installationError', { message: data.message }), 'error');
           
@@ -768,20 +781,26 @@ try {
         }
         // Si l'installation est terminée (100%), afficher la notification de succès
         else if (data.progress >= 100) {
+          console.log(`[AppStore] ✅ 100% atteint pour ${appId}, fermeture SSE et notification`);
           addLog(t('appStore.notifications.completed').replace('{appName}', appName), 'success');
           addLog(`🏁 Processus terminé pour ${appName}`, 'info');
           showToast(t('appStore.notifications.installed').replace('{appName}', appName), 'success');
           
           // Fermer la connexion SSE
+          console.log(`[AppStore] 🔌 Fermeture de la connexion SSE pour ${appId}`);
           eventSource.close();
           delete activeEventSources.current[appId];
           
-          // Nettoyer l'état d'installation
-          setInstallingApps(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(appId);
-            return newSet;
-          });
+          // IMPORTANT: Garder l'état installingApps actif pendant 3 secondes pour que la notification reste visible
+          console.log(`[AppStore] ⏳ Maintien de la notification pendant 3 secondes pour ${appId}`);
+          setTimeout(() => {
+            console.log(`[AppStore] 🧹 Nettoyage de l'état installingApps pour ${appId}`);
+            setInstallingApps(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(appId);
+              return newSet;
+            });
+          }, 3000);
           
           // Notifier Home que l'installation est terminée
           window.parent.postMessage({ 
@@ -793,6 +812,7 @@ try {
           }, '*');
           
           // Rafraîchir IMMÉDIATEMENT le bureau pour afficher l'icône
+          console.log(`[AppStore] 🔄 Rafraîchissement immédiat du bureau pour ${appId}`);
           window.parent.postMessage({ type: 'REFRESH_DESKTOP_ICONS' }, '*');
           addLog(`🔄 Bureau rafraîchi immédiatement`, 'success');
           
@@ -817,6 +837,7 @@ try {
             
             // Nettoyer la progression et les logs après un délai
             setTimeout(() => {
+              console.log(`[AppStore] 🧹 Nettoyage final de la progression pour ${appId}`);
               setInstallProgress(prev => {
                 const newProgress = { ...prev };
                 delete newProgress[appId];
@@ -827,7 +848,7 @@ try {
           }, 1000);
         }
       } catch (error) {
-        console.error('Erreur lors du parsing des données de progression:', error);
+        console.error('[AppStore] Erreur lors du parsing des données de progression:', error);
       }
     };
     

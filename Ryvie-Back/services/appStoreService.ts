@@ -927,24 +927,31 @@ async function updateAppFromStore(appId) {
     
     console.log(`[Update] ✅ ${appId} téléchargé dans ${appDir}`);
 
-    // 4. Vérifier la présence d'un script install.sh
+    // 4. Déterminer la méthode d'installation
     console.log('[Update] 🔎 Étape courante: installation-check');
     const installScriptPath = path.join(appDir, 'install.sh');
+    const isUpdate = existingManifest !== null;
     let hasInstallScript = false;
     
     try {
       await fs.access(installScriptPath);
       hasInstallScript = true;
-      console.log('[Update] ✅ Script install.sh détecté');
+      if (isUpdate) {
+        console.log('[Update] ℹ️ Script install.sh détecté mais IGNORÉ (mise à jour)');
+      } else {
+        console.log('[Update] ✅ Script install.sh détecté (nouvelle installation)');
+      }
     } catch {
       console.log('[Update] ℹ️ Aucun script install.sh, utilisation de docker-compose');
     }
     
     sendProgressUpdate(appId, 75, 'Lancement de l\'installation...', 'installation');
     
-    if (hasInstallScript) {
-      // Utiliser le script install.sh
-      console.log('[Update] 🚀 Exécution du script install.sh...');
+    // IMPORTANT: Pour les mises à jour, TOUJOURS utiliser docker compose --build
+    // Le script install.sh est uniquement pour les nouvelles installations
+    if (hasInstallScript && !isUpdate) {
+      // Utiliser le script install.sh UNIQUEMENT pour les nouvelles installations
+      console.log('[Update] 🚀 Exécution du script install.sh (nouvelle installation)...');
       console.log(`[Update] 📂 Dossier de travail: ${appDir}`);
       
       try {
@@ -963,8 +970,12 @@ async function updateAppFromStore(appId) {
         throw new Error(`Échec de l'exécution du script install.sh: ${installError.message}`);
       }
     } else {
-      // Utiliser docker-compose classique
-      console.log('[Update] 🔎 Étape courante: docker-compose-up');
+      // Utiliser docker-compose pour les mises à jour OU si pas de install.sh
+      if (isUpdate) {
+        console.log('[Update] 🔎 Étape courante: docker-compose-up (MISE À JOUR)');
+      } else {
+        console.log('[Update] 🔎 Étape courante: docker-compose-up (nouvelle installation)');
+      }
       
       // Utiliser dockerComposePath du manifest existant si disponible
       let composeFile = null;
@@ -1032,14 +1043,24 @@ LOCAL_IP=${localIP}
         console.log('[Update] ℹ️ Aucun container existant à nettoyer');
       }
       
-      // Lancer docker compose
-      console.log('[Update] 🚀 Lancement des containers...');
+      // Lancer docker compose avec rebuild si c'est une mise à jour
+      const buildFlag = isUpdate ? '--build' : '';
+      
+      if (isUpdate) {
+        console.log('[Update]   Rebuild et lancement des containers (mise à jour)...');
+        sendProgressUpdate(appId, 76, 'Reconstruction des images Docker...', 'build');
+      } else {
+        console.log('[Update]    Lancement des containers (nouvelle installation)...');
+      }
+      
       console.log(`[Update] 📂 Dossier de travail: ${appDir}`);
       console.log(`[Update] 📄 Fichier compose: ${composeFile}`);
+      console.log(`[Update] 🔧 Commande: docker compose -p ${appId} -f ${composeFile} up -d ${buildFlag}`);
       
       try {
         // Utiliser -p pour spécifier le nom du projet (basé sur appId)
-        execSync(`docker compose -p ${appId} -f ${composeFile} up -d`, { 
+        // Ajouter --build pour forcer le rebuild lors des mises à jour
+        execSync(`docker compose -p ${appId} -f ${composeFile} up -d ${buildFlag}`, { 
           cwd: appDir, 
           stdio: 'inherit'
         });
@@ -1634,15 +1655,27 @@ async function initialize() {
 // Exports pour être utilisés par updateCheckService et updateService
 /**
  * Nettoyage complet et immédiat d'une installation annulée
- * Tue tous les processus Docker en cours et supprime toutes les traces
+ * - Pour une NOUVELLE INSTALLATION : Supprime tout
+ * - Pour une MISE À JOUR : Fait un rollback vers le snapshot
  */
 async function forceCleanupCancelledInstall(appId) {
   try {
-    console.log(`[ForceCleanup] 🛑 Nettoyage complet de l'installation annulée de ${appId}...`);
+    console.log(`[ForceCleanup] 🛑 Nettoyage de l'installation annulée de ${appId}...`);
     
     const APPS_DIR = '/data/apps';
     const MANIFESTS_DIR = '/data/config/manifests';
     const appDir = path.join(APPS_DIR, appId);
+    const manifestPath = path.join(MANIFESTS_DIR, appId, 'manifest.json');
+    
+    // Vérifier si c'est une mise à jour (manifest existant) ou une nouvelle installation
+    let isUpdate = false;
+    try {
+      await fs.access(manifestPath);
+      isUpdate = true;
+      console.log(`[ForceCleanup] ℹ️ Manifest existant détecté → C'est une MISE À JOUR annulée`);
+    } catch {
+      console.log(`[ForceCleanup] ℹ️ Aucun manifest → C'est une NOUVELLE INSTALLATION annulée`);
+    }
     
     // 1. TUER IMMÉDIATEMENT tous les processus Docker liés à cette app
     console.log(`[ForceCleanup] ⚡ Arrêt forcé de tous les processus Docker pour ${appId}...`);
@@ -1655,7 +1688,65 @@ async function forceCleanupCancelledInstall(appId) {
       // Ignore les erreurs
     }
     
-    // 2. Arrêter tous les containers Docker (par nom de projet)
+    // 2. Si c'est une MISE À JOUR annulée, chercher et restaurer le snapshot
+    if (isUpdate) {
+      console.log(`[ForceCleanup] 🔄 MISE À JOUR annulée → Recherche du snapshot pour rollback...`);
+      
+      // Chercher le snapshot le plus récent pour cette app
+      try {
+        const snapshotsOutput = execSync(`ls -t /data/snapshots/${appId}-* 2>/dev/null | head -1`, { encoding: 'utf8' }).trim();
+        
+        if (snapshotsOutput) {
+          const snapshotPath = snapshotsOutput;
+          console.log(`[ForceCleanup] 📸 Snapshot trouvé: ${snapshotPath}`);
+          console.log(`[ForceCleanup] 🔄 Rollback en cours vers l'ancienne version...`);
+          
+          try {
+            // Arrêter les containers avant le rollback
+            execSync(`docker compose -p ${appId} down 2>/dev/null || true`, { stdio: 'inherit' });
+            
+            // Exécuter le rollback
+            const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback-app.sh "${snapshotPath}" "${appDir}"`, { 
+              encoding: 'utf8',
+              stdio: 'pipe'
+            });
+            console.log(`[ForceCleanup] ✅ Rollback terminé`);
+            console.log(rollbackOutput);
+            
+            // Redémarrer les containers avec l'ancienne version
+            console.log(`[ForceCleanup] 🚀 Redémarrage des containers avec l'ancienne version...`);
+            execSync(`docker compose -p ${appId} up -d 2>/dev/null || true`, { cwd: appDir, stdio: 'inherit' });
+            
+            // Supprimer le snapshot après rollback réussi
+            try {
+              execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
+              console.log(`[ForceCleanup] 🧹 Snapshot supprimé`);
+            } catch (delError: any) {
+              console.warn(`[ForceCleanup] ⚠️ Impossible de supprimer le snapshot:`, delError.message);
+            }
+            
+            console.log(`[ForceCleanup] ✅ Mise à jour annulée, ancienne version restaurée`);
+            return {
+              success: true,
+              message: `Mise à jour annulée, ancienne version de ${appId} restaurée`,
+              isUpdate: true
+            };
+          } catch (rollbackError: any) {
+            console.error(`[ForceCleanup] ❌ Erreur lors du rollback:`, rollbackError.message);
+            // Continuer avec le nettoyage normal en cas d'échec du rollback
+          }
+        } else {
+          console.warn(`[ForceCleanup] ⚠️ Aucun snapshot trouvé pour ${appId}, nettoyage normal`);
+        }
+      } catch (snapshotError: any) {
+        console.warn(`[ForceCleanup] ⚠️ Erreur lors de la recherche du snapshot:`, snapshotError.message);
+      }
+    }
+    
+    // 3. Pour une NOUVELLE INSTALLATION ou si le rollback a échoué : Nettoyage complet
+    console.log(`[ForceCleanup] 🗑️ Nettoyage complet de ${appId}...`);
+    
+    // Arrêter tous les containers Docker (par nom de projet)
     console.log(`[ForceCleanup] 🐳 Arrêt des containers Docker...`);
     try {
       execSync(`docker compose -p ${appId} down -v --remove-orphans 2>/dev/null || true`, { stdio: 'inherit' });
@@ -1663,7 +1754,7 @@ async function forceCleanupCancelledInstall(appId) {
       // Ignore
     }
     
-    // 3. Si le dossier existe avec un docker-compose.yml, arrêter aussi via le dossier
+    // Si le dossier existe avec un docker-compose.yml, arrêter aussi via le dossier
     try {
       const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
       for (const file of composeFiles) {
@@ -1679,7 +1770,7 @@ async function forceCleanupCancelledInstall(appId) {
       // Ignore
     }
     
-    // 4. Supprimer tous les volumes Docker liés à cette app
+    // Supprimer tous les volumes Docker liés à cette app
     console.log(`[ForceCleanup] 🗑️ Suppression des volumes Docker...`);
     try {
       const volumesOutput = execSync(`docker volume ls -q --filter "name=${appId}"`, { encoding: 'utf8' }).trim();
@@ -1695,7 +1786,7 @@ async function forceCleanupCancelledInstall(appId) {
       // Ignore
     }
     
-    // 5. Supprimer le dossier de l'application
+    // Supprimer le dossier de l'application
     console.log(`[ForceCleanup] 🗑️ Suppression du dossier ${appDir}...`);
     try {
       execSync(`sudo rm -rf "${appDir}" 2>/dev/null || true`, { stdio: 'inherit' });
@@ -1703,7 +1794,7 @@ async function forceCleanupCancelledInstall(appId) {
       // Ignore
     }
     
-    // 6. Supprimer le manifest
+    // Supprimer le manifest
     const manifestDir = path.join(MANIFESTS_DIR, appId);
     console.log(`[ForceCleanup] 🗑️ Suppression du manifest ${manifestDir}...`);
     try {
