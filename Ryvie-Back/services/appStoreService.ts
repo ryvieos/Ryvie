@@ -528,6 +528,13 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
   const appDir = existingManifest?.sourceDir || path.join(APPS_DIR, appId);
   console.log(`[appStore] 📂 Dossier de destination: ${appDir}`);
   
+  // Déterminer le sous-dossier de destination basé sur dockerComposePath
+  let targetSubDir = '';
+  if (existingManifest?.dockerComposePath && existingManifest.dockerComposePath.includes('/')) {
+    targetSubDir = path.dirname(existingManifest.dockerComposePath);
+    console.log(`[appStore] 📁 Sous-dossier cible détecté depuis le manifest: ${targetSubDir}`);
+  }
+  
   // Créer un sous-volume Btrfs au lieu d'un simple dossier pour permettre les snapshots
   try {
     // Vérifier si le dossier existe déjà
@@ -622,8 +629,10 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
           timeout: 300000
         });
         
-        // Construire le chemin local
-        const localFilePath = path.join(appDir, filePath);
+        // Construire le chemin local (dans le sous-dossier si spécifié)
+        const localFilePath = targetSubDir 
+          ? path.join(appDir, targetSubDir, filePath)
+          : path.join(appDir, filePath);
         
         // Créer le répertoire si nécessaire
         const localDir = path.dirname(localFilePath);
@@ -1030,14 +1039,30 @@ LOCAL_IP=${localIP}
         console.log(`[Update] ✅ Fichier .env créé avec LOCAL_IP=${localIP}`);
       }
       
-      // Nettoyer les containers arrêtés de cette app avant de lancer (évite les conflits de namespaces)
+      // Nettoyer les containers existants avant de lancer (évite les conflits de noms)
       console.log('[Update] 🧹 Nettoyage des anciens containers...');
       try {
-        // Utiliser -p pour spécifier le nom du projet (basé sur appId)
-        execSync(`docker compose -p ${appId} -f ${composeFile} down 2>/dev/null || true`, { 
-          cwd: appDir, 
+        // Lister tous les containers de cette app (en cours ou arrêtés)
+        const containersOutput = execSync(`docker ps -a --filter "name=app-${appId}" --format "{{.Names}}"`, { 
+          encoding: 'utf8',
           stdio: 'pipe'
-        });
+        }).trim();
+        
+        if (containersOutput) {
+          const containers = containersOutput.split('\n').filter(name => name.trim());
+          console.log(`[Update] 🗑️ Suppression de ${containers.length} container(s) existant(s)...`);
+          
+          for (const containerName of containers) {
+            try {
+              execSync(`docker rm -f ${containerName}`, { stdio: 'pipe' });
+              console.log(`[Update] ✅ Container ${containerName} supprimé`);
+            } catch (rmError: any) {
+              console.warn(`[Update] ⚠️ Impossible de supprimer ${containerName}:`, rmError.message);
+            }
+          }
+        } else {
+          console.log('[Update] ℹ️ Aucun container existant à nettoyer');
+        }
       } catch (cleanupError: any) {
         // Non bloquant - l'app n'existe peut-être pas encore
         console.log('[Update] ℹ️ Aucun container existant à nettoyer');
@@ -1053,15 +1078,22 @@ LOCAL_IP=${localIP}
         console.log('[Update]    Lancement des containers (nouvelle installation)...');
       }
       
-      console.log(`[Update] 📂 Dossier de travail: ${appDir}`);
-      console.log(`[Update] 📄 Fichier compose: ${composeFile}`);
-      console.log(`[Update] 🔧 Commande: docker compose -p ${appId} -f ${composeFile} up -d ${buildFlag}`);
+      // Déterminer le dossier de travail : si le docker-compose est dans un sous-dossier,
+      // utiliser ce sous-dossier comme cwd pour que ${PWD} fonctionne correctement
+      const workingDir = composeFile.includes('/') 
+        ? path.join(appDir, path.dirname(composeFile))
+        : appDir;
+      const composeFileName = path.basename(composeFile);
+      
+      console.log(`[Update] 📂 Dossier de travail: ${workingDir}`);
+      console.log(`[Update] 📄 Fichier compose: ${composeFileName}`);
+      console.log(`[Update] 🔧 Commande: docker compose -f ${composeFileName} up -d ${buildFlag}`);
       
       try {
-        // Utiliser -p pour spécifier le nom du projet (basé sur appId)
+        // Ne pas utiliser -p car les container_name sont fixes dans le docker-compose.yml
         // Ajouter --build pour forcer le rebuild lors des mises à jour
-        execSync(`docker compose -p ${appId} -f ${composeFile} up -d ${buildFlag}`, { 
-          cwd: appDir, 
+        execSync(`docker compose -f ${composeFileName} up -d ${buildFlag}`, { 
+          cwd: workingDir, 
           stdio: 'inherit'
         });
         console.log('[Update] ✅ Containers lancés avec succès');
@@ -1703,7 +1735,7 @@ async function forceCleanupCancelledInstall(appId) {
           
           try {
             // Arrêter les containers avant le rollback
-            execSync(`docker compose -p ${appId} down 2>/dev/null || true`, { stdio: 'inherit' });
+            execSync(`docker compose down 2>/dev/null || true`, { cwd: appDir, stdio: 'inherit' });
             
             // Exécuter le rollback
             const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback-app.sh "${snapshotPath}" "${appDir}"`, { 
@@ -1715,7 +1747,7 @@ async function forceCleanupCancelledInstall(appId) {
             
             // Redémarrer les containers avec l'ancienne version
             console.log(`[ForceCleanup] 🚀 Redémarrage des containers avec l'ancienne version...`);
-            execSync(`docker compose -p ${appId} up -d 2>/dev/null || true`, { cwd: appDir, stdio: 'inherit' });
+            execSync(`docker compose up -d 2>/dev/null || true`, { cwd: appDir, stdio: 'inherit' });
             
             // Supprimer le snapshot après rollback réussi
             try {
