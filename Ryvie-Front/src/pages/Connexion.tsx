@@ -16,7 +16,7 @@ const Userlogin = () => {
   const [messageType, setMessageType] = useState('info'); // 'info', 'success', 'error'
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [accessMode, setAccessMode] = useState('private');
   const [selectedUser, setSelectedUser] = useState(null);
   const [password, setPassword] = useState('');
@@ -47,7 +47,7 @@ const Userlogin = () => {
       } catch (err) {
         console.error('Erreur lors de l\'initialisation:', err);
         setDetectingMode(false);
-        setError('Erreur lors de l\'initialisation de l\'application.');
+        setError(t('connexion.initializationError'));
         setLoading(false);
       }
     };
@@ -94,7 +94,7 @@ const Userlogin = () => {
           const u = {
             name: user.name || user.uid,
             id: user.uid,
-            email: user.email || 'Non défini',
+            email: user.email || t('connexion.notDefined'),
             // Préserver le rôle si fourni; sinon, si c'est l'utilisateur courant, afficher son rôle de session
             role: user.role || ''
           };
@@ -115,12 +115,12 @@ const Userlogin = () => {
         // Si on est en web et qu'on a échoué en mode privé, forcer le mode privé (pas de serveur remote pour les tests)
         if (!isElectron() && mode === 'private') {
           console.log('[Connexion] Échec en mode privé, mais on reste en mode privé (pas de serveur remote de test)');
-          setError('Impossible de se connecter au serveur local ryvie.local:3002. Vérifiez que le serveur est démarré et accessible.');
+          setError(t('connexion.cannotConnectLocal'));
           setLoading(false);
           return;
         }
         
-        setError('Erreur lors du chargement des utilisateurs. Veuillez vérifier votre connexion au serveur.');
+        setError(t('connexion.errorLoadingUsers'));
         setLoading(false);
       }
     };
@@ -146,7 +146,7 @@ const Userlogin = () => {
 
   const authenticateUser = async () => {
     if (!selectedUser || !password) {
-      setMessage('Veuillez entrer un mot de passe');
+      setMessage(t('connexion.pleaseEnterPassword'));
       setMessageType('error');
       return;
     }
@@ -180,7 +180,7 @@ const Userlogin = () => {
           userEmail: response.data.user.email || ''
         });
         
-        setMessage('Authentification réussie. Ouverture d\'une nouvelle session...');
+        setMessage(t('connexion.authenticationSuccess'));
         setMessageType('success');
         
         // Fermer le modal
@@ -197,7 +197,7 @@ const Userlogin = () => {
         );
       } else {
         setLoginAttempts(prev => prev + 1);
-        setMessage('Échec de l\'authentification. Réponse du serveur invalide.');
+        setMessage(t('connexion.authenticationFailed'));
         setMessageType('error');
       }
     } catch (error) {
@@ -208,7 +208,7 @@ const Userlogin = () => {
         // Close modal and show blocking message after 5 attempts
         if (newAttempts >= 5) {
           setShowPasswordModal(false);
-          setMessage('Trop de tentatives échouées pour cet utilisateur. Veuillez réessayer plus tard.');
+          setMessage(t('connexion.tooManyAttempts'));
           setMessageType('error');
           
           // Block this user for 5 minutes (shorter than main login)
@@ -227,23 +227,23 @@ const Userlogin = () => {
         if (error.response.status === 401) {
           const remaining = Math.max(0, 5 - (loginAttempts + 1));
           if (remaining > 0) {
-            setMessage(`Identifiants incorrects. ${remaining} tentative(s) restante(s).`);
+            setMessage(t('connexion.incorrectCredentials', { remaining }));
           } else {
-            setMessage('Trop de tentatives échouées. Utilisateur temporairement bloqué.');
+            setMessage(t('connexion.userBlocked'));
           }
         } else if (error.response.status === 429) {
           const retryAfter = error.response.data?.retryAfter || 900;
-          setMessage(`Trop de tentatives de connexion. Réessayez dans ${Math.ceil(retryAfter / 60)} minutes.`);
+          setMessage(t('connexion.retryAfter', { minutes: Math.ceil(retryAfter / 60) }));
           setShowPasswordModal(false);
         } else {
-          setMessage(`Erreur d'authentification: ${error.response.data?.error || 'Erreur serveur'}`);
+          setMessage(t('connexion.authError', { error: error.response.data?.error || t('connexion.serverError') }));
         }
       } else if (error.request) {
         // La requête a été faite mais pas de réponse
-        setMessage('Impossible de contacter le serveur. Veuillez vérifier votre connexion.');
+        setMessage(t('connexion.cannotContactServer'));
       } else {
         // Erreur lors de la configuration de la requête
-        setMessage(`Erreur: ${error.message}`);
+        setMessage(t('connexion.error', { message: error.message }));
       }
       
       setMessageType('error');
@@ -259,7 +259,7 @@ const Userlogin = () => {
       if (isElectron()) {
         // Mode Electron - Créer une nouvelle fenêtre
         await window.electronAPI.invoke('create-user-window-with-mode', userId, accessMode, userRole, token);
-        setMessage(`Fenêtre ouverte pour ${userName} en mode ${accessMode} avec le rôle ${userRole}`);
+        setMessage(t('connexion.windowOpened', { userName, accessMode, userRole }));
         setMessageType('success');
         
         // Fermer l'overlay si on est dans un iframe
@@ -273,7 +273,7 @@ const Userlogin = () => {
         if (window.parent !== window) {
           // On est dans un overlay, fermer l'overlay et rediriger le parent
           console.log(`[Connexion] Mode web dans overlay - fermeture de l'overlay`);
-          setMessage(`Connexion réussie pour ${userName}`);
+          setMessage(t('connexion.loginSuccess', { userName }));
           setMessageType('success');
           
           setTimeout(() => {
@@ -283,13 +283,13 @@ const Userlogin = () => {
           // Navigation normale
           console.log(`[Connexion] Mode web - redirection vers l'accueil pour ${userName}`);
           navigate('/welcome');
-          setMessage(`Connexion réussie pour ${userName}`);
+          setMessage(t('connexion.loginSuccess', { userName }));
           setMessageType('success');
         }
       }
     } catch (error) {
       console.error('Erreur lors de l\'ouverture de la fenêtre:', error);
-      setMessage(`Erreur lors de l'ouverture de la fenêtre: ${error.message}`);
+      setMessage(t('connexion.windowOpenError', { message: error.message }));
       setMessageType('error');
     }
   };
@@ -371,14 +371,14 @@ const Userlogin = () => {
           }} 
           className="return-button"
         >
-          Retour à l'accueil
+          {t('connexion.backToHome')}
         </button>
       </div>
 
       {showPasswordModal && (
         <div className="modal-overlay" onClick={() => !authenticating && setShowPasswordModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2 className="modal-title">Authentification</h2>
+            <h2 className="modal-title">{t('connexion.authentication')}</h2>
             <div className="user-info">
               <div className={`modal-user-avatar ${selectedUser.id === 'jules' ? 'primary-user-avatar' : ''}`}>
                 {selectedUser.name.charAt(0).toUpperCase()}
@@ -386,23 +386,23 @@ const Userlogin = () => {
               <div className="modal-user-name">{selectedUser.name}</div>
             </div>
             
-            <p className="modal-text">Veuillez entrer votre mot de passe</p>
+            <p className="modal-text">{t('connexion.enterPassword')}</p>
             
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="password-input"
-              placeholder="Mot de passe"
+              placeholder={t('connexion.password')}
               onKeyPress={(e) => e.key === 'Enter' && authenticateUser()}
               autoFocus
             />
             
             {loginAttempts > 0 && (
               <p className="attempt-warning">
-                {loginAttempts === 1 ? 'Première tentative échouée' : 
-                 loginAttempts === 2 ? 'Deuxième tentative échouée' : 
-                 'Attention: Plusieurs tentatives échouées'}
+                {loginAttempts === 1 ? t('connexion.firstAttemptFailed') : 
+                 loginAttempts === 2 ? t('connexion.secondAttemptFailed') : 
+                 t('connexion.multipleAttemptsFailed')}
               </p>
             )}
             
@@ -417,7 +417,7 @@ const Userlogin = () => {
                 className="cancel-button"
                 disabled={authenticating}
               >
-                Annuler
+                {t('connexion.cancel')}
               </button>
               <button 
                 onClick={authenticateUser}
@@ -426,7 +426,7 @@ const Userlogin = () => {
               >
                 {authenticating ? (
                   <div className="button-spinner"></div>
-                ) : 'Se connecter'}
+                ) : t('connexion.connect')}
               </button>
             </div>
           </div>

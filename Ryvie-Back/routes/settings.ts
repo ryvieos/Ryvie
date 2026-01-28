@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const { checkAllUpdates } = require('../services/updateCheckService');
-const { updateRyvie, updateApp } = require('../services/updateService');
+const { updateRyvie, updateApp, updateProgressEmitter } = require('../services/updateService');
 const { SETTINGS_FILE, NETBIRD_FILE } = require('../config/paths');
 const crypto = require('crypto');
 
@@ -323,6 +323,105 @@ router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req: any, res
   }
 });
 
+// Map pour stocker les workers de mise à jour actifs (appName -> worker process)
+const activeUpdateWorkers = new Map();
+
+// Map pour stocker la dernière progression de chaque mise à jour (appName -> { progress, message, stage })
+const lastUpdateProgressMap = new Map();
+
+/**
+ * GET /api/settings/update-progress/:appName - Server-Sent Events pour suivre la progression de mise à jour
+ */
+router.get('/settings/update-progress/:appName', verifyToken, (req: any, res: any) => {
+  const appName = req.params.appName;
+  
+  // Configurer les headers pour SSE
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control',
+  });
+  
+  // Vérifier si la mise à jour est active
+  const isActive = activeUpdateWorkers.has(appName);
+  
+  // Récupérer la dernière progression connue
+  const lastProgressData = lastUpdateProgressMap.get(appName) || { progress: 0, message: 'Mise à jour en cours...', stage: 'active' };
+  
+  // Envoyer un ping initial avec le statut et la vraie progression
+  if (isActive) {
+    res.write(`data: ${JSON.stringify({ appName, ...lastProgressData })}\n\n`);
+  } else {
+    res.write(`data: ${JSON.stringify({ appName, progress: 0, message: 'Mise à jour non trouvée', stage: 'inactive' })}\n\n`);
+    res.end();
+    return;
+  }
+  
+  let lastProgressValue = 0;
+  
+  // Écouter les événements de progression pour cette app
+  const progressListener = (update) => {
+    if (update.appName === appName) {
+      lastProgressValue = update.progress || 0;
+      // Sauvegarder la dernière progression dans la Map
+      lastUpdateProgressMap.set(appName, { progress: update.progress || 0, message: update.message, stage: update.stage });
+      res.write(`data: ${JSON.stringify(update)}\n\n`);
+      
+      // Fermer la connexion si la mise à jour est terminée
+      if (update.progress >= 100 || update.stage === 'completed' || update.stage === 'error') {
+        setTimeout(() => {
+          updateProgressEmitter.off('progress', progressListener);
+          if (heartbeatInterval) clearInterval(heartbeatInterval);
+          res.end();
+        }, 1000);
+      }
+    }
+  };
+  
+  updateProgressEmitter.on('progress', progressListener);
+  
+  // Heartbeat toutes les 5 secondes pour garder la connexion vivante
+  const heartbeatInterval = setInterval(() => {
+    if (!activeUpdateWorkers.has(appName)) {
+      // La mise à jour n'est plus active
+      res.write(`data: ${JSON.stringify({ appName, progress: lastProgressValue, message: 'Mise à jour terminée ou annulée', stage: 'inactive' })}\n\n`);
+      clearInterval(heartbeatInterval);
+      updateProgressEmitter.off('progress', progressListener);
+      res.end();
+    } else {
+      // Envoyer un heartbeat
+      res.write(`: heartbeat\n\n`);
+    }
+  }, 5000);
+  
+  // Nettoyer l'écouteur quand le client se déconnecte
+  req.on('close', () => {
+    updateProgressEmitter.off('progress', progressListener);
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    res.end();
+  });
+  
+  // Timeout de sécurité (30 minutes)
+  setTimeout(() => {
+    updateProgressEmitter.off('progress', progressListener);
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    res.end();
+  }, 30 * 60 * 1000);
+});
+
+/**
+ * GET /api/settings/active-updates - Retourne la liste des mises à jour en cours
+ */
+router.get('/settings/active-updates', verifyToken, (req: any, res: any) => {
+  const activeUpdates = Array.from(activeUpdateWorkers.keys());
+  res.json({
+    success: true,
+    updates: activeUpdates
+  });
+});
+
 // POST /api/settings/update-app - Mettre à jour une application
 router.post('/settings/update-app', verifyToken, isAdmin, async (req: any, res: any) => {
   try {
@@ -335,16 +434,82 @@ router.post('/settings/update-app', verifyToken, isAdmin, async (req: any, res: 
       });
     }
     
-    console.log(`[settings] Démarrage de la mise à jour de ${appName}...`);
-    const result = await updateApp(appName);
-    
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(500).json(result);
+    // Vérifier si une mise à jour est déjà en cours pour cette app
+    if (activeUpdateWorkers.has(appName)) {
+      return res.status(409).json({
+        success: false,
+        error: 'Mise à jour déjà en cours',
+        message: `Une mise à jour est déjà en cours pour ${appName}`
+      });
     }
+    
+    console.log(`[settings] Lancement de la mise à jour de ${appName} dans un processus séparé...`);
+    
+    // Répondre immédiatement au client
+    res.json({
+      success: true,
+      message: `Mise à jour de ${appName} lancée en arrière-plan`,
+      appName: appName
+    });
+    
+    // Lancer la mise à jour dans un processus enfant séparé (non-bloquant)
+    const { fork } = require('child_process');
+    const workerPath = require('path').join(__dirname, '../workers/updateWorker.js');
+    
+    const worker = fork(workerPath, [appName], {
+      detached: false,
+      stdio: 'inherit'
+    });
+    
+    // Stocker le worker actif
+    activeUpdateWorkers.set(appName, worker);
+    
+    worker.on('message', (message) => {
+      if (message.type === 'log') {
+        console.log(`[UpdateWorker ${appName}]`, message.message);
+      } else if (message.type === 'progress') {
+        // Retransmettre les événements de progression au updateProgressEmitter principal
+        updateProgressEmitter.emit('progress', message.data);
+      }
+    });
+    
+    worker.on('exit', (code) => {
+      // Retirer le worker de la map quand il se termine
+      activeUpdateWorkers.delete(appName);
+      // Nettoyer la progression sauvegardée
+      lastUpdateProgressMap.delete(appName);
+      
+      if (code === 0) {
+        console.log(`[settings] ✅ Mise à jour de ${appName} terminée avec succès`);
+      } else {
+        console.error(`[settings] ❌ Mise à jour de ${appName} échouée avec le code ${code}`);
+        
+        // Émettre un événement de progression d'erreur pour notifier le frontend
+        updateProgressEmitter.emit('progress', {
+          appName: appName,
+          progress: 0,
+          message: 'Erreur lors de la mise à jour',
+          stage: 'error'
+        });
+      }
+    });
+    
+    worker.on('error', (error) => {
+      console.error(`[settings] ❌ Erreur du worker pour ${appName}:`, error);
+      activeUpdateWorkers.delete(appName);
+      lastUpdateProgressMap.delete(appName);
+      
+      // Émettre un événement de progression d'erreur pour notifier le frontend
+      updateProgressEmitter.emit('progress', {
+        appName: appName,
+        progress: 0,
+        message: error.message || 'Erreur lors de la mise à jour',
+        stage: 'error'
+      });
+    });
+    
   } catch (error: any) {
-    console.error(`[settings] Erreur lors de la mise à jour de l'app:`, error);
+    console.error(`[settings] Erreur lors du lancement de la mise à jour:`, error);
     res.status(500).json({ 
       success: false,
       error: 'Erreur lors de la mise à jour',
