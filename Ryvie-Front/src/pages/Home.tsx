@@ -1301,9 +1301,18 @@ const Home = () => {
         for (const appId of installIds) {
           const isActive = activeInstalls.includes(appId);
           const isInstalled = installedApps.some(app => app.id === appId);
+          const installData = savedInstalls[appId];
+          const progress = installData?.progress || 0;
           
-          if (isInstalled || !isActive) {
-            console.log(`[Home] Polling: Installation de ${appId} terminée ou inactive, nettoyage`);
+          // Ne nettoyer que si:
+          // 1. L'app est installée ET la progression est à 100%
+          // 2. OU l'installation n'est plus active ET la dernière mise à jour date de plus de 30 secondes
+          const lastUpdate = installData?.lastUpdate || Date.now();
+          const timeSinceUpdate = Date.now() - lastUpdate;
+          const isStale = timeSinceUpdate > 30000; // 30 secondes
+          
+          if ((isInstalled && progress >= 100) || (!isActive && isStale)) {
+            console.log(`[Home] Polling: Installation de ${appId} terminée (progress: ${progress}%, active: ${isActive}, stale: ${isStale}), nettoyage`);
             removeInstallation(appId);
             setInstallingApps(prev => {
               const updated = { ...prev };
@@ -1311,6 +1320,8 @@ const Home = () => {
               return updated;
             });
             hasChanges = true;
+          } else if (!isActive) {
+            console.log(`[Home] Polling: Installation de ${appId} inactive mais récente (progress: ${progress}%, age: ${Math.round(timeSinceUpdate/1000)}s), maintien`);
           }
         }
         
