@@ -2,16 +2,7 @@ import { NetbirdData, UrlConfig, BaseUrls, LocationInfo } from '../types';
 
 const LOCAL_PORTS: Record<string, number> = {
   FRONTEND: 3000,
-  SERVER: 3002,
-  APPSTORE: 5173,
-  RDRIVE: 3010,
-  PORTAINER: 9000,
-  RTRANSFER: 3011,
-  RDROP: 8080,
-  RPICTURES: 2283,
-  BACKEND_RDRIVE: 3012,
-  CONNECTOR_RDRIVE: 3013,
-  DOCUMENT_RDRIVE: 3014
+  SERVER: 3002
 };
 
 let netbirdData: NetbirdData = {
@@ -176,6 +167,15 @@ const buildAppUrl = (appId: string, port: number): string => {
   const appDomain = domains[appId];
   const requiresHttps = appHttpsRequired[appId] || false;
 
+  // Applications qui doivent TOUJOURS utiliser leur domaine Netbird public
+  const alwaysUseNetbirdDomain = ['rtransfer', 'rdrop'];
+  
+  // Si l'app a un domaine Netbird et doit toujours l'utiliser, forcer HTTPS
+  if (alwaysUseNetbirdDomain.includes(appId) && appDomain) {
+    console.log(`[buildAppUrl] ${appId} → https://${appDomain} (domaine Netbird forcé)`);
+    return `https://${appDomain}`;
+  }
+
   if (hostname === 'ryvie.local') {
     if (cachedLocalIP && port) {
       // Utiliser HTTPS si l'app le requiert
@@ -236,15 +236,15 @@ const generateBaseUrls = (): BaseUrls => {
     RDRIVE_BACKEND: {
       BACKEND: {
         REMOTE: `https://${domains['backend.rdrive']}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.BACKEND_RDRIVE}`
+        PRIVATE: `http://ryvie.local:${appPorts['backend.rdrive'] || 3012}`
       },
       CONNECTOR: {
         REMOTE: `https://${domains['connector.rdrive']}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.CONNECTOR_RDRIVE}`
+        PRIVATE: `http://ryvie.local:${appPorts['connector.rdrive'] || 3013}`
       },
       DOCUMENT: {
         REMOTE: `https://${domains['document.rdrive']}`,
-        PRIVATE: `http://ryvie.local:${LOCAL_PORTS.DOCUMENT_RDRIVE}`
+        PRIVATE: `http://ryvie.local:${appPorts['document.rdrive'] || 3014}`
       }
     }
   };
@@ -300,13 +300,13 @@ const getRdriveBackendUrl = (serviceName: string, accessMode: string): string =>
   };
   
   const serviceToPort: Record<string, number> = {
-    'BACKEND': LOCAL_PORTS.BACKEND_RDRIVE,
-    'CONNECTOR': LOCAL_PORTS.CONNECTOR_RDRIVE,
-    'DOCUMENT': LOCAL_PORTS.DOCUMENT_RDRIVE
+    'BACKEND': 3012,
+    'CONNECTOR': 3013,
+    'DOCUMENT': 3014
   };
   
   const appId = serviceToAppId[serviceName];
-  const port = serviceToPort[serviceName];
+  const port = appPorts[appId] || serviceToPort[serviceName];
   
   if (!appId || !port) {
     console.error(`Service RDrive Backend non trouvé: ${serviceName}`);
