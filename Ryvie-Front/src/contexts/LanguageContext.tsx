@@ -72,7 +72,8 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (!params) return value;
 
     return Object.entries(params).reduce((acc, [paramKey, paramValue]) => {
-      return acc.replaceAll(`{${paramKey}}`, String(paramValue));
+      const regex = new RegExp(`\\{${paramKey}\\}`, 'g');
+      return acc.replace(regex, String(paramValue));
     }, value);
   };
 
@@ -81,10 +82,39 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (currentUser) {
       const cached = localStorage.getItem(`ryvie_language_${currentUser}`);
       if (cached && (cached === 'fr' || cached === 'en') && cached !== language) {
+        console.log(`[LanguageContext] Chargement de la langue pour ${currentUser}: ${cached}`);
         setLanguageState(cached);
       }
     }
   }, []);
+
+  // Monitor user changes and reload language preference when user switches
+  useEffect(() => {
+    const checkUserChange = () => {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const cached = localStorage.getItem(`ryvie_language_${currentUser}`);
+        if (cached && (cached === 'fr' || cached === 'en') && cached !== language) {
+          console.log(`[LanguageContext] Changement d'utilisateur détecté, application de la langue: ${cached}`);
+          setLanguageState(cached);
+        }
+      }
+    };
+
+    // Check immediately
+    checkUserChange();
+
+    // Listen for storage events (cross-tab communication)
+    window.addEventListener('storage', checkUserChange);
+    
+    // Poll for user changes every 500ms (to catch session switches)
+    const interval = setInterval(checkUserChange, 500);
+
+    return () => {
+      window.removeEventListener('storage', checkUserChange);
+      clearInterval(interval);
+    };
+  }, [language]);
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t, translations: translations[language] || translations.fr }}>

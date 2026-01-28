@@ -1226,24 +1226,27 @@ const Settings = () => {
     try {
       const serverUrl = getServerUrl(accessMode);
       console.log(`[Settings] Démarrage de la mise à jour de ${appName}...`);
-      const response = await axios.post(`${serverUrl}/api/settings/update-app`, { appName }, {
-        timeout: 120000 // 120 secondes pour snapshot + docker build
+      
+      // Utiliser le même endpoint que l'installation pour avoir les notifications persistantes
+      // L'endpoint /api/appstore/apps/:id/install gère à la fois l'installation ET la mise à jour
+      const response = await axios.post(`${serverUrl}/api/appstore/apps/${appName}/install`, {}, {
+        timeout: 10000 // Court timeout car l'installation se fait en arrière-plan
       });
       
       if (response.data.success) {
-        await showConfirm(
-          '✅ Mise à jour réussie',
-          `${appName} a été mis à jour avec succès !`,
-          true
-        );
-        // Re-vérifier les mises à jour
-        await fetchUpdates();
+        // Notifier l'utilisateur que la mise à jour a démarré
+        showToast(t('settings.updateStarted', { appName }) || `Mise à jour de ${appName} lancée en arrière-plan`, 'success');
+        
+        // Rediriger vers Home pour voir la notification persistante
+        console.log('[Settings] Redirection vers Home pour suivre la mise à jour...');
+        navigate('/home');
       } else {
         await showConfirm(
           '❌ Erreur de mise à jour',
           `Erreur: ${response.data.message}`,
           true
         );
+        setUpdateInProgress(null);
       }
     } catch (error) {
       console.error(`[Settings] Erreur lors de la mise à jour de ${appName}:`, error);
@@ -1252,7 +1255,6 @@ const Settings = () => {
         `Erreur lors de la mise à jour: ${error.response?.data?.message || error.message}`,
         true
       );
-    } finally {
       setUpdateInProgress(null);
     }
   };
@@ -1959,9 +1961,9 @@ const Settings = () => {
                         'stopped'
                       }`}>
                         {app.status === 'running' && app.progress === 100 ? t('settings.running') : 
-                         app.status === 'starting' ? t('home.status.starting') :
-                         app.status === 'partial' ? t('home.status.partial') :
-                         t('home.status.stopped')}
+                         app.status === 'starting' ? t('settings.starting') :
+                         app.status === 'partial' ? t('settings.partial') :
+                         t('settings.stopped')}
                       </span>
                     </div>
                 {appActionStatus.show && appActionStatus.appId === app.id && (
