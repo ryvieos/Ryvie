@@ -53,10 +53,11 @@ router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
     for (const app of apps) {
       try {
         let appSize = 0;
+        let folderSizeGB = 0;
+        let volumesSizeGB = 0;
         console.log(`[Storage Detail] Calcul taille pour app: ${app.id} (${app.name})`);
 
-        // Taille du dossier de l'app dans APPS_DIR
-        // Chercher tous les dossiers qui contiennent l'id de l'app (insensible à la casse)
+        // 1. Taille du dossier de l'app dans APPS_DIR
         try {
           if (fs.existsSync(APPS_DIR)) {
             const appsDirs = fs.readdirSync(APPS_DIR, { withFileTypes: true })
@@ -74,8 +75,8 @@ router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
               
               const { stdout } = await execPromise(`sudo du -sb ${appFolder} 2>/dev/null | cut -f1`, { timeout: 30000 });
               const folderSize = parseInt(stdout.trim()) || 0;
-              const folderSizeGB = folderSize / 1e9;
-              console.log(`[Storage Detail] Taille dossier ${appFolder}: ${folderSize} bytes (${folderSizeGB.toFixed(2)} GB)`);
+              folderSizeGB = folderSize / 1e9;
+              console.log(`[Storage Detail] Taille dossier ${appFolder}: ${folderSizeGB.toFixed(2)} GB`);
               appSize += folderSizeGB;
             } else {
               console.log(`[Storage Detail] Aucun dossier trouvé pour ${app.id} dans ${APPS_DIR}`);
@@ -85,7 +86,7 @@ router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
           console.error(`[Storage Detail] Erreur recherche dossier ${app.id}:`, error.message);
         }
 
-        // Taille des volumes Docker de l'app
+        // 2. Taille des volumes Docker nommés de l'app
         try {
           const containers = await docker.listContainers({ all: true });
           const appContainers = containers.filter(c => {
@@ -105,7 +106,7 @@ router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
             }
           }
           
-          console.log(`[Storage Detail] Volumes trouvés pour ${app.id}:`, volumeNames.size);
+          console.log(`[Storage Detail] Volumes Docker trouvés pour ${app.id}:`, volumeNames.size);
           
           for (const volName of volumeNames) {
             try {
@@ -113,6 +114,7 @@ router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
               const { stdout } = await execPromise(`sudo du -sb ${volInfo.Mountpoint} 2>/dev/null | cut -f1`, { timeout: 30000 });
               const volSize = parseInt(stdout.trim()) / 1e9 || 0;
               console.log(`[Storage Detail] Volume ${volName}: ${volSize.toFixed(4)} GB`);
+              volumesSizeGB += volSize;
               appSize += volSize;
             } catch (error: any) {
               console.error(`[Storage Detail] Erreur calcul volume ${volName}:`, error.message);
@@ -122,8 +124,57 @@ router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
           console.error(`[Storage Detail] Erreur récupération volumes ${app.id}:`, error.message);
         }
 
-        // Note: On ne compte PAS les images Docker car elles ont des layers partagés
-        // qui seraient comptés en double. Les images sont déjà incluses dans df /data
+        // 3. Taille des images Docker de l'app (uniquement les images "In Use")
+        let imagesSizeGB = 0;
+        try {
+          // Récupérer tous les containers (running et stopped) pour savoir quelles images sont utilisées
+          const allContainers = await docker.listContainers({ all: true });
+          const usedImageIds = new Set(allContainers.map(c => c.ImageID));
+          
+          const images = await docker.listImages();
+          const appImages = images.filter(img => {
+            // Ne prendre que les images "In Use" (utilisées par au moins un container)
+            if (!usedImageIds.has(img.Id)) {
+              return false;
+            }
+            
+            // Chercher les images qui correspondent à l'app
+            if (img.RepoTags && img.RepoTags.length > 0) {
+              return img.RepoTags.some(tag => {
+                const tagLower = tag.toLowerCase();
+                const appIdLower = app.id.toLowerCase();
+                
+                // Formats supportés:
+                // 1. app-{appId}-{service} (ex: app-vaultwarden-server)
+                // 2. {appId}/{anything} (ex: vaultwarden/server)
+                // 3. {appId}:{tag} (ex: vaultwarden:latest)
+                // 4. {registry}/{appId}:{tag} (ex: julescloud/rdrive-frontend:latest)
+                // 5. ryvie-{appId}-{service} (ex: ryvie-rtransfer-pingvin-share)
+                
+                return tagLower.includes(`app-${appIdLower}`) || 
+                       tagLower.startsWith(`${appIdLower}/`) ||
+                       tagLower.startsWith(`${appIdLower}:`) ||
+                       tagLower.includes(`/${appIdLower}-`) ||
+                       tagLower.includes(`/${appIdLower}:`) ||
+                       tagLower.includes(`ryvie-${appIdLower}`);
+              });
+            }
+            return false;
+          });
+          
+          console.log(`[Storage Detail] Images Docker "In Use" trouvées pour ${app.id}:`, appImages.length);
+          
+          for (const img of appImages) {
+            const imgSize = img.Size / 1e9;
+            console.log(`[Storage Detail] Image ${img.RepoTags?.[0] || img.Id}: ${imgSize.toFixed(4)} GB`);
+            imagesSizeGB += imgSize;
+            appSize += imgSize;
+          }
+        } catch (error: any) {
+          console.error(`[Storage Detail] Erreur récupération images ${app.id}:`, error.message);
+        }
+
+        console.log(`[Storage Detail] ${app.id} - Dossier: ${folderSizeGB.toFixed(2)} GB, Volumes: ${volumesSizeGB.toFixed(2)} GB, Images: ${imagesSizeGB.toFixed(2)} GB, Total: ${appSize.toFixed(2)} GB`)
         
         // Récupérer l'icône depuis MANIFESTS_DIR/{appId}/
         let iconUrl = null;
@@ -187,38 +238,27 @@ router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
       othersSize = 0;
     }
 
-    // 5. Répartir proportionnellement l'espace non identifié entre les apps
+    // 5. Calculer l'espace réel et mettre ce qui n'est pas identifié dans "Autres"
     const dataUsedReal = dataPartition ? dataPartition.used / 1e9 : (totalAppsSize + othersSize);
     
-    // Espace non identifié = total /data utilisé - apps calculées - autres
+    // Espace non identifié = total /data utilisé - apps calculées - autres calculés
     const unidentifiedSpace = Math.max(0, dataUsedReal - totalAppsSize - othersSize);
     
-    console.log(`[Storage Detail] /data utilisé: ${dataUsedReal.toFixed(2)} GB, Apps calculées: ${totalAppsSize.toFixed(2)} GB, Autres: ${othersSize.toFixed(2)} GB, Non identifié: ${unidentifiedSpace.toFixed(2)} GB`);
+    console.log(`[Storage Detail] /data utilisé: ${dataUsedReal.toFixed(2)} GB, Apps: ${totalAppsSize.toFixed(2)} GB, Autres calculés: ${othersSize.toFixed(2)} GB, Non identifié: ${unidentifiedSpace.toFixed(2)} GB`);
     
-    // Répartir l'espace non identifié proportionnellement entre les apps
-    let totalAppsAdjusted = 0;
-    for (const appDetail of appsDetails) {
-      if (totalAppsSize > 0) {
-        const proportion = appDetail.size / totalAppsSize;
-        const additionalSpace = proportion * unidentifiedSpace;
-        const adjustedSize = appDetail.size + additionalSpace;
-        
-        console.log(`[Storage Detail] ${appDetail.name}: ${appDetail.size.toFixed(2)} GB + ${additionalSpace.toFixed(2)} GB = ${adjustedSize.toFixed(2)} GB`);
-        
-        appDetail.size = adjustedSize;
-        appDetail.sizeFormatted = `${adjustedSize.toFixed(2)} GB`;
-        totalAppsAdjusted += adjustedSize;
-      }
-    }
+    // Ajouter l'espace non identifié à "Autres" (images Docker, caches, etc.)
+    const othersFinal = othersSize + unidentifiedSpace;
     
-    // Trier par taille décroissante après ajustement
+    console.log(`[Storage Detail] Autres final (avec non identifié): ${othersFinal.toFixed(2)} GB`);
+    
+    // Trier les apps par taille décroissante
     appsDetails.sort((a, b) => b.size - a.size);
     
     const totalUsed = systemSize + dataUsedReal;
     const totalSize = systemSize + (dataPartition ? dataPartition.size / 1e9 : 0);
     const dataAvailable = (dataPartition ? dataPartition.size / 1e9 : 0) - dataUsedReal;
     
-    console.log(`[Storage Detail] Apps ajustées total: ${totalAppsAdjusted.toFixed(2)} GB, Système: ${systemSize.toFixed(1)} GB, Total utilisé: ${totalUsed.toFixed(1)} GB`);
+    console.log(`[Storage Detail] Apps total: ${totalAppsSize.toFixed(2)} GB, Système: ${systemSize.toFixed(1)} GB, Autres: ${othersFinal.toFixed(1)} GB, Total utilisé: ${totalUsed.toFixed(1)} GB`);
 
     res.json({
       success: true,
@@ -227,14 +267,14 @@ router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
         used: totalUsed,
         available: dataAvailable,
         system: systemSize,
-        apps: totalAppsAdjusted,
-        others: othersSize,
+        apps: totalAppsSize,
+        others: othersFinal,
         totalFormatted: `${totalSize.toFixed(1)} GB`,
         usedFormatted: `${totalUsed.toFixed(1)} GB`,
         availableFormatted: `${dataAvailable.toFixed(1)} GB`,
         systemFormatted: `${systemSize.toFixed(1)} GB`,
-        appsFormatted: `${totalAppsAdjusted.toFixed(1)} GB`,
-        othersFormatted: `${othersSize.toFixed(1)} GB`
+        appsFormatted: `${totalAppsSize.toFixed(1)} GB`,
+        othersFormatted: `${othersFinal.toFixed(1)} GB`
       },
       apps: appsDetails
     });
