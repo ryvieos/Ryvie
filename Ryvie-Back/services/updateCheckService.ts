@@ -545,5 +545,5 @@ export = {
   checkRyvieUpdate,
   checkAppsUpdates,
   checkStoreCatalogUpdate,
-  compareVersions
+  compareVersions 
 };
