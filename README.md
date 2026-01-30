@@ -9,7 +9,7 @@
 
 ## 🌟 Présentation
 
-**Ryvie** est un **OS + une plateforme** qui transforme n'importe quelle machine (mini‑PC, serveur, etc.) en un **cloud personnel** puissant et simple à utiliser. 
+**Ryvie** est un **OS + une plateforme** qui transforme n'importe quelle machine (mini‑PC, serveur, etc.) en un **cloud personnel** puissant et simple à utiliser.
 
 L'objectif est d'offrir une page d'accueil de type **"launcher"** (style iOS 📱) pour lancer et administrer vos services (apps Docker) en toute fluidité :
 
