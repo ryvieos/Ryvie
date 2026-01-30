@@ -361,11 +361,9 @@ async function getLatestRelease() {
     // 6. Fallback si rien trouvé
     if (!targetTag) {
       if (mode === 'dev') {
-        console.log(`[appStore] Aucun tag de pré-release trouvé en dev, utilisation de la branche dev`);
-        targetTag = 'dev';
+        throw new Error(`Aucun tag de pré-release trouvé en mode dev. Tags disponibles: ${tags.join(', ')}`);
       } else {
-        console.log(`[appStore] Aucun tag stable trouvé en prod, utilisation de main`);
-        targetTag = 'main';
+        throw new Error(`Aucun tag stable trouvé en mode prod. Tags disponibles: ${tags.join(', ')}`);
       }
     }
     
@@ -379,15 +377,7 @@ async function getLatestRelease() {
     };
   } catch (error: any) {
     console.error('[appStore] Erreur lors de la récupération de la version:', error.message);
-    
-    // En cas d'erreur, retourner main par défaut
-    console.log('[appStore] Utilisation de la branche main par défaut');
-    return {
-      tag: 'main',
-      name: 'main',
-      publishedAt: new Date().toISOString(),
-      assets: []
-    };
+    throw error;
   }
 }
 
