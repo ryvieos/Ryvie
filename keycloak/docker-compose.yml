@@ -36,7 +36,7 @@ services:
     volumes:
       - ./import:/opt/keycloak/data/import
     ports:
-      - "0.0.0.0:8080:8080"
+      - "0.0.0.0:3005:8080"
     command:
       - start
       - --import-realm

@@ -9,7 +9,7 @@ interface OIDCConfig {
 }
 
 const config: OIDCConfig = {
-  issuer: process.env.OIDC_ISSUER || 'http://ryvie.local:8080/realms/ryvie',
+  issuer: process.env.OIDC_ISSUER || 'http://ryvie.local:3005/realms/ryvie',
   clientId: process.env.OIDC_CLIENT_ID || 'ryvie-dashboard',
   clientSecret: process.env.OIDC_CLIENT_SECRET || 'ryvie-dashboard-secret-change-me',
   redirectUri: process.env.OIDC_REDIRECT_URI || 'http://ryvie.local/api/auth/callback',
@@ -20,8 +20,8 @@ let discoveredConfig: oauth.Configuration | null = null;
 // Fonction pour construire l'issuer dynamiquement basé sur l'origine
 function getIssuerFromOrigin(origin: string): string {
   const url = new URL(origin);
-  // Remplacer le port par 8080 pour Keycloak
-  return `http://${url.hostname}:8080/realms/ryvie`;
+  // Remplacer le port par 3005 pour Keycloak
+  return `http://${url.hostname}:3005/realms/ryvie`;
 }
 
 // Fonction pour construire le redirect_uri vers le backend

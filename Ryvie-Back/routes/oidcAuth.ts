@@ -154,7 +154,7 @@ router.get('/logout', async (req: any, res: any) => {
     const origin = getOriginFromRequest(req);
     
     const url = new URL(origin);
-    const issuer = `http://${url.hostname}:8080/realms/ryvie`;
+    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
     const logoutUrl = `${issuer}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(origin)}${idToken ? `&id_token_hint=${idToken}` : ''}`;
 
     console.log('[OIDC] Logging out from origin:', origin);
