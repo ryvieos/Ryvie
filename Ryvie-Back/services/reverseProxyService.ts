@@ -491,6 +491,16 @@ http://ryvie.local {
     header_up X-Real-IP {remote_host}
   }
 }
+
+# --- KEYCLOAK SSO ---
+ryvie.local:3005 {
+  reverse_proxy keycloak:8080 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-Host {host}
+  }
+}
 `;
 }
 

@@ -1,0 +1,80 @@
+{
+  "realm": "ryvie",
+  "enabled": true,
+  "displayName": "Ryvie Authentication",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Ryvie</span></div>",
+  "loginTheme": "keycloak",
+  "accountTheme": "keycloak",
+  "adminTheme": "keycloak",
+  "emailTheme": "keycloak",
+  
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": false,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  
+  "roles": {
+    "realm": [
+      {
+        "name": "Admin",
+        "description": "Administrator role"
+      },
+      {
+        "name": "User",
+        "description": "Standard user role"
+      },
+      {
+        "name": "Guest",
+        "description": "Guest role with limited access"
+      }
+    ]
+  },
+  
+  "clients": [
+    {
+      "clientId": "ryvie-dashboard",
+      "name": "Ryvie Dashboard",
+      "description": "Main Ryvie application",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "ryvie-dashboard-secret-change-me",
+      "redirectUris": [
+        "http://*:3000/*",
+        "http://*:3000/api/auth/callback"
+      ],
+      "webOrigins": [
+        "http://*:3000"
+      ],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "post.logout.redirect.uris": "http://ryvie.local##http://ryvie.local/login"
+      }
+    }
+  ]
+}

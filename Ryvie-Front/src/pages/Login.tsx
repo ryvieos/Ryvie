@@ -102,6 +102,23 @@ const Login = () => {
     };
   }, [accessMode]);
 
+  const handleSSOLogin = async () => {
+    setLoading(true);
+    setMessage(t('login.redirectingToSSO') || 'Redirection vers le SSO...');
+    setMessageType('info');
+
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      console.log(`[Login] Redirection SSO en mode ${accessMode.toUpperCase()}: ${serverUrl}`);
+      window.location.href = `${serverUrl}/api/auth/login`;
+    } catch (error: any) {
+      console.error('Erreur de redirection SSO:', error);
+      setMessage(t('login.ssoError') || 'Erreur SSO');
+      setMessageType('error');
+      setLoading(false);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -226,6 +243,31 @@ const Login = () => {
         )}
         
         <form onSubmit={handleLogin} className="login-form">
+          {/* Bouton SSO principal */}
+          <button 
+            type="button"
+            onClick={handleSSOLogin}
+            className="login-button sso-button"
+            disabled={loading}
+            style={{ marginBottom: '20px', backgroundColor: '#4CAF50' }}
+          >
+            {loading ? t('login.redirecting') || 'Redirection...' : t('login.signInWithSSO') || 'Se connecter avec SSO'}
+          </button>
+
+          {/* Séparateur */}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            margin: '20px 0',
+            color: '#666',
+            fontSize: '14px'
+          }}>
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#ddd' }}></div>
+            <span style={{ padding: '0 10px' }}>{t('login.or') || 'ou'}</span>
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#ddd' }}></div>
+          </div>
+
+          {/* Formulaire LDAP classique (fallback) */}
           <div className="form-group">
             <label htmlFor="username">{t('login.username')}</label>
             <input
@@ -234,7 +276,6 @@ const Login = () => {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
-              autoFocus
               placeholder={t('login.usernamePlaceholder')}
             />
           </div>

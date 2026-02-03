@@ -166,6 +166,10 @@ app.use('/api', appsRouter);
 // Mount Auth routes
 app.use('/api', authRouter);
 
+// Mount OIDC Auth routes (SSO)
+const oidcAuthRouter = require('./routes/oidcAuth');
+app.use('/api/auth', oidcAuthRouter);
+
 // Mount Admin routes
 app.use('/api', adminRouter);
 
