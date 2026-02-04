@@ -35,6 +35,7 @@ services:
       KC_FEATURES: preview
     volumes:
       - ./import:/opt/keycloak/data/import
+      - ./themes:/opt/keycloak/themes
     ports:
       - "0.0.0.0:3005:8080"
     command:

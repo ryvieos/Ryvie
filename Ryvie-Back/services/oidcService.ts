@@ -50,6 +50,8 @@ export async function getOIDCConfig(): Promise<oauth.Configuration> {
 
   try {
     const issuerUrl = new URL(config.issuer);
+    console.log('[OIDC] Attempting discovery for:', config.issuer);
+    
     discoveredConfig = await oauth.discovery(
       issuerUrl, 
       config.clientId, 
@@ -59,10 +61,12 @@ export async function getOIDCConfig(): Promise<oauth.Configuration> {
         execute: [oauth.allowInsecureRequests]
       }
     );
-    console.log('[OIDC] Discovered issuer:', config.issuer);
+    console.log('[OIDC] Discovery successful for issuer:', config.issuer);
     return discoveredConfig;
   } catch (error: any) {
     console.error('[OIDC] Failed to discover configuration:', error.message);
+    console.error('[OIDC] Will retry on next request');
+    // Ne pas mettre en cache l'erreur - permettre de réessayer
     throw new Error('OIDC initialization failed');
   }
 }

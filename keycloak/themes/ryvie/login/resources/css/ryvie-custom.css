@@ -1,0 +1,39 @@
+/* Thème Ryvie pour Keycloak - Fond gris/blanc avec carte centrée */
+
+/* Fond gris/blanc */
+body {
+    background: linear-gradient(135deg, #f5f5f7 0%, #ffffff 100%) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Container principal */
+.login-pf-page {
+    background: transparent !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    min-height: 100vh !important;
+}
+
+/* Carte de connexion - style par défaut Keycloak avec fond blanc */
+.login-pf-page .card-pf {
+    background: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+    padding: 40px !important;
+    margin: 20px !important;
+    max-width: 450px !important;
+    width: 100% !important;
+}
+
+/* Masquer le texte "Ryvie" dans le header */
+#kc-header-wrapper,
+.kc-logo-text,
+#kc-header-wrapper span {
+    display: none !important;
+}
