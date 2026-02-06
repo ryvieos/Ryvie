@@ -12,7 +12,7 @@ Ryvie utilise un système de mise à jour simple et fiable basé sur **GitHub Re
 - ✅ **Rollback automatique** (snapshot btrfs en cas d'erreur)
 
 ---
-
+ 
 ## 📦 Architecture
 
 ### Structure des dossiers
