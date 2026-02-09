@@ -10,7 +10,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 
 const Login = () => {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { t, setLanguage } = useLanguage();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -123,6 +123,12 @@ const Login = () => {
       });
 
       if (response.data && response.data.token) {
+        // Appliquer la langue de l'utilisateur si elle est définie
+        if (response.data.user.language) {
+          setLanguage(response.data.user.language);
+          console.log(`[Login] Langue de l'utilisateur appliquée: ${response.data.user.language}`);
+        }
+        
         // Démarrer la session via le gestionnaire centralisé
         startSession({
           token: response.data.token,

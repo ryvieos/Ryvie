@@ -167,15 +167,14 @@ const buildAppUrl = (appId: string, port: number): string => {
   const appDomain = domains[appId];
   const requiresHttps = appHttpsRequired[appId] || false;
 
-  // Applications qui doivent TOUJOURS utiliser leur domaine Netbird public
-  const alwaysUseNetbirdDomain = ['rtransfer', 'rdrop'];
-  
-  // Si l'app a un domaine Netbird et doit toujours l'utiliser, forcer HTTPS
-  if (alwaysUseNetbirdDomain.includes(appId) && appDomain) {
-    console.log(`[buildAppUrl] ${appId} → https://${appDomain} (domaine Netbird forcé)`);
+  // Si l'application a un domaine Netbird public, TOUJOURS l'utiliser
+  // peu importe le mode de connexion (privé ou remote)
+  if (appDomain) {
+    console.log(`[buildAppUrl] ${appId} → https://${appDomain} (domaine Netbird public forcé)`);
     return `https://${appDomain}`;
   }
 
+  // Sinon, utiliser la logique locale/privée
   if (hostname === 'ryvie.local') {
     if (cachedLocalIP && port) {
       // Utiliser HTTPS si l'app le requiert
@@ -185,14 +184,6 @@ const buildAppUrl = (appId: string, port: number): string => {
     }
     console.log(`[buildAppUrl] ${appId} → http://ryvie.local (IP locale non disponible: ${cachedLocalIP})`);
     return 'http://ryvie.local';
-  }
-
-  if (protocol === 'https:' && appDomain) {
-    return `https://${appDomain}`;
-  }
-
-  if (isOnNetbirdTunnel() && appDomain) {
-    return `https://${appDomain}`;
   }
 
   // Forcer HTTPS si l'app le requiert

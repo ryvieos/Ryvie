@@ -606,4 +606,3 @@ export = {
   checkStoreCatalogUpdate,
   getLatestGitHubTagViaGit
 };
-

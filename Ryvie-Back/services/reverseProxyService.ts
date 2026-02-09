@@ -760,6 +760,23 @@ async function startCaddy() {
   try {
     console.log('[reverseProxyService] 🚀 Démarrage de Caddy...');
     
+    // Vérifier si le conteneur existe et est en pause
+    try {
+      const container = docker.getContainer('caddy');
+      const info = await container.inspect();
+      
+      if (info.State.Paused) {
+        console.log('[reverseProxyService] 🔓 Conteneur en pause détecté, unpause en cours...');
+        await container.unpause();
+        console.log('[reverseProxyService] ✅ Conteneur unpause avec succès');
+      }
+    } catch (inspectError: any) {
+      // Le conteneur n'existe pas ou autre erreur, on continue normalement
+      if (!inspectError.message.includes('No such container')) {
+        console.warn('[reverseProxyService] ⚠️ Erreur lors de l\'inspection:', inspectError.message);
+      }
+    }
+    
     const { stdout, stderr } = await execPromise(
       'docker compose up -d',
       { cwd: REVERSE_PROXY_DIR }

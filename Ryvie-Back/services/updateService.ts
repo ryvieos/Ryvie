@@ -166,7 +166,8 @@ async function updateRyvie() {
     return {
       success: true,
       message: `Mise à jour vers ${targetVersion} en cours. Le système va redémarrer...`,
-      needsRestart: true,
+      needsRestart: false, // Le script externe gère le redémarrage
+      externalScript: true,
       version: targetVersion
     };
     

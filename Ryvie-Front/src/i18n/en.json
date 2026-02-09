@@ -87,7 +87,9 @@
     "localNetwork": "Local Network",
     "localNetworkSubtitle": "Access from home",
     "remoteNetwork": "Remote Network",
-    "remoteNetworkSubtitle": "Access from outside"
+    "remoteNetworkSubtitle": "Access from outside",
+    "noServerDetected": "No server detected at the moment.",
+    "waitingConnection": "Waiting for connection..."
   },
   "home": {
     "title": "Home",
