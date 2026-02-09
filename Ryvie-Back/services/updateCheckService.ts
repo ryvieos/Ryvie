@@ -580,6 +580,7 @@ export = {
   checkAllUpdates,
   checkRyvieUpdate,
   checkAppsUpdates,
-  checkStoreCatalogUpdate
+  checkStoreCatalogUpdate,
+  getLatestGitHubTagViaGit
 };
 
