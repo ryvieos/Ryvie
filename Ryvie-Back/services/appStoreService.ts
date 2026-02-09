@@ -9,7 +9,6 @@ const { STORE_CATALOG, RYVIE_DIR, MANIFESTS_DIR, APPS_DIR } = require('../config
 const { getLocalIP } = require('../utils/network');
 // Importer compareVersions depuis updateCheckService pour un tri cohérent
 const { compareVersions } = require('./updateCheckService');
-const { detectMode } = require('../utils/detectMode');
 
 // Configuration
 const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
@@ -69,7 +68,7 @@ function logRateLimit(headers, context = 'API call') {
       }*/
     }
 
-    // Erreur critique si moins de 10 requêtes 
+    // Erreur critique si moins de 10 requêtes
     if (remaining < 10) {
       console.error(`[GitHub Rate Limit] 🚨 CRITIQUE: Seulement ${remaining} requêtes restantes! Reset dans ${Math.ceil((resetDate.getTime() - Date.now()) / 60000)} minutes`);
     }
@@ -296,7 +295,17 @@ async function enrichAppsWithInstalledVersions(apps) {
 async function getLatestRelease() {
   try {
     // 1. Détecter le mode actuel (dev ou prod)
-    const mode = detectMode();
+    let mode = 'prod';
+    try {
+      const pm2List = execSync('pm2 list', { encoding: 'utf8' });
+      // Vérifier si "dev" est présent dans n'importe quel nom de processus
+      if (pm2List.toLowerCase().includes('dev')) {
+        mode = 'dev';
+      }
+    } catch (_) {
+      mode = 'prod';
+    }
+    
     console.log(`[appStore] Mode détecté: ${mode}`);
     
     // 2. Récupérer tous les tags avec git ls-remote
