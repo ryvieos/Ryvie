@@ -120,16 +120,23 @@ async function updateRyvie() {
     
     console.log(`[Update] Dernière version disponible: ${targetVersion}`);
     
-    // 3. Vérifier si déjà à jour
+    // 3. Vérifier si déjà à jour (sauf si changement de mode dev↔prod)
     const currentVersion = getCurrentRyvieVersion();
     console.log(`[Update] Version actuelle: ${currentVersion}`);
     
-    if (currentVersion === targetVersion || `v${currentVersion}` === targetVersion) {
+    const isDevVersion = /dev/i.test(currentVersion || '');
+    const modeMismatch = (mode === 'prod' && isDevVersion) || (mode === 'dev' && !isDevVersion);
+    
+    if (!modeMismatch && (currentVersion === targetVersion || `v${currentVersion}` === targetVersion)) {
       return {
         success: true,
         message: `Ryvie est déjà à jour (${currentVersion})`,
         needsRestart: false
       };
+    }
+    
+    if (modeMismatch) {
+      console.log(`[Update] Mode switch détecté: version=${currentVersion} (${isDevVersion ? 'dev' : 'prod'}) → mode=${mode}, target=${targetVersion}`);
     }
     
     // 4. Lancer le script externe en arrière-plan détaché

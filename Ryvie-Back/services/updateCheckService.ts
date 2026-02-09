@@ -357,6 +357,19 @@ function getLatestGitHubTagViaGit(owner, repo, mode) {
 }
 
 /**
+ * Vérifie si la version actuelle correspond au mode (dev ou prod).
+ * Retourne true si la version est incompatible avec le mode courant.
+ * Ex: version "dev" en mode prod, ou version stable en mode dev.
+ */
+function isVersionModeMismatch(version, mode) {
+  if (!version || !mode) return false;
+  const isDevVersion = /dev/i.test(version);
+  if (mode === 'prod' && isDevVersion) return true;
+  if (mode === 'dev' && !isDevVersion) return true;
+  return false;
+}
+
+/**
  * Vérifie les mises à jour pour Ryvie
  */
 async function checkRyvieUpdate() {
@@ -371,7 +384,16 @@ async function checkRyvieUpdate() {
   // Version distante: dernier tag via git ls-remote (sans API, sans token)
   const latestVersion = getLatestGitHubTagViaGit('ryvieos', 'Ryvie', mode);
 
-  const status = compareVersions(currentVersion, latestVersion);
+  // Détecter un changement de mode (ex: version dev installée mais mode prod actif)
+  const modeMismatch = isVersionModeMismatch(currentVersion, mode);
+
+  let status = compareVersions(currentVersion, latestVersion);
+  
+  // Si la version locale ne correspond pas au mode, forcer la mise à jour
+  if (modeMismatch && latestVersion) {
+    console.log(`[updateCheck] Mode mismatch détecté: version=${currentVersion}, mode=${mode}, latestVersion=${latestVersion}`);
+    status = 'mode-switch';
+  }
   
   return {
     name: 'Ryvie',
@@ -379,8 +401,9 @@ async function checkRyvieUpdate() {
     branch: currentBranch,
     currentVersion,
     latestVersion,
-    updateAvailable: status === 'update-available',
-    status
+    updateAvailable: status === 'update-available' || status === 'mode-switch',
+    status,
+    mode
   };
 }
 

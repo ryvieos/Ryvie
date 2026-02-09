@@ -7,7 +7,7 @@ function detectMode() {
   try {
     const pm2List = execSync('pm2 list', { encoding: 'utf8' });
     if (pm2List.toLowerCase().includes('dev')) {
-      return 'dev';
+      return 'dev'; //'dev'
     }
   } catch (_) {}
   return 'prod';
