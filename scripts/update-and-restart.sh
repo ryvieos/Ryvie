@@ -216,6 +216,7 @@ log "  Permissions restaurs ($CURRENT_USER:$CURRENT_GROUP)"
 if [[ "$TARGET_VERSION" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9._-]*) ]]; then
   SEMVER="${BASH_REMATCH[1]}"
   log "  Mise jour de package.json avec version $SEMVER..."
+fi
 cat > "$RYVIE_DIR/package.json" <<EOF
 {
   "name": "ryvie",
