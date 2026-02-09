@@ -259,7 +259,7 @@ fi
 
 log "✅ Script de démarrage terminé avec succès"
 
-# Vérifier que les node_modules sont bien installés
+# Vérifier que les node_modules sont bien installés 
 log "🔍 Vérification de l'installation des dépendances..."
 if [ ! -d "$RYVIE_DIR/Ryvie-Back/node_modules" ]; then
   log "❌ ERREUR: node_modules du backend non installé!"
