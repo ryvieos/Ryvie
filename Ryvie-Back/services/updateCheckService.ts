@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const { APPS_DIR, RYVIE_DIR } = require('../config/paths');
+const { detectMode } = require('../utils/detectMode');
 require('dotenv').config();
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -237,17 +238,7 @@ function getRemoteLatestTag(dir) {
 function getLatestCatalogTag() {
   try {
     // 1. Détecter le mode actuel (dev ou prod)
-    let mode = 'prod';
-    try {
-      const pm2List = execSync('pm2 list', { encoding: 'utf8' });
-      // Vérifier si "dev" est présent dans n'importe quel nom de processus
-      if (pm2List.toLowerCase().includes('dev')) {
-        mode = 'dev';
-      }
-    } catch (_) {
-      mode = 'prod';
-    }
-    
+    const mode = detectMode();
     console.log(`[updateCheck] Mode détecté: ${mode}`);
     
     const repoUrl = 'https://github.com/ryvieos/Ryvie-Apps.git';
@@ -319,27 +310,72 @@ function getLatestCatalogTag() {
 }
 
 /**
- * Vérifie les mises à jour pour Ryvie (basé sur tags Git locaux/distants)
+ * Récupère le dernier tag d'un repo GitHub via git ls-remote (sans API, sans token)
+ * mode = 'prod' : tags stables (sans "dev"), ex: v0.1.0-alpha
+ * mode = 'dev'  : tags prerelease (avec "dev"), ex: v0.1.0-alpha-dev.4
+ */
+function getLatestGitHubTagViaGit(owner, repo, mode) {
+  try {
+    const repoUrl = `https://github.com/${owner}/${repo}.git`;
+    const out = execSync(`git ls-remote --tags --refs ${repoUrl}`, { encoding: 'utf8', timeout: 15000 });
+    const tags = out
+      .split('\n')
+      .map(l => (l.split('\t')[1] || '').replace('refs/tags/', '').trim())
+      .filter(Boolean);
+
+    if (tags.length === 0) {
+      console.log(`[updateCheck] Aucun tag trouvé pour ${owner}/${repo}`);
+      return null;
+    }
+
+    // Filtrer selon le mode: "dev" dans le tag = prerelease, sinon = stable
+    const filtered = mode === 'dev'
+      ? tags.filter(t => /dev/.test(t))
+      : tags.filter(t => !/dev/.test(t));
+
+    if (filtered.length === 0) {
+      console.log(`[updateCheck] Aucun tag ${mode === 'dev' ? 'prerelease' : 'stable'} trouvé pour ${owner}/${repo}`);
+      return null;
+    }
+
+    // Trier avec compareVersions pour trouver le plus récent
+    const sorted = filtered.sort((a, b) => {
+      const res = compareVersions(a, b);
+      if (res === null) return 0;
+      if (res === 'update-available') return -1;
+      if (res === 'ahead') return 1;
+      return 0;
+    });
+
+    const latest = sorted[sorted.length - 1] || null;
+    console.log(`[updateCheck] Dernier tag ${mode} pour ${owner}/${repo}: ${latest}`);
+    return latest;
+  } catch (error: any) {
+    console.error(`[updateCheck] Erreur ls-remote pour ${owner}/${repo}:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Vérifie les mises à jour pour Ryvie
  */
 async function checkRyvieUpdate() {
   const currentBranch = getCurrentBranch(RYVIE_DIR);
 
-  // Version locale: source de vérité = package.json (pas git)
-  const currentVersion = getCurrentRyvieVersion();
-  const remoteTag = getRemoteLatestTag(RYVIE_DIR);
+  // Détecter le mode (dev ou prod)
+  const mode = detectMode();
 
-  // Fallback GitHub API si pas de remote tag récupéré (ex: pas de remote, erreurs réseau)
-  let latestVersion = remoteTag;
-  if (!latestVersion) {
-    const fromRelease = await getLatestGitHubReleaseForBranch('maisonnavejul', 'Ryvie', currentBranch);
-    latestVersion = fromRelease || await getLatestGitHubTag('maisonnavejul', 'Ryvie');
-  }
+  // Version locale: source de vérité = package.json
+  const currentVersion = getCurrentRyvieVersion();
+
+  // Version distante: dernier tag via git ls-remote (sans API, sans token)
+  const latestVersion = getLatestGitHubTagViaGit('ryvieos', 'Ryvie', mode);
 
   const status = compareVersions(currentVersion, latestVersion);
   
   return {
     name: 'Ryvie',
-    repo: 'maisonnavejul/Ryvie',
+    repo: 'ryvieos/Ryvie',
     branch: currentBranch,
     currentVersion,
     latestVersion,

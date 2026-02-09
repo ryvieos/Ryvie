@@ -213,7 +213,7 @@ find "$RYVIE_DIR/scripts" -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null 
 log "  Permissions restaurs ($CURRENT_USER:$CURRENT_GROUP)"
 
 # 8. Mettre jour le package.json racine avec la version
-if [[ "$TARGET_VERSION" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+if [[ "$TARGET_VERSION" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9._-]*) ]]; then
   SEMVER="${BASH_REMATCH[1]}"
   log "  Mise jour de package.json avec version $SEMVER..."
 
