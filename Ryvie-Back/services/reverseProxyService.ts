@@ -21,7 +21,7 @@ const RYVIE_RDRIVE_COMPOSE_PATH = '/data/apps/Ryvie-rDrive/tdrive/docker-compose
 
 // Templates de configuration
 function generateDockerComposeTemplate(ports = []) {
-  const defaultPorts = ['80:80', '443:443'];
+  const defaultPorts = ['80:80', '443:443', '3005:3005'];
   const allPorts = [...defaultPorts, ...ports];
   
   let template = `version: "3.8"
@@ -44,6 +44,12 @@ services:
       - /data/config/reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - /data/config/reverse-proxy/data:/data
       - /data/config/reverse-proxy/config:/config
+    networks:
+      - ryvie-network
+
+networks:
+  ryvie-network:
+    external: true
 `;
   
   return template;
@@ -459,12 +465,7 @@ function generateAppProxyConfig(appId, proxyConfig) {
  */
 function generateCaddyfileContent() {
   return `{
-  local_certs
-}
-
-# Rediriger HTTPS -> HTTP (évite le forçage HTTPS local)
-https://ryvie.local {
-  redir http://ryvie.local{uri} permanent
+  auto_https disable_redirects
 }
 
 # Site local
@@ -492,12 +493,13 @@ http://ryvie.local {
   }
 }
 
-# --- KEYCLOAK SSO ---
-ryvie.local:3005 {
+# --- KEYCLOAK OIDC (toutes origines, HTTP pur) ---
+http://:3005 {
   reverse_proxy keycloak:8080 {
     header_up Host {host}
     header_up X-Real-IP {remote_host}
-    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-Proto http
+    header_up X-Forwarded-Port 3005
     header_up X-Forwarded-Host {host}
   }
 }

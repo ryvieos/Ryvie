@@ -329,7 +329,6 @@
           "attributes": {}
         }
       ],
-      "ryvie-rpictures": [],
       "security-admin-console": [],
       "admin-cli": [],
       "account-console": [],
@@ -857,11 +856,10 @@
       "clientAuthenticatorType": "client-secret",
       "secret": "ryvie-dashboard-secret-change-me",
       "redirectUris": [
-        "http://*:3000/*",
-        "http://*:3000/api/auth/callback"
+        "*"
       ],
       "webOrigins": [
-        "http://*:3000"
+        "*"
       ],
       "notBefore": 0,
       "bearerOnly": false,
@@ -875,7 +873,7 @@
       "protocol": "openid-connect",
       "attributes": {
         "realm_client": "false",
-        "post.logout.redirect.uris": "http://ryvie.local/*##http://localhost:3000/*##http://10.128.255.101:3000/*##http://*:3000/*"
+        "post.logout.redirect.uris": "+"
       },
       "authenticationFlowBindingOverrides": {},
       "fullScopeAllowed": true,

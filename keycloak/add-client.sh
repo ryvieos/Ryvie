@@ -34,53 +34,63 @@ NEW_CLIENT=$(cat <<EOF
   "clientAuthenticatorType": "client-secret",
   "secret": "$CLIENT_SECRET",
   "redirectUris": [
-    "http://ryvie.local:$PORT/*",
-    "http://ryvie.local:$PORT/api/auth/callback",
-    "http://*:$PORT/*",
-    "http://*:$PORT/api/auth/callback"
+    "*"
   ],
   "webOrigins": [
-    "http://ryvie.local:$PORT",
-    "http://*:$PORT"
+    "*"
   ],
   "standardFlowEnabled": true,
   "directAccessGrantsEnabled": true,
   "publicClient": false,
   "protocol": "openid-connect",
   "attributes": {
-    "post.logout.redirect.uris": "http://ryvie.local:$PORT##http://ryvie.local:$PORT/login"
+    "post.logout.redirect.uris": "+"
   }
 }
 EOF
 )
 
-# Vérifier si le client existe déjà
+# Si le client existe déjà, le supprimer automatiquement
 if jq -e ".clients[] | select(.clientId == \"$CLIENT_ID\")" "$REALM_FILE" > /dev/null 2>&1; then
-    echo "⚠️  Le client '$CLIENT_ID' existe déjà dans la configuration."
-    echo "   Voulez-vous le remplacer ? (y/N)"
-    read -r response
-    if [[ ! "$response" =~ ^[Yy]$ ]]; then
-        echo "❌ Annulé."
-        exit 0
-    fi
-    
-    # Supprimer l'ancien client
+    echo "⚠️  Le client '$CLIENT_ID' existe déjà — remplacement automatique."
     jq "del(.clients[] | select(.clientId == \"$CLIENT_ID\"))" "$REALM_FILE" > "$REALM_FILE.tmp"
     mv "$REALM_FILE.tmp" "$REALM_FILE"
-    echo "🗑️  Ancien client supprimé."
+    echo "🗑️  Ancien client supprimé du realm JSON."
 fi
 
 # Ajouter le nouveau client
 jq ".clients += [$NEW_CLIENT]" "$REALM_FILE" > "$REALM_FILE.tmp"
 mv "$REALM_FILE.tmp" "$REALM_FILE"
 
-echo "✅ Client '$CLIENT_ID' ajouté avec succès !"
+echo "✅ Client '$CLIENT_ID' ajouté au fichier realm JSON."
+echo ""
+
+# Appliquer en live via l'API admin Keycloak (si le conteneur tourne)
+if docker ps --filter "name=keycloak" --format "{{.Names}}" 2>/dev/null | grep -q "^keycloak$"; then
+    echo "🔄 Application en live via l'API admin Keycloak..."
+    docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master \
+        --user admin --password "${KEYCLOAK_ADMIN_PASSWORD:-changeme123}" 2>/dev/null
+
+    # Vérifier si le client existe déjà dans Keycloak
+    EXISTING_ID=$(docker exec keycloak /opt/keycloak/bin/kcadm.sh get clients -r ryvie \
+        --fields id,clientId 2>/dev/null | grep -B1 "\"$CLIENT_ID\"" | grep '"id"' | sed 's/.*: "\(.*\)".*/\1/')
+
+    if [ -n "$EXISTING_ID" ]; then
+        docker exec keycloak /opt/keycloak/bin/kcadm.sh delete "clients/$EXISTING_ID" -r ryvie 2>/dev/null
+        echo "   🗑️  Ancien client supprimé de Keycloak."
+    fi
+
+    echo "$NEW_CLIENT" | docker exec -i keycloak /opt/keycloak/bin/kcadm.sh create clients -r ryvie -f - 2>/dev/null
+    echo "   ✅ Client créé en live dans Keycloak."
+else
+    echo "⚠️  Keycloak n'est pas en cours d'exécution."
+    echo "   Les changements seront appliqués au prochain démarrage."
+    echo "   docker compose -f /opt/Ryvie/keycloak/docker-compose.yml restart keycloak"
+fi
+
 echo ""
 echo "📋 Configuration pour votre application :"
 echo "   OIDC_ISSUER=http://ryvie.local:3005/realms/ryvie"
 echo "   OIDC_CLIENT_ID=$CLIENT_ID"
 echo "   OIDC_CLIENT_SECRET=$CLIENT_SECRET"
-echo "   OIDC_REDIRECT_URI=http://ryvie.local:$PORT/api/auth/callback"
-echo ""
-echo "🔄 Redémarrez Keycloak pour appliquer les changements :"
-echo "   docker compose -f /opt/Ryvie/keycloak/docker-compose.yml restart keycloak"
