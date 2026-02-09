@@ -69,8 +69,6 @@ const Login = () => {
         console.log('[Login] Utilisateur existant - redirection automatique vers SSO');
         setIsRedirectingToSSO(true);
         setLoading(true);
-        setMessage(t('login.redirectingToSSO') || 'Redirection vers le SSO...');
-        setMessageType('info');
         window.location.href = `${serverUrl}/api/auth/login`;
         return;
       } catch (error) {
@@ -248,12 +246,11 @@ const Login = () => {
       <div className="login-card">
         <div className="login-header">
           <h1>Ryvie</h1>
-          <p>{t('login.subtitle')}</p>
         </div>
 
         <div className="login-redirect">
           {(loading || isRedirectingToSSO) && <div className="spinner" />}
-          {message && (
+          {message && messageType === 'error' && (
             <div className={`message message-${messageType}`}>
               {message}
             </div>
