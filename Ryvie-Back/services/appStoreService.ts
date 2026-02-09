@@ -69,7 +69,7 @@ function logRateLimit(headers, context = 'API call') {
       }*/
     }
 
-    // Erreur critique si moins de 10 requêtes
+    // Erreur critique si moins de 10 requêtes 
     if (remaining < 10) {
       console.error(`[GitHub Rate Limit] 🚨 CRITIQUE: Seulement ${remaining} requêtes restantes! Reset dans ${Math.ceil((resetDate.getTime() - Date.now()) / 60000)} minutes`);
     }
