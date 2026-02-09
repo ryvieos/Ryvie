@@ -11,8 +11,6 @@ KEYCLOAK_DB_PASSWORD=keycloak_db_password_changeme
 # OIDC pour Ryvie (mode LOCAL - port 3005)
 OIDC_CLIENT_ID=ryvie-dashboard
 OIDC_CLIENT_SECRET=ryvie-dashboard-secret-change-me
-OIDC_ISSUER=http://ryvie.local:3005/realms/ryvie
-OIDC_REDIRECT_URI=http://ryvie.local/api/auth/callback
 
 # Frontend URL
 FRONTEND_URL=http://ryvie.local

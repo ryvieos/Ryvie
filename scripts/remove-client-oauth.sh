@@ -12,14 +12,14 @@ if [ -z "$CLIENT_ID" ]; then
     echo "Example: $0 ryvie-rpictures"
     echo ""
     echo "Clients actuels :"
-    REALM_FILE="/opt/Ryvie/keycloak/import/ryvie-realm.json"
+    REALM_FILE="/data/config/keycloak/import/ryvie-realm.json"
     if [ -f "$REALM_FILE" ]; then
         jq -r '.clients[] | select(.clientId | startswith("ryvie-")) | "   - \(.clientId) (\(.name // "N/A"))"' "$REALM_FILE"
     fi
     exit 1
 fi
 
-REALM_FILE="/opt/Ryvie/keycloak/import/ryvie-realm.json"
+REALM_FILE="/data/config/keycloak/import/ryvie-realm.json"
 
 # Vérifier que le fichier realm existe
 if [ ! -f "$REALM_FILE" ]; then

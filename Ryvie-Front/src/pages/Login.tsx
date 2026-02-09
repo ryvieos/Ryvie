@@ -17,6 +17,7 @@ const Login = () => {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info'); // 'info', 'success', 'error'
   const [accessMode, setAccessMode] = useState('private');
+  const [isRedirectingToSSO, setIsRedirectingToSSO] = useState(false);
 
   useEffect(() => {
     const initMode = async () => {
@@ -61,10 +62,24 @@ const Login = () => {
         if (response.data && response.data.isFirstTime) {
           console.log('[Login] Première connexion détectée - redirection vers FirstTimeSetup');
           navigate('/first-time-setup', { replace: true });
+          return;
         }
+
+        // 5) Pas première connexion → rediriger directement vers SSO Keycloak
+        console.log('[Login] Utilisateur existant - redirection automatique vers SSO');
+        setIsRedirectingToSSO(true);
+        setLoading(true);
+        setMessage(t('login.redirectingToSSO') || 'Redirection vers le SSO...');
+        setMessageType('info');
+        window.location.href = `${serverUrl}/api/auth/login`;
+        return;
       } catch (error) {
         console.error('[Login] Erreur lors de la vérification de la première connexion:', error);
-        // En cas d'erreur, on continue normalement vers la page de login
+        // En cas d'erreur, on reste sur une UI minimaliste (spinner + message)
+        setIsRedirectingToSSO(false);
+        setLoading(false);
+        setMessage(t('login.serverUnavailable') || 'Serveur indisponible. Rafraîchis la page.');
+        setMessageType('error');
       }
     };
 
@@ -235,80 +250,14 @@ const Login = () => {
           <h1>Ryvie</h1>
           <p>{t('login.subtitle')}</p>
         </div>
-        
-        {message && (
-          <div className={`message message-${messageType}`}>
-            {message}
-          </div>
-        )}
-        
-        <form onSubmit={handleLogin} className="login-form">
-          {/* Bouton SSO principal */}
-          <button 
-            type="button"
-            onClick={handleSSOLogin}
-            className="login-button sso-button"
-            disabled={loading}
-            style={{ marginBottom: '20px', backgroundColor: '#4CAF50' }}
-          >
-            {loading ? t('login.redirecting') || 'Redirection...' : t('login.signInWithSSO') || 'Se connecter avec SSO'}
-          </button>
 
-          {/* Séparateur */}
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            margin: '20px 0',
-            color: '#666',
-            fontSize: '14px'
-          }}>
-            <div style={{ flex: 1, height: '1px', backgroundColor: '#ddd' }}></div>
-            <span style={{ padding: '0 10px' }}>{t('login.or') || 'ou'}</span>
-            <div style={{ flex: 1, height: '1px', backgroundColor: '#ddd' }}></div>
-          </div>
-
-          {/* Formulaire LDAP classique (fallback) */}
-          <div className="form-group">
-            <label htmlFor="username">{t('login.username')}</label>
-            <input
-              type="text"
-              id="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={loading}
-              placeholder={t('login.usernamePlaceholder')}
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="password">{t('login.password')}</label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-              placeholder={t('login.passwordPlaceholder')}
-            />
-          </div>
-          
-          <button 
-            type="submit" 
-            className="login-button"
-            disabled={loading}
-          >
-            {loading ? t('login.signingIn') : t('login.signIn')}
-          </button>
-        </form>
-        
-        <div className="access-mode-toggle">
-          <span>{t('login.accessMode')}: </span>
-          <button 
-            onClick={toggleAccessMode}
-            className={`toggle-button ${accessMode === 'remote' ? 'toggle-remote' : 'toggle-private'}`}
-          >
-            {accessMode === 'remote' ? 'Remote' : 'Privé'}
-          </button>
+        <div className="login-redirect">
+          {(loading || isRedirectingToSSO) && <div className="spinner" />}
+          {message && (
+            <div className={`message message-${messageType}`}>
+              {message}
+            </div>
+          )}
         </div>
       </div>
     </div>

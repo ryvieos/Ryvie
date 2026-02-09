@@ -16,7 +16,7 @@ if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_NAME" ] || [ -z "$PORT" ]; then
     exit 1
 fi
 
-REALM_FILE="/opt/Ryvie/keycloak/import/ryvie-realm.json"
+REALM_FILE="/data/config/keycloak/import/ryvie-realm.json"
 
 echo "🔧 Ajout du client OAuth : $CLIENT_ID"
 echo "   Nom: $CLIENT_NAME"

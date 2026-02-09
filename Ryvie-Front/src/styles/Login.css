@@ -32,6 +32,28 @@
   margin: 0;
 }
 
+ .login-redirect {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 120px;
+ }
+
+ .spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid #e8f0fe;
+  border-top-color: #1a73e8;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+ }
+
+ @keyframes spin {
+  to { transform: rotate(360deg); }
+ }
+
 .login-form {
   display: flex;
   flex-direction: column;

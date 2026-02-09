@@ -332,7 +332,6 @@
       "security-admin-console": [],
       "admin-cli": [],
       "account-console": [],
-      "ryvie-dashboard": [],
       "broker": [
         {
           "id": "63f0cc87-a287-444c-a989-ce7469542d4e",
@@ -846,55 +845,6 @@
       ]
     },
     {
-      "id": "4ecc37bc-69d9-4aac-a31a-273fc99ac14e",
-      "clientId": "ryvie-dashboard",
-      "name": "Ryvie Dashboard",
-      "description": "Main Ryvie application",
-      "surrogateAuthRequired": false,
-      "enabled": true,
-      "alwaysDisplayInConsole": false,
-      "clientAuthenticatorType": "client-secret",
-      "secret": "ryvie-dashboard-secret-change-me",
-      "redirectUris": [
-        "*"
-      ],
-      "webOrigins": [
-        "*"
-      ],
-      "notBefore": 0,
-      "bearerOnly": false,
-      "consentRequired": false,
-      "standardFlowEnabled": true,
-      "implicitFlowEnabled": false,
-      "directAccessGrantsEnabled": true,
-      "serviceAccountsEnabled": false,
-      "publicClient": false,
-      "frontchannelLogout": false,
-      "protocol": "openid-connect",
-      "attributes": {
-        "realm_client": "false",
-        "post.logout.redirect.uris": "+"
-      },
-      "authenticationFlowBindingOverrides": {},
-      "fullScopeAllowed": true,
-      "nodeReRegistrationTimeout": -1,
-      "defaultClientScopes": [
-        "web-origins",
-        "acr",
-        "roles",
-        "profile",
-        "basic",
-        "email"
-      ],
-      "optionalClientScopes": [
-        "address",
-        "phone",
-        "offline_access",
-        "organization",
-        "microprofile-jwt"
-      ]
-    },
-    {
       "id": "8f327700-35f4-4f1a-b4bc-f759a3b79984",
       "clientId": "security-admin-console",
       "name": "${client_security-admin-console}",
@@ -962,6 +912,27 @@
         "organization",
         "microprofile-jwt"
       ]
+    },
+    {
+      "clientId": "ryvie-dashboard",
+      "name": "Ryvie Dashboard",
+      "description": "OAuth client for Ryvie Dashboard",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "07fef94c49812afd0ad1c0ff95a8a9e54adacafdd03b6ed089b53235662b0c34",
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "post.logout.redirect.uris": "+"
+      }
     }
   ],
   "clientScopes": [

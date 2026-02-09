@@ -148,6 +148,58 @@ router.get('/callback', async (req: any, res: any) => {
   }
 });
 
+// Switch user step 1: redirect browser to KC logout (destroys session cookie),
+// then KC redirects to /api/auth/switch-login with login_hint
+router.get('/switch', async (req: any, res: any) => {
+  try {
+    const origin = getOriginFromRequest(req);
+    const loginHint = req.query.login_hint || '';
+    console.log('[OIDC] Switch user - origin:', origin, 'login_hint:', loginHint || '(none)');
+    
+    const url = new URL(origin);
+    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
+    
+    // Redirect to KC logout with client_id (post.logout.redirect.uris=+ allows any redirect)
+    // This destroys the KC session cookie in the browser
+    const postLogoutRedirect = `${origin}/api/auth/switch-login?login_hint=${encodeURIComponent(loginHint)}`;
+    const logoutUrl = `${issuer}/protocol/openid-connect/logout?client_id=ryvie-dashboard&post_logout_redirect_uri=${encodeURIComponent(postLogoutRedirect)}`;
+    
+    console.log('[OIDC] Switch - logout then redirect:', logoutUrl);
+    res.redirect(logoutUrl);
+  } catch (error: any) {
+    console.error('[OIDC] Switch error:', error.message);
+    res.status(500).json({ error: 'Failed to initiate user switch' });
+  }
+});
+
+// Switch user step 2: after KC logout, initiate fresh login with login_hint
+router.get('/switch-login', async (req: any, res: any) => {
+  try {
+    const origin = getOriginFromRequest(req);
+    const loginHint = req.query.login_hint || '';
+    console.log('[OIDC] Switch-login - origin:', origin, 'login_hint:', loginHint || '(none)');
+    
+    await getOIDCConfig();
+
+    const state = generateState();
+    const nonce = generateNonce();
+
+    stateStore.set(state, { nonce, timestamp: Date.now(), origin });
+
+    const authUrl = await generateAuthUrl(state, nonce, origin);
+    let switchUrl = authUrl;
+    if (loginHint) {
+      switchUrl += `&login_hint=${encodeURIComponent(loginHint)}`;
+    }
+    
+    console.log('[OIDC] Switch-login - redirecting to Keycloak:', switchUrl);
+    res.redirect(switchUrl);
+  } catch (error: any) {
+    console.error('[OIDC] Switch-login error:', error.message);
+    res.status(500).json({ error: 'Failed to initiate user switch login' });
+  }
+});
+
 router.get('/logout', async (req: any, res: any) => {
   try {
     const idToken = req.query.id_token;

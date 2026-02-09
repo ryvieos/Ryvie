@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   keycloak-postgres:
@@ -9,7 +8,7 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_password}
     volumes:
-      - keycloak-postgres-data:/var/lib/postgresql/data
+      - /data/config/keycloak/postgres:/var/lib/postgresql/data
     networks:
       - ryvie-network
     restart: unless-stopped
@@ -18,8 +17,8 @@ services:
     image: quay.io/keycloak/keycloak:26.3
     container_name: keycloak
     environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/keycloak
@@ -34,8 +33,8 @@ services:
       
       KC_FEATURES: preview
     volumes:
-      - ./import:/opt/keycloak/data/import
-      - ./themes:/opt/keycloak/themes
+      - /data/config/keycloak/import:/opt/keycloak/data/import
+      - /data/config/keycloak/themes:/opt/keycloak/themes
     expose:
       - "8080"
     command:
@@ -47,9 +46,6 @@ services:
     networks:
       - ryvie-network
     restart: unless-stopped
-
-volumes:
-  keycloak-postgres-data:
 
 networks:
   ryvie-network:
