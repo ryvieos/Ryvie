@@ -213,16 +213,17 @@ find "$RYVIE_DIR/scripts" -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null 
 log "  Permissions restaurs ($CURRENT_USER:$CURRENT_GROUP)"
 
 # 8. Mettre jour le package.json racine avec la version
-# Enlever le 'v' initial mais garder tout le reste (y compris -alpha, -beta, etc.)
-SEMVER="${TARGET_VERSION#v}"
-log "  Mise jour de package.json avec version $SEMVER..."
+if [[ "$TARGET_VERSION" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9._-]*) ]]; then
+  SEMVER="${BASH_REMATCH[1]}"
+  log "  Mise jour de package.json avec version $SEMVER..."
 
-cat > "$RYVIE_DIR/package.json" <<EOF
+  cat > "$RYVIE_DIR/package.json" <<EOF
 {
   "name": "ryvie",
   "version": "$SEMVER"
 }
 EOF
+fi
 
 # 8.5. Patcher prod.sh pour s'assurer qu'il installe les devDependencies
 log "🔧 Patch de prod.sh pour compatibilité..."
