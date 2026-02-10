@@ -5,6 +5,8 @@ const axios = require('axios');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { APPS_DIR, RYVIE_DIR } = require('../config/paths');
+const { detectMode } = require('../utils/detectMode');
+const { getLatestGitHubTagViaGit } = require('./updateCheckService');
 require('dotenv').config();
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -104,24 +106,17 @@ async function updateRyvie() {
   try {
     console.log('[Update] Début de la mise à jour de Ryvie...');
     
-    // 1. Récupérer la dernière release depuis GitHub
-    console.log('[Update] 📥 Récupération de la dernière release...');
-    const headers: any = {
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'Ryvie-Update-System'
-    };
-    
-    if (GITHUB_TOKEN) {
-      headers['Authorization'] = `token ${GITHUB_TOKEN}`;
+    // 1. Détecter le mode (dev ou prod)
+    const mode = detectMode();
+    console.log(`[Update] Mode détecté: ${mode}`);
+ 
+    // 2. Récupérer le dernier tag via git ls-remote (sans API, sans token)
+    console.log('[Update] 📥 Récupération de la dernière version...');
+    const targetVersion = getLatestGitHubTagViaGit('ryvieos', 'Ryvie', mode);
+ 
+    if (!targetVersion) {
+      throw new Error('Impossible de récupérer la dernière version depuis GitHub');
     }
-    
-    const releaseResponse = await axios.get(
-      'https://api.github.com/repos/maisonnavejul/Ryvie/releases/latest',
-      { headers, timeout: 60000 }
-    );
-    
-    const release = releaseResponse.data;
-    const targetVersion = release.tag_name;
     
     console.log(`[Update] Dernière version disponible: ${targetVersion}`);
     
@@ -129,7 +124,10 @@ async function updateRyvie() {
     const currentVersion = getCurrentRyvieVersion();
     console.log(`[Update] Version actuelle: ${currentVersion}`);
     
-    if (currentVersion === targetVersion) {
+    const isDevVersion = /dev/i.test(currentVersion || '');
+    const modeMismatch = (mode === 'prod' && isDevVersion) || (mode === 'dev' && !isDevVersion);
+ 
+    if (!modeMismatch && (currentVersion === targetVersion || `v${currentVersion}` === targetVersion)) {
       return {
         success: true,
         message: `Ryvie est déjà à jour (${currentVersion})`,
@@ -137,18 +135,9 @@ async function updateRyvie() {
       };
     }
     
-    // 3. Détecter le mode actuel (dev ou prod)
-    let mode = 'prod';
-    try {
-      const pm2List = execSync('pm2 list', { encoding: 'utf8' });
-      if (pm2List.includes('ryvie-backend-dev')) {
-        mode = 'dev';
-      }
-    } catch (_) {
-      mode = 'prod';
+    if (modeMismatch) {
+      console.log(`[Update] Mode switch détecté: version=${currentVersion} (${isDevVersion ? 'dev' : 'prod'}) → mode=${mode}, target=${targetVersion}`);
     }
-    
-    console.log(`[Update] Mode détecté: ${mode}`);
     
     // 4. Lancer le script externe en arrière-plan détaché
     const updateScript = path.join(RYVIE_DIR, 'scripts/update-and-restart.sh');
