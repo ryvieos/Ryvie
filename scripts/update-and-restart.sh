@@ -216,13 +216,14 @@ log "  Permissions restaurs ($CURRENT_USER:$CURRENT_GROUP)"
 if [[ "$TARGET_VERSION" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9._-]*) ]]; then
   SEMVER="${BASH_REMATCH[1]}"
   log "  Mise jour de package.json avec version $SEMVER..."
-fi
-cat > "$RYVIE_DIR/package.json" <<EOF
+
+  cat > "$RYVIE_DIR/package.json" <<EOF
 {
   "name": "ryvie",
   "version": "$SEMVER"
 }
 EOF
+fi
 
 # 8.5. Patcher prod.sh pour s'assurer qu'il installe les devDependencies
 log "🔧 Patch de prod.sh pour compatibilité..."
@@ -259,7 +260,7 @@ fi
 
 log "✅ Script de démarrage terminé avec succès"
 
-# Vérifier que les node_modules sont bien installés 
+# Vérifier que les node_modules sont bien installés
 log "🔍 Vérification de l'installation des dépendances..."
 if [ ! -d "$RYVIE_DIR/Ryvie-Back/node_modules" ]; then
   log "❌ ERREUR: node_modules du backend non installé!"
