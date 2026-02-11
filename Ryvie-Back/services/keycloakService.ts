@@ -2,7 +2,7 @@ export {};
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 
 const KEYCLOAK_DATA_DIR = '/data/config/keycloak';
 const KEYCLOAK_CODE_DIR = '/opt/Ryvie/keycloak';
@@ -16,6 +16,8 @@ const BACKEND_ENV_DATA = '/data/config/backend-view/.env';
 const BACKEND_ENV_CODE = '/opt/Ryvie/Ryvie-Back/.env';
 
 const DASHBOARD_CLIENT_ID = 'ryvie-dashboard';
+const MANIFESTS_DIR = '/data/config/manifests';
+const ADD_CLIENT_SCRIPT = path.join('/opt/Ryvie/scripts', 'add-client-oauth.sh');
 
 const REQUIRED_DIRS = [
   KEYCLOAK_DATA_DIR,
@@ -119,13 +121,30 @@ function ensureDirectories(): void {
  * 2. Si /opt/Ryvie/keycloak/.env existe et valide → copie vers /data/config/keycloak/
  * 3. Sinon → génère dans /data/config/keycloak/ et copie vers /opt/Ryvie/keycloak/
  */
+function filesAreIdentical(fileA: string, fileB: string): boolean {
+  try {
+    if (!fs.existsSync(fileA) || !fs.existsSync(fileB)) return false;
+    return fs.readFileSync(fileA, 'utf8') === fs.readFileSync(fileB, 'utf8');
+  } catch {
+    return false;
+  }
+}
+
 function ensureEnvFile(): void {
   if (envHasRequiredKeys(KEYCLOAK_ENV_DATA)) {
-    fs.copyFileSync(KEYCLOAK_ENV_DATA, KEYCLOAK_ENV_CODE);
-    console.log(`[keycloak] ✅ .env copié depuis ${KEYCLOAK_ENV_DATA}`);
+    if (filesAreIdentical(KEYCLOAK_ENV_DATA, KEYCLOAK_ENV_CODE)) {
+      console.log('[keycloak] ✅ .env déjà synchronisé');
+    } else {
+      fs.copyFileSync(KEYCLOAK_ENV_DATA, KEYCLOAK_ENV_CODE);
+      console.log(`[keycloak] ✅ .env copié depuis ${KEYCLOAK_ENV_DATA}`);
+    }
   } else if (envHasRequiredKeys(KEYCLOAK_ENV_CODE)) {
-    fs.copyFileSync(KEYCLOAK_ENV_CODE, KEYCLOAK_ENV_DATA);
-    console.log(`[keycloak] ✅ .env copié depuis ${KEYCLOAK_ENV_CODE}`);
+    if (filesAreIdentical(KEYCLOAK_ENV_CODE, KEYCLOAK_ENV_DATA)) {
+      console.log('[keycloak] ✅ .env déjà synchronisé');
+    } else {
+      fs.copyFileSync(KEYCLOAK_ENV_CODE, KEYCLOAK_ENV_DATA);
+      console.log(`[keycloak] ✅ .env copié depuis ${KEYCLOAK_ENV_CODE}`);
+    }
   } else {
     generateEnvFile(KEYCLOAK_ENV_DATA);
     fs.copyFileSync(KEYCLOAK_ENV_DATA, KEYCLOAK_ENV_CODE);
@@ -139,6 +158,10 @@ function ensureEnvFile(): void {
 function syncRealmJson(): void {
   if (!fs.existsSync(REALM_SOURCE)) {
     console.warn(`[keycloak] ⚠️  Realm JSON source introuvable : ${REALM_SOURCE}`);
+    return;
+  }
+  if (filesAreIdentical(REALM_SOURCE, REALM_DEST)) {
+    console.log('[keycloak] ✅ Realm JSON déjà à jour');
     return;
   }
   fs.copyFileSync(REALM_SOURCE, REALM_DEST);
@@ -380,10 +403,16 @@ function setEnvVar(filePath: string, key: string, value: string): void {
   }
 
   const regex = new RegExp(`^${key}=.*$`, 'm');
+  const exactLine = `${key}=${value}`;
+  // Si la valeur est déjà correcte, ne rien faire
+  if (regex.test(content) && content.match(regex)![0] === exactLine) {
+    return;
+  }
+
   if (regex.test(content)) {
-    content = content.replace(regex, `${key}=${value}`);
+    content = content.replace(regex, exactLine);
   } else {
-    content = content.trimEnd() + `\n${key}=${value}\n`;
+    content = content.trimEnd() + `\n${exactLine}\n`;
   }
 
   try {
@@ -507,6 +536,9 @@ async function ensureKeycloakRunning(): Promise<{ success: boolean; alreadyRunni
     // 8. S'assurer que le thème ryvie est appliqué au realm
     ensureRealmTheme();
 
+    // 9. Provisionner les clients SSO des apps (manifests avec sso: true)
+    ensureAppSSOClients();
+
     return { success: true, alreadyRunning: !wasStarted, started: wasStarted };
   } catch (err: any) {
     console.error('[keycloak] ❌ Erreur lors du setup Keycloak:', err.message);
@@ -542,6 +574,218 @@ function ensureRealmTheme(): void {
     console.log('[keycloak] ✅ Thème login ryvie + locale FR appliqués au realm');
   } catch (err: any) {
     console.warn('[keycloak] ⚠️  Impossible de configurer le thème:', err.message);
+  }
+}
+
+/**
+ * Vérifie si un client Keycloak existe dans le realm ryvie
+ */
+function keycloakClientExists(clientId: string): boolean {
+  try {
+    const adminPass = getAdminPassword();
+    execSync(
+      `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
+      { stdio: 'pipe', timeout: 15000 }
+    );
+    const result = execSync(
+      `docker exec keycloak /opt/keycloak/bin/kcadm.sh get clients -r ryvie --fields clientId -q clientId=${clientId}`,
+      { encoding: 'utf8', timeout: 15000, stdio: 'pipe' }
+    );
+    return result.includes(clientId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Récupère le secret d'un client Keycloak depuis le realm JSON
+ */
+function getClientSecretFromRealm(clientId: string): string | null {
+  try {
+    const realmPath = fs.existsSync(REALM_DEST) ? REALM_DEST : REALM_SOURCE;
+    const realm = JSON.parse(fs.readFileSync(realmPath, 'utf8'));
+    const client = (realm.clients || []).find((c: any) => c.clientId === clientId);
+    return client?.secret || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Provisionne les clients SSO pour toutes les apps dont le manifest a sso: true.
+ * - Lit les manifests dans /data/config/manifests/
+ * - Pour chaque app avec sso: true, vérifie si le client ryvie-<appId> existe
+ * - Si absent, exécute scripts/add-client-oauth.sh pour le créer
+ * - Injecte les variables OIDC dans le .env de l'app (à côté du docker-compose)
+ */
+function ensureAppSSOClients(): void {
+  console.log('[keycloak] 🔐 Vérification des clients SSO des apps...');
+
+  if (!fs.existsSync(MANIFESTS_DIR)) {
+    console.log('[keycloak] ℹ️  Aucun dossier manifests, pas de clients SSO à provisionner');
+    return;
+  }
+
+  let entries: any[];
+  try {
+    entries = fs.readdirSync(MANIFESTS_DIR, { withFileTypes: true }).filter((e: any) => e.isDirectory());
+  } catch {
+    console.warn('[keycloak] ⚠️  Impossible de lire le dossier manifests');
+    return;
+  }
+
+  for (const entry of entries) {
+    const manifestPath = path.join(MANIFESTS_DIR, entry.name, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) continue;
+
+    let manifest: any;
+    try {
+      manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    } catch {
+      continue;
+    }
+
+    if (!manifest.sso) continue;
+
+    const appId = manifest.id;
+    const appName = manifest.name;
+    const port = manifest.mainPort;
+    const clientId = `ryvie-${appId}`;
+
+    if (!port) {
+      console.log(`[keycloak] ⚠️  SSO activé pour ${appName} mais pas de port, ignoré`);
+      continue;
+    }
+
+    console.log(`[keycloak] 🔐 SSO ${appName} (client: ${clientId}, port: ${port})`);
+
+    // 1) Vérifier / créer le client Keycloak
+    let clientSecret: string | null = null;
+
+    if (keycloakClientExists(clientId)) {
+      console.log(`[keycloak]    ✅ Client ${clientId} existe déjà`);
+      clientSecret = getClientSecretFromRealm(clientId);
+    } else {
+      console.log(`[keycloak]    🆕 Création du client ${clientId}...`);
+      try {
+        const adminPass = getAdminPassword();
+        const output = execSync(
+          `KEYCLOAK_ADMIN_PASSWORD='${adminPass}' bash "${ADD_CLIENT_SCRIPT}" "${clientId}" "${appName}" "${port}"`,
+          { timeout: 30000, encoding: 'utf8', stdio: 'pipe' }
+        );
+        console.log(output);
+        clientSecret = getClientSecretFromRealm(clientId);
+      } catch (err: any) {
+        console.warn(`[keycloak]    ❌ Erreur création client ${clientId}:`, err.message);
+        continue;
+      }
+    }
+
+    if (!clientSecret) {
+      // Fallback: lire depuis le .env existant de l'app
+      const envPath = manifest.sourceDir && manifest.dockerComposePath
+        ? path.join(path.dirname(path.join(manifest.sourceDir, manifest.dockerComposePath)), '.env')
+        : null;
+      if (envPath && fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        const m = envContent.match(/OAUTH_CLIENT_SECRET=(.+)/);
+        if (m) clientSecret = m[1].trim();
+      }
+    }
+
+    if (!clientSecret) {
+      console.warn(`[keycloak]    ⚠️  Secret introuvable pour ${clientId}, injection OIDC ignorée`);
+      continue;
+    }
+
+    // 2) Injecter les variables OIDC dans le .env de l'app
+    if (!manifest.sourceDir || !manifest.dockerComposePath) {
+      console.warn(`[keycloak]    ⚠️  Pas de sourceDir/dockerComposePath pour ${appName}, injection ignorée`);
+      continue;
+    }
+
+    const envFilePath = path.join(
+      path.dirname(path.join(manifest.sourceDir, manifest.dockerComposePath)),
+      '.env'
+    );
+
+    const oidcVars: Record<string, string> = {
+      'OAUTH_ENABLED': 'true',
+      'OAUTH_ISSUER_URL': 'http://ryvie.local:3005/realms/ryvie',
+      'OAUTH_CLIENT_ID': clientId,
+      'OAUTH_CLIENT_SECRET': clientSecret,
+      'OAUTH_SCOPE': 'openid email profile',
+    };
+
+    // Lire le contenu avant modification pour détecter les changements
+    let envBefore = '';
+    try {
+      if (fs.existsSync(envFilePath)) {
+        envBefore = fs.readFileSync(envFilePath, 'utf8');
+      }
+    } catch {}
+
+    try {
+      for (const [key, value] of Object.entries(oidcVars)) {
+        setEnvVar(envFilePath, key, value);
+      }
+      console.log(`[keycloak]    ✅ Variables OIDC injectées dans ${envFilePath}`);
+    } catch (err: any) {
+      console.warn(`[keycloak]    ⚠️  Erreur injection OIDC dans ${envFilePath}:`, err.message);
+      continue;
+    }
+
+    // Si le .env a changé, redémarrer le docker-compose de l'app
+    let envAfter = '';
+    try {
+      envAfter = fs.readFileSync(envFilePath, 'utf8');
+    } catch {}
+
+    if (envBefore !== envAfter) {
+      // Détecter le fichier compose réellement utilisé via les labels Docker
+      let actualComposeFile: string | null = null;
+      let actualComposeDir: string | null = null;
+      try {
+        const containerName = execSync(
+          `docker ps -a --filter "name=app-${appId}" --format "{{.Names}}" | head -1`,
+          { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
+        ).trim();
+        if (containerName) {
+          const configFiles = execSync(
+            `docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "${containerName}"`,
+            { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
+          ).trim();
+          if (configFiles && configFiles !== '<no value>' && fs.existsSync(configFiles)) {
+            actualComposeFile = path.basename(configFiles);
+            actualComposeDir = path.dirname(configFiles);
+          }
+        }
+      } catch {}
+
+      // Fallback sur le chemin du manifest
+      if (!actualComposeFile || !actualComposeDir) {
+        const composePath = path.join(manifest.sourceDir, manifest.dockerComposePath);
+        actualComposeFile = path.basename(composePath);
+        actualComposeDir = path.dirname(composePath);
+      }
+
+      console.log(`[keycloak]    🔄 .env modifié, redémarrage de ${appName} (${actualComposeFile})...`);
+      try {
+        execSync(`docker compose -f "${actualComposeFile}" down`, { cwd: actualComposeDir, timeout: 120000, stdio: 'pipe' });
+        // Lancer up -d en arrière-plan (non bloquant)
+        const child = spawn('docker', ['compose', '-f', actualComposeFile, 'up', '-d', '--force-recreate'], {
+          cwd: actualComposeDir,
+          stdio: 'ignore',
+          detached: true,
+        });
+        child.unref();
+        console.log(`[keycloak]    ✅ ${appName} : down terminé, up -d lancé en arrière-plan`);
+      } catch (err: any) {
+        console.warn(`[keycloak]    ⚠️  Erreur redémarrage ${appName}:`, err.message);
+      }
+    } else {
+      console.log(`[keycloak]    ✅ Variables OIDC déjà à jour pour ${appName}, pas de redémarrage`);
+    }
   }
 }
 

@@ -3,7 +3,7 @@ import axios from '../utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
 import '../styles/Login.css';
 import urlsConfig from '../config/urls';
-const { getServerUrl } = urlsConfig;
+const { getServerUrl, getLocalIP, setLocalIP } = urlsConfig;
 import { isSessionActive, startSession } from '../utils/sessionManager';
 import { getCurrentAccessMode, detectAccessMode, setAccessMode as persistAccessMode, testServerConnectivity } from '../utils/detectAccessMode';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -13,11 +13,35 @@ const Login = () => {
   const { t, setLanguage } = useLanguage();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('info'); // 'info', 'success', 'error'
   const [accessMode, setAccessMode] = useState('private');
-  const [isRedirectingToSSO, setIsRedirectingToSSO] = useState(false);
+  const [isRedirectingToSSO, setIsRedirectingToSSO] = useState(true);
+  const [ssoRedirectUrl, setSsoRedirectUrl] = useState<string | null>(null);
+
+  // Construit la base URL du backend pour la redirection SSO
+  // Même logique que buildAppUrl() : si on est sur ryvie.local et qu'une IP locale
+  // est détectée, utiliser cette IP pour que le cookie Keycloak soit partagé avec les apps
+  const getSsoBase = (): string => {
+    const hostname = window.location.hostname;
+    const port = window.location.port;
+    const localIP = getLocalIP();
+
+    console.log('[Login] getSsoBase - hostname:', hostname, 'port:', port, 'localIP:', localIP);
+
+    if (hostname === 'ryvie.local') {
+      if (localIP) {
+        console.log('[Login] getSsoBase - using localIP:', `http://${localIP}:3002`);
+        return `http://${localIP}:3002`;
+      }
+      console.log('[Login] getSsoBase - no localIP, using ryvie.local');
+      return `http://ryvie.local`;
+    }
+
+    console.log('[Login] getSsoBase - using current hostname:', `http://${hostname}:3002`);
+    return `http://${hostname}:3002`;
+  };
 
   useEffect(() => {
     const initMode = async () => {
@@ -65,24 +89,55 @@ const Login = () => {
           return;
         }
 
-        // 5) Pas première connexion → rediriger directement vers SSO Keycloak
+        // 5) Récupérer l'IP locale si on est sur ryvie.local (pour que le cookie Keycloak
+        //    soit sur le même domaine que les apps)
+        if (window.location.hostname === 'ryvie.local') {
+          console.log('[Login] Sur ryvie.local, getLocalIP():', getLocalIP());
+          if (!getLocalIP()) {
+            try {
+              console.log('[Login] Fetch /status pour récupérer l\'IP locale...');
+              const statusRes = await axios.get(`${serverUrl}/status`);
+              console.log('[Login] Réponse /status:', statusRes.data);
+              if (statusRes.data?.ip) {
+                setLocalIP(statusRes.data.ip);
+                console.log('[Login] IP locale mise en cache:', statusRes.data.ip);
+                console.log('[Login] Vérification getLocalIP() après setLocalIP():', getLocalIP());
+              } else {
+                console.warn('[Login] Pas d\'IP dans la réponse /status');
+              }
+            } catch (e) {
+              console.warn('[Login] Impossible de récupérer l\'IP locale:', e);
+            }
+          } else {
+            console.log('[Login] IP locale déjà en cache:', getLocalIP());
+          }
+        }
+
         console.log('[Login] Utilisateur existant - redirection automatique vers SSO');
-        setIsRedirectingToSSO(true);
-        setLoading(true);
-        window.location.href = `${serverUrl}/api/auth/login`;
+        const ssoUrl = `${getSsoBase()}/api/auth/login`;
+        console.log('[Login] URL SSO finale:', ssoUrl);
+        setSsoRedirectUrl(ssoUrl);
         return;
       } catch (error) {
         console.error('[Login] Erreur lors de la vérification de la première connexion:', error);
-        // En cas d'erreur, on reste sur une UI minimaliste (spinner + message)
-        setIsRedirectingToSSO(false);
-        setLoading(false);
-        setMessage(t('login.serverUnavailable') || 'Serveur indisponible. Rafraîchis la page.');
-        setMessageType('error');
+        setSsoRedirectUrl(`${getSsoBase()}/api/auth/login`);
       }
     };
 
     initMode();
   }, []);
+
+  // Redirection SSO différée : attend que le spinner soit peint avant de naviguer
+  useEffect(() => {
+    if (!ssoRedirectUrl) return;
+    // requestAnimationFrame garantit que le navigateur a peint le spinner
+    const rafId = requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.location.href = ssoRedirectUrl;
+      }, 100);
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [ssoRedirectUrl]);
 
   // Polling: rester en remote et tenter périodiquement de basculer en privé dès que détecté
   useEffect(() => {
@@ -244,17 +299,10 @@ const Login = () => {
   return (
     <div className="login-container">
       <div className="login-card">
-        <div className="login-header">
-          <h1>Ryvie</h1>
-        </div>
+
 
         <div className="login-redirect">
-          {(loading || isRedirectingToSSO) && <div className="spinner" />}
-          {message && messageType === 'error' && (
-            <div className={`message message-${messageType}`}>
-              {message}
-            </div>
-          )}
+          <div className="spinner" />
         </div>
       </div>
     </div>

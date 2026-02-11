@@ -24,23 +24,56 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+// Fonction pour convertir l'origin backend vers l'origin frontend
+function getFrontendOrigin(backendOrigin: string): string {
+  try {
+    const url = new URL(backendOrigin);
+    
+    // Si c'est ryvie.local (Caddy), pas de port spécifique
+    if (url.hostname === 'ryvie.local' && (!url.port || url.port === '80')) {
+      return `http://ryvie.local`;
+    }
+    
+    // Si le port est 3002 (backend dev), utiliser 3000 pour le frontend
+    if (url.port === '3002') {
+      return `http://${url.hostname}:3000`;
+    }
+    
+    // Sinon, utiliser le même origin (prod derrière Caddy)
+    return backendOrigin;
+  } catch (e) {
+    console.warn('[OIDC] Invalid backend origin:', backendOrigin);
+    return backendOrigin;
+  }
+}
+
 // Fonction pour détecter l'origine de la requête
 function getOriginFromRequest(req: any): string {
-  const referer = req.get('referer') || req.get('origin');
+  // Priorité 1: utiliser le host de la requête (l'URL réellement demandée)
+  // Cela permet au frontend de contrôler l'origin en redirigeant vers l'IP
+  const protocol = req.protocol || 'http';
+  const host = req.get('host');
   
+  if (host) {
+    const origin = `${protocol}://${host}`;
+    console.log('[OIDC] Origin from request host:', origin);
+    return origin;
+  }
+  
+  // Fallback sur referer/origin header
+  const referer = req.get('referer') || req.get('origin');
   if (referer) {
     try {
       const url = new URL(referer);
+      console.log('[OIDC] Origin from referer:', `${url.protocol}//${url.host}`);
       return `${url.protocol}//${url.host}`;
     } catch (e) {
       console.warn('[OIDC] Invalid referer/origin:', referer);
     }
   }
   
-  // Fallback sur l'host de la requête
-  const protocol = req.protocol || 'http';
-  const host = req.get('host');
-  return `${protocol}://${host}`;
+  console.warn('[OIDC] No valid origin found, using localhost fallback');
+  return 'http://localhost:3002';
 }
 
 router.get('/login', async (req: any, res: any) => {
@@ -139,12 +172,14 @@ router.get('/callback', async (req: any, res: any) => {
 
     console.log(`[OIDC] Authentication successful for ${user.uid} (role: ${role})`);
 
-    console.log('[OIDC] Redirecting to frontend:', origin);
-    res.redirect(`${origin}/#/auth-callback?token=${token}`);
+    const frontendOrigin = getFrontendOrigin(origin);
+    console.log('[OIDC] Redirecting to frontend:', frontendOrigin, '(from backend origin:', origin + ')');
+    res.redirect(`${frontendOrigin}/#/auth-callback?token=${token}`);
   } catch (error: any) {
     console.error('[OIDC] Callback error:', error.message);
     const origin = getOriginFromRequest(req);
-    res.redirect(`${origin}/#/login?error=auth_failed`);
+    const frontendOrigin = getFrontendOrigin(origin);
+    res.redirect(`${frontendOrigin}/#/login?error=auth_failed`);
   }
 });
 
@@ -204,18 +239,21 @@ router.get('/logout', async (req: any, res: any) => {
   try {
     const idToken = req.query.id_token;
     const origin = getOriginFromRequest(req);
+    const frontendOrigin = getFrontendOrigin(origin);
     
     const url = new URL(origin);
     const issuer = `http://${url.hostname}:3005/realms/ryvie`;
-    const logoutUrl = `${issuer}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(origin)}${idToken ? `&id_token_hint=${idToken}` : ''}`;
+    const logoutUrl = `${issuer}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(frontendOrigin)}${idToken ? `&id_token_hint=${idToken}` : ''}`;
 
-    console.log('[OIDC] Logging out from origin:', origin);
+    console.log('[OIDC] Logging out from backend origin:', origin);
+    console.log('[OIDC] Frontend origin:', frontendOrigin);
     console.log('[OIDC] Redirecting to:', logoutUrl);
     res.redirect(logoutUrl);
   } catch (error: any) {
     console.error('[OIDC] Logout error:', error.message);
     const origin = getOriginFromRequest(req);
-    res.redirect(`${origin}/#/login`);
+    const frontendOrigin = getFrontendOrigin(origin);
+    res.redirect(`${frontendOrigin}/#/login`);
   }
 });
 
