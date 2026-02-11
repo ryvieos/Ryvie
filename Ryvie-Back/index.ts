@@ -82,6 +82,9 @@ const { getLocalIP, getPrivateIP, waitForWifiInterface, listNetworkInterfaces } 
 const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
 const { syncNetbirdConfig } = require('./utils/syncNetbirdConfig');
 
+// Flag de readiness : true uniquement quand toute l'initialisation (Keycloak, AppStore, etc.) est terminée
+(global as any).serverReady = false;
+
 const docker = new Docker();
 const app = express();
 // Behind reverse proxies (Docker/Nginx), enable trust proxy so rate limit & req.ip work with X-Forwarded-For safely
@@ -369,6 +372,10 @@ async function startServer() {
     
     // Synchroniser la configuration Netbird au démarrage
     syncNetbirdConfig();
+    
+    // Marquer le serveur comme prêt (tous les services initialisés)
+    (global as any).serverReady = true;
+    console.log('✅ Tous les services sont initialisés - serveur prêt');
     
     const PORT = process.env.PORT || 3002;
     httpServer.listen(PORT, () => {

@@ -294,13 +294,15 @@ else
 fi
 
 # Fonction de health check intelligent
+# Attend que le backend signale que TOUS ses services sont initialisés via /api/health/ready
 perform_health_check() {
-  local max_wait=180  # Timeout de sécurité pour erreurs silencieuses (3 minutes)
+  local max_wait=300  # Timeout de sécurité (5 minutes - Keycloak peut prendre du temps au premier démarrage)
   local start_time=$(date +%s)
-  local check_interval=2
+  local check_interval=3
   local health_check_start_timestamp=$(date '+%Y-%m-%dT%H:%M')
   
   log "  Surveillance active (timeout sécurité: ${max_wait}s)..."
+  log "  Attente que tous les services backend soient initialisés..."
   log "  Timestamp de référence: $health_check_start_timestamp"
   
   while true; do
@@ -309,10 +311,8 @@ perform_health_check() {
     
     # 1. Vérifier les erreurs critiques dans les logs RÉCENTS uniquement
     if [[ -f "$BACKEND_LOG" ]]; then
-      # Ne regarder que les logs des 2 dernières minutes (depuis le début du health check)
       local recent_errors=$(grep "$health_check_start_timestamp" "$BACKEND_LOG" 2>/dev/null | tail -n 50 || echo "")
       
-      # Si pas d'erreurs récentes, tout va bien - ne pas regarder les vieilles erreurs
       if [[ -n "$recent_errors" ]]; then
         # Erreurs critiques qui nécessitent un rollback immédiat
         if echo "$recent_errors" | grep -qiE "(Cannot find module.*dist/index\.js|ENOENT.*dist/index|MODULE_NOT_FOUND.*dist|Error: Cannot find module|CRITICAL.*environment variable.*required|Fatal error|Segmentation fault|EADDRINUSE|listen EADDRINUSE)"; then
@@ -346,51 +346,55 @@ perform_health_check() {
       return 1
     fi
     
-    # 3. Si le backend est online, vérifier qu'il répond
-    if [[ "$backend_status" == "online" ]]; then
-      # Attendre un peu que le serveur soit vraiment prêt
-      if [[ $elapsed -ge 10 ]]; then
-        # Test HTTP pour confirmer que le backend répond
-        if command -v curl >/dev/null 2>&1; then
-          local http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3002/api/health 2>/dev/null || echo "000")
-          
-          # Codes acceptables: 200 (OK), 401 (auth requise mais serveur répond), 404 (route pas trouvée mais serveur répond)
-          if [[ "$http_code" == "200" ]] || [[ "$http_code" == "401" ]] || [[ "$http_code" == "404" ]]; then
-            log "  ✅ Backend online et répond correctement (HTTP $http_code) après ${elapsed}s"
-            log "  Backend: status=$backend_status, restarts=$restart_count"
-            return 0
-          fi
-          
-          # Erreur serveur
-          if [[ "$http_code" == "500" ]] || [[ "$http_code" == "502" ]] || [[ "$http_code" == "503" ]]; then
-            log "  ❌ Backend répond avec erreur HTTP $http_code après ${elapsed}s"
-            return 1
-          fi
-          
-          # Si le backend est online depuis plus de 30s mais ne répond pas encore, on considère que c'est OK
-          # Le backend peut prendre du temps à initialiser tous les services
-          if [[ $elapsed -ge 30 ]]; then
-            log "  ✅ Backend online (PM2) depuis ${elapsed}s, initialisation en cours"
-            log "  Backend: status=$backend_status, restarts=$restart_count"
-            return 0
-          fi
-        else
-          # Pas de curl, on fait confiance au statut PM2
-          log "  ✅ Backend online (PM2) après ${elapsed}s"
+    # 3. Si le backend est online, vérifier la readiness complète via /api/health/ready
+    if [[ "$backend_status" == "online" ]] && [[ $elapsed -ge 5 ]]; then
+      if command -v curl >/dev/null 2>&1; then
+        local http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3002/api/health/ready 2>/dev/null || echo "000")
+        
+        # 200 = tous les services sont initialisés (Keycloak, AppStore, etc.)
+        if [[ "$http_code" == "200" ]]; then
+          log "  ✅ Backend entièrement initialisé (tous les services prêts) après ${elapsed}s"
+          log "  Backend: status=$backend_status, restarts=$restart_count"
+          return 0
+        fi
+        
+        # 503 = backend en cours d'initialisation (Keycloak, AppStore, etc.)
+        if [[ "$http_code" == "503" ]]; then
+          log "  ⏳ Backend en cours d'initialisation des services... (${elapsed}s écoulées)"
+        fi
+        
+        # 500/502 = erreur serveur
+        if [[ "$http_code" == "500" ]] || [[ "$http_code" == "502" ]]; then
+          log "  ⚠️  Backend répond avec erreur HTTP $http_code après ${elapsed}s (on continue d'attendre)"
+        fi
+        
+        # 000 = pas encore de réponse HTTP (serveur pas encore en écoute)
+        if [[ "$http_code" == "000" ]]; then
+          log "  ⏳ Backend pas encore en écoute HTTP... (${elapsed}s écoulées)"
+        fi
+      else
+        # Pas de curl, fallback: on fait confiance au statut PM2 + attente supplémentaire
+        if [[ $elapsed -ge 60 ]]; then
+          log "  ✅ Backend online (PM2) depuis ${elapsed}s (pas de curl pour vérifier readiness)"
           log "  Backend: status=$backend_status, restarts=$restart_count"
           return 0
         fi
       fi
     fi
     
-    # 4. Timeout de sécurité atteint (erreur silencieuse)
+    # 4. Timeout de sécurité atteint
     if [[ $elapsed -ge $max_wait ]]; then
       log "  ⚠️  Timeout de sécurité atteint (${max_wait}s) - backend: $backend_status"
       if [[ "$backend_status" == "online" ]]; then
-        log "  ℹ️  Le backend est online mais ne répond pas aux requêtes HTTP"
-        log "  ℹ️  Cela peut être normal si le démarrage est lent"
-        # On considère que c'est OK si PM2 dit que c'est online
-        return 0
+        # Vérifier une dernière fois si le backend répond au moins sur /api/health
+        local fallback_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3002/api/health 2>/dev/null || echo "000")
+        if [[ "$fallback_code" == "200" ]]; then
+          log "  ⚠️  Backend répond sur /api/health mais pas encore ready - on continue quand même"
+          log "  ℹ️  Certains services peuvent encore être en cours d'initialisation"
+          return 0
+        fi
+        log "  ❌ Backend online (PM2) mais ne répond pas du tout après ${max_wait}s"
+        return 1
       else
         log "  ❌ Timeout et backend pas online: $backend_status"
         return 1
