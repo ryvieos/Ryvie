@@ -1,0 +1,308 @@
+/* ============================================
+   Thème Ryvie — Keycloak 26
+   Custom template.ftl — HTML propre et centré
+   ============================================ */
+
+/* ---- Reset ---- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #ryvie-login {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #f0f2f5;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Centrage ---- */
+.ryvie-login-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+}
+
+/* ---- Carte ---- */
+.ryvie-login-card {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.06);
+    padding: 52px 48px 44px;
+    width: 100%;
+    max-width: 500px;
+}
+
+/* ---- Logo "Ryvie" ---- */
+.ryvie-logo {
+    text-align: center;
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: #4285f4;
+    margin-bottom: 6px;
+    letter-spacing: -0.5px;
+}
+
+/* ---- Sous-titre ---- */
+.ryvie-subtitle {
+    text-align: center;
+    color: #6b7280;
+    font-size: 0.95rem;
+    font-weight: 400;
+    margin-bottom: 32px;
+    line-height: 1.4;
+}
+
+/* ---- Labels (PF v5 macros) ---- */
+label,
+.pf-v5-c-form__label-text {
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+    display: block;
+}
+
+/* ---- Formulaire ---- */
+.pf-v5-c-form {
+    width: 100%;
+}
+
+/* ---- Groupes de formulaire ---- */
+.pf-v5-c-form__group {
+    margin-bottom: 18px;
+}
+
+.pf-v5-c-form__group-label {
+    margin-bottom: 6px;
+}
+
+/* ---- Masquer les erreurs inline PF v5 (on utilise l'alerte globale) ---- */
+#input-error-container-username,
+#input-error-container-password {
+    display: none;
+}
+
+/* ---- Champs de saisie (PF v5 span wrapper) ---- */
+span.pf-v5-c-form-control {
+    display: flex;
+    align-items: center;
+    border: 1.5px solid #e0e3e8;
+    border-radius: 10px;
+    background: #fafbfc;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+span.pf-v5-c-form-control input {
+    border: none;
+    padding: 14px 16px;
+    font-size: 1rem;
+    color: #1f2937;
+    background: transparent;
+    outline: none;
+    width: 100%;
+}
+
+span.pf-v5-c-form-control:focus-within {
+    border-color: #4285f4;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
+}
+
+/* ---- Input group (password + eye toggle) ---- */
+.pf-v5-c-input-group {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    position: relative;
+}
+
+.pf-v5-c-input-group__item {
+    display: flex;
+    background: transparent;
+    border: none;
+}
+
+.pf-v5-c-input-group__item.pf-m-fill {
+    flex: 1;
+    min-width: 0;
+}
+
+.pf-v5-c-input-group__item.pf-m-fill span.pf-v5-c-form-control {
+    border-radius: 10px;
+    width: 100%;
+}
+
+/* ---- Masquer le bouton oeil (toggle password) ---- */
+.pf-v5-c-input-group__item:not(.pf-m-fill) {
+    display: none !important;
+}
+
+input::placeholder {
+    color: #9ca3af;
+}
+
+/* ---- Bouton principal ---- */
+.pf-v5-c-button.pf-m-primary,
+input[type="submit"],
+button[type="submit"] {
+    background: #4285f4;
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 24px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.2s ease;
+    margin-top: 4px;
+}
+
+.pf-v5-c-button.pf-m-primary:hover,
+input[type="submit"]:hover,
+button[type="submit"]:hover {
+    background: #3367d6;
+    box-shadow: 0 4px 12px rgba(66, 133, 244, 0.25);
+}
+
+/* ---- Checkbox ---- */
+.pf-v5-c-check {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.pf-v5-c-check__label {
+    color: #6b7280;
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+/* ---- Liens ---- */
+a {
+    color: #4285f4;
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* ---- Alertes modernes ---- */
+.ryvie-alert {
+    padding: 14px 18px;
+    border-radius: 10px;
+    margin-bottom: 24px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.ryvie-alert::before {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    line-height: 1.3;
+}
+
+.ryvie-alert-error {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+.ryvie-alert-error::before {
+    content: '\26A0';
+}
+
+.ryvie-alert-success {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.ryvie-alert-success::before {
+    content: '\2713';
+}
+
+.ryvie-alert-warning {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+}
+
+.ryvie-alert-warning::before {
+    content: '\26A0';
+}
+
+.ryvie-alert-info {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.ryvie-alert-info::before {
+    content: '\2139';
+}
+
+/* ---- Info section ---- */
+.ryvie-info {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+/* ---- Masquer les erreurs inline PF v5 (on utilise l'alerte globale ryvie-alert) ---- */
+.pf-v5-c-helper-text__item.pf-m-error,
+.kc-feedback-text,
+.pf-v5-c-helper-text__item-icon {
+    display: none;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+    .ryvie-login-card {
+        max-width: 90vw;
+        padding: 40px 32px 36px;
+    }
+    .ryvie-logo {
+        font-size: 2rem;
+    }
+    .ryvie-subtitle {
+        font-size: 0.9rem;
+        margin-bottom: 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .ryvie-login-wrapper {
+        padding: 16px;
+    }
+    .ryvie-login-card {
+        max-width: 100%;
+        padding: 32px 20px 28px;
+        border-radius: 12px;
+    }
+    .ryvie-logo {
+        font-size: 1.8rem;
+    }
+    .ryvie-subtitle {
+        font-size: 0.85rem;
+        margin-bottom: 20px;
+    }
+    span.pf-v5-c-form-control input {
+        padding: 12px 14px;
+        font-size: 0.95rem;
+    }
+    .pf-v5-c-button.pf-m-primary,
+    input[type="submit"],
+    button[type="submit"] {
+        padding: 12px 20px;
+        font-size: 0.95rem;
+    }
+}

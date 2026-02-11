@@ -2324,8 +2324,19 @@ const Home = () => {
     } catch (e) {
       console.warn('[Home] Erreur lors de la déconnexion du socket:', e);
     }
+    
+    // Récupérer l'id_token du localStorage si disponible
+    const idToken = localStorage.getItem('id_token');
+    
+    // Nettoyer la session locale
     endSession();
-    navigate('/login', { replace: true });
+    
+    // Rediriger vers l'endpoint OIDC logout pour déconnecter aussi de Keycloak
+    const backendUrl = getServerUrl(accessMode);
+    const logoutUrl = `${backendUrl}/api/auth/logout${idToken ? `?id_token=${idToken}` : ''}`;
+    
+    console.log('[Home] Déconnexion OIDC vers:', logoutUrl);
+    window.location.href = logoutUrl;
   };
 
   // Fonction pour fermer l'overlay AppStore intelligemment

@@ -166,6 +166,10 @@ app.use('/api', appsRouter);
 // Mount Auth routes
 app.use('/api', authRouter);
 
+// Mount OIDC Auth routes (SSO)
+const oidcAuthRouter = require('./routes/oidcAuth');
+app.use('/api/auth', oidcAuthRouter);
+
 // Mount Admin routes
 app.use('/api', adminRouter);
 
@@ -313,6 +317,25 @@ async function startServer() {
     } catch (caddyError: any) {
       console.error('❌ Erreur critique lors de la vérification de Caddy:', caddyError.message);
       console.error('⚠️  Continuons le démarrage sans le reverse proxy...');
+    }
+    
+    // Vérifier et démarrer Keycloak si nécessaire
+    console.log('🔍 Vérification de Keycloak...');
+    try {
+      const { ensureKeycloakRunning } = require('./services/keycloakService');
+      const keycloakResult = await ensureKeycloakRunning();
+      if (keycloakResult.success) {
+        if (keycloakResult.alreadyRunning) {
+          console.log('✅ Keycloak est déjà en cours d\'exécution');
+        } else if (keycloakResult.started) {
+          console.log('✅ Keycloak a été démarré avec succès');
+        }
+      } else {
+        console.error('❌ Erreur lors de la vérification/démarrage de Keycloak:', keycloakResult.error);
+      }
+    } catch (keycloakError: any) {
+      console.error('❌ Erreur critique lors de la vérification de Keycloak:', keycloakError.message);
+      console.error('⚠️  Continuons le démarrage sans Keycloak...');
     }
     
     // Vérifier les snapshots en attente (après une mise à jour)

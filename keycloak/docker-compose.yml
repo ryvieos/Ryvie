@@ -1,0 +1,52 @@
+
+services:
+  keycloak-postgres:
+    image: postgres:15-alpine
+    container_name: keycloak-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_password}
+    volumes:
+      - /data/config/keycloak/postgres:/var/lib/postgresql/data
+    networks:
+      - ryvie-network
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3
+    container_name: keycloak
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_password}
+      
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+      
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: true
+      
+      KC_FEATURES: preview
+    volumes:
+      - /data/config/keycloak/import:/opt/keycloak/data/import
+      - /data/config/keycloak/themes:/opt/keycloak/themes
+    expose:
+      - "8080"
+    command:
+      - start
+      - --import-realm
+      - --health-enabled=true
+    depends_on:
+      - keycloak-postgres
+    networks:
+      - ryvie-network
+    restart: unless-stopped
+
+networks:
+  ryvie-network:
+    external: true

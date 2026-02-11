@@ -146,7 +146,7 @@ function getRyvieAppPort(appDir, dockerComposeRelativePath) {
  * Extrait des métadonnées (id, name, port) depuis ryvie-app.yml si présent
  */
 function getRyvieAppMeta(appDir, dockerComposeRelativePath) {
-    const meta = { id: null, name: null, port: null, buildId: null };
+    const meta = { id: null, name: null, port: null, buildId: null, sso: false };
     try {
         const composeDir = dockerComposeRelativePath
             ? path.dirname(path.join(appDir, dockerComposeRelativePath))
@@ -173,6 +173,9 @@ function getRyvieAppMeta(appDir, dockerComposeRelativePath) {
                     const buildIdMatch = content.match(/^\s*buildId\s*:\s*["']?(\d+)["']?/mi);
                     if (buildIdMatch)
                         meta.buildId = parseInt(buildIdMatch[1], 10);
+                    const ssoMatch = content.match(/^\s*sso\s*:\s*(true|false)/mi);
+                    if (ssoMatch)
+                        meta.sso = ssoMatch[1].toLowerCase() === 'true';
                     // Dès qu'on a lu un fichier, on peut retourner (le plus proche du compose est prioritaire)
                     return meta;
                 }
@@ -334,6 +337,8 @@ function generateManifest(appData) {
         metadata.mainPort ||
         (Object.keys(ports).length > 0 ? parseInt(Object.keys(ports)[0], 10) : null);
 
+    const ssoEnabled = ryvieMeta.sso === true;
+
     // Créer le manifest
     const manifest = {
         id: finalId,
@@ -346,6 +351,7 @@ function generateManifest(appData) {
         ports: ports,
         // mainPort doit refléter le port hôte (clé du mapping)
         mainPort: resolvedMainPort,
+        sso: ssoEnabled,
         launchType: metadata.launchType,
         dockerComposePath: metadata.dockerComposePath,
         sourceDir: appDir,
