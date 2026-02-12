@@ -1359,6 +1359,20 @@ LOCAL_IP=${localIP}
       console.warn(`[Update] ⚠️ Impossible de régénérer le manifest de ${appId}:`, manifestError.message);
     }
     
+    // 6b. Provisionner le client SSO si le manifest a sso: true
+    currentStep = 'sso-client-provisioning';
+    console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
+    try {
+      const keycloakService = require('./keycloakService');
+      if (keycloakService.ensureAppSSOClient) {
+        sendProgressUpdate(appId, 99, 'Vérification du client SSO...', 'sso');
+        keycloakService.ensureAppSSOClient(appId);
+      }
+    } catch (ssoError: any) {
+      console.warn(`[Update] ⚠️ Erreur lors du provisionnement SSO pour ${appId}:`, ssoError.message);
+      // Non bloquant - l'installation est déjà terminée
+    }
+    
     sendProgressUpdate(appId, 100, 'Installation terminée avec succès !', 'completed');
     
     // 7. Forcer la réconciliation du layout pour placer l'icône AVANT de modifier Caddy
@@ -1907,9 +1921,10 @@ async function uninstallApp(appId) {
     const manifestPath = path.join(MANIFESTS_DIR, appId, 'manifest.json');
     let appDir = null;
     
+    let manifest: any = null;
     try {
       const manifestContent = await fs.readFile(manifestPath, 'utf8');
-      const manifest = JSON.parse(manifestContent);
+      manifest = JSON.parse(manifestContent);
       appDir = manifest.sourceDir;
       console.log(`[Uninstall] Dossier de l'app depuis le manifest: ${appDir}`);
     } catch (manifestError: any) {
@@ -1932,25 +1947,68 @@ async function uninstallApp(appId) {
       };
     }
     
-    // 2. Récupérer les images utilisées par l'application avant de tout supprimer
+    // 2b. Déterminer le fichier docker-compose à utiliser
+    // Priorité : dockerComposePath du manifest > labels Docker > recherche à la racine
     console.log('[Uninstall] 🔍 Récupération des images Docker de l\'application...');
     let appImages = [];
-    const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
     let composeFile = null;
+    let composeDir = null;
     
-    for (const file of composeFiles) {
+    // Essayer d'abord le dockerComposePath du manifest
+    if (manifest?.dockerComposePath) {
+      const fullComposePath = path.join(appDir, manifest.dockerComposePath);
       try {
-        await fs.access(path.join(appDir, file));
-        composeFile = file;
-        break;
+        await fs.access(fullComposePath);
+        composeFile = path.basename(fullComposePath);
+        composeDir = path.dirname(fullComposePath);
+        console.log(`[Uninstall] ✅ docker-compose depuis le manifest: ${manifest.dockerComposePath}`);
+      } catch {
+        console.warn(`[Uninstall] ⚠️ dockerComposePath du manifest introuvable: ${fullComposePath}`);
+      }
+    }
+    
+    // Fallback : chercher via les labels Docker du conteneur
+    if (!composeFile) {
+      try {
+        const containerName = execSync(
+          `docker ps -a --filter "name=app-${appId}" --format "{{.Names}}" | head -1`,
+          { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
+        ).trim();
+        if (containerName) {
+          const configFiles = execSync(
+            `docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "${containerName}"`,
+            { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
+          ).trim();
+          if (configFiles && configFiles !== '<no value>') {
+            try {
+              await fs.access(configFiles);
+              composeFile = path.basename(configFiles);
+              composeDir = path.dirname(configFiles);
+              console.log(`[Uninstall] ✅ docker-compose depuis les labels Docker: ${configFiles}`);
+            } catch {}
+          }
+        }
       } catch {}
+    }
+    
+    // Fallback final : chercher à la racine de appDir
+    if (!composeFile) {
+      const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
+      for (const file of composeFiles) {
+        try {
+          await fs.access(path.join(appDir, file));
+          composeFile = file;
+          composeDir = appDir;
+          break;
+        } catch {}
+      }
     }
     
     if (composeFile) {
       try {
         // Récupérer les images utilisées par l'app
         const imagesOutput = execSync(`docker compose -f ${composeFile} images -q`, { 
-          cwd: appDir, 
+          cwd: composeDir, 
           encoding: 'utf8'
         }).trim();
         
@@ -1966,7 +2024,7 @@ async function uninstallApp(appId) {
       console.log('[Uninstall] 🛑 Arrêt et suppression des containers...');
       try {
         execSync(`docker compose -f ${composeFile} down -v`, { 
-          cwd: appDir, 
+          cwd: composeDir, 
           stdio: 'inherit'
         });
         console.log('[Uninstall] ✅ Containers et volumes arrêtés et supprimés');
@@ -2030,6 +2088,17 @@ async function uninstallApp(appId) {
     } catch (rmError: any) {
       console.error('[Uninstall] ❌ Erreur lors de la suppression du dossier:', rmError.message);
       throw new Error(`Impossible de supprimer le dossier de l'application: ${rmError.message}`);
+    }
+    
+    // 5c. Supprimer le client SSO si l'app en avait un (AVANT suppression du manifest)
+    try {
+      const keycloakService = require('./keycloakService');
+      if (keycloakService.removeAppSSOClient) {
+        keycloakService.removeAppSSOClient(appId);
+      }
+    } catch (ssoError: any) {
+      console.warn(`[Uninstall] ⚠️ Erreur lors de la suppression du client SSO pour ${appId}:`, ssoError.message);
+      // Non bloquant
     }
     
     // 6. Supprimer le manifest
