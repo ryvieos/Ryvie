@@ -101,7 +101,9 @@ const FirstTimeSetup = () => {
         setMessageType('success');
         
         setTimeout(() => {
-          navigate('/login');
+          // Rediriger directement vers le SSO Keycloak (comme Login.tsx)
+          // Utiliser ryvie.local pour que le discovery OIDC fonctionne correctement
+          window.location.href = 'http://ryvie.local/api/auth/login';
         }, 2000);
       } else {
         setMessage(t('firstTimeSetup.errorMessage'));
