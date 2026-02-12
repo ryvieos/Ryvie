@@ -304,20 +304,20 @@ function getAdminPassword(): string {
 }
 
 /**
- * Attend que Keycloak soit prêt à recevoir des requêtes (health check)
+ * Attend que Keycloak soit prêt à recevoir des requêtes (health check via HTTP)
  */
-async function waitForKeycloakReady(maxWaitMs = 120000, intervalMs = 5000): Promise<boolean> {
+async function waitForKeycloakReady(maxWaitMs = 120000, intervalMs = 2000): Promise<boolean> {
   const start = Date.now();
-  const adminPass = getAdminPassword();
   console.log('[keycloak] ⏳ Attente que Keycloak soit prêt...');
   while (Date.now() - start < maxWaitMs) {
     try {
-      execSync(
-        `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
-        { stdio: 'pipe', timeout: 10000 }
-      );
-      console.log('[keycloak] ✅ Keycloak est prêt');
-      return true;
+      const res = await fetch('http://localhost:3005/realms/ryvie/.well-known/openid-configuration', {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        console.log('[keycloak] ✅ Keycloak est prêt');
+        return true;
+      }
     } catch {
       // pas encore prêt
     }
@@ -328,15 +328,22 @@ async function waitForKeycloakReady(maxWaitMs = 120000, intervalMs = 5000): Prom
 }
 
 /**
+ * Authentifie kcadm.sh une seule fois. Les appels suivants réutilisent la session.
+ */
+function kcadmAuth(): void {
+  const adminPass = getAdminPassword();
+  execSync(
+    `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
+    { stdio: 'pipe', timeout: 15000 }
+  );
+}
+
+/**
  * Vérifie si le client ryvie-dashboard existe dans Keycloak via kcadm.sh
+ * Assumes kcadmAuth() was already called.
  */
 function dashboardClientExists(): boolean {
   try {
-    const adminPass = getAdminPassword();
-    execSync(
-      `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
-      { stdio: 'pipe', timeout: 15000 }
-    );
     const output = execSync(
       'docker exec keycloak /opt/keycloak/bin/kcadm.sh get clients -r ryvie --fields clientId',
       { encoding: 'utf8', timeout: 15000, stdio: 'pipe' }
@@ -354,13 +361,6 @@ function dashboardClientExists(): boolean {
  */
 function createDashboardClient(): string {
   const clientSecret = crypto.randomBytes(32).toString('hex');
-  const adminPass = getAdminPassword();
-
-  // Authentification admin
-  execSync(
-    `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
-    { stdio: 'pipe', timeout: 15000 }
-  );
 
   // Créer le client via l'API admin
   const clientJson = JSON.stringify({
@@ -486,11 +486,6 @@ function updateBackendEnv(clientSecret: string): void {
  */
 function getDashboardClientSecret(): string | null {
   try {
-    const adminPass = getAdminPassword();
-    execSync(
-      `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
-      { stdio: 'pipe', timeout: 15000 }
-    );
     // Récupérer l'ID interne du client
     const clientsJson = execSync(
       'docker exec keycloak /opt/keycloak/bin/kcadm.sh get clients -r ryvie --fields id,clientId',
@@ -572,17 +567,6 @@ function syncClientSecrets(): void {
     return;
   }
 
-  const adminPass = getAdminPassword();
-  try {
-    execSync(
-      `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
-      { stdio: 'pipe', timeout: 15000 }
-    );
-  } catch (err: any) {
-    console.warn('[keycloak] ⚠️  Impossible de se connecter à l\'API admin pour sync secrets:', err.message);
-    return;
-  }
-
   let syncCount = 0;
   for (const client of customClients) {
     try {
@@ -647,6 +631,9 @@ async function ensureKeycloakRunning(): Promise<{ success: boolean; alreadyRunni
       return { success: false, error: 'Keycloak non prêt après timeout' };
     }
 
+    // 6b. Authentifier kcadm.sh une seule fois pour toutes les opérations suivantes
+    kcadmAuth();
+
     // 7. S'assurer que le client ryvie-dashboard existe et .env backend à jour
     await ensureDashboardClient();
 
@@ -671,11 +658,6 @@ async function ensureKeycloakRunning(): Promise<{ success: boolean; alreadyRunni
  */
 function ensureRealmTheme(): void {
   try {
-    const adminPass = getAdminPassword();
-    execSync(
-      `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
-      { stdio: 'pipe', timeout: 15000 }
-    );
     // Vérifier le thème et la locale actuels
     const realmJson = execSync(
       'docker exec keycloak /opt/keycloak/bin/kcadm.sh get realms/ryvie --fields loginTheme,internationalizationEnabled,defaultLocale',
@@ -702,11 +684,6 @@ function ensureRealmTheme(): void {
  */
 function keycloakClientExists(clientId: string): boolean {
   try {
-    const adminPass = getAdminPassword();
-    execSync(
-      `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
-      { stdio: 'pipe', timeout: 15000 }
-    );
     const result = execSync(
       `docker exec keycloak /opt/keycloak/bin/kcadm.sh get clients -r ryvie --fields clientId -q clientId=${clientId}`,
       { encoding: 'utf8', timeout: 15000, stdio: 'pipe' }
@@ -955,6 +932,14 @@ function ensureAppSSOClient(appId: string): void {
 
   console.log(`[keycloak] 🔐 SSO ${appName} (client: ${clientId}, port: ${port})`);
 
+  // Authentifier kcadm.sh pour cette opération standalone
+  try {
+    kcadmAuth();
+  } catch (err: any) {
+    console.warn(`[keycloak]    ⚠️  Impossible de s'authentifier auprès de Keycloak:`, err.message);
+    return;
+  }
+
   // 1) Vérifier / créer le client Keycloak
   let clientSecret: string | null = null;
 
@@ -1113,11 +1098,7 @@ function removeAppSSOClient(appId: string): void {
     ).trim();
 
     if (isRunning) {
-      const adminPass = getAdminPassword();
-      execSync(
-        `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
-        { stdio: 'pipe', timeout: 15000 }
-      );
+      kcadmAuth();
 
       // Trouver l'ID interne du client
       const clientsJson = execSync(

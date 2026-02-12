@@ -76,6 +76,26 @@ function getOriginFromRequest(req: any): string {
   return 'http://localhost:3002';
 }
 
+router.get('/health', async (req: any, res: any) => {
+  try {
+    // Live check: fetch Keycloak's well-known endpoint to confirm it's actually reachable
+    const issuer = process.env.OIDC_ISSUER || 'http://ryvie.local:3005/realms/ryvie';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const response = await fetch(`${issuer}/.well-known/openid-configuration`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (response.ok) {
+      res.json({ ready: true });
+    } else {
+      res.status(503).json({ ready: false, error: `Keycloak returned ${response.status}` });
+    }
+  } catch (error: any) {
+    res.status(503).json({ ready: false, error: error.message });
+  }
+});
+
 router.get('/login', async (req: any, res: any) => {
   try {
     const origin = getOriginFromRequest(req);

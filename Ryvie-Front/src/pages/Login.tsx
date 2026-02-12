@@ -19,6 +19,7 @@ const Login = () => {
   const [accessMode, setAccessMode] = useState('private');
   const [isRedirectingToSSO, setIsRedirectingToSSO] = useState(true);
   const [ssoRedirectUrl, setSsoRedirectUrl] = useState<string | null>(null);
+  const [waitingForKeycloak, setWaitingForKeycloak] = useState(false);
 
   // Construit la base URL du backend pour la redirection SSO
   // Même logique que buildAppUrl() : si on est sur ryvie.local et qu'une IP locale
@@ -113,19 +114,53 @@ const Login = () => {
           }
         }
 
-        console.log('[Login] Utilisateur existant - redirection automatique vers SSO');
-        const ssoUrl = `${getSsoBase()}/api/auth/login`;
-        console.log('[Login] URL SSO finale:', ssoUrl);
-        setSsoRedirectUrl(ssoUrl);
+        console.log('[Login] Utilisateur existant - vérification de la disponibilité de Keycloak...');
+        setWaitingForKeycloak(true);
         return;
       } catch (error) {
         console.error('[Login] Erreur lors de la vérification de la première connexion:', error);
-        setSsoRedirectUrl(`${getSsoBase()}/api/auth/login`);
+        setWaitingForKeycloak(true);
       }
     };
 
     initMode();
   }, []);
+
+  // Polling Keycloak health avant redirection SSO
+  useEffect(() => {
+    if (!waitingForKeycloak) return;
+
+    let cancelled = false;
+
+    const pollHealth = async () => {
+      const mode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(mode);
+      const healthUrl = `${serverUrl}/api/auth/health`;
+
+      while (!cancelled) {
+        try {
+          console.log('[Login] Polling Keycloak health...');
+          const res = await axios.get(healthUrl, { timeout: 5000 });
+          if (res.data?.ready) {
+            console.log('[Login] Keycloak est prêt, redirection SSO');
+            if (!cancelled) {
+              const ssoUrl = `${getSsoBase()}/api/auth/login`;
+              console.log('[Login] URL SSO finale:', ssoUrl);
+              setSsoRedirectUrl(ssoUrl);
+            }
+            return;
+          }
+        } catch (e) {
+          console.log('[Login] Keycloak pas encore prêt, nouvelle tentative dans 2s...');
+        }
+        // Attendre 2s avant de réessayer
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    };
+
+    pollHealth();
+    return () => { cancelled = true; };
+  }, [waitingForKeycloak]);
 
   // Redirection SSO différée : attend que le spinner soit peint avant de naviguer
   useEffect(() => {
@@ -298,12 +333,33 @@ const Login = () => {
 
   return (
     <div className="login-container">
-      <div className="login-card">
+      <div className="login-card login-card--preparing">
 
+        <div className="login-preparing">
+          <div className="login-preparing__icon">
+            <div className="login-preparing__ring" />
+            <span className="login-preparing__logo">R</span>
+          </div>
 
-        <div className="login-redirect">
-          <div className="spinner" />
+          <h2 className="login-preparing__title">
+            {t('login.preparingTitle') || 'Votre Ryvie est en cours de préparation'}
+          </h2>
+
+          <p className="login-preparing__subtitle">
+            {waitingForKeycloak && !ssoRedirectUrl
+              ? (t('login.preparingSubtitle') || 'Nous préparons votre espace sécurisé...')
+              : (t('login.redirecting') || 'Redirection...')}
+          </p>
+
+          <div className="login-preparing__dots">
+            <span /><span /><span />
+          </div>
+
+          <div className="login-preparing__bar">
+            <div className="login-preparing__bar-fill" />
+          </div>
         </div>
+
       </div>
     </div>
   );

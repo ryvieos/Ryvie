@@ -79,7 +79,10 @@
     "serverUnavailable": "Serveur inaccessible. Vérifiez votre connexion.",
     "testingConnectivity": "Test de connectivité vers le mode {{mode}}...",
     "accessModeError": "❌ Impossible d'accéder au serveur en mode {{mode}}. Vérifiez votre connexion.",
-    "connecting": "✓ Connexion réussie, redirection..."
+    "connecting": "✓ Connexion réussie, redirection...",
+    "startingUp": "Ryvie en train de démarrer...",
+    "preparingTitle": "Votre Ryvie est en cours de préparation",
+    "preparingSubtitle": "Nous préparons votre espace sécurisé..."
   },
   "welcome": {
     "title": "Bienvenue",

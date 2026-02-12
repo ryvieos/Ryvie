@@ -16,6 +16,16 @@
   max-width: 90%;
 }
 
+.login-card--preparing {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  padding: 3rem 2.5rem;
+  width: 420px;
+  animation: cardAppear 0.6s ease-out;
+}
+
 .login-header {
   text-align: center;
   margin-bottom: 2rem;
@@ -53,6 +63,151 @@
  @keyframes spin {
   to { transform: rotate(360deg); }
  }
+
+ .login-startup-message {
+  color: #5f6368;
+  font-size: 0.95rem;
+  margin: 0;
+  text-align: center;
+ }
+
+/* ── Modern preparing screen ── */
+
+@keyframes cardAppear {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.login-preparing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+}
+
+/* Pulsing ring + logo */
+.login-preparing__icon {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin-bottom: 12px;
+}
+
+.login-preparing__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: #4e73df;
+  border-right-color: #3b5fc0;
+  animation: ringRotate 1.4s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+}
+
+.login-preparing__ring::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-bottom-color: #4e73df;
+  border-left-color: #7c9af2;
+  animation: ringRotate 1.8s cubic-bezier(0.6, 0, 0.4, 1) infinite reverse;
+}
+
+@keyframes ringRotate {
+  to { transform: rotate(360deg); }
+}
+
+.login-preparing__logo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #4e73df, #3b5fc0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: logoPulse 2s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.7; transform: scale(0.92); }
+}
+
+/* Title */
+.login-preparing__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+/* Subtitle */
+.login-preparing__subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+/* Bouncing dots */
+.login-preparing__dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.login-preparing__dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4e73df, #5a7ee5);
+  animation: dotBounce 1.2s ease-in-out infinite;
+}
+
+.login-preparing__dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.login-preparing__dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes dotBounce {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40%           { opacity: 1;   transform: scale(1.2); }
+}
+
+/* Progress bar */
+.login-preparing__bar {
+  width: 100%;
+  height: 3px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 20px;
+}
+
+.login-preparing__bar-fill {
+  height: 100%;
+  width: 40%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #4e73df, #5a7ee5);
+  background-size: 200% 100%;
+  animation: barSlide 1.8s ease-in-out infinite;
+}
+
+@keyframes barSlide {
+  0%   { transform: translateX(-100%); background-position: 0% 0%; }
+  50%  { background-position: 100% 0%; }
+  100% { transform: translateX(350%); background-position: 0% 0%; }
+}
 
 .login-form {
   display: flex;

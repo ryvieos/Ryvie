@@ -79,7 +79,10 @@
     "serverUnavailable": "Server unavailable. Check your connection.",
     "testingConnectivity": "Testing connectivity to {{mode}} mode...",
     "accessModeError": "❌ Unable to access server in {{mode}} mode. Check your connection.",
-    "connecting": "✓ Connection successful, redirecting..."
+    "connecting": "✓ Connection successful, redirecting...",
+    "startingUp": "Ryvie is starting up...",
+    "preparingTitle": "Your Ryvie is being prepared",
+    "preparingSubtitle": "We're setting up your secure space..."
   },
   "welcome": {
     "title": "Welcome",
