@@ -234,6 +234,47 @@ function ensureDockerNetwork(): void {
 }
 
 /**
+ * S'assure que le conteneur openldap est connecté au réseau ryvie-network.
+ *
+ * Keycloak a besoin de joindre openldap:1389 pour l'import du realm (fédération LDAP).
+ * Si openldap tourne mais n'est pas sur ryvie-network, Keycloak crashe au démarrage.
+ */
+function ensureLdapOnNetwork(): void {
+  try {
+    // Vérifier si le conteneur openldap existe et tourne
+    const ldapRunning = execSync(
+      'docker ps --filter "name=^openldap$" --filter "status=running" -q',
+      { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
+    ).trim();
+
+    if (!ldapRunning) {
+      console.log('[keycloak] ℹ️  Conteneur openldap non trouvé ou arrêté, vérification réseau ignorée');
+      return;
+    }
+
+    // Vérifier si openldap est déjà sur ryvie-network
+    const networks = execSync(
+      'docker inspect openldap --format \'{{json .NetworkSettings.Networks}}\'',
+      { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
+    ).trim();
+
+    if (networks.includes('ryvie-network')) {
+      console.log('[keycloak] ✅ openldap déjà connecté à ryvie-network');
+      return;
+    }
+
+    // Connecter openldap à ryvie-network
+    execSync('docker network connect ryvie-network openldap', {
+      stdio: 'pipe',
+      timeout: 15000,
+    });
+    console.log('[keycloak] 🌐 openldap connecté à ryvie-network');
+  } catch (err: any) {
+    console.warn('[keycloak] ⚠️  Impossible de vérifier/connecter openldap à ryvie-network:', err.message);
+  }
+}
+
+/**
  * Démarre Keycloak via docker compose
  */
 function startKeycloak(): void {
@@ -587,6 +628,9 @@ async function ensureKeycloakRunning(): Promise<{ success: boolean; alreadyRunni
 
     // 4. Réseau Docker
     ensureDockerNetwork();
+
+    // 4b. S'assurer que openldap est sur ryvie-network (requis pour l'import realm LDAP)
+    ensureLdapOnNetwork();
 
     // 5. Démarrer si pas déjà en cours
     let wasStarted = false;

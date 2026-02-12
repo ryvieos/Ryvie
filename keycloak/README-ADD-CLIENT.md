@@ -282,20 +282,33 @@ Un script shell est aussi disponible pour forcer la sync sans redémarrer le bac
 /opt/Ryvie/scripts/sync-keycloak-secrets.sh
 ```
 
+### Vérification réseau LDAP
+
+Keycloak dépend du conteneur `openldap` pour la fédération d'utilisateurs. Si `openldap` tourne mais n'est **pas sur le réseau `ryvie-network`**, Keycloak ne peut pas le joindre et **crashe en boucle** au démarrage (erreur `Failed to fetch results from the LDAP provider`).
+
+Au démarrage (étape 4b), `ensureLdapOnNetwork()` :
+
+1. Vérifie si le conteneur `openldap` tourne
+2. Inspecte ses réseaux Docker
+3. Si `ryvie-network` est absent → exécute `docker network connect ryvie-network openldap`
+
+Cela peut arriver si le docker-compose d'OpenLDAP (`/data/config/ldap/docker-compose.yml`) ne déclare pas `ryvie-network`, ou si le conteneur a été recréé sans ce réseau.
+
 ### Ordre d'exécution au démarrage
 
 ```
 ensureKeycloakRunning()
-  1. Création des dossiers
-  2. Synchronisation .env Keycloak
-  3. Synchronisation realm JSON + thèmes
-  4. Création réseau Docker
-  5. Démarrage Keycloak (si pas déjà lancé)
-  6. Attente que Keycloak soit prêt
-  7. Vérification/création du client ryvie-dashboard
-  7b. ← Synchronisation des secrets (syncClientSecrets)
-  8. Application du thème ryvie
-  9. Provisioning des clients SSO des apps
+  1.  Création des dossiers
+  2.  Synchronisation .env Keycloak
+  3.  Synchronisation realm JSON + thèmes
+  4.  Création réseau Docker ryvie-network
+  4b. Vérification que openldap est sur ryvie-network
+  5.  Démarrage Keycloak (si pas déjà lancé)
+  6.  Attente que Keycloak soit prêt
+  7.  Vérification/création du client ryvie-dashboard
+  7b. Synchronisation des secrets (syncClientSecrets)
+  8.  Application du thème ryvie
+  9.  Provisioning des clients SSO des apps
 ```
 
 ---
