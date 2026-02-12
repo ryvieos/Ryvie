@@ -296,7 +296,7 @@ fi
 # Fonction de health check intelligent
 # Attend que le backend signale que TOUS ses services sont initialisés via /api/health/ready
 perform_health_check() {
-  local max_wait=300  # Timeout de sécurité (5 minutes - Keycloak peut prendre du temps au premier démarrage)
+  local max_wait=600  # Timeout de sécurité (10 minutes - Keycloak peut prendre du temps au premier démarrage)
   local start_time=$(date +%s)
   local check_interval=3
   local health_check_start_timestamp=$(date '+%Y-%m-%dT%H:%M')

@@ -138,10 +138,10 @@ const server = app.listen(PORT, () => {
   log("[Update Monitor] Pret a recevoir des requetes");
 });
 
-// Sécurité : arrêt automatique après 5 minutes
+// Sécurité : arrêt automatique après 10 minutes
 setTimeout(() => {
   performCleanupAndShutdown('Timeout de securite');
-}, 300000); // 5 minutes
+}, 600000); // 10 minutes
 
 // Gérer l'arrêt propre en appelant la fonction de nettoyage complète
 const shutdown = (signal) => {
