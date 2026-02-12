@@ -231,9 +231,79 @@ jq '.clients[] | {clientId, name}' /opt/Ryvie/keycloak/import/ryvie-realm.json
 
 ---
 
+## 🔑 Synchronisation automatique des secrets
+
+### Pourquoi ?
+
+Keycloak importe le realm JSON au démarrage avec la stratégie **`IGNORE_EXISTING`** :
+- **Premier démarrage** : le realm est importé intégralement, secrets inclus
+- **Démarrages suivants** : le realm existe en base, le JSON est **ignoré**
+
+Keycloak stocke les secrets **hashés** en interne. Ce hash peut diverger du secret en clair du realm JSON (régénération via l'admin UI, mise à jour de Keycloak, etc.). Quand ça arrive, le backend envoie le bon secret mais Keycloak le rejette → **boucle d'authentification `invalid_client_credentials`**.
+
+### Comment ça fonctionne
+
+Au démarrage du backend, `keycloakService.ts` exécute `syncClientSecrets()` (étape 7b de `ensureKeycloakRunning()`) :
+
+1. Lit le **realm JSON** (`/data/config/keycloak/import/ryvie-realm.json`) — source de vérité
+2. Filtre les clients **custom** (ceux avec un `secret`, hors clients internes Keycloak)
+3. Pour chaque client, force le secret dans Keycloak via `kcadm.sh update`
+
+Cela **re-hashe** le secret en base pour qu'il corresponde au secret en clair du JSON.
+
+### Impact sur les clients des apps
+
+La sync concerne **tous les clients custom** présents dans le realm JSON :
+
+| Client | Impacté ? | Pourquoi |
+|--------|-----------|----------|
+| `ryvie-dashboard` | Oui | Client principal du dashboard |
+| `ryvie-rpictures`, `ryvie-*` | Oui | Clients créés par `add-client-oauth.sh` |
+| `account`, `admin-cli`, etc. | Non | Clients internes Keycloak (filtrés, pas de secret) |
+
+**C'est sans danger** : la sync écrit le **même secret** que celui déjà dans le realm JSON. Si le secret n'a pas changé en base, l'opération est un no-op fonctionnel (Keycloak re-hashe la même valeur).
+
+### Quand un secret est modifié manuellement dans Keycloak
+
+Si vous changez un secret **uniquement via l'admin UI** sans mettre à jour le realm JSON, la sync **écrasera** ce changement au prochain démarrage du backend. Pour éviter ça :
+
+```bash
+# Toujours utiliser le script pour modifier un client :
+/opt/Ryvie/scripts/add-client-oauth.sh <client-id> "<nom>" <port> [nouveau-secret]
+
+# Ou mettre à jour manuellement le realm JSON après modification dans l'admin UI
+```
+
+### Script de sync manuelle
+
+Un script shell est aussi disponible pour forcer la sync sans redémarrer le backend :
+
+```bash
+/opt/Ryvie/scripts/sync-keycloak-secrets.sh
+```
+
+### Ordre d'exécution au démarrage
+
+```
+ensureKeycloakRunning()
+  1. Création des dossiers
+  2. Synchronisation .env Keycloak
+  3. Synchronisation realm JSON + thèmes
+  4. Création réseau Docker
+  5. Démarrage Keycloak (si pas déjà lancé)
+  6. Attente que Keycloak soit prêt
+  7. Vérification/création du client ryvie-dashboard
+  7b. ← Synchronisation des secrets (syncClientSecrets)
+  8. Application du thème ryvie
+  9. Provisioning des clients SSO des apps
+```
+
+---
+
 ## ⚠️ Important
 
 - **Chaque application** doit avoir un **client_id unique**
 - **Le secret** doit être gardé confidentiel (ne jamais le commiter)
 - **Les redirect URIs** doivent correspondre exactement aux URLs de callback
 - **Redémarrez Keycloak** après modification du fichier JSON
+- **Le realm JSON est la source de vérité** pour les secrets — toute modification doit y être reflétée

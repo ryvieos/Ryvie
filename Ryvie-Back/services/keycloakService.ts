@@ -493,6 +493,79 @@ async function ensureDashboardClient(): Promise<void> {
 }
 
 /**
+ * Synchronise les secrets de tous les clients custom du realm JSON vers Keycloak.
+ *
+ * Pourquoi : Keycloak importe le realm avec la stratégie IGNORE_EXISTING, ce qui
+ * signifie que si un client existe déjà en base, son secret n'est PAS mis à jour
+ * depuis le fichier JSON. Keycloak stocke les secrets hashés en interne, et ce hash
+ * peut diverger silencieusement du secret en clair dans le realm JSON (par exemple
+ * après une régénération via l'admin UI ou un re-hash interne).
+ *
+ * Cette fonction force le secret du realm JSON dans Keycloak via kcadm.sh update,
+ * ce qui re-hashe le secret en base et garantit la cohérence.
+ */
+function syncClientSecrets(): void {
+  console.log('[keycloak] 🔑 Synchronisation des secrets clients...');
+
+  const realmPath = fs.existsSync(REALM_DEST) ? REALM_DEST : REALM_SOURCE;
+  if (!fs.existsSync(realmPath)) {
+    console.warn('[keycloak] ⚠️  Realm JSON introuvable, sync secrets ignorée');
+    return;
+  }
+
+  let realm: any;
+  try {
+    realm = JSON.parse(fs.readFileSync(realmPath, 'utf8'));
+  } catch (err: any) {
+    console.warn('[keycloak] ⚠️  Impossible de lire le realm JSON:', err.message);
+    return;
+  }
+
+  const internalClients = ['account', 'account-console', 'admin-cli', 'broker', 'realm-management', 'security-admin-console'];
+  const customClients = (realm.clients || []).filter(
+    (c: any) => c.secret && !internalClients.includes(c.clientId)
+  );
+
+  if (customClients.length === 0) {
+    console.log('[keycloak] ℹ️  Aucun client custom avec secret dans le realm JSON');
+    return;
+  }
+
+  const adminPass = getAdminPassword();
+  try {
+    execSync(
+      `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
+      { stdio: 'pipe', timeout: 15000 }
+    );
+  } catch (err: any) {
+    console.warn('[keycloak] ⚠️  Impossible de se connecter à l\'API admin pour sync secrets:', err.message);
+    return;
+  }
+
+  let syncCount = 0;
+  for (const client of customClients) {
+    try {
+      const clientsJson = execSync(
+        `docker exec keycloak /opt/keycloak/bin/kcadm.sh get clients -r ryvie -q clientId=${client.clientId} --fields id`,
+        { encoding: 'utf8', timeout: 15000, stdio: 'pipe' }
+      );
+      const clients = JSON.parse(clientsJson);
+      if (!clients.length) continue;
+
+      execSync(
+        `docker exec keycloak /opt/keycloak/bin/kcadm.sh update clients/${clients[0].id} -r ryvie -s secret=${client.secret}`,
+        { stdio: 'pipe', timeout: 15000 }
+      );
+      syncCount++;
+    } catch (err: any) {
+      console.warn(`[keycloak] ⚠️  Échec sync secret pour ${client.clientId}:`, err.message);
+    }
+  }
+
+  console.log(`[keycloak] ✅ ${syncCount}/${customClients.length} secret(s) synchronisé(s)`);
+}
+
+/**
  * Point d'entrée principal : s'assure que Keycloak est configuré et en cours d'exécution.
  * Appelé au démarrage du backend dans index.ts → startServer()
  */
@@ -532,6 +605,9 @@ async function ensureKeycloakRunning(): Promise<{ success: boolean; alreadyRunni
 
     // 7. S'assurer que le client ryvie-dashboard existe et .env backend à jour
     await ensureDashboardClient();
+
+    // 7b. Forcer les secrets du realm JSON dans Keycloak (évite les désync après import IGNORE_EXISTING)
+    syncClientSecrets();
 
     // 8. S'assurer que le thème ryvie est appliqué au realm
     ensureRealmTheme();
