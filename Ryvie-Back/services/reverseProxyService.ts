@@ -607,27 +607,39 @@ async function checkComposeFile() {
   try {
     const content = await fs.readFile(EXPECTED_CONFIG.composeFile, 'utf8');
     
-    // Vérifications basiques
+    // Générer le contenu attendu pour comparaison exacte
+    const expectedContent = await generateCaddyDockerCompose();
+    
+    // Comparer le contenu exact (en normalisant les espaces/retours à la ligne)
+    const normalizeContent = (str: string) => str.trim().replace(/\r\n/g, '\n');
+    const isIdentical = normalizeContent(content) === normalizeContent(expectedContent);
+    
+    // Vérifications basiques (fallback si pas identique)
     const checks = [
       content.includes('caddy:latest'),
       content.includes('container_name: caddy'),
       content.includes('restart: unless-stopped'),
       content.includes('host.docker.internal:host-gateway'),
       content.includes('80:80'),
-      content.includes('443:443')
+      content.includes('443:443'),
+      content.includes('3005:3005'),
+      content.includes('ryvie-network')
     ];
     
-    const isValid = checks.every(check => check);
+    const hasBasicElements = checks.every(check => check);
+    const isValid = isIdentical || hasBasicElements;
     
     if (!isValid) {
       console.warn('[reverseProxyService] ⚠️  docker-compose.yml existe mais configuration incomplète');
+    } else if (!isIdentical && hasBasicElements) {
+      console.warn('[reverseProxyService] ⚠️  docker-compose.yml diffère du template mais contient les éléments essentiels');
     }
     
-    return { exists: true, valid: isValid, content };
+    return { exists: true, valid: isValid, identical: isIdentical, content };
   } catch (error: any) {
     if (error.code === 'ENOENT') {
       console.warn('[reverseProxyService] ⚠️  docker-compose.yml non trouvé:', EXPECTED_CONFIG.composeFile);
-      return { exists: false, valid: false };
+      return { exists: false, valid: false, identical: false };
     }
     throw error;
   }
@@ -924,13 +936,37 @@ async function ensureCaddyRunning() {
       checkCaddyfile()
     ]);
     
-    if (!composeCheck.exists || !composeCheck.valid) {
-      console.error('[reverseProxyService] ❌ docker-compose.yml manquant ou invalide');
-      return {
-        success: false,
-        error: 'Configuration docker-compose.yml manquante ou invalide',
-        details: { composeCheck, caddyfileCheck }
-      };
+    // Vérifier si le docker-compose.yml doit être régénéré
+    const shouldRegenerateCompose = !composeCheck.exists || !composeCheck.valid || !composeCheck.identical;
+    let composeRegenerated = false;
+    
+    if (shouldRegenerateCompose) {
+      if (!composeCheck.exists) {
+        console.warn('[reverseProxyService] ⚠️  docker-compose.yml manquant, création...');
+      } else if (!composeCheck.valid) {
+        console.warn('[reverseProxyService] ⚠️  docker-compose.yml invalide, régénération...');
+      } else if (!composeCheck.identical) {
+        console.warn('[reverseProxyService] ⚠️  docker-compose.yml diffère du template, mise à jour...');
+      }
+      
+      // Régénérer le docker-compose.yml
+      const composeContent = await generateCaddyDockerCompose();
+      await fs.writeFile(EXPECTED_CONFIG.composeFile, composeContent);
+      console.log('[reverseProxyService] ✅ docker-compose.yml régénéré');
+      composeRegenerated = true;
+      
+      // Si Caddy tourne, il faut le redémarrer (down + up) pour prendre en compte les changements de ports
+      const containerStatus = await checkCaddyContainer();
+      if (containerStatus.running) {
+        console.log('[reverseProxyService] 🔄 Redémarrage de Caddy pour appliquer le nouveau docker-compose.yml...');
+        const restartResult = await restartCaddy();
+        
+        if (!restartResult.success) {
+          console.warn('[reverseProxyService] ⚠️  Échec du redémarrage de Caddy:', restartResult.error);
+        } else {
+          console.log('[reverseProxyService] ✅ Caddy redémarré avec le nouveau docker-compose.yml');
+        }
+      }
     }
     
     // Vérifier si le Caddyfile doit être régénéré
