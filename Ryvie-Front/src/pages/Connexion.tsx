@@ -6,7 +6,7 @@ import { getCurrentAccessMode } from '../utils/detectAccessMode';
 import { isElectron, WindowManager } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
-import { startSession, getCurrentUser, getCurrentUserRole, getSessionInfo } from '../utils/sessionManager';
+import { startSession, endSession, getCurrentUser, getCurrentUserRole, getSessionInfo } from '../utils/sessionManager';
 import { useLanguage } from '../contexts/LanguageContext';
 
 const Userlogin = () => {
@@ -130,9 +130,25 @@ const Userlogin = () => {
 
   const selectUser = (userId, userName) => {
     const userObj = users.find(user => user.id === userId);
-    setSelectedUser(userObj);
-    setShowPasswordModal(true);
-    setMessage('');
+
+    // Si c'est l'utilisateur courant, fermer l'overlay
+    if (userObj && isCurrentSessionUser(userObj)) {
+      // Fermer l'overlay si on est dans un iframe
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: 'CLOSE_OVERLAY' }, '*');
+      } else {
+        navigate('/welcome');
+      }
+      return;
+    }
+
+    // Utilisateur différent → logout + redirect vers SSO Keycloak avec login_hint
+    const serverUrl = getServerUrl(accessMode);
+    console.log(`[Connexion] Switch vers ${userName} via SSO Keycloak`);
+    endSession();
+    // Rediriger la fenêtre parente (ou la fenêtre courante) vers le SSO
+    const targetWindow = (window.parent !== window) ? window.parent : window;
+    targetWindow.location.href = `${serverUrl}/api/auth/switch?login_hint=${encodeURIComponent(userId)}`;
   };
 
   // Helper: check if a given list user matches the current session user (by id or name)

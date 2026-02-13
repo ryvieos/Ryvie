@@ -57,13 +57,18 @@
     "checking": "Vérification..."
   },
   "login": {
-    "subtitle": "Connectez-vous pour accéder à votre espace personnel",
-    "username": "Nom d'utilisateur ou Email",
+    "subtitle": "Connectez-vous pour accéder à votre espace",
+    "username": "Nom d'utilisateur",
+    "usernamePlaceholder": "Entrez votre nom d'utilisateur",
     "password": "Mot de passe",
-    "usernamePlaceholder": "nom d'utilisateur ou email",
-    "passwordPlaceholder": "mot de passe",
+    "passwordPlaceholder": "Entrez votre mot de passe",
     "signIn": "Se connecter",
     "signingIn": "Connexion en cours...",
+    "signInWithSSO": "Se connecter avec SSO",
+    "redirectingToSSO": "Redirection vers le SSO...",
+    "redirecting": "Redirection...",
+    "ssoError": "Erreur lors de la connexion SSO",
+    "or": "ou",
     "accessMode": "Mode d'accès",
     "allFieldsRequired": "Veuillez entrer un nom d'utilisateur et un mot de passe",
     "success": "Connexion réussie. Redirection...",
@@ -74,7 +79,10 @@
     "serverUnavailable": "Serveur inaccessible. Vérifiez votre connexion.",
     "testingConnectivity": "Test de connectivité vers le mode {{mode}}...",
     "accessModeError": "❌ Impossible d'accéder au serveur en mode {{mode}}. Vérifiez votre connexion.",
-    "connecting": "✓ Connexion réussie, redirection..."
+    "connecting": "✓ Connexion réussie, redirection...",
+    "startingUp": "Ryvie en train de démarrer...",
+    "preparingTitle": "Votre Ryvie est en cours de préparation",
+    "preparingSubtitle": "Nous préparons votre espace sécurisé..."
   },
   "welcome": {
     "title": "Bienvenue",

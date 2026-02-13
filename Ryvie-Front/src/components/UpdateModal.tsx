@@ -100,7 +100,7 @@ const UpdateModal = ({ isOpen, targetVersion, accessMode }: { isOpen: boolean; t
   // Polling du health check après que les fichiers soient prêts
   const startHealthPolling = () => {
     let attempts = 0;
-    const maxAttempts = 150; // 150 tentatives = 5 minutes max
+    const maxAttempts = 300; // 300 tentatives = 10 minutes max
     let consecutiveReady = 0;
     const requiredConsecutiveReady = 2; // Réduit à 2 pour plus de réactivité
     let progressValue = 95;

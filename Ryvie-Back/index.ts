@@ -82,6 +82,12 @@ const { getLocalIP, getPrivateIP, waitForWifiInterface, listNetworkInterfaces } 
 const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
 const { syncNetbirdConfig } = require('./utils/syncNetbirdConfig');
 
+// Flag de readiness : true uniquement quand toute l'initialisation (Keycloak, AppStore, etc.) est terminée
+(global as any).serverReady = false;
+
+// Tracker de démarrage des services
+const startupTracker = require('./services/startupTracker');
+
 const docker = new Docker();
 const app = express();
 // Behind reverse proxies (Docker/Nginx), enable trust proxy so rate limit & req.ip work with X-Forwarded-For safely
@@ -151,7 +157,7 @@ const apiLimiter = rateLimit({
   // Skip rate limiting for certain endpoints if needed
   skip: (req) => {
     // Optionally skip rate limiting for health checks
-    return req.path === '/status' || req.path === '/api/status';
+    return req.path === '/status' || req.path === '/api/status' || req.path === '/api/auth/health';
   }
 });
 
@@ -165,6 +171,10 @@ app.use('/api', appsRouter);
 
 // Mount Auth routes
 app.use('/api', authRouter);
+
+// Mount OIDC Auth routes (SSO)
+const oidcAuthRouter = require('./routes/oidcAuth');
+app.use('/api/auth', oidcAuthRouter);
 
 // Mount Admin routes
 app.use('/api', adminRouter);
@@ -279,15 +289,34 @@ try {
 // Initialisation et démarrage des serveurs
 async function startServer() {
   try {
+    // Enregistrer tous les services de démarrage
+    startupTracker.registerService('redis');
+    startupTracker.registerService('network');
+    startupTracker.registerService('caddy');
+    startupTracker.registerService('keycloak');
+    startupTracker.registerService('snapshots');
+    startupTracker.registerService('realtime');
+    startupTracker.registerService('manifests');
+    startupTracker.registerService('appstore');
+    startupTracker.registerService('backgrounds');
+    startupTracker.registerService('netbird');
+
     // Vérifier et redémarrer Redis si nécessaire
     const { ensureRedisRunning } = require('./utils/redisHealthCheck');
-    await ensureRedisRunning();
+    try {
+      await ensureRedisRunning();
+      startupTracker.markDone('redis');
+    } catch (redisError: any) {
+      startupTracker.markError('redis', redisError.message);
+      throw redisError;
+    }
     
     // Attendre qu'une interface réseau soit disponible (max 30 secondes)
     console.log('📶 Attente d\'une interface réseau valide...');
     listNetworkInterfaces(); // Debug: afficher les interfaces disponibles
     const networkIP = await waitForWifiInterface(30000, 1000);
     console.log(`✅ Interface réseau prête: ${networkIP}`);
+    startupTracker.markDone('network');
     
     // Afficher aussi l'IP privée si disponible (VPN/Netbird)
     const privateIP = getPrivateIP();
@@ -306,22 +335,58 @@ async function startServer() {
         } else if (caddyResult.started) {
           console.log('✅ Caddy a été démarré avec succès');
         }
+        startupTracker.markDone('caddy');
       } else {
         console.error('❌ Erreur lors de la vérification/démarrage de Caddy:', caddyResult.error);
         console.error('⚠️  Le reverse proxy n\'est pas disponible, l\'application peut ne pas être accessible via ryvie.local');
+        startupTracker.markError('caddy', caddyResult.error || 'Caddy startup failed');
       }
     } catch (caddyError: any) {
       console.error('❌ Erreur critique lors de la vérification de Caddy:', caddyError.message);
       console.error('⚠️  Continuons le démarrage sans le reverse proxy...');
+      startupTracker.markError('caddy', caddyError.message);
+    }
+    
+    // Vérifier et démarrer Keycloak si nécessaire
+    console.log('🔍 Vérification de Keycloak...');
+    try {
+      const { ensureKeycloakRunning } = require('./services/keycloakService');
+      const keycloakResult = await ensureKeycloakRunning();
+      if (keycloakResult.success) {
+        if (keycloakResult.alreadyRunning) {
+          console.log('✅ Keycloak est déjà en cours d\'exécution');
+        } else if (keycloakResult.started) {
+          console.log('✅ Keycloak a été démarré avec succès');
+        }
+        startupTracker.markDone('keycloak');
+      } else {
+        console.error('❌ Erreur lors de la vérification/démarrage de Keycloak:', keycloakResult.error);
+        startupTracker.markError('keycloak', keycloakResult.error || 'Keycloak startup failed');
+      }
+    } catch (keycloakError: any) {
+      console.error('❌ Erreur critique lors de la vérification de Keycloak:', keycloakError.message);
+      console.error('⚠️  Continuons le démarrage sans Keycloak...');
+      startupTracker.markError('keycloak', keycloakError.message);
     }
     
     // Vérifier les snapshots en attente (après une mise à jour)
     const { checkPendingSnapshots } = require('./utils/snapshotCleanup');
-    checkPendingSnapshots();
+    try {
+      checkPendingSnapshots();
+      startupTracker.markDone('snapshots');
+    } catch (snapError: any) {
+      startupTracker.markError('snapshots', snapError.message);
+    }
     
     // Initialize realtime service
-    realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
-    await realtime.initializeActiveContainers();
+    try {
+      realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
+      await realtime.initializeActiveContainers();
+      startupTracker.markDone('realtime');
+    } catch (realtimeError: any) {
+      console.error('❌ Erreur lors de l\'initialisation du service realtime:', realtimeError.message);
+      startupTracker.markError('realtime', realtimeError.message);
+    }
 
     // Générer les manifests des applications au démarrage
     console.log('🔧 Génération des manifests des applications...');
@@ -330,22 +395,44 @@ async function startServer() {
       const manifestScript = require('path').join(__dirname, '..', '..', 'generate-manifests.js');
       execSync(`node ${manifestScript}`, { stdio: 'inherit' });
       console.log('✅ Manifests générés avec succès');
+      startupTracker.markDone('manifests');
     } catch (manifestError: any) {
       console.error('⚠️  Erreur lors de la génération des manifests:', manifestError.message);
+      startupTracker.markError('manifests', manifestError.message);
     }
     
     // Initialiser le service App Store
     const { initialize: initAppStore } = require('./services/appStoreService');
-    await initAppStore();
+    try {
+      await initAppStore();
+      startupTracker.markDone('appstore');
+    } catch (appStoreError: any) {
+      console.error('❌ Erreur lors de l\'initialisation de l\'App Store:', appStoreError.message);
+      startupTracker.markError('appstore', appStoreError.message);
+    }
     
     // Synchroniser les fonds d'écran au démarrage
-    syncBackgrounds();
-    
-    // Surveiller les changements dans le dossier public/images/backgrounds
-    watchBackgrounds();
+    try {
+      syncBackgrounds();
+      // Surveiller les changements dans le dossier public/images/backgrounds
+      watchBackgrounds();
+      startupTracker.markDone('backgrounds');
+    } catch (bgError: any) {
+      console.error('⚠️  Erreur lors de la synchronisation des fonds d\'écran:', bgError.message);
+      startupTracker.markError('backgrounds', bgError.message);
+    }
     
     // Synchroniser la configuration Netbird au démarrage
-    syncNetbirdConfig();
+    try {
+      syncNetbirdConfig();
+      startupTracker.markDone('netbird');
+    } catch (netbirdError: any) {
+      console.error('⚠️  Erreur lors de la synchronisation Netbird:', netbirdError.message);
+      startupTracker.markError('netbird', netbirdError.message);
+    }
+    
+    // Note: serverReady est maintenant géré automatiquement par startupTracker
+    // quand tous les services enregistrés sont terminés (done ou error)
     
     const PORT = process.env.PORT || 3002;
     httpServer.listen(PORT, () => {
