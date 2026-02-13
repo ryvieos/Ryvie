@@ -24,8 +24,7 @@ function generateDockerComposeTemplate(ports = []) {
   const defaultPorts = ['80:80', '443:443', '3005:3005'];
   const allPorts = [...defaultPorts, ...ports];
   
-  let template = `version: "3.8"
-services:
+  let template = `services:
   caddy:
     image: caddy:latest
     container_name: caddy
@@ -900,6 +899,18 @@ async function restartCaddy() {
 async function ensureCaddyRunning() {
   try {
     console.log('[reverseProxyService] 🔍 Vérification du reverse proxy Caddy...');
+    
+    // S'assurer que le réseau Docker ryvie-network existe avant de démarrer Caddy
+    try {
+      await execPromise('docker network inspect ryvie-network');
+    } catch {
+      try {
+        await execPromise('docker network create ryvie-network');
+        console.log('[reverseProxyService] 🌐 Réseau Docker ryvie-network créé');
+      } catch (createErr: any) {
+        console.warn('[reverseProxyService] ⚠️  Impossible de créer ryvie-network:', createErr.message);
+      }
+    }
     
     // 0. Vérifier et mettre à jour l'adresse privée dans Ryvie-rDrive
     const privateIPResult = await ensurePrivateIPInRyvieDrive();
