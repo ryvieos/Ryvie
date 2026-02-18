@@ -123,12 +123,18 @@ router.get('/callback', async (req: any, res: any) => {
     const { code, state } = req.query;
 
     if (!code || !state) {
-      return res.status(400).json({ error: 'Missing code or state' });
+      console.warn('[OIDC] Callback missing code or state, redirecting to login');
+      const origin = getOriginFromRequest(req);
+      const frontendOrigin = getFrontendOrigin(origin);
+      return res.redirect(`${frontendOrigin}/#/login?error=missing_params`);
     }
 
     const storedData = stateStore.get(state as string);
     if (!storedData) {
-      return res.status(400).json({ error: 'Invalid or expired state' });
+      console.warn('[OIDC] Invalid or expired state, redirecting to login');
+      const origin = getOriginFromRequest(req);
+      const frontendOrigin = getFrontendOrigin(origin);
+      return res.redirect(`${frontendOrigin}/#/login?error=session_expired`);
     }
 
     const { nonce, origin } = storedData;

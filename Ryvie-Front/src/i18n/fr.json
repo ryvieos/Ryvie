@@ -92,6 +92,7 @@
     "loading": "Chargement de votre espace...",
     "preloading": "Préchargement des données...",
     "ready": "Connecté à votre Ryvie",
+    "accessCta": "Accéder à votre Ryvie",
     "localNetwork": "Réseau Local",
     "localNetworkSubtitle": "Accès depuis la maison",
     "remoteNetwork": "Réseau Externe",

@@ -92,6 +92,7 @@
     "loading": "Loading your space...",
     "preloading": "Preloading data...",
     "ready": "Connected to your Ryvie",
+    "accessCta": "Access your Ryvie",
     "localNetwork": "Local Network",
     "localNetworkSubtitle": "Access from home",
     "remoteNetwork": "Remote Network",
