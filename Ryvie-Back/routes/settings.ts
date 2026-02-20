@@ -620,7 +620,13 @@ router.get('/settings/ryvie-domains', verifyToken, (req: any, res: any) => {
         const envContent = fs.readFileSync(envPath, 'utf8');
         const line = envContent.split(/\r?\n/).find(l => l.trim().startsWith('NETBIRD_SETUP_KEY='));
         if (line) {
-          setupKey = line.substring('NETBIRD_SETUP_KEY='.length).trim();
+          const baseKey = line.substring('NETBIRD_SETUP_KEY='.length).trim();
+          // Ajouter l'IP du tunnel à la clé si disponible
+          if (tunnelHost && baseKey) {
+            setupKey = `${baseKey}-${tunnelHost}`;
+          } else {
+            setupKey = baseKey;
+          }
         }
       }
     } catch (_: any) {}

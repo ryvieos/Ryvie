@@ -56,6 +56,61 @@ router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req: any, res:
   });
 });
 
+// POST /api/check-user-exists — check if user exists by UID or email (no admin auth required)
+router.post('/check-user-exists', verifyToken, async (req: any, res: any) => {
+  const { uid, email } = req.body || {};
+
+  if (!uid && !email) {
+    return res.status(400).json({ error: 'UID ou email requis' });
+  }
+
+  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+
+  ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
+    if (err) {
+      console.error('Erreur connexion LDAP :', err);
+      return res.status(500).json({ error: 'Erreur de connexion LDAP' });
+    }
+
+    // Build filter to check UID or email
+    let filterParts = [];
+    if (uid) filterParts.push(`(uid=${uid})`);
+    if (email) filterParts.push(`(mail=${email})`);
+    const checkFilter = filterParts.length > 1 ? `(|${filterParts.join('')})` : filterParts[0];
+
+    ldapClient.search(ldapConfig.userSearchBase, { filter: checkFilter, scope: 'sub', attributes: ['uid', 'mail'] }, (err, checkRes) => {
+      if (err) {
+        console.error('Erreur vérification uid/mail :', err);
+        ldapClient.unbind();
+        return res.status(500).json({ error: 'Erreur lors de la vérification de l\'utilisateur' });
+      }
+
+      let conflict = null;
+      checkRes.on('searchEntry', (entry) => {
+        const entryUid = entry.pojo.attributes.find((a) => a.type === 'uid')?.values[0];
+        const entryMail = entry.pojo.attributes.find((a) => a.type === 'mail')?.values[0];
+        if (uid && entryUid === uid) conflict = 'UID';
+        else if (email && entryMail === email) conflict = 'email';
+      });
+
+      checkRes.on('end', () => {
+        ldapClient.unbind();
+        if (conflict) {
+          const errorMessage = conflict === 'email' ? 'Cette adresse mail est déjà utilisée.' : 'Cet utilisateur existe déjà.';
+          return res.status(409).json({ exists: true, conflict, error: errorMessage });
+        }
+        return res.json({ exists: false });
+      });
+
+      checkRes.on('error', (err) => {
+        console.error('Erreur recherche utilisateur :', err);
+        ldapClient.unbind();
+        return res.status(500).json({ error: 'Erreur lors de la recherche' });
+      });
+    });
+  });
+});
+
 // POST /api/add-user — create a new LDAP user and assign role group (moved from auth.js)
 router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
   const { adminUid, adminPassword, newUser } = req.body || {};

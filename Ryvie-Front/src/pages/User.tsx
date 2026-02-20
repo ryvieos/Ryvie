@@ -318,7 +318,40 @@ const User = () => {
       return;
     }
 
-    // Récupérer l'email de l'utilisateur actuel pour pré-remplir les identifiants admin
+    // Vérifier si l'utilisateur existe déjà avant de demander l'auth admin
+    const token = (getSessionInfo() || {}).token;
+    if (!token) {
+      setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
+      setMessageType('error');
+      return;
+    }
+
+    try {
+      const serverUrl = getServerUrl(accessMode || 'private');
+      const checkResponse = await axios.post(
+        `${serverUrl}/api/check-user-exists`,
+        { uid: newUser.uid || newUser.name, email: newUser.email },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (checkResponse.data.exists) {
+        setMessage(checkResponse.data.error || t('userManagement.userExists'));
+        setMessageType('error');
+        return;
+      }
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        setMessage(err.response.data?.error || t('userManagement.userExists'));
+        setMessageType('error');
+        return;
+      }
+      console.error('Erreur lors de la vérification de l\'utilisateur:', err);
+      setMessage('Erreur lors de la vérification de l\'utilisateur');
+      setMessageType('error');
+      return;
+    }
+
+    // Si l'utilisateur n'existe pas, récupérer l'email de l'utilisateur actuel pour pré-remplir les identifiants admin
     const sessionInfo = getSessionInfo();
     const currentUserEmail = sessionInfo.userEmail || getCurrentUser() || '';
     
@@ -328,6 +361,9 @@ const User = () => {
       password: '' 
     });
 
+    // Effacer le message d'erreur avant d'ouvrir le modal admin
+    setMessage('');
+    
     // Ouvrir le modal d'authentification admin
     setShowAdminAuthModal(true);
   };
@@ -335,6 +371,41 @@ const User = () => {
   const handleUpdateUser = async () => {
     if (!validateUserForm()) {
       return;
+    }
+
+    // Pour la mise à jour, vérifier si l'email a changé et s'il est déjà utilisé
+    if (editUser && newUser.email !== (editUser as any).email) {
+      const token = (getSessionInfo() || {}).token;
+      if (!token) {
+        setMessage('Session expirée ou non authentifiée. Veuillez vous reconnecter.');
+        setMessageType('error');
+        return;
+      }
+
+      try {
+        const serverUrl = getServerUrl(accessMode || 'private');
+        const checkResponse = await axios.post(
+          `${serverUrl}/api/check-user-exists`,
+          { email: newUser.email },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (checkResponse.data.exists) {
+          setMessage(checkResponse.data.error || t('userManagement.userExists'));
+          setMessageType('error');
+          return;
+        }
+      } catch (err: any) {
+        if (err.response?.status === 409) {
+          setMessage(err.response.data?.error || t('userManagement.userExists'));
+          setMessageType('error');
+          return;
+        }
+        console.error('Erreur lors de la vérification de l\'email:', err);
+        setMessage('Erreur lors de la vérification de l\'email');
+        setMessageType('error');
+        return;
+      }
     }
 
     // Récupérer l'email de l'utilisateur actuel pour pré-remplir les identifiants admin
@@ -347,6 +418,9 @@ const User = () => {
       password: '' 
     });
 
+    // Effacer le message d'erreur avant d'ouvrir le modal admin
+    setMessage('');
+    
     // Ouvrir le modal d'authentification admin
     setShowAdminAuthModal(true);
   };

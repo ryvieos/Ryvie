@@ -170,10 +170,35 @@ async function loadInstalledVersions() {
     }
   }
 
-  if (!installed || Object.keys(installed).length === 0) {
-    const fallback = await loadInstalledVersionsFromManifests();
-    if (Object.keys(fallback).length > 0) {
-      installed = fallback;
+  // Toujours vérifier les manifests comme source de vérité
+  // et fusionner avec apps-versions.json (les manifests ont priorité pour la détection)
+  const fromManifests = await loadInstalledVersionsFromManifests();
+  if (Object.keys(fromManifests).length > 0) {
+    // Ajouter les apps détectées via manifests qui manquent dans apps-versions.json
+    let updated = false;
+    for (const [appId, buildId] of Object.entries(fromManifests)) {
+      if (installed[appId] === undefined) {
+        console.log(`[appStore] 🔧 App ${appId} détectée via manifest mais absente de apps-versions.json, ajout avec buildId=${buildId}`);
+        installed[appId] = buildId;
+        updated = true;
+      }
+    }
+    // Supprimer les apps présentes dans apps-versions.json mais plus dans les manifests
+    for (const appId of Object.keys(installed)) {
+      if (fromManifests[appId] === undefined) {
+        console.log(`[appStore] 🧹 App ${appId} présente dans apps-versions.json mais plus dans les manifests, suppression`);
+        delete installed[appId];
+        updated = true;
+      }
+    }
+    // Persister la correction si nécessaire
+    if (updated) {
+      try {
+        await fs.writeFile(APPS_VERSIONS_FILE, JSON.stringify(installed, null, 2));
+        console.log('[appStore] ✅ apps-versions.json synchronisé avec les manifests');
+      } catch (writeError: any) {
+        console.warn('[appStore] ⚠️ Impossible de sauvegarder apps-versions.json:', writeError.message);
+      }
     }
   }
 
