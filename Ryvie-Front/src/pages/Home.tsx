@@ -12,7 +12,7 @@ import { loadInstallState, saveInstallState, updateInstallation, removeInstallat
 import { isElectron, WindowManager, StorageManager, NotificationManager } from '../utils/platformUtils';
 import { endSession, getCurrentUser, getCurrentUserRole, startSession, isSessionActive, getSessionInfo } from '../utils/sessionManager';
 import urlsConfig from '../config/urls';
-const { getServerUrl, getAppUrl, setLocalIP, registerAppPort } = urlsConfig;
+const { getServerUrl, getAppUrl, setLocalIP, registerAppPort, reloadNetbirdData } = urlsConfig;
 import { 
   generateAppConfigFromManifests,
   generateDefaultAppsList,
@@ -753,6 +753,15 @@ const Home = () => {
     
     try {
       console.log('[Home] 🔄 Rafraîchissement des icônes du bureau...', { mode });
+      
+      // Recharger les données Netbird pour récupérer les nouveaux domaines publics
+      try {
+        await reloadNetbirdData();
+        console.log('[Home] ✅ Données Netbird rechargées');
+      } catch (err) {
+        console.warn('[Home] ⚠️ Impossible de recharger les données Netbird:', err);
+      }
+      
       const config = await generateAppConfigFromManifests(mode);
       
       // Vérifier que la config contient au moins une app (hors taskbar)

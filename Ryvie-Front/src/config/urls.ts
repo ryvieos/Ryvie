@@ -51,8 +51,8 @@ const loadNetbirdDataSync = (): void => {
   }
 };
 
-const loadNetbirdData = async (): Promise<NetbirdData> => {
-  if (netbirdDataLoaded) {
+const loadNetbirdData = async (forceReload: boolean = false): Promise<NetbirdData> => {
+  if (netbirdDataLoaded && !forceReload) {
     return netbirdData;
   }
   
@@ -65,7 +65,7 @@ const loadNetbirdData = async (): Promise<NetbirdData> => {
   netbirdDataLoading = true;
   
   try {
-    const response = await fetch('/config/netbird-data.json', {
+    const response = await fetch('/config/netbird-data.json?t=' + Date.now(), {
       cache: 'no-cache'
     });
     
@@ -87,6 +87,11 @@ const loadNetbirdData = async (): Promise<NetbirdData> => {
   }
   
   return netbirdData;
+};
+
+const reloadNetbirdData = async (): Promise<NetbirdData> => {
+  netbirdDataLoaded = false;
+  return loadNetbirdData(true);
 };
 
 const loadAppPorts = async (): Promise<Record<string, number>> => {
@@ -430,5 +435,6 @@ export default {
   setLocalIP,
   getLocalIP,
   loadNetbirdData,
+  reloadNetbirdData,
   loadAppPorts
 };
