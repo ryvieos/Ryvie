@@ -18,6 +18,7 @@ const Settings = () => {
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
   const [loading, setLoading] = useState(true);
+  const [showLoadingSkeleton, setShowLoadingSkeleton] = useState(false);
   const [stats, setStats] = useState(() => {
     // Charger depuis le cache localStorage au démarrage
     const cached = localStorage.getItem('systemStats');
@@ -85,6 +86,7 @@ const Settings = () => {
   // État pour les applications Docker
   const [applications, setApplications] = useState([]);
   const [appsLoading, setAppsLoading] = useState(true);
+  const [showAppsLoadingSkeleton, setShowAppsLoadingSkeleton] = useState(false);
   const [appsError, setAppsError] = useState(null);
   const [appActionStatus, setAppActionStatus] = useState({
     show: false,
@@ -1566,8 +1568,40 @@ const Settings = () => {
     }
   }, [accessMode, socket]);
 
+  useEffect(() => {
+    let timeoutId: any;
+
+    if (loading) {
+      timeoutId = setTimeout(() => {
+        setShowLoadingSkeleton(true);
+      }, 200);
+    } else {
+      setShowLoadingSkeleton(false);
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [loading]);
+
+  useEffect(() => {
+    let timeoutId: any;
+
+    if (appsLoading) {
+      timeoutId = setTimeout(() => {
+        setShowAppsLoadingSkeleton(true);
+      }, 200);
+    } else {
+      setShowAppsLoadingSkeleton(false);
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [appsLoading]);
+
   if (loading) {
-    return (
+    return showLoadingSkeleton ? (
       <div className="settings-skeleton">
         {/* Header skeleton */}
         <div className="skeleton-header">
@@ -1615,6 +1649,8 @@ const Settings = () => {
           </div>
         </div>
       </div>
+    ) : (
+      <div className="settings-container"></div>
     );
   }
 
@@ -1956,6 +1992,7 @@ const Settings = () => {
           </div>
         )}
         {appsLoading ? (
+          showAppsLoadingSkeleton ? (
           <div className="docker-apps-grid">
             {[1, 2, 3, 4].map(i => (
               <div key={i} className="docker-app-card-skeleton">
@@ -1972,6 +2009,9 @@ const Settings = () => {
               </div>
             ))}
           </div>
+          ) : (
+            <div className="docker-apps-grid"></div>
+          )
         ) : appsError ? (
           <div className="docker-error-container">
             <p className="docker-error-message">{appsError}</p>

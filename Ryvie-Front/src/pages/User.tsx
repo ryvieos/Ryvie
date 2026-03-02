@@ -30,6 +30,7 @@ const User = () => {
   });
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [loading, setLoading] = useState(true); // Indicateur de chargement
+  const [showLoadingSkeleton, setShowLoadingSkeleton] = useState(false);
   const [error, setError] = useState(null); // Gestion des erreurs
   const [accessMode, setAccessMode] = useState(null);
   const [message, setMessage] = useState('');
@@ -196,6 +197,22 @@ const User = () => {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    let timeoutId: any;
+
+    if (loading) {
+      timeoutId = setTimeout(() => {
+        setShowLoadingSkeleton(true);
+      }, 200);
+    } else {
+      setShowLoadingSkeleton(false);
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [loading]);
 
   const handleRoleChange = (id, role) => {
     setUsers(users.map((user) => (user.id === id ? { ...user, role } : user)));
@@ -643,7 +660,7 @@ const User = () => {
   };
 
   if (loading) {
-    return (
+    return showLoadingSkeleton ? (
       <div className="user-body">
         <div className="user-container">
           {/* Skeleton top bar */}
@@ -676,6 +693,10 @@ const User = () => {
             ))}
           </div>
         </div>
+      </div>
+    ) : (
+      <div className="user-body">
+        <div className="user-container"></div>
       </div>
     );
   }

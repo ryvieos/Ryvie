@@ -623,6 +623,7 @@ const Home = () => {
   const [closingOverlay, setClosingOverlay] = useState(false);
   const [overlayTitle, setOverlayTitle] = useState(t('home.appStore'));
   const [appStoreMounted, setAppStoreMounted] = useState(false);
+  const [userLoginMounted, setUserLoginMounted] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
   const [appStoreInstalling, setAppStoreInstalling] = useState(false);
   // Map des installations en cours: { appId: { appName, progress } }
@@ -2347,10 +2348,11 @@ const Home = () => {
       setOverlayVisible(false);
       setClosingOverlay(false);
       
-      // Démonter l'AppStore si aucune installation n'est en cours
+      // Démonter l'overlay (AppStore ou userlogin)
       if (!appStoreInstalling) {
-        console.log('[Home] Aucune installation en cours, démontage immédiat de l\'AppStore');
+        console.log('[Home] Aucune installation en cours, démontage immédiat');
         setAppStoreMounted(false);
+        setUserLoginMounted(false);
         setOverlayUrl('');
       } else {
         console.log('[Home] Installation en cours, démontage différé de l\'AppStore');
@@ -2381,9 +2383,11 @@ const Home = () => {
         if (!appStoreMounted) {
           setOverlayUrl(url);
           setAppStoreMounted(true);
+          setUserLoginMounted(false); // Démonter userlogin si monté
         }
         
         setOverlayTitle(t('home.appStore'));
+        setIframeLoading(false); // Pas de skeleton pour AppStore (il a sa propre animation)
         setOverlayVisible(true);
         setPendingUnmount(false); // Annuler tout démontage en attente
       } catch (e) {
@@ -2400,9 +2404,10 @@ const Home = () => {
         const url = `${base}#/userlogin`;
         
         // Monter l'iframe si elle n'est pas déjà montée
-        if (!appStoreMounted) {
+        if (!userLoginMounted) {
           setOverlayUrl(url);
-          setAppStoreMounted(true);
+          setUserLoginMounted(true);
+          setAppStoreMounted(false); // Démonter AppStore si monté
         }
         
         setOverlayTitle('Nouvelle session utilisateur');
@@ -2757,7 +2762,7 @@ const Home = () => {
               ✕
             </button>
           </div>
-          {appStoreMounted && overlayUrl && (
+          {(appStoreMounted || userLoginMounted) && overlayUrl && (
             <>
               {/* Skeleton de chargement affiché pendant le chargement de l'iframe */}
               {iframeLoading && overlayUrl.includes('userlogin') && (

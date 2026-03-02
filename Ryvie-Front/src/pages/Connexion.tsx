@@ -24,8 +24,25 @@ const Userlogin = () => {
   const [authenticating, setAuthenticating] = useState(false);
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [detectingMode, setDetectingMode] = useState(true);
+  const [showLoadingSkeleton, setShowLoadingSkeleton] = useState(false);
   const currentUser = getCurrentUser();
   const currentUserRole = getCurrentUserRole();
+
+  useEffect(() => {
+    let timeoutId: any;
+
+    if (loading || detectingMode) {
+      timeoutId = setTimeout(() => {
+        setShowLoadingSkeleton(true);
+      }, 200);
+    } else {
+      setShowLoadingSkeleton(false);
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [loading, detectingMode]);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -325,19 +342,23 @@ const Userlogin = () => {
         </div>
         
         {(loading || detectingMode) ? (
-          <div className="user-buttons-container">
-            <div className="user-skeleton-list">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="user-skeleton-item">
-                  <div className="user-skeleton-avatar connexion-skeleton-pulse"></div>
-                  <div className="user-skeleton-info">
-                    <div className="user-skeleton-name connexion-skeleton-pulse" style={{ width: `${80 + i * 20}px` }}></div>
-                    <div className="user-skeleton-role connexion-skeleton-pulse"></div>
+          showLoadingSkeleton ? (
+            <div className="user-buttons-container">
+              <div className="user-skeleton-list">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="user-skeleton-item">
+                    <div className="user-skeleton-avatar connexion-skeleton-pulse"></div>
+                    <div className="user-skeleton-info">
+                      <div className="user-skeleton-name connexion-skeleton-pulse" style={{ width: `${80 + i * 20}px` }}></div>
+                      <div className="user-skeleton-role connexion-skeleton-pulse"></div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="user-buttons-container"></div>
+          )
         ) : error ? (
           <div className="user-buttons-container error-state">
             <div className="inline-error">

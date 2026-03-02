@@ -1037,8 +1037,8 @@ try {
   if (initialLoading) {
     return (
       <div className="appstore-container appstore-loading">
-        <div className="loading-icon">🛍️</div>
-        <div className="loading-dots">
+        <div className="appstore-loading-icon">🛍️</div>
+        <div className="appstore-loading-dots">
           <span></span>
           <span></span>
           <span></span>

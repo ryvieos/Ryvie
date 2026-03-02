@@ -1634,18 +1634,18 @@
   background: #ffffff;
 }
 
-.loading-icon {
+.appstore-loading-icon {
   font-size: 3.5rem;
   animation: float 2s ease-in-out infinite;
 }
 
-.loading-dots {
+.appstore-loading-dots {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-.loading-dots span {
+.appstore-loading-dots span {
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -1653,9 +1653,9 @@
   animation: wave 1.4s ease-in-out infinite;
 }
 
-.loading-dots span:nth-child(1) { animation-delay: 0s; }
-.loading-dots span:nth-child(2) { animation-delay: 0.1s; }
-.loading-dots span:nth-child(3) { animation-delay: 0.2s; }
+.appstore-loading-dots span:nth-child(1) { animation-delay: 0s; }
+.appstore-loading-dots span:nth-child(2) { animation-delay: 0.1s; }
+.appstore-loading-dots span:nth-child(3) { animation-delay: 0.2s; }
 
 .appstore-loading .spinner {
   display: none;
