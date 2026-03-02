@@ -89,6 +89,12 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+# Copier manuellement les fichiers de configuration (webpack ne les copie pas toujours)
+echo "📋 Copie des fichiers de configuration..."
+mkdir -p dist/config
+cp src/config/*.json dist/config/ 2>/dev/null || true
+echo "✅ Fichiers de configuration copiés"
+
 # Réinstaller uniquement les dépendances de production (optimisation)
 echo "🧹 Nettoyage des devDependencies pour la production..."
 cd /opt/Ryvie/Ryvie-Back
