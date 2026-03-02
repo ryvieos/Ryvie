@@ -2740,7 +2740,7 @@ const Home = () => {
               right: 20,
               display: 'flex',
               gap: 8,
-              zIndex: 2
+              zIndex: 10
             }}
           >
             <button
