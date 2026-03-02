@@ -103,6 +103,12 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
         setSocket(s);
         setIsConnected(true);
         setServerStatus(true);
+        
+        // Écouter l'événement de mise à jour système
+        s.on('system-update-started', (data: any) => {
+          console.log('[SocketContext] Mise à jour système détectée, redirection vers le monitoring');
+          window.location.href = `${window.location.protocol}//${window.location.hostname}:3001`;
+        });
       },
       onDisconnect: () => {
         console.log('[SocketContext] Socket.io déconnecté');

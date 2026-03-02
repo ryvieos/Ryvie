@@ -278,6 +278,14 @@ echo $!
 router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req: any, res: any) => {
   try {
     console.log('[settings] Démarrage de la mise à jour de Ryvie...');
+    
+    // Notifier tous les clients connectés qu'une mise à jour démarre
+    const io = (global as any).io;
+    if (io) {
+      io.emit('system-update-started', { message: 'Mise à jour système en cours' });
+      console.log('[settings] 📡 Notification de mise à jour diffusée via WebSocket');
+    }
+    
     const result = await updateRyvie();
     
     if (result.success && result.needsRestart) {

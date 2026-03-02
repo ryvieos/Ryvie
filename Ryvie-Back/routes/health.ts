@@ -50,8 +50,12 @@ router.get('/health/update-status', (req: any, res: any) => {
     if (fs.existsSync(statusFile)) {
       const data = fs.readFileSync(statusFile, 'utf8');
       const status = JSON.parse(data);
+      
+      // Mise à jour en cours uniquement si step !== "done"
+      const isUpdating = status.step && status.step !== 'done';
+      
       res.json({
-        updating: true,
+        updating: isUpdating,
         ...status
       });
     } else {
