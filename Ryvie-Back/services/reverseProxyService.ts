@@ -43,6 +43,7 @@ function generateDockerComposeTemplate(ports = []) {
       - /data/config/reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - /data/config/reverse-proxy/data:/data
       - /data/config/reverse-proxy/config:/config
+      - /tmp:/tmp:ro
     networks:
       - ryvie-network
 
@@ -470,6 +471,11 @@ function generateCaddyfileContent() {
 # Site local
 http://ryvie.local {
   encode gzip
+
+  # 0) Redirection vers le monitoring si mise à jour en cours
+  # Vérifie si le fichier flag existe (même si le serveur est arrêté)
+  @updating file /tmp/ryvie-updating
+  redir @updating http://{host}:3001 temporary
 
   # 1) Socket.IO (WebSocket support)
   @socketio path /socket.io/*

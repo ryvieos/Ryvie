@@ -36,19 +36,6 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const App = () => {
   useEffect(() => {
-    // Vérifier si une mise à jour est en cours → rediriger vers le monitoring (port 3001)
-    fetch('/api/health/update-status', { cache: 'no-cache' })
-      .then(res => res.json())
-      .then(data => {
-        if (data.updating) {
-          console.log('[App] Mise à jour en cours, redirection vers le monitoring');
-          window.location.href = `${window.location.protocol}//${window.location.hostname}:3001`;
-        }
-      })
-      .catch(() => {
-        // Backend inaccessible, ignorer
-      });
-
     // Initialiser la session au démarrage
     initializeSession();
     console.log(`[App] Application démarrée en mode ${isElectron() ? 'Electron' : 'Web'}`);

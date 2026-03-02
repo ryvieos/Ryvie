@@ -7,6 +7,26 @@
   <title>Ryvie - Your Personal Cloud</title>
   <meta name="description" content="Ryvie - Système d'exploitation cloud personnel">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <script>
+    // Vérifier si une mise à jour est en cours AVANT de charger React (synchrone)
+    // Utilise XMLHttpRequest synchrone pour bloquer le chargement de React
+    (function() {
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/health/update-status', false); // false = synchrone
+        xhr.timeout = 2000;
+        xhr.send(null);
+        if (xhr.status === 200) {
+          var data = JSON.parse(xhr.responseText);
+          if (data.updating && data.step && data.step !== 'done') {
+            window.location.href = window.location.protocol + '//' + window.location.hostname + ':3001';
+          }
+        }
+      } catch(e) {
+        // Backend inaccessible, ignorer (Caddy redirigera si nécessaire)
+      }
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>

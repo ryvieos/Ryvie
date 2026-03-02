@@ -58,6 +58,11 @@ cleanup() {
     log "🧹 Nettoyage du dossier temporaire..."
     rm -rf "$TEMP_DIR" || true
   fi
+  # Supprimer le fichier flag pour que Caddy arrête de rediriger
+  if [[ -e /tmp/ryvie-updating ]]; then
+    rm -rf /tmp/ryvie-updating || true
+    log "🧹 Fichier flag supprimé (cleanup)"
+  fi
 }
 
 # Fonction de rollback
@@ -124,6 +129,13 @@ rollback() {
 }
 
 trap cleanup EXIT
+
+# Créer un fichier flag pour indiquer qu'une mise à jour est en cours
+# Ce fichier sera utilisé par Caddy pour rediriger vers le monitoring
+# Nettoyer d'abord au cas où un dossier résiduel existe (problème Docker)
+rm -rf /tmp/ryvie-updating 2>/dev/null || true
+touch /tmp/ryvie-updating
+log "🚩 Fichier flag créé: /tmp/ryvie-updating"
 
 update_status "starting" "Démarrage de la mise à jour vers $TARGET_VERSION" 5
 log "═══════════════════════════════════════════════════════════════"
@@ -436,6 +448,13 @@ fi
 log "⏳ Attente de 15s pour la stabilisation des services..."
 sleep 15
 update_status "done" "Mise à jour terminée avec succès" 100
+
+# Supprimer le fichier flag pour que Caddy arrête de rediriger
+if [[ -e /tmp/ryvie-updating ]]; then
+  rm -rf /tmp/ryvie-updating
+  log "✅ Fichier flag supprimé"
+fi
+
 log "========================================="
 log "✅ Mise à jour terminée avec succès"
 log "   Version: $TARGET_VERSION"
