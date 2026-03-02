@@ -207,7 +207,7 @@ app.use('/api', healthRouter);
 
 // Servir les fichiers de configuration JSON de manière statique pour le frontend
 app.get('/config/netbird-data.json', (req, res) => {
-  const netbirdPath = path.join(__dirname, '../Ryvie-Front/src/config/netbird-data.json');
+  const netbirdPath = '/opt/Ryvie/Ryvie-Front/src/config/netbird-data.json';
   
   if (fs.existsSync(netbirdPath)) {
     res.setHeader('Content-Type', 'application/json');
@@ -222,7 +222,7 @@ app.get('/config/netbird-data.json', (req, res) => {
 });
 
 app.get('/config/app-ports.json', (req, res) => {
-  const appPortsPath = path.join(__dirname, '../Ryvie-Front/src/config/app-ports.json');
+  const appPortsPath = '/opt/Ryvie/Ryvie-Front/src/config/app-ports.json';
   
   if (fs.existsSync(appPortsPath)) {
     res.setHeader('Content-Type', 'application/json');
