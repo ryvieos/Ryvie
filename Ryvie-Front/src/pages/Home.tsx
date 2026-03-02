@@ -623,6 +623,7 @@ const Home = () => {
   const [closingOverlay, setClosingOverlay] = useState(false);
   const [overlayTitle, setOverlayTitle] = useState(t('home.appStore'));
   const [appStoreMounted, setAppStoreMounted] = useState(false);
+  const [iframeLoading, setIframeLoading] = useState(true);
   const [appStoreInstalling, setAppStoreInstalling] = useState(false);
   // Map des installations en cours: { appId: { appName, progress } }
   // Charger l'état depuis localStorage au montage
@@ -2405,6 +2406,7 @@ const Home = () => {
         }
         
         setOverlayTitle('Nouvelle session utilisateur');
+        setIframeLoading(true); // Afficher le skeleton immédiatement
         setOverlayVisible(true);
         setPendingUnmount(false); // Annuler tout démontage en attente
       } catch (e) {
@@ -2756,11 +2758,125 @@ const Home = () => {
             </button>
           </div>
           {appStoreMounted && overlayUrl && (
-            <iframe
-              title={overlayTitle}
-              src={overlayUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-            />
+            <>
+              {/* Skeleton de chargement affiché pendant le chargement de l'iframe */}
+              {iframeLoading && overlayUrl.includes('userlogin') && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'linear-gradient(135deg, #f5f5f5 0%, #e0e9ff 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1
+                }}>
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.85)',
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '16px',
+                    padding: '30px',
+                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.12)',
+                    width: '100%',
+                    maxWidth: '500px'
+                  }}>
+                    {/* Titre skeleton */}
+                    <div style={{
+                      width: '280px',
+                      height: '32px',
+                      background: 'linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                      borderRadius: '6px',
+                      margin: '0 auto 25px'
+                    }} />
+                    
+                    {/* Badges skeleton */}
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>
+                      <div style={{
+                        width: '120px',
+                        height: '28px',
+                        background: 'linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%)',
+                        backgroundSize: '200% 100%',
+                        animation: 'shimmer 1.5s ease-in-out infinite',
+                        borderRadius: '12px'
+                      }} />
+                      <div style={{
+                        width: '80px',
+                        height: '28px',
+                        background: 'linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%)',
+                        backgroundSize: '200% 100%',
+                        animation: 'shimmer 1.5s ease-in-out infinite',
+                        borderRadius: '12px'
+                      }} />
+                    </div>
+                    
+                    {/* Liste utilisateurs skeleton */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                      {[1, 2, 3].map(i => (
+                        <div key={i} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '12px 16px',
+                          background: 'white',
+                          borderRadius: '12px',
+                          boxShadow: '0 2px 5px rgba(0, 0, 0, 0.05)'
+                        }}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%)',
+                            backgroundSize: '200% 100%',
+                            animation: 'shimmer 1.5s ease-in-out infinite',
+                            marginRight: '15px',
+                            flexShrink: 0
+                          }} />
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{
+                              width: `${80 + i * 20}px`,
+                              height: '16px',
+                              background: 'linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%)',
+                              backgroundSize: '200% 100%',
+                              animation: 'shimmer 1.5s ease-in-out infinite',
+                              borderRadius: '4px'
+                            }} />
+                            <div style={{
+                              width: '60px',
+                              height: '12px',
+                              background: 'linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%)',
+                              backgroundSize: '200% 100%',
+                              animation: 'shimmer 1.5s ease-in-out infinite',
+                              borderRadius: '4px'
+                            }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Bouton retour skeleton */}
+                    <div style={{
+                      width: '160px',
+                      height: '40px',
+                      background: 'linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                      borderRadius: '8px',
+                      margin: '0 auto'
+                    }} />
+                  </div>
+                </div>
+              )}
+              
+              <iframe
+                title={overlayTitle}
+                src={overlayUrl}
+                style={{ width: '100%', height: '100%', border: 'none', position: 'relative', zIndex: 2 }}
+                onLoad={() => setIframeLoading(false)}
+              />
+            </>
           )}
         </div>
       </div>

@@ -468,8 +468,8 @@ function generateCaddyfileContent() {
   auto_https disable_redirects
 }
 
-# Site local
-http://ryvie.local {
+# Site principal (catch-all port 80 : ryvie.local, IP privée, localhost, etc.)
+http://:80 {
   encode gzip
 
   # 0) Redirection vers le monitoring si mise à jour en cours
@@ -684,8 +684,8 @@ async function checkCaddyfile() {
     
     // Vérifications basiques (fallback si pas identique)
     const checks = [
-      content.includes('auto_https off'),
-      content.includes('ryvie.local'),
+      content.includes('auto_https'),
+      content.includes('http://:80') || content.includes('ryvie.local'),
       content.includes('reverse_proxy') && content.includes(':3000'),
       content.includes('@api') && content.includes(':3002'),
       content.includes('@socketio') && content.includes(':3002'),

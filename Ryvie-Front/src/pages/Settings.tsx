@@ -1568,9 +1568,52 @@ const Settings = () => {
 
   if (loading) {
     return (
-      <div className="settings-loading">
-        <div className="loading-spinner"></div>
-        <p>{t('common.loading')}</p>
+      <div className="settings-skeleton">
+        {/* Header skeleton */}
+        <div className="skeleton-header">
+          <div className="skeleton-back-btn skeleton-pulse"></div>
+          <div className="skeleton-title skeleton-pulse"></div>
+        </div>
+
+        {/* Customization section skeleton */}
+        <div className="skeleton-section">
+          <div className="skeleton-section-title skeleton-pulse"></div>
+          <div className="skeleton-grid">
+            <div className="skeleton-card skeleton-pulse">
+              <div className="skeleton-card-title skeleton-pulse"></div>
+              <div className="skeleton-card-text skeleton-pulse"></div>
+              <div className="skeleton-card-text short skeleton-pulse"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats section skeleton */}
+        <div className="skeleton-section">
+          <div className="skeleton-section-title skeleton-pulse"></div>
+          <div className="skeleton-stats-grid">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="skeleton-stat-card skeleton-pulse">
+                <div className="skeleton-stat-title skeleton-pulse"></div>
+                <div className="skeleton-stat-bar skeleton-pulse"></div>
+                <div className="skeleton-stat-text skeleton-pulse"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Settings cards section skeleton */}
+        <div className="skeleton-section">
+          <div className="skeleton-section-title skeleton-pulse"></div>
+          <div className="skeleton-grid">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="skeleton-card skeleton-pulse">
+                <div className="skeleton-card-title skeleton-pulse"></div>
+                <div className="skeleton-card-text skeleton-pulse"></div>
+                <div className="skeleton-card-text short skeleton-pulse"></div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -1913,9 +1956,21 @@ const Settings = () => {
           </div>
         )}
         {appsLoading ? (
-          <div className="docker-loading-container">
-            <div className="docker-loading-spinner"></div>
-            <p>{t('common.loading')}</p>
+          <div className="docker-apps-grid">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="docker-app-card-skeleton">
+                <div className="docker-skeleton-header">
+                  <div className="docker-skeleton-icon skeleton-pulse"></div>
+                  <div className="docker-skeleton-name skeleton-pulse" style={{ width: `${80 + i * 15}px` }}></div>
+                  <div className="docker-skeleton-badge skeleton-pulse"></div>
+                </div>
+                <div className="docker-skeleton-controls">
+                  <div className="docker-skeleton-btn skeleton-pulse"></div>
+                  <div className="docker-skeleton-btn skeleton-pulse"></div>
+                  <div className="docker-skeleton-btn-small skeleton-pulse"></div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : appsError ? (
           <div className="docker-error-container">

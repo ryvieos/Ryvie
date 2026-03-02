@@ -422,3 +422,58 @@
   cursor: pointer;
   font-weight: 500;
 }
+
+/* Skeleton loading for user list */
+.user-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.user-skeleton-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.user-skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 15px;
+  flex-shrink: 0;
+}
+
+.user-skeleton-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.user-skeleton-name {
+  height: 16px;
+  border-radius: 4px;
+  width: 120px;
+}
+
+.user-skeleton-role {
+  height: 12px;
+  border-radius: 4px;
+  width: 60px;
+}
+
+.connexion-skeleton-pulse {
+  background: linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: connexion-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes connexion-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

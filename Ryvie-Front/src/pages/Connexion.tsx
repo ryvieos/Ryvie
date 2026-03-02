@@ -325,15 +325,17 @@ const Userlogin = () => {
         </div>
         
         {(loading || detectingMode) ? (
-          <div className="user-buttons-container loading-state">
-            <div className="inline-loading">
-              <div className="spinner"></div>
-              <p className="loading-text">
-                {detectingMode ? t('connexion.detectingAccessMode') : t('connexion.loadingUsers')}
-              </p>
-              {!isElectron() && detectingMode && (
-                <p className="loading-subtext">{t('connexion.testingConnectivity')}</p>
-              )}
+          <div className="user-buttons-container">
+            <div className="user-skeleton-list">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="user-skeleton-item">
+                  <div className="user-skeleton-avatar connexion-skeleton-pulse"></div>
+                  <div className="user-skeleton-info">
+                    <div className="user-skeleton-name connexion-skeleton-pulse" style={{ width: `${80 + i * 20}px` }}></div>
+                    <div className="user-skeleton-role connexion-skeleton-pulse"></div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ) : error ? (

@@ -695,29 +695,188 @@ select:disabled {
   opacity: 0.7;
 }
 
-/* Loading */
-.settings-loading {
+/* Skeleton Loading */
+.settings-skeleton {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.skeleton-header {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 400px;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.skeleton-back-btn {
+  width: 80px;
+  height: 36px;
+  border-radius: 8px;
+}
+
+.skeleton-title {
+  width: 200px;
+  height: 32px;
+  border-radius: 6px;
+}
+
+.skeleton-section {
+  margin-bottom: 32px;
+}
+
+.skeleton-section-title {
+  width: 180px;
+  height: 24px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 16px;
 }
 
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #4776E6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.skeleton-card {
+  border-radius: 12px;
+  padding: 20px;
+  min-height: 120px;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.skeleton-card-title {
+  width: 60%;
+  height: 20px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.skeleton-card-text {
+  width: 90%;
+  height: 14px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.skeleton-card-text.short {
+  width: 50%;
+}
+
+.skeleton-card-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  margin-top: 16px;
+}
+
+.skeleton-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.skeleton-stat-card {
+  border-radius: 12px;
+  padding: 20px;
+  min-height: 100px;
+}
+
+.skeleton-stat-title {
+  width: 80px;
+  height: 18px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.skeleton-stat-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.skeleton-stat-text {
+  width: 120px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.skeleton-pulse {
+  background: linear-gradient(90deg, #e2e8f0 25%, #edf2f7 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Dark mode skeleton */
+.dark-mode .skeleton-pulse {
+  background: linear-gradient(90deg, #2d3748 25%, #4a5568 50%, #2d3748 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Docker app card skeleton */
+.docker-app-card-skeleton {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.docker-skeleton-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.docker-skeleton-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.docker-skeleton-name {
+  height: 20px;
+  border-radius: 4px;
+  flex: 1;
+}
+
+.docker-skeleton-badge {
+  width: 70px;
+  height: 24px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.docker-skeleton-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.docker-skeleton-btn {
+  width: 72px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+.docker-skeleton-btn-small {
+  width: 32px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+body.dark-mode .docker-app-card-skeleton {
+  background: #333333;
+  border-color: #444444;
 }
 
 /* Message de statut */

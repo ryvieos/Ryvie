@@ -646,14 +646,34 @@ const User = () => {
     return (
       <div className="user-body">
         <div className="user-container">
-          <div className="loading-container">
-            <div className="loading-icon">👥</div>
-            <div className="loading-dots">
-              <span></span>
-              <span></span>
-              <span></span>
+          {/* Skeleton top bar */}
+          <div className="user-skeleton-topbar">
+            <div className="user-skeleton-back user-skeleton-pulse"></div>
+            <div className="user-skeleton-topbar-center">
+              <div className="user-skeleton-page-title user-skeleton-pulse"></div>
+              <div className="user-skeleton-page-subtitle user-skeleton-pulse"></div>
             </div>
-            <p>{t('userManagement.loading')}</p>
+            <div className="user-skeleton-add-btn user-skeleton-pulse"></div>
+          </div>
+
+          {/* Skeleton user cards */}
+          <div className="user-skeleton-grid">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="user-skeleton-card user-skeleton-pulse">
+                <div className="user-skeleton-card-header">
+                  <div className="user-skeleton-card-avatar user-skeleton-pulse"></div>
+                  <div className="user-skeleton-card-info">
+                    <div className="user-skeleton-card-name user-skeleton-pulse" style={{ width: `${100 + i * 15}px` }}></div>
+                    <div className="user-skeleton-card-email user-skeleton-pulse" style={{ width: `${140 + i * 10}px` }}></div>
+                  </div>
+                </div>
+                <div className="user-skeleton-card-role user-skeleton-pulse"></div>
+                <div className="user-skeleton-card-actions">
+                  <div className="user-skeleton-card-action user-skeleton-pulse"></div>
+                  <div className="user-skeleton-card-action user-skeleton-pulse"></div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
