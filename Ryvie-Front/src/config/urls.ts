@@ -23,6 +23,34 @@ let appPortsLoaded = false;
 let appPortsLoading = false;
 const appPortsCallbacks: Array<(data: Record<string, number>) => void> = [];
 
+const loadNetbirdDataSync = (): void => {
+  if (netbirdDataLoaded) {
+    return;
+  }
+  
+  netbirdDataLoading = true;
+  
+  try {
+    // Utiliser XMLHttpRequest en mode synchrone pour charger les données immédiatement
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', '/config/netbird-data.json?t=' + Date.now(), false); // false = synchrone
+    xhr.send(null);
+    
+    if (xhr.status === 200) {
+      const data = JSON.parse(xhr.responseText);
+      netbirdData = { ...data };
+      console.log('[urls] Données Netbird chargées (sync):', netbirdData);
+    } else {
+      console.warn('[urls] Impossible de charger netbird-data.json (status:', xhr.status, '), utilisation des valeurs par défaut');
+    }
+  } catch (error: any) {
+    console.warn('[urls] Erreur lors du chargement de netbird-data.json:', error.message);
+  } finally {
+    netbirdDataLoaded = true;
+    netbirdDataLoading = false;
+  }
+};
+
 const loadNetbirdData = async (): Promise<NetbirdData> => {
   if (netbirdDataLoaded) {
     return netbirdData;
@@ -99,7 +127,9 @@ const loadAppPorts = async (): Promise<Record<string, number>> => {
   return appPorts;
 };
 
-loadNetbirdData();
+// Charger les données Netbird de manière synchrone au démarrage du module
+// pour garantir qu'elles sont disponibles quand buildAppUrl est appelé
+loadNetbirdDataSync();
 loadAppPorts();
 
 let cachedLocalIP: string | null = null;
@@ -163,9 +193,13 @@ const getLocalIP = (): string | null => {
 
 const buildAppUrl = (appId: string, port: number): string => {
   const { hostname, protocol } = getCurrentLocation();
+  
   const domains = netbirdData?.domains || {};
   const appDomain = domains[appId];
   const requiresHttps = appHttpsRequired[appId] || false;
+
+  // Debug: afficher l'état des données Netbird
+  console.log(`[buildAppUrl] ${appId} - netbirdDataLoaded=${netbirdDataLoaded}, domains=`, Object.keys(domains), `appDomain=${appDomain}`);
 
   // Si l'application a un domaine Netbird public, TOUJOURS l'utiliser
   // peu importe le mode de connexion (privé ou remote)
