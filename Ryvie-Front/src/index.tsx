@@ -24,7 +24,7 @@ import GlobalUpdateModal from './components/GlobalUpdateModal';
 import { LanguageProvider } from './contexts/LanguageContext';
 
 // Composant de redirection conditionnelle (Web et Electron)
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const sessionActive = isSessionActive();
   
   // Ne pas nettoyer automatiquement la session ici pour éviter les boucles
@@ -36,6 +36,19 @@ const ProtectedRoute = ({ children }) => {
 
 const App = () => {
   useEffect(() => {
+    // Vérifier si une mise à jour est en cours → rediriger vers le monitoring (port 3001)
+    fetch('/api/health/update-status', { cache: 'no-cache' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.updating) {
+          console.log('[App] Mise à jour en cours, redirection vers le monitoring');
+          window.location.href = `${window.location.protocol}//${window.location.hostname}:3001`;
+        }
+      })
+      .catch(() => {
+        // Backend inaccessible, ignorer
+      });
+
     // Initialiser la session au démarrage
     initializeSession();
     console.log(`[App] Application démarrée en mode ${isElectron() ? 'Electron' : 'Web'}`);
@@ -125,5 +138,8 @@ const App = () => {
 };
 
 const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Root element not found');
+}
 const root = ReactDOM.createRoot(rootElement);
 root.render(<App />);

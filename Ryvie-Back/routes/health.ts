@@ -37,4 +37,32 @@ router.get('/health/ready', (req: any, res: any) => {
   }
 });
 
+/**
+ * GET /api/health/update-status - Vérifier si une mise à jour est en cours
+ * Endpoint public (sans authentification) pour permettre à tous les utilisateurs
+ * de détecter une mise à jour en cours
+ */
+router.get('/health/update-status', (req: any, res: any) => {
+  const fs = require('fs');
+  const statusFile = '/tmp/ryvie-update-status.json';
+  
+  try {
+    if (fs.existsSync(statusFile)) {
+      const data = fs.readFileSync(statusFile, 'utf8');
+      const status = JSON.parse(data);
+      res.json({
+        updating: true,
+        ...status
+      });
+    } else {
+      res.json({ 
+        updating: false
+      });
+    }
+  } catch (error: any) {
+    console.error('[health] Erreur GET update-status:', error);
+    res.json({ updating: false });
+  }
+});
+
 export = router;
