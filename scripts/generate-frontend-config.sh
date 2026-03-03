@@ -1,59 +1,47 @@
 #!/bin/bash
-# Script pour générer les fichiers JSON de configuration du frontend
-# Appelé AVANT le build webpack pour garantir que tous les fichiers sont présents
+# Script pour initialiser les fichiers JSON de configuration frontend
+# Stockés dans /data/config/frontend-view (persistant, servis par le backend)
 
 set -euo pipefail
 
-RYVIE_DIR="/opt/Ryvie"
-CONFIG_DIR="$RYVIE_DIR/Ryvie-Front/src/config"
+DATA_CONFIG_DIR="/data/config/frontend-view"
 
-echo "📝 Génération des fichiers de configuration frontend..."
+echo "📝 Initialisation des fichiers de configuration frontend..."
 
-# Créer le dossier config s'il n'existe pas
-mkdir -p "$CONFIG_DIR"
+# Créer le dossier s'il n'existe pas
+mkdir -p "$DATA_CONFIG_DIR"
 
-# 1. Générer app-ports.json (ports des apps installées)
-echo "  → app-ports.json"
-if [ ! -f "$CONFIG_DIR/app-ports.json" ]; then
-  echo '{}' > "$CONFIG_DIR/app-ports.json"
+# 1. Initialiser app-ports.json si absent
+if [ ! -f "$DATA_CONFIG_DIR/app-ports.json" ]; then
+  echo "  → Création de app-ports.json"
+  echo '{}' > "$DATA_CONFIG_DIR/app-ports.json"
 fi
 
-# 2. Générer apps-versions.json (versions installées)
-echo "  → apps-versions.json"
-if [ ! -f "$CONFIG_DIR/apps-versions.json" ]; then
-  echo '{}' > "$CONFIG_DIR/apps-versions.json"
+# 2. Initialiser apps-versions.json si absent
+if [ ! -f "$DATA_CONFIG_DIR/apps-versions.json" ]; then
+  echo "  → Création de apps-versions.json"
+  echo '{}' > "$DATA_CONFIG_DIR/apps-versions.json"
 fi
 
-# 3. Générer all-ports.json (tous les ports système)
-echo "  → all-ports.json"
-if [ ! -f "$CONFIG_DIR/all-ports.json" ]; then
-  cat > "$CONFIG_DIR/all-ports.json" <<'EOF'
-{
-  "backend": 3002,
-  "frontend": 3000,
-  "caddy": 80,
-  "keycloak": 3005,
-  "openldap": 1389,
-  "netbird": 3004
-}
-EOF
+# 3. Initialiser all-ports.json si absent
+if [ ! -f "$DATA_CONFIG_DIR/all-ports.json" ]; then
+  echo "  → Création de all-ports.json"
+  echo '{}' > "$DATA_CONFIG_DIR/all-ports.json"
 fi
 
-# 4. Synchroniser netbird-data.json depuis /data/config si disponible
-echo "  → netbird-data.json"
+# 4. Synchroniser netbird-data.json depuis /data/config/netbird si disponible
 if [ -f "/data/config/netbird/netbird-data.json" ]; then
-  cp -f "/data/config/netbird/netbird-data.json" "$CONFIG_DIR/netbird-data.json"
-  echo "    ✓ Synchronisé depuis /data/config/netbird/"
-elif [ ! -f "$CONFIG_DIR/netbird-data.json" ]; then
-  # Créer un fichier vide par défaut
-  cat > "$CONFIG_DIR/netbird-data.json" <<'EOF'
+  cp -f "/data/config/netbird/netbird-data.json" "$DATA_CONFIG_DIR/netbird-data.json"
+  echo "  → netbird-data.json synchronisé depuis /data/config/netbird/"
+elif [ ! -f "$DATA_CONFIG_DIR/netbird-data.json" ]; then
+  cat > "$DATA_CONFIG_DIR/netbird-data.json" <<'EOF'
 {
   "managementUrl": "",
   "setupKey": "",
   "hostname": ""
 }
 EOF
-  echo "    ✓ Fichier par défaut créé"
+  echo "  → netbird-data.json par défaut créé"
 fi
 
-echo "✅ Fichiers de configuration générés"
+echo "✅ Configuration frontend initialisée dans $DATA_CONFIG_DIR"

@@ -484,14 +484,14 @@ http://:80 {
     header_up X-Real-IP {remote_host}
   }
 
-  # 2) API Backend (routes /api/* et /status)
-  @api path /api/* /status
+  # 2) API Backend (routes /api/*, /status et /config/*.json)
+  @api path /api/* /status /config/*.json
   reverse_proxy @api host.docker.internal:3002 {
     header_up Host {host}
     header_up X-Real-IP {remote_host}
   }
 
-  # 3) Tout le reste vers le frontend (webpack dev)
+  # 3) Tout le reste vers le frontend
   reverse_proxy host.docker.internal:3000 {
     header_up Host {host}
     header_up X-Real-IP {remote_host}

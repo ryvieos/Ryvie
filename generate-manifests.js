@@ -497,23 +497,23 @@ function main(specificAppId = null) {
             appBuildIds[manifest.id] = manifest.buildId;
         }
     });
-    const frontendConfigDir = path.join(__dirname, 'Ryvie-Front/src/config');
+    const dataConfigDir = '/data/config/frontend-view';
     try {
-        if (!fs.existsSync(frontendConfigDir))
-            fs.mkdirSync(frontendConfigDir, { recursive: true });
+        if (!fs.existsSync(dataConfigDir))
+            fs.mkdirSync(dataConfigDir, { recursive: true });
     }
     catch (e) {
         console.log(`\n⚠️  Impossible de préparer le dossier de config frontend: ${e.message}`);
     }
     // Écrire le mapping des ports pour le frontend
     try {
-        const frontendPortsPath = path.join(frontendConfigDir, 'app-ports.json');
+        const dataPortsPath = path.join(dataConfigDir, 'app-ports.json');
         
         // En mode ciblé, fusionner avec les ports existants au lieu d'écraser
         let finalPorts = appPorts;
-        if (specificAppId && fs.existsSync(frontendPortsPath)) {
+        if (specificAppId && fs.existsSync(dataPortsPath)) {
             try {
-                const existingPorts = JSON.parse(fs.readFileSync(frontendPortsPath, 'utf8'));
+                const existingPorts = JSON.parse(fs.readFileSync(dataPortsPath, 'utf8'));
                 finalPorts = { ...existingPorts, ...appPorts };
                 console.log(`\n🔄 Fusion avec les ports existants (mode ciblé)`);
             } catch (e) {
@@ -521,24 +521,21 @@ function main(specificAppId = null) {
             }
         }
         
-        fs.writeFileSync(frontendPortsPath, JSON.stringify(finalPorts, null, 2));
-        console.log(`📝 Ports des apps écrits pour le frontend: ${frontendPortsPath}`);
+        fs.writeFileSync(dataPortsPath, JSON.stringify(finalPorts, null, 2));
+        console.log(`📝 Ports des apps écrits: ${dataPortsPath}`);
     }
     catch (e) {
-        console.log(`\n⚠️  Impossible d'écrire app-ports.json pour le frontend: ${e.message}`);
+        console.log(`\n⚠️  Impossible d'écrire app-ports.json: ${e.message}`);
     }
     // Écrire tous les ports détaillés pour le frontend
     try {
-        const allPortsPath = path.join(__dirname, 'Ryvie-Front/src/config/all-ports.json');
-        const dir = path.dirname(allPortsPath);
-        if (!fs.existsSync(dir))
-            fs.mkdirSync(dir, { recursive: true });
+        const dataAllPortsPath = path.join(dataConfigDir, 'all-ports.json');
         
         // En mode ciblé, fusionner avec les ports existants
         let finalAllPorts = allPorts;
-        if (specificAppId && fs.existsSync(allPortsPath)) {
+        if (specificAppId && fs.existsSync(dataAllPortsPath)) {
             try {
-                const existingAllPorts = JSON.parse(fs.readFileSync(allPortsPath, 'utf8'));
+                const existingAllPorts = JSON.parse(fs.readFileSync(dataAllPortsPath, 'utf8'));
                 finalAllPorts = { ...existingAllPorts, ...allPorts };
                 console.log(`🔄 Fusion avec all-ports existants (mode ciblé)`);
             } catch (e) {
@@ -546,21 +543,21 @@ function main(specificAppId = null) {
             }
         }
         
-        fs.writeFileSync(allPortsPath, JSON.stringify(finalAllPorts, null, 2));
-        console.log(`📝 Ports détaillés écrits pour le frontend: ${allPortsPath}`);
+        fs.writeFileSync(dataAllPortsPath, JSON.stringify(finalAllPorts, null, 2));
+        console.log(`📝 Ports détaillés écrits: ${dataAllPortsPath}`);
     }
     catch (e) {
-        console.log(`⚠️  Impossible d'écrire all-ports.json pour le frontend: ${e.message}`);
+        console.log(`⚠️  Impossible d'écrire all-ports.json: ${e.message}`);
     }
     // Écrire les buildIds des apps pour le frontend
     try {
-        const versionsPath = path.join(frontendConfigDir, 'apps-versions.json');
+        const dataVersionsPath = path.join(dataConfigDir, 'apps-versions.json');
         
         // En mode ciblé, fusionner avec les buildIds existants
         let finalBuildIds = appBuildIds;
-        if (specificAppId && fs.existsSync(versionsPath)) {
+        if (specificAppId && fs.existsSync(dataVersionsPath)) {
             try {
-                const existingBuildIds = JSON.parse(fs.readFileSync(versionsPath, 'utf8'));
+                const existingBuildIds = JSON.parse(fs.readFileSync(dataVersionsPath, 'utf8'));
                 finalBuildIds = { ...existingBuildIds, ...appBuildIds };
                 console.log(`🔄 Fusion avec les buildIds existants (mode ciblé)`);
             } catch (e) {
@@ -568,11 +565,11 @@ function main(specificAppId = null) {
             }
         }
         
-        fs.writeFileSync(versionsPath, JSON.stringify(finalBuildIds, null, 2));
-        console.log(`📝 BuildIds des apps écrits pour le frontend: ${versionsPath}`);
+        fs.writeFileSync(dataVersionsPath, JSON.stringify(finalBuildIds, null, 2));
+        console.log(`📝 BuildIds des apps écrits: ${dataVersionsPath}`);
     }
     catch (e) {
-        console.log(`⚠️  Impossible d'écrire apps-versions.json pour le frontend: ${e.message}`);
+        console.log(`⚠️  Impossible d'écrire apps-versions.json: ${e.message}`);
     }
     console.log('\n🎉 Génération terminée !');
     console.log(`\n💡 Prochaines étapes:`);

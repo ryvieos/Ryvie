@@ -197,8 +197,8 @@ find . -maxdepth 1 -mindepth 1 \
   -exec rm -rf {} + 2>/dev/null || true
 log "✅ Ancien code supprimé"
 
-# Note: netbird-data.json sera synchronisé automatiquement par le backend au démarrage
-echo "ℹ️  netbird-data.json sera synchronisé par le backend au démarrage"
+# Note: Les fichiers de config frontend sont dans /data/config/frontend-view (persistants)
+echo "ℹ️  Fichiers de config frontend dans /data/config/frontend-view (persistants)"
 
 # 5. Sauvegarder les permissions actuelles
 update_status "permissions" "Sauvegarde des permissions" 50

@@ -1,13 +1,14 @@
 const fs = require('fs');
 const path = require('path');
-const { NETBIRD_FILE } = require('../config/paths');
+const { NETBIRD_FILE, FRONTEND_CONFIG_DIR } = require('../config/paths');
 
 /**
- * Synchronise le fichier netbird-data.json depuis /data/config/netbird vers le frontend
+ * Synchronise le fichier netbird-data.json depuis /data/config/netbird
+ * vers /data/config/frontend-view (servi au frontend via l'API backend)
  */
 function syncNetbirdConfig() {
   const sourceFile = NETBIRD_FILE;
-  const targetFile = path.join(__dirname, '../../../Ryvie-Front/src/config/netbird-data.json');
+  const targetFile = path.join(FRONTEND_CONFIG_DIR, 'netbird-data.json');
   
   try {
     // Vérifier si le fichier source existe
@@ -17,12 +18,11 @@ function syncNetbirdConfig() {
     }
     
     // Créer le dossier de destination si nécessaire
-    const targetDir = path.dirname(targetFile);
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
+    if (!fs.existsSync(FRONTEND_CONFIG_DIR)) {
+      fs.mkdirSync(FRONTEND_CONFIG_DIR, { recursive: true });
     }
     
-    // Copier le fichier
+    // Copier vers /data/config/frontend-view
     fs.copyFileSync(sourceFile, targetFile);
     console.log('✅ Configuration Netbird synchronisée avec succès');
     console.log(`   Source: ${sourceFile}`);
