@@ -96,6 +96,11 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+# Créer un symlink dist/config → /data/config/frontend-view
+# pour que serve -s puisse servir les JSON de config directement
+ln -sfn /data/config/frontend-view /opt/Ryvie/Ryvie-Front/dist/config
+echo "✅ Symlink dist/config → /data/config/frontend-view créé"
+
 # Réinstaller uniquement les dépendances de production (optimisation)
 echo "🧹 Nettoyage des devDependencies pour la production..."
 cd /opt/Ryvie/Ryvie-Back
