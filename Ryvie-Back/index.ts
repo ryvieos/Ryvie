@@ -205,31 +205,17 @@ app.use('/api', appStoreRouter);
 // Mount Health check route (for update polling)
 app.use('/api', healthRouter);
 
-// Servir les fichiers de configuration JSON de manière statique pour le frontend
-app.get('/config/netbird-data.json', (req, res) => {
-  const netbirdPath = path.join(__dirname, '../Ryvie-Front/src/config/netbird-data.json');
+// Servir tous les fichiers JSON de configuration depuis /data/config/frontend-view/
+app.get('/config/:filename.json', (req, res) => {
+  const { FRONTEND_CONFIG_DIR } = require('./config/paths');
+  const filename = req.params.filename + '.json';
+  const filePath = path.join(FRONTEND_CONFIG_DIR, filename);
   
-  if (fs.existsSync(netbirdPath)) {
+  if (fs.existsSync(filePath)) {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.sendFile(netbirdPath);
+    res.sendFile(filePath);
   } else {
-    res.json({
-      domains: {},
-      received: { backendHost: '' }
-    });
-  }
-});
-
-app.get('/config/app-ports.json', (req, res) => {
-  const appPortsPath = path.join(__dirname, '../Ryvie-Front/src/config/app-ports.json');
-  
-  if (fs.existsSync(appPortsPath)) {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.sendFile(appPortsPath);
-  } else {
-    // Retourner un objet vide par défaut si le fichier n'existe pas
     res.json({});
   }
 });
@@ -399,6 +385,17 @@ async function startServer() {
     } catch (manifestError: any) {
       console.error('⚠️  Erreur lors de la génération des manifests:', manifestError.message);
       startupTracker.markError('manifests', manifestError.message);
+    }
+    
+    // Synchroniser les secrets OAuth des apps SSO
+    console.log('🔐 Synchronisation OAuth des apps SSO...');
+    try {
+      const { syncAllAppsOAuth } = require('./services/appsOAuthService');
+      await syncAllAppsOAuth();
+      startupTracker.markDone('oauth-sync');
+    } catch (oauthError: any) {
+      console.error('⚠️  Erreur lors de la synchronisation OAuth:', oauthError.message);
+      startupTracker.markError('oauth-sync', oauthError.message);
     }
     
     // Initialiser le service App Store

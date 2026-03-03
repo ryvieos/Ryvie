@@ -19,8 +19,9 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 // Local files
 const APPS_FILE = path.join(STORE_CATALOG, 'apps.json');
 const METADATA_FILE = path.join(STORE_CATALOG, 'metadata.json');
-// Snapshot des versions installées généré côté manifests (utilisé pour détecter les mises à jour)
-const APPS_VERSIONS_FILE = path.join(RYVIE_DIR, 'Ryvie-Front/src/config/apps-versions.json');
+// Snapshot des versions installées stocké dans /data/config (persistant aux mises à jour)
+const { FRONTEND_CONFIG_DIR } = require('../config/paths');
+const APPS_VERSIONS_FILE = path.join(FRONTEND_CONFIG_DIR, 'apps-versions.json');
 
 // Metadata in memory
 let metadata = {
@@ -1384,17 +1385,37 @@ LOCAL_IP=${localIP}
       console.warn(`[Update] ⚠️ Impossible de régénérer le manifest de ${appId}:`, manifestError.message);
     }
     
-    // 6b. Provisionner le client SSO si le manifest a sso: true
-    currentStep = 'sso-client-provisioning';
+    // 6b. Provisionner OAuth + synchro .env si l'app a sso: true dans le manifest
+    currentStep = 'sso-oauth-provisioning';
     console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
     try {
-      const keycloakService = require('./keycloakService');
-      if (keycloakService.ensureAppSSOClient) {
-        sendProgressUpdate(appId, 99, 'Vérification du client SSO...', 'sso');
-        keycloakService.ensureAppSSOClient(appId);
+      const appsOAuthService = require('./appsOAuthService');
+      sendProgressUpdate(appId, 99, 'Vérification du client SSO...', 'sso');
+      const oauthResult = await appsOAuthService.provisionAppOAuth(appId);
+      
+      // Si le .env a changé, redémarrer les containers pour prendre le nouveau secret
+      if (oauthResult.envChanged) {
+        console.log(`[Update] 🔄 Secret OAuth modifié, redémarrage de ${appId}...`);
+        sendProgressUpdate(appId, 99, 'Redémarrage pour appliquer le secret OAuth...', 'sso');
+        
+        const manifest = require('./appManagerService').getAppManifest ? 
+          await require('./appManagerService').getAppManifest(appId) : null;
+        const composePath = manifest?.dockerComposePath || 'docker-compose.yml';
+        const workDir = composePath.includes('/') 
+          ? path.join(manifest?.sourceDir || `/data/apps/${appId}`, path.dirname(composePath))
+          : (manifest?.sourceDir || `/data/apps/${appId}`);
+        const composeFile = path.basename(composePath);
+        
+        try {
+          execSync(`docker compose -f ${composeFile} down`, { cwd: workDir, stdio: 'pipe' });
+          execSync(`docker compose -f ${composeFile} up -d`, { cwd: workDir, stdio: 'pipe' });
+          console.log(`[Update] ✅ ${appId} redémarré avec le nouveau secret OAuth`);
+        } catch (restartErr: any) {
+          console.warn(`[Update] ⚠️ Erreur redémarrage OAuth ${appId}:`, restartErr.message);
+        }
       }
     } catch (ssoError: any) {
-      console.warn(`[Update] ⚠️ Erreur lors du provisionnement SSO pour ${appId}:`, ssoError.message);
+      console.warn(`[Update] ⚠️ Erreur lors du provisionnement OAuth pour ${appId}:`, ssoError.message);
       // Non bloquant - l'installation est déjà terminée
     }
     

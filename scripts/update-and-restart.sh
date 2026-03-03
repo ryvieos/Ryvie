@@ -197,8 +197,8 @@ find . -maxdepth 1 -mindepth 1 \
   -exec rm -rf {} + 2>/dev/null || true
 log "✅ Ancien code supprimé"
 
-# Note: netbird-data.json sera synchronisé automatiquement par le backend au démarrage
-echo "ℹ️  netbird-data.json sera synchronisé par le backend au démarrage"
+# Note: Les fichiers de config frontend sont dans /data/config/frontend-view (persistants)
+echo "ℹ️  Fichiers de config frontend dans /data/config/frontend-view (persistants)"
 
 # 5. Sauvegarder les permissions actuelles
 update_status "permissions" "Sauvegarde des permissions" 50
@@ -247,7 +247,15 @@ if [[ -f "$RYVIE_DIR/scripts/prod.sh" ]]; then
   log "✅ prod.sh patché"
 fi
 
-# 9. Rebuild et redmarrage
+# 9. Générer les fichiers de configuration frontend avant le build
+log "� Génération des fichiers de configuration frontend..."
+if bash "$RYVIE_DIR/scripts/generate-frontend-config.sh" >> "$LOG_FILE" 2>&1; then
+  log "✅ Fichiers de configuration générés"
+else
+  log "⚠️  Génération des configs frontend échouée (non critique, le backend les créera)"
+fi
+
+# 10. Rebuild et redmarrage
 update_status "building" "Installation des dépendances et compilation" 60
 
 log "🔄 Lancement du script de démarrage en mode $MODE..."

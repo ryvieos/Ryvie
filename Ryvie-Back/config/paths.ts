@@ -12,6 +12,7 @@ const MANIFESTS_DIR = '/data/config/manifests';
 const APPS_DIR = '/data/apps';
 const STORE_CATALOG = '/data/config/appStore';  
 const REVERSE_PROXY_DIR = '/data/config/reverse-proxy';
+const FRONTEND_CONFIG_DIR = '/data/config/frontend-view';
 
 module.exports = {
   RYVIE_DIR,
@@ -23,5 +24,6 @@ module.exports = {
   MANIFESTS_DIR,
   APPS_DIR,
   STORE_CATALOG,
-  REVERSE_PROXY_DIR
+  REVERSE_PROXY_DIR,
+  FRONTEND_CONFIG_DIR
 };

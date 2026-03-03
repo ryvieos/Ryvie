@@ -10,7 +10,8 @@ module.exports = {
   entry: './src/index.tsx',
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: 'bundle.js',
+    filename: 'bundle.[contenthash:8].js',
+    clean: true,
   },
   module: {
     rules: [
@@ -56,13 +57,8 @@ module.exports = {
   resolve: {
     extensions: ['.ts', '.tsx', '.js', '.jsx'],
   },
-  // ✅ Empêcher la recompilation en boucle des fichiers JSON modifiés par le backend
   watchOptions: {
-    ignored: [
-      '**/node_modules/**',
-      '**/src/config/app-ports.json',
-      '**/src/config/netbird-data.json',
-    ],
+    ignored: ['**/node_modules/**'],
     aggregateTimeout: 600,
     poll: false,
   },
@@ -78,6 +74,15 @@ module.exports = {
   
     // SPA (si tu fais du routing côté client)
     historyApiFallback: true,
+
+    // Proxy /config/*.json vers le backend (fichiers servis depuis /data/config/frontend-view)
+    proxy: [
+      {
+        context: ['/config'],
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+      },
+    ],
   
     // ✅ HMR via proxy HTTPS (activé seulement si PUBLIC_HMR=1)
     client: process.env.PUBLIC_HMR === '1'
@@ -99,11 +104,6 @@ module.exports = {
     }),
     new CopyWebpackPlugin({
       patterns: [
-        {
-          from: 'src/config/*.json',
-          to: 'config/[name][ext]',
-          noErrorOnMissing: true,
-        },
         {
           from: 'public/images',
           to: 'images',
