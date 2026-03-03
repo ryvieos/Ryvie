@@ -764,7 +764,22 @@ function removeAppSSOClient(appId: string): void {
     console.warn(`[keycloak]    ⚠️  Erreur suppression live de ${clientId}:`, err.message);
   }
 
-  // 3) Supprimer du realm JSON (source + dest)
+  // 3) Supprimer l'entrée dans apps-oauth.json pour forcer la re-création au prochain install
+  const APPS_OAUTH_FILE = '/data/config/keycloak/apps-oauth.json';
+  try {
+    if (fs.existsSync(APPS_OAUTH_FILE)) {
+      const data = JSON.parse(fs.readFileSync(APPS_OAUTH_FILE, 'utf8'));
+      if (data[appId]) {
+        delete data[appId];
+        fs.writeFileSync(APPS_OAUTH_FILE, JSON.stringify(data, null, 2), 'utf8');
+        console.log(`[keycloak]    ✅ Entrée ${appId} supprimée de apps-oauth.json`);
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[keycloak]    ⚠️  Erreur suppression de ${appId} dans apps-oauth.json:`, err.message);
+  }
+
+  // 4) Supprimer du realm JSON (source + dest)
   for (const realmPath of [REALM_DEST, REALM_SOURCE]) {
     if (!fs.existsSync(realmPath)) continue;
     try {
