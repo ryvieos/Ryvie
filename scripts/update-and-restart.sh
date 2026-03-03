@@ -247,7 +247,15 @@ if [[ -f "$RYVIE_DIR/scripts/prod.sh" ]]; then
   log "✅ prod.sh patché"
 fi
 
-# 9. Rebuild et redmarrage
+# 9. Générer les fichiers de configuration frontend avant le build
+log "� Génération des fichiers de configuration frontend..."
+if bash "$RYVIE_DIR/scripts/generate-frontend-config.sh" >> "$LOG_FILE" 2>&1; then
+  log "✅ Fichiers de configuration générés"
+else
+  log "⚠️  Génération des configs frontend échouée (non critique, le backend les créera)"
+fi
+
+# 10. Rebuild et redmarrage
 update_status "building" "Installation des dépendances et compilation" 60
 
 log "🔄 Lancement du script de démarrage en mode $MODE..."

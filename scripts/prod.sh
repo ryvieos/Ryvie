@@ -79,6 +79,13 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+# Générer les fichiers de configuration frontend avant le build
+echo "📝 Génération des fichiers de configuration frontend..."
+bash /opt/Ryvie/scripts/generate-frontend-config.sh
+if [ $? -ne 0 ]; then
+  echo "⚠️  Avertissement: génération des configs frontend échouée (non critique)"
+fi
+
 # Build frontend
 echo "📦 Build du frontend..."
 cd /opt/Ryvie/Ryvie-Front

@@ -38,6 +38,10 @@ echo "📦 Installation des dépendances frontend..."
 cd /opt/Ryvie/Ryvie-Front
 npm install
 
+# Générer les fichiers de configuration frontend
+echo "📝 Génération des fichiers de configuration frontend..."
+bash /opt/Ryvie/scripts/generate-frontend-config.sh
+
 # Build initial du backend (nécessaire pour nodemon)
 echo "📦 Build initial du backend..."
 cd /opt/Ryvie/Ryvie-Back
