@@ -154,8 +154,7 @@ async function ensureKeycloakClient(clientId: string, clientSecret: string): Pro
     } else {
       // Le client n'existe pas → créer
       console.log(`[appsOAuth] 🆕 Création du client ${clientId} dans Keycloak...`);
-      const configFile = `/tmp/kc-client-${clientId}.json`;
-      await fs.writeFile(configFile, JSON.stringify({
+      const clientJson = JSON.stringify({
         clientId,
         secret: clientSecret,
         enabled: true,
@@ -164,9 +163,8 @@ async function ensureKeycloakClient(clientId: string, clientSecret: string): Pro
         directAccessGrantsEnabled: true,
         redirectUris: ['*'],
         webOrigins: ['*']
-      }));
-      execSync(`docker exec keycloak /opt/keycloak/bin/kcadm.sh create clients -r ryvie -f - < ${configFile}`, { stdio: 'pipe' });
-      await fs.unlink(configFile);
+      });
+      execSync(`echo '${clientJson.replace(/'/g, "'\\''")}' | docker exec -i keycloak /opt/keycloak/bin/kcadm.sh create clients -r ryvie -f -`, { stdio: 'pipe' });
     }
 
     console.log(`[appsOAuth] ✅ Client ${clientId} synchronisé dans Keycloak`);
@@ -283,13 +281,15 @@ async function provisionAppOAuth(appId: string): Promise<{ success: boolean; env
       console.log(`[appsOAuth] 🔑 Nouveau secret généré pour ${appId}`);
     }
 
-    // Synchro Keycloak si nécessaire
-    if (!entry.keycloakSynced) {
-      const ok = await ensureKeycloakClient(entry.clientId, entry.clientSecret);
-      if (ok) {
-        entry.keycloakSynced = true;
-        needSave = true;
-      }
+    // Synchro Keycloak : toujours vérifier que le client existe réellement
+    // (même si keycloakSynced est true, le client a pu être supprimé entre-temps)
+    const ok = await ensureKeycloakClient(entry.clientId, entry.clientSecret);
+    if (ok && !entry.keycloakSynced) {
+      entry.keycloakSynced = true;
+      needSave = true;
+    } else if (!ok) {
+      entry.keycloakSynced = false;
+      needSave = true;
     }
 
     if (needSave) await saveAppsOAuth(data);
