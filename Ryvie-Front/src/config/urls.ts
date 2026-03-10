@@ -191,15 +191,19 @@ const getLocalIP = (): string | null => {
   return cachedLocalIP;
 };
 
+const RYVIE_APPS = ['rdrive', 'rpictures', 'rdrop', 'rtransfer'];
+
 const buildAppUrl = (appId: string, port: number): string => {
   const { hostname, protocol } = getCurrentLocation();
   
   const domains = netbirdData?.domains || {};
   const appDomain = domains[appId];
   const requiresHttps = appHttpsRequired[appId] || false;
+  const backendHost = netbirdData?.received?.backendHost;
+  const isRApp = RYVIE_APPS.includes(appId.toLowerCase());
 
   // Debug: afficher l'état des données Netbird
-  console.log(`[buildAppUrl] ${appId} - netbirdDataLoaded=${netbirdDataLoaded}, domains=`, Object.keys(domains), `appDomain=${appDomain}`);
+  console.log(`[buildAppUrl] ${appId} - netbirdDataLoaded=${netbirdDataLoaded}, isRApp=${isRApp}, backendHost=${backendHost}, domains=`, Object.keys(domains), `appDomain=${appDomain}`);
 
   // Si l'application a un domaine Netbird public, TOUJOURS l'utiliser
   // peu importe le mode de connexion (privé ou remote)
@@ -208,10 +212,16 @@ const buildAppUrl = (appId: string, port: number): string => {
     return `https://${appDomain}`;
   }
 
-  // Sinon, utiliser la logique locale/privée
+  // Pour les apps non-rApps, toujours utiliser l'IP du tunnel (backendHost) si disponible
+  if (!isRApp && backendHost && port) {
+    const scheme = requiresHttps ? 'https' : 'http';
+    console.log(`[buildAppUrl] ${appId} → ${scheme}://${backendHost}:${port} (non-rApp, tunnel IP forcé)`);
+    return `${scheme}://${backendHost}:${port}`;
+  }
+
+  // rApps: utiliser la logique locale/privée
   if (hostname === 'ryvie.local') {
     if (cachedLocalIP && port) {
-      // Utiliser HTTPS si l'app le requiert
       const scheme = requiresHttps ? 'https' : 'http';
       console.log(`[buildAppUrl] ${appId} → ${scheme}://${cachedLocalIP}:${port}${requiresHttps ? ' (HTTPS requis)' : ''}`);
       return `${scheme}://${cachedLocalIP}:${port}`;

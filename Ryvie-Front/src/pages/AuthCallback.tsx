@@ -78,12 +78,7 @@ const AuthCallback = () => {
           <div style={{ color: 'red', fontSize: '18px' }}>{error}</div>
           <div>Redirection vers la page de connexion...</div>
         </>
-      ) : (
-        <>
-          <div className="spinner"></div>
-          <div>Authentification en cours...</div>
-        </>
-      )}
+      ) : null}
     </div>
   );
 };

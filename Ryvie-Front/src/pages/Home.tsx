@@ -625,6 +625,7 @@ const Home = () => {
   const [appStoreMounted, setAppStoreMounted] = useState(false);
   const [userLoginMounted, setUserLoginMounted] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
+  const overlayIframeRef = useRef<HTMLIFrameElement>(null);
   const [appStoreInstalling, setAppStoreInstalling] = useState(false);
   // Map des installations en cours: { appId: { appName, progress } }
   // Charger l'état depuis localStorage au montage
@@ -2384,6 +2385,11 @@ const Home = () => {
           setOverlayUrl(url);
           setAppStoreMounted(true);
           setUserLoginMounted(false); // Démonter userlogin si monté
+        } else {
+          // L'iframe est déjà montée, demander un refresh du catalogue
+          setTimeout(() => {
+            overlayIframeRef.current?.contentWindow?.postMessage({ type: 'APPSTORE_REFRESH' }, '*');
+          }, 100);
         }
         
         setOverlayTitle(t('home.appStore'));
@@ -2876,6 +2882,7 @@ const Home = () => {
               )}
               
               <iframe
+                ref={overlayIframeRef}
                 title={overlayTitle}
                 src={overlayUrl}
                 style={{ width: '100%', height: '100%', border: 'none', position: 'relative', zIndex: 2 }}
