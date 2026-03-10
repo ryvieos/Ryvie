@@ -4,10 +4,8 @@ const { execSync } = require('child_process');
 // Interfaces à ignorer (Docker, bridges, virtuelles, etc.)
 const IGNORED_INTERFACE_PATTERNS = ['br-', 'docker', 'veth', 'lo', 'virbr', 'tun', 'tap'];
 
-// Cache des IPs pour éviter les recherches répétées
-let cachedLocalIP: string | null = null;
-let cachedPrivateIP: string | null = null;
-let cacheInitialized = false;
+// Flag pour savoir si le réseau a été initialisé au démarrage
+let networkReady = false;
 
 /**
  * Vérifie si l'interface doit être ignorée
@@ -87,40 +85,27 @@ function getFallbackIP(): string {
 }
 
 /**
- * Récupère l'adresse IP locale de manière fiable (avec cache)
+ * Récupère l'adresse IP locale de manière fiable (sans cache, toujours à jour)
  * Ordre de priorité:
  * 1. Interface de la route par défaut (ip route get 8.8.8.8)
  * 2. NetworkManager (nmcli)
  * 3. Première interface non-Docker disponible
  */
 function getLocalIP(): string {
-  // Retourner le cache si déjà initialisé
-  if (cacheInitialized && cachedLocalIP) {
-    return cachedLocalIP;
-  }
-  
   // 1. Méthode la plus fiable: route par défaut
   const defaultRoute = getDefaultRouteInterface();
-  if (defaultRoute) {
-    cachedLocalIP = defaultRoute.ip;
-    return defaultRoute.ip;
-  }
+  if (defaultRoute) return defaultRoute.ip;
   
   // 2. Essayer NetworkManager
   const nmIP = getNetworkManagerIP();
-  if (nmIP) {
-    cachedLocalIP = nmIP;
-    return nmIP;
-  }
+  if (nmIP) return nmIP;
   
   // 3. Fallback sur la première interface valide
-  const fallbackIP = getFallbackIP();
-  cachedLocalIP = fallbackIP;
-  return fallbackIP;
+  return getFallbackIP();
 }
 
 /**
- * Attend qu'une interface réseau valide soit disponible et initialise le cache
+ * Attend qu'une interface réseau valide soit disponible au démarrage
  * @param maxWaitMs Temps maximum d'attente en ms (défaut: 30 secondes)
  * @param checkIntervalMs Intervalle entre les vérifications en ms (défaut: 1 seconde)
  */
@@ -130,32 +115,20 @@ async function waitForWifiInterface(maxWaitMs: number = 30000, checkIntervalMs: 
   console.log('[network] 🔍 Attente d\'une interface réseau valide...');
   
   while (Date.now() - startTime < maxWaitMs) {
-    // Vérifier la route par défaut (méthode la plus fiable)
     const defaultRoute = getDefaultRouteInterface();
     if (defaultRoute) {
       console.log(`[network] ✅ Interface réseau trouvée: ${defaultRoute.interface} (${defaultRoute.ip})`);
-      
-      // Initialiser le cache
-      cachedLocalIP = defaultRoute.ip;
-      cachedPrivateIP = getPrivateIPInternal(); // Calculer aussi l'IP privée
-      cacheInitialized = true;
-      
+      networkReady = true;
       return defaultRoute.ip;
     }
     
-    // Attendre avant la prochaine vérification
     await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
   }
   
   // Timeout atteint, utiliser le fallback
   const fallbackIP = getFallbackIP();
   console.warn(`[network] ⚠️  Timeout (${maxWaitMs}ms) - Utilisation du fallback:`, fallbackIP);
-  
-  // Initialiser le cache même en fallback
-  cachedLocalIP = fallbackIP;
-  cachedPrivateIP = getPrivateIPInternal();
-  cacheInitialized = true;
-  
+  networkReady = true;
   return fallbackIP;
 }
 
@@ -209,23 +182,15 @@ function getPrivateIPInternal(): string {
   }
   
   // Par défaut, retourner l'IP locale standard
-  return cachedLocalIP || getFallbackIP();
+  return getLocalIP();
 }
 
 /**
- * Récupère l'adresse IP privée (VPN/Netbird) avec cache
+ * Récupère l'adresse IP privée (VPN/Netbird) sans cache, toujours à jour
  * Utilisé pour Ryvie-rDrive qui a besoin de l'IP du VPN
  */
 function getPrivateIP(): string {
-  // Retourner le cache si déjà initialisé
-  if (cacheInitialized && cachedPrivateIP) {
-    return cachedPrivateIP;
-  }
-  
-  // Calculer et mettre en cache
-  const privateIP = getPrivateIPInternal();
-  cachedPrivateIP = privateIP;
-  return privateIP;
+  return getPrivateIPInternal();
 }
 
 /**

@@ -238,6 +238,18 @@ const AppStore = () => {
     })();
   }, []);
 
+  // Écouter les demandes de refresh depuis Home (à chaque réouverture de l'overlay)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'APPSTORE_REFRESH') {
+        console.log('[AppStore] Refresh demandé par Home');
+        fetchApps(true);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   // Polling pour recharger les apps toutes les 5 minutes
   useEffect(() => {
     const interval = setInterval(() => {
