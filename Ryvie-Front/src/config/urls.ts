@@ -193,6 +193,13 @@ const getLocalIP = (): string | null => {
 
 const RYVIE_APPS = ['rdrive', 'rpictures', 'rdrop', 'rtransfer'];
 
+// Vérifie si un appId est un service interne Ryvie (rApps + backend + sous-services rdrive)
+// Ces services gardent la logique locale/privée et ne sont PAS forcés sur le tunnel IP
+const isRyvieInternal = (appId: string): boolean => {
+  const id = appId.toLowerCase();
+  return RYVIE_APPS.includes(id) || id === 'status' || id.endsWith('.rdrive');
+};
+
 const buildAppUrl = (appId: string, port: number): string => {
   const { hostname, protocol } = getCurrentLocation();
   
@@ -200,7 +207,7 @@ const buildAppUrl = (appId: string, port: number): string => {
   const appDomain = domains[appId];
   const requiresHttps = appHttpsRequired[appId] || false;
   const backendHost = netbirdData?.received?.backendHost;
-  const isRApp = RYVIE_APPS.includes(appId.toLowerCase());
+  const isRApp = isRyvieInternal(appId);
 
   // Debug: afficher l'état des données Netbird
   console.log(`[buildAppUrl] ${appId} - netbirdDataLoaded=${netbirdDataLoaded}, isRApp=${isRApp}, backendHost=${backendHost}, domains=`, Object.keys(domains), `appDomain=${appDomain}`);
