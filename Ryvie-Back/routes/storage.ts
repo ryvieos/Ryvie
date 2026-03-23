@@ -1733,5 +1733,588 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req: any, r
 });
 
 
+/**
+ * GET /api/storage/disk-health
+ * Récupère les données SMART de tous les disques
+ */
+router.get('/storage/disk-health', authenticateToken, async (req: any, res: any) => {
+  try {
+    // Lister les disques physiques
+    const lsblkResult = await executeCommand('lsblk', ['-J', '-d', '-o', 'NAME,SIZE,MODEL,SERIAL,TYPE,TRAN,ROTA']);
+    const lsblkData = JSON.parse(lsblkResult.stdout);
+    const disks = (lsblkData.blockdevices || []).filter((d: any) => d.type === 'disk' && !d.name.includes('sr'));
+
+    const healthData = [];
+
+    for (const disk of disks) {
+      const devicePath = `/dev/${disk.name}`;
+      const entry: any = {
+        device: devicePath,
+        name: disk.name,
+        size: disk.size,
+        model: disk.model || 'Unknown',
+        serial: disk.serial || 'N/A',
+        transport: disk.tran || 'unknown',
+        rotational: disk.rota === true || disk.rota === '1',
+        smart: null,
+        health: 'unknown',
+        temperature: null,
+        powerOnHours: null,
+        reallocatedSectors: null,
+        pendingSectors: null
+      };
+
+      try {
+        const smartResult = await executeCommand('sudo', ['-n', 'smartctl', '-j', '-a', devicePath]);
+        const smartData = JSON.parse(smartResult.stdout);
+
+        // Overall health
+        if (smartData.smart_status && smartData.smart_status.passed !== undefined) {
+          entry.health = smartData.smart_status.passed ? 'good' : 'failing';
+        }
+
+        // Parse SMART attributes
+        if (smartData.ata_smart_attributes && smartData.ata_smart_attributes.table) {
+          for (const attr of smartData.ata_smart_attributes.table) {
+            switch (attr.id) {
+              case 194: // Temperature
+              case 190:
+                entry.temperature = attr.raw?.value ?? null;
+                break;
+              case 9: // Power-On Hours
+                entry.powerOnHours = attr.raw?.value ?? null;
+                break;
+              case 5: // Reallocated Sectors
+                entry.reallocatedSectors = attr.raw?.value ?? null;
+                break;
+              case 197: // Current Pending Sector
+                entry.pendingSectors = attr.raw?.value ?? null;
+                break;
+            }
+          }
+        }
+
+        // NVMe attributes
+        if (smartData.nvme_smart_health_information_log) {
+          const nvme = smartData.nvme_smart_health_information_log;
+          entry.temperature = nvme.temperature ?? null;
+          entry.powerOnHours = nvme.power_on_hours ?? null;
+          entry.reallocatedSectors = null;
+          entry.pendingSectors = null;
+          if (nvme.media_errors !== undefined && nvme.media_errors > 0) {
+            entry.health = 'warning';
+          }
+        }
+
+        // Compute health score from attributes
+        if (entry.reallocatedSectors !== null && entry.reallocatedSectors > 0) {
+          entry.health = entry.reallocatedSectors > 100 ? 'failing' : 'warning';
+        }
+        if (entry.pendingSectors !== null && entry.pendingSectors > 0) {
+          entry.health = 'warning';
+        }
+
+        entry.smart = {
+          available: true,
+          enabled: smartData.smart_status !== undefined
+        };
+      } catch (smartError: any) {
+        // smartctl may fail if SMART not supported
+        entry.smart = { available: false, enabled: false };
+        entry.health = 'unknown';
+      }
+
+      healthData.push(entry);
+    }
+
+    res.json({
+      success: true,
+      disks: healthData
+    });
+  } catch (error: any) {
+    console.error('Error fetching disk health:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch disk health data',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/storage/mdraid-create
+ * Crée un nouvel array RAID mdadm avec le niveau et les disques choisis
+ * Body: { level: string, disks: string[], dryRun: boolean }
+ */
+router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: any) => {
+  const { level, disks: selectedDisks, dryRun = false } = req.body;
+
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      type,
+      message
+    };
+    logs.push(logEntry);
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    if (io) {
+      io.emit('mdraid-log', logEntry);
+    }
+  };
+
+  try {
+    // Validate level
+    const validLevels = ['raid0', 'raid1', 'raid5', 'raid6', 'raid10'];
+    if (!level || !validLevels.includes(level)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid RAID level. Must be one of: ${validLevels.join(', ')}`
+      });
+    }
+
+    // Validate disk count for level
+    const minDisks = { raid0: 2, raid1: 2, raid5: 3, raid6: 4, raid10: 4 };
+    if (!selectedDisks || !Array.isArray(selectedDisks) || selectedDisks.length < minDisks[level]) {
+      return res.status(400).json({
+        success: false,
+        error: `RAID level ${level} requires at least ${minDisks[level]} disks (got ${selectedDisks?.length || 0})`
+      });
+    }
+
+    // For RAID10, need even number
+    if (level === 'raid10' && selectedDisks.length % 2 !== 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'RAID 10 requires an even number of disks'
+      });
+    }
+
+    // Validate all disk paths
+    for (const disk of selectedDisks) {
+      if (!isValidDevicePath(disk)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid device path: ${disk}`
+        });
+      }
+    }
+
+    log(`🚀 Creating new ${level.toUpperCase()} array with ${selectedDisks.length} disks`, 'info');
+    log(`Level: ${level}`, 'info');
+    log(`Disks: ${selectedDisks.join(', ')}`, 'info');
+    log(`Dry Run: ${dryRun}`, 'info');
+
+    // Step 1: Verify all disks are not mounted
+    log('=== Step 1: Verifying disks ===', 'step');
+    for (const disk of selectedDisks) {
+      const mountCheck = await isDeviceMounted(disk);
+      if (mountCheck.mounted) {
+        log(`❌ Disk ${disk} is mounted on ${mountCheck.mountpoint}`, 'error');
+        return res.status(400).json({
+          success: false,
+          error: `Disk ${disk} is mounted on ${mountCheck.mountpoint}`,
+          logs
+        });
+      }
+      log(`✓ ${disk} is not mounted`, 'success');
+    }
+
+    // Step 2: Determine partition sizes (use smallest disk as reference)
+    log('=== Step 2: Calculating partition sizes ===', 'step');
+    let minSizeBytes = Infinity;
+    const diskSizes = {};
+    for (const disk of selectedDisks) {
+      const sizeResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', disk]);
+      const sizeBytes = parseInt(sizeResult.stdout.trim());
+      diskSizes[disk] = sizeBytes;
+      if (sizeBytes < minSizeBytes) minSizeBytes = sizeBytes;
+      log(`${disk}: ${Math.floor(sizeBytes / 1024 / 1024)} MiB`, 'info');
+    }
+    const partEndMiB = Math.floor((minSizeBytes - 2 * 1024 * 1024) / 1024 / 1024);
+    log(`Partition size per disk: ${partEndMiB} MiB`, 'info');
+
+    if (dryRun) {
+      log('🔍 DRY RUN MODE - No changes will be made', 'warning');
+      log('=== Commands that would be executed ===', 'step');
+      const partPaths = [];
+      selectedDisks.forEach((disk, i) => {
+        const label = `md0_${String.fromCharCode(97 + i)}`;
+        const partPath = getPartitionPath(disk, 1);
+        partPaths.push(partPath);
+        log(`wipefs -a ${disk}`, 'info');
+        log(`parted -s ${disk} mklabel gpt`, 'info');
+        log(`parted -s ${disk} mkpart primary 1MiB ${partEndMiB}MiB`, 'info');
+        log(`parted -s ${disk} name 1 ${label}`, 'info');
+        log(`parted -s ${disk} set 1 raid on`, 'info');
+      });
+      const mdLevel = level.replace('raid', '');
+      log(`mdadm --create /dev/md0 --level=${mdLevel} --raid-devices=${selectedDisks.length} ${partPaths.join(' ')}`, 'info');
+      log(`mkfs.btrfs /dev/md0`, 'info');
+      log(`mount /dev/md0 /data`, 'info');
+      log('✓ Dry run completed', 'success');
+
+      return res.json({
+        success: true,
+        dryRun: true,
+        logs,
+        message: 'Dry run completed - no changes made'
+      });
+    }
+
+    // Step 3: Prepare all disks
+    log('=== Step 3: Preparing disks ===', 'step');
+    const partitionPaths = [];
+
+    for (let i = 0; i < selectedDisks.length; i++) {
+      const disk = selectedDisks[i];
+      const label = `md0_${String.fromCharCode(97 + i)}`;
+      const partPath = getPartitionPath(disk, 1);
+      partitionPaths.push(partPath);
+
+      log(`--- Preparing ${disk} ---`, 'info');
+
+      try {
+        log(`Wiping ${disk}...`, 'info');
+        await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]);
+        log(`✓ Wiped`, 'success');
+      } catch (e: any) {
+        log(`Error wiping ${disk}: ${e.message}`, 'error');
+        throw e;
+      }
+
+      try {
+        log(`Creating GPT table on ${disk}...`, 'info');
+        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mklabel', 'gpt']);
+        log(`✓ GPT table created`, 'success');
+      } catch (e: any) {
+        log(`Error creating GPT: ${e.message}`, 'error');
+        throw e;
+      }
+
+      try {
+        log(`Creating partition (1MiB to ${partEndMiB}MiB)...`, 'info');
+        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mkpart', 'primary', '1MiB', `${partEndMiB}MiB`]);
+        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'name', '1', label]);
+        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'set', '1', 'raid', 'on']);
+        log(`✓ Partition created: ${partPath} (${label})`, 'success');
+      } catch (e: any) {
+        log(`Error creating partition: ${e.message}`, 'error');
+        throw e;
+      }
+
+      await executeCommand('sudo', ['-n', 'partprobe', disk]);
+    }
+
+    await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
+    await executeCommand('sleep', ['2']);
+
+    // Wipe superblocks on all partitions
+    for (const partPath of partitionPaths) {
+      try {
+        await executeCommand('sudo', ['-n', 'wipefs', '-a', partPath]);
+        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partPath]);
+      } catch (e: any) {
+        // OK if no superblock
+      }
+    }
+    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
+    await executeCommand('sleep', ['2']);
+
+    // Step 4: Create the RAID array
+    log('=== Step 4: Creating RAID array ===', 'step');
+    const mdLevel = level.replace('raid', '');
+
+    try {
+      // Check if /dev/md0 already exists and stop it
+      try {
+        await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']);
+        log('Stopped existing /dev/md0', 'info');
+        await executeCommand('sleep', ['1']);
+      } catch (e: any) {
+        // md0 doesn't exist, that's fine
+      }
+
+      const createArgs = [
+        '-n', 'mdadm', '--create', '/dev/md0',
+        '--level=' + mdLevel,
+        '--raid-devices=' + selectedDisks.length,
+        '--run', '--force',
+        ...partitionPaths
+      ];
+      log(`Running: mdadm --create /dev/md0 --level=${mdLevel} --raid-devices=${selectedDisks.length} ${partitionPaths.join(' ')}`, 'info');
+      await executeCommand('sudo', createArgs);
+      log(`✓ RAID array created: /dev/md0 (${level.toUpperCase()})`, 'success');
+    } catch (e: any) {
+      log(`Error creating array: ${e.message}`, 'error');
+      throw e;
+    }
+
+    // Step 5: Create filesystem
+    log('=== Step 5: Creating btrfs filesystem ===', 'step');
+    try {
+      await executeCommand('sudo', ['-n', 'mkfs.btrfs', '-f', '/dev/md0']);
+      log(`✓ btrfs filesystem created`, 'success');
+    } catch (e: any) {
+      log(`Error creating filesystem: ${e.message}`, 'error');
+      throw e;
+    }
+
+    // Step 6: Mount
+    log('=== Step 6: Mounting /data ===', 'step');
+    try {
+      // Ensure /data directory exists
+      await executeCommand('sudo', ['-n', 'mkdir', '-p', '/data']);
+      await executeCommand('sudo', ['-n', 'mount', '/dev/md0', '/data']);
+      log(`✓ Mounted /dev/md0 on /data`, 'success');
+    } catch (e: any) {
+      log(`Error mounting: ${e.message}`, 'error');
+      throw e;
+    }
+
+    // Step 7: Save mdadm config
+    log('=== Step 7: Saving configuration ===', 'step');
+    try {
+      const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const fs = require('fs');
+      const tmpFile = '/tmp/mdadm.conf.new';
+      fs.writeFileSync(tmpFile, scanResult.stdout);
+      await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
+      fs.unlinkSync(tmpFile);
+      log(`✓ Updated /etc/mdadm/mdadm.conf`, 'success');
+
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log(`✓ Updated initramfs`, 'success');
+    } catch (e: any) {
+      log(`Warning: Config save: ${e.message}`, 'warning');
+    }
+
+    // Step 8: Monitor initial sync (for raid5/6/10)
+    if (level !== 'raid0') {
+      log('=== Step 8: Monitoring initial sync ===', 'step');
+      try {
+        const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+        if (mdstatResult.stdout.includes('recovery') || mdstatResult.stdout.includes('resync')) {
+          log('🔄 Resynchronization started...', 'info');
+
+          let lastProgress = -1;
+          let resyncComplete = false;
+          const maxWaitMinutes = 120;
+          const startTime = Date.now();
+
+          while (!resyncComplete) {
+            await executeCommand('sleep', ['3']);
+
+            const elapsedMinutes = (Date.now() - startTime) / 1000 / 60;
+            if (elapsedMinutes > maxWaitMinutes) {
+              log('⚠ Resync monitoring timeout - continuing in background', 'warning');
+              break;
+            }
+
+            const currentMdstat = await executeCommand('cat', ['/proc/mdstat']);
+            const mdstatOutput = currentMdstat.stdout;
+
+            const progressMatch = mdstatOutput.match(/(?:recovery|resync)\s*=\s*(\d+\.\d+)%/);
+            if (progressMatch) {
+              const progress = parseFloat(progressMatch[1]);
+              if (Math.abs(progress - lastProgress) >= 0.5 || lastProgress === -1) {
+                const finishMatch = mdstatOutput.match(/finish\s*=\s*([\d.]+min)/);
+                const speedMatch = mdstatOutput.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
+
+                let progressMsg = `🔄 Resync: ${progress.toFixed(1)}%`;
+                if (finishMatch) progressMsg += ` | ETA: ${finishMatch[1]}`;
+                if (speedMatch) progressMsg += ` | Speed: ${speedMatch[1]}`;
+                log(progressMsg, 'info');
+
+                if (io) {
+                  io.emit('mdraid-resync-progress', {
+                    percent: progress,
+                    eta: finishMatch ? finishMatch[1] : null,
+                    speed: speedMatch ? speedMatch[1] : null
+                  });
+                }
+                lastProgress = progress;
+              }
+            } else if (mdstatOutput.includes('[UU') || (!mdstatOutput.includes('recovery') && !mdstatOutput.includes('resync'))) {
+              log('✅ Resynchronization completed!', 'success');
+              if (io) {
+                io.emit('mdraid-resync-progress', { percent: 100, completed: true });
+              }
+              resyncComplete = true;
+            }
+          }
+        } else {
+          log('✓ No resync needed (instant sync)', 'success');
+        }
+      } catch (e: any) {
+        log(`Could not monitor resync: ${e.message}`, 'warning');
+      }
+    }
+
+    // Final status
+    log('=== Final status ===', 'step');
+    try {
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+      log(detailResult.stdout.trim(), 'info');
+      const dfResult = await executeCommand('df', ['-h', '/data']);
+      log(dfResult.stdout.trim(), 'info');
+    } catch (e: any) {}
+
+    log(`✅ ${level.toUpperCase()} array created successfully with ${selectedDisks.length} disks!`, 'success');
+
+    res.json({
+      success: true,
+      logs,
+      message: `${level.toUpperCase()} array created successfully`
+    });
+  } catch (error: any) {
+    console.error('Error creating RAID array:', error);
+    log(`Fatal error: ${error.message}`, 'error');
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create RAID array',
+      details: error.message,
+      logs
+    });
+  }
+});
+
+/**
+ * POST /api/storage/mdraid-create-prechecks
+ * Pré-vérifications pour la création d'un nouvel array RAID
+ * Body: { level: string, disks: string[] }
+ */
+router.post('/storage/mdraid-create-prechecks', authenticateToken, async (req: any, res: any) => {
+  try {
+    const { level, disks: selectedDisks } = req.body;
+    const reasons = [];
+    const plan = [];
+    let canProceed = true;
+
+    const validLevels = ['raid0', 'raid1', 'raid5', 'raid6', 'raid10'];
+    if (!level || !validLevels.includes(level)) {
+      return res.status(400).json({ success: false, error: 'Invalid RAID level' });
+    }
+
+    const minDisks = { raid0: 2, raid1: 2, raid5: 3, raid6: 4, raid10: 4 };
+    if (!selectedDisks || !Array.isArray(selectedDisks) || selectedDisks.length < minDisks[level]) {
+      reasons.push(`❌ ${level.toUpperCase()} requires at least ${minDisks[level]} disks (got ${selectedDisks?.length || 0})`);
+      canProceed = false;
+    } else {
+      reasons.push(`✓ ${selectedDisks.length} disks selected (minimum ${minDisks[level]} for ${level.toUpperCase()})`);
+    }
+
+    if (level === 'raid10' && selectedDisks && selectedDisks.length % 2 !== 0) {
+      reasons.push(`❌ RAID 10 requires an even number of disks`);
+      canProceed = false;
+    }
+
+    // Check if /dev/md0 already exists
+    try {
+      await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+      reasons.push(`⚠ /dev/md0 already exists - it will be stopped and recreated`);
+    } catch (e: any) {
+      reasons.push(`✓ /dev/md0 does not exist yet`);
+    }
+
+    // Check if /data is already mounted
+    try {
+      const findmntResult = await executeCommand('findmnt', ['-no', 'SOURCE', '/data']);
+      const source = findmntResult.stdout.trim();
+      if (source) {
+        reasons.push(`⚠ /data is currently mounted on ${source} - will need to be unmounted`);
+      }
+    } catch (e: any) {
+      reasons.push(`✓ /data is not currently mounted`);
+    }
+
+    // Check each disk
+    let minSizeBytes = Infinity;
+    if (selectedDisks && Array.isArray(selectedDisks)) {
+      for (const disk of selectedDisks) {
+        if (!isValidDevicePath(disk)) {
+          reasons.push(`❌ Invalid device path: ${disk}`);
+          canProceed = false;
+          continue;
+        }
+
+        const mountCheck = await isDeviceMounted(disk);
+        if (mountCheck.mounted) {
+          reasons.push(`❌ ${disk} is mounted on ${mountCheck.mountpoint}`);
+          canProceed = false;
+        } else {
+          reasons.push(`✓ ${disk} is not mounted`);
+        }
+
+        try {
+          const sizeResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', disk]);
+          const sizeBytes = parseInt(sizeResult.stdout.trim());
+          if (sizeBytes < minSizeBytes) minSizeBytes = sizeBytes;
+          reasons.push(`✓ ${disk} size: ${Math.floor(sizeBytes / 1024 / 1024)} MiB`);
+        } catch (e: any) {
+          reasons.push(`❌ Cannot read size of ${disk}`);
+          canProceed = false;
+        }
+      }
+    }
+
+    // Compute expected capacity
+    let expectedCapacity = 0;
+    const partSize = minSizeBytes !== Infinity ? minSizeBytes - 2 * 1024 * 1024 : 0;
+    const diskCount = selectedDisks?.length || 0;
+    switch (level) {
+      case 'raid0': expectedCapacity = partSize * diskCount; break;
+      case 'raid1': expectedCapacity = partSize; break;
+      case 'raid5': expectedCapacity = partSize * (diskCount - 1); break;
+      case 'raid6': expectedCapacity = partSize * (diskCount - 2); break;
+      case 'raid10': expectedCapacity = partSize * (diskCount / 2); break;
+    }
+
+    if (expectedCapacity > 0) {
+      reasons.push(`✓ Expected usable capacity: ${Math.floor(expectedCapacity / 1024 / 1024 / 1024)} GiB`);
+    }
+
+    // Build plan
+    if (canProceed && selectedDisks) {
+      const partEndMiB = Math.floor(partSize / 1024 / 1024);
+      const partPaths = [];
+      selectedDisks.forEach((disk, i) => {
+        const label = `md0_${String.fromCharCode(97 + i)}`;
+        const partPath = getPartitionPath(disk, 1);
+        partPaths.push(partPath);
+        plan.push(`wipefs -a ${disk}`);
+        plan.push(`parted -s ${disk} mklabel gpt`);
+        plan.push(`parted -s ${disk} mkpart primary 1MiB ${partEndMiB}MiB`);
+        plan.push(`parted -s ${disk} name 1 ${label}`);
+        plan.push(`parted -s ${disk} set 1 raid on`);
+      });
+      const mdLevel = level.replace('raid', '');
+      plan.push(`mdadm --create /dev/md0 --level=${mdLevel} --raid-devices=${diskCount} ${partPaths.join(' ')}`);
+      plan.push(`mkfs.btrfs -f /dev/md0`);
+      plan.push(`mount /dev/md0 /data`);
+      plan.push(`mdadm --detail --scan > /etc/mdadm/mdadm.conf`);
+      plan.push(`update-initramfs -u`);
+    }
+
+    res.json({
+      success: true,
+      canProceed,
+      reasons,
+      plan,
+      expectedCapacity,
+      level,
+      diskCount
+    });
+  } catch (error: any) {
+    console.error('Error during create prechecks:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to perform pre-checks',
+      details: error.message
+    });
+  }
+});
+
 export = router;
 module.exports.setSocketIO = setSocketIO;
