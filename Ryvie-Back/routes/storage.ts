@@ -11,8 +11,43 @@ interface CommandResult {
   exitCode: number;
 }
 
+const fs = require('fs');
+
+// Named md device — avoids conflict with auto-assembled /dev/md0
+const MD_DEVICE_NAME = '/dev/md/ryvie';
+
 // Instance Socket.IO pour les logs en temps réel
 let io = null;
+
+/**
+ * Find the active RAID array device for /data.
+ * Checks /dev/md/ryvie first, then falls back to /dev/md0, then scans /proc/mdstat.
+ * Returns the device path or null if none found.
+ */
+async function findActiveMdDevice(): Promise<string | null> {
+  // 1. Check named device
+  try {
+    await executeCommand('sudo', ['-n', 'mdadm', '--detail', MD_DEVICE_NAME]);
+    return MD_DEVICE_NAME;
+  } catch (e: any) {}
+
+  // 2. Check /dev/md0
+  try {
+    await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+    return '/dev/md0';
+  } catch (e: any) {}
+
+  // 3. Check what /data is mounted on
+  try {
+    const findmntResult = await executeCommand('findmnt', ['-no', 'SOURCE', '/data']);
+    const source = findmntResult.stdout.trim();
+    if (source && source.startsWith('/dev/md')) {
+      return source;
+    }
+  } catch (e: any) {}
+
+  return null;
+}
 
 // Fonction pour initialiser Socket.IO
 function setSocketIO(socketIO) {
@@ -634,7 +669,6 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req: a
     
     try {
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
-      const fs = require('fs');
       const tmpFile = '/tmp/mdadm.conf.new';
       fs.writeFileSync(tmpFile, scanResult.stdout);
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
@@ -1097,7 +1131,6 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req: any, res:
     try {
       log(`Updating /etc/mdadm/mdadm.conf...`, 'info');
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
-      const fs = require('fs');
       const tmpFile = '/tmp/mdadm.conf.new';
       fs.writeFileSync(tmpFile, scanResult.stdout);
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
@@ -1259,8 +1292,9 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req: any, res:
  */
 router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: any) => {
   try {
+    const activeMd = await findActiveMdDevice();
     const status: any = {
-      array: '/dev/md0',
+      array: activeMd || MD_DEVICE_NAME,
       exists: false,
       mounted: false,
       members: [],
@@ -1273,7 +1307,7 @@ router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: an
       const findmntResult = await executeCommand('findmnt', ['-no', 'FSTYPE,SOURCE', '/data']);
       const [fstype, source] = findmntResult.stdout.trim().split(/\s+/);
       
-      status.mounted = (source === '/dev/md0' && fstype === 'btrfs');
+      status.mounted = (source && source.startsWith('/dev/md') && fstype === 'btrfs');
       status.fstype = fstype;
       status.source = source;
     } catch (error: any) {
@@ -1281,8 +1315,9 @@ router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: an
     }
 
     // Vérifier l'état du RAID
+    const mdDeviceToCheck = activeMd || MD_DEVICE_NAME;
     try {
-      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDeviceToCheck]);
       status.exists = true;
       status.detail = detailResult.stdout;
       
@@ -1678,7 +1713,6 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req: any, r
     try {
       log(`Updating /etc/mdadm/mdadm.conf...`, 'info');
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
-      const fs = require('fs');
       const tmpFile = '/tmp/mdadm.conf.new';
       fs.writeFileSync(tmpFile, scanResult.stdout);
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
@@ -1964,26 +1998,51 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
       log(`Warning: Could not disable auto-assembly: ${e.message}`, 'warning');
     }
 
-    // === Collect old md0 members before stopping ===
-    let oldMd0Members: string[] = [];
+    // === Collect old members from ALL active md arrays ===
+    let oldMdMembers: string[] = [];
+    const oldMdDevices: string[] = [];
     try {
-      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
-      const lines = detailResult.stdout.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
-      for (const line of lines) {
-        const match = line.match(/(\/dev\/\S+)/);
-        if (match) oldMd0Members.push(match[1]);
+      const mdStat = await executeCommand('cat', ['/proc/mdstat']);
+      const activeArrays = mdStat.stdout.match(/^(md\S+)\s/gm);
+      if (activeArrays) {
+        for (const md of activeArrays) {
+          const mdName = md.trim();
+          oldMdDevices.push(`/dev/${mdName}`);
+          try {
+            const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', `/dev/${mdName}`]);
+            const lines = detailResult.stdout.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
+            for (const line of lines) {
+              const match = line.match(/(\/dev\/\S+)/);
+              if (match && !oldMdMembers.includes(match[1])) oldMdMembers.push(match[1]);
+            }
+          } catch (e: any) {}
+        }
       }
-      log(`Old md0 members: ${oldMd0Members.join(', ') || 'none'}`, 'info');
-    } catch (e: any) {
-      log('No existing /dev/md0 found', 'info');
+    } catch (e: any) {}
+    // Also check /dev/md/ryvie and /dev/md0 explicitly
+    for (const mdDev of [MD_DEVICE_NAME, '/dev/md0']) {
+      try {
+        const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDev]);
+        if (!oldMdDevices.includes(mdDev)) oldMdDevices.push(mdDev);
+        const lines = detailResult.stdout.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
+        for (const line of lines) {
+          const match = line.match(/(\/dev\/\S+)/);
+          if (match && !oldMdMembers.includes(match[1])) oldMdMembers.push(match[1]);
+        }
+      } catch (e: any) {}
+    }
+    // Filter out members that are on the NEW selected disks (don't delete those partitions!)
+    const oldMembersNotOnNewDisks = oldMdMembers.filter(m => !selectedDisks.some(d => m.startsWith(d)));
+    log(`Old md members to clean: ${oldMdMembers.join(', ') || 'none'}`, 'info');
+    if (oldMembersNotOnNewDisks.length > 0) {
+      log(`Old members on OTHER disks (partitions will be deleted): ${oldMembersNotOnNewDisks.join(', ')}`, 'info');
     }
 
-    // === Nuclear cleanup: stop ALL md arrays, then DESTROY superblocks with dd ===
-    // Loop until /proc/mdstat shows no active arrays (max 5 attempts)
+    // === Nuclear cleanup: stop ALL md arrays ===
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         const mdStat = await executeCommand('cat', ['/proc/mdstat']);
-        const activeArrays = mdStat.stdout.match(/^(md\d+)\s/gm);
+        const activeArrays = mdStat.stdout.match(/^(md\S+)\s/gm);
         if (!activeArrays || activeArrays.length === 0) {
           log(`✓ All md arrays stopped (attempt ${attempt + 1})`, 'success');
           break;
@@ -1997,34 +2056,55 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
         }
       } catch (e: any) {}
 
-      // Destroy superblocks on old members using dd (wipefs + mdadm --zero are not enough)
-      for (const member of oldMd0Members) {
+      // Zero superblocks on all old members
+      for (const member of oldMdMembers) {
         try {
-          // wipefs -af: erase all filesystem/raid signatures
           await executeCommand('sudo', ['-n', 'wipefs', '-af', member]);
-          // mdadm --zero-superblock --force
           await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', '--force', member]);
-          // dd: overwrite first 100MB (metadata 1.2 is at offset 4096 from start)
           await executeCommand('sudo', ['-n', 'dd', 'if=/dev/zero', `of=${member}`, 'bs=1M', 'count=100', 'conv=notrunc']);
-          // dd: overwrite last 10MB (metadata 1.0 is at end of device)
-          await executeCommand('sudo', ['-n', 'bash', '-c',
-            `SIZE=$(blockdev --getsize64 ${member}); SKIP=$(( (SIZE / 1048576) - 10 )); dd if=/dev/zero of=${member} bs=1M count=10 seek=$SKIP conv=notrunc 2>/dev/null`]);
-          if (attempt === 0) log(`✓ Destroyed all superblocks on ${member} (wipefs + dd)`, 'success');
-        } catch (e: any) {
-          log(`Warning: Could not fully wipe ${member}: ${e.message}`, 'warning');
-        }
+        } catch (e: any) {}
       }
-
       await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
       await executeCommand('sleep', ['1']);
     }
 
-    // Verify /proc/mdstat is clean
+    // === DELETE old member partitions from their parent disk's partition table ===
+    // This is the REAL fix: removing /dev/sda6 from /dev/sda so the kernel can never re-detect it
+    for (const member of oldMembersNotOnNewDisks) {
+      try {
+        // Parse parent disk and partition number: /dev/sda6 -> /dev/sda, 6
+        const partMatch = member.match(/^(\/dev\/[a-z]+)(\d+)$/) || member.match(/^(\/dev\/nvme\d+n\d+)p(\d+)$/);
+        if (partMatch) {
+          const parentDisk = partMatch[1];
+          const partNum = partMatch[2];
+          log(`Deleting partition ${partNum} from ${parentDisk} (was old RAID member ${member})...`, 'info');
+          // Use sfdisk to delete the partition
+          await executeCommand('sudo', ['-n', 'sfdisk', '--delete', parentDisk, partNum]);
+          await executeCommand('sudo', ['-n', 'partprobe', parentDisk]);
+          log(`✓ Deleted partition ${member} from ${parentDisk}'s partition table`, 'success');
+        }
+      } catch (e: any) {
+        log(`Warning: Could not delete partition ${member}: ${e.message}`, 'warning');
+        // Fallback: try to dd the whole partition to at least wipe the superblock
+        try {
+          await executeCommand('sudo', ['-n', 'dd', 'if=/dev/zero', `of=${member}`, 'bs=1M', 'count=100', 'conv=notrunc']);
+        } catch (e2: any) {}
+      }
+    }
+
+    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
+    await executeCommand('sleep', ['2']);
+
+    // === Final verification: /proc/mdstat must be clean ===
     try {
       const finalMdStat = await executeCommand('cat', ['/proc/mdstat']);
-      const remaining = finalMdStat.stdout.match(/^(md\d+)\s/gm);
+      const remaining = finalMdStat.stdout.match(/^(md\S+)\s/gm);
       if (remaining && remaining.length > 0) {
         log(`⚠ WARNING: md arrays still active after cleanup: ${remaining.map((m: string) => m.trim()).join(', ')}`, 'warning');
+        // One more attempt to stop everything
+        for (const md of remaining) {
+          try { await executeCommand('sudo', ['-n', 'mdadm', '--stop', `/dev/${md.trim()}`]); } catch (e: any) {}
+        }
       } else {
         log('✓ /proc/mdstat is clean - no active arrays', 'success');
       }
@@ -2066,7 +2146,7 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
       log('=== Commands that would be executed ===', 'step');
       const partPaths = [];
       selectedDisks.forEach((disk, i) => {
-        const label = `md0_${String.fromCharCode(97 + i)}`;
+        const label = `ryvie_${String.fromCharCode(97 + i)}`;
         const partPath = getPartitionPath(disk, 1);
         partPaths.push(partPath);
         log(`wipefs -a ${disk}`, 'info');
@@ -2076,9 +2156,9 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
         log(`parted -s ${disk} set 1 raid on`, 'info');
       });
       const mdLevel = level.replace('raid', '');
-      log(`mdadm --create /dev/md0 --level=${mdLevel} --raid-devices=${selectedDisks.length} ${partPaths.join(' ')}`, 'info');
-      log(`mkfs.btrfs /dev/md0`, 'info');
-      log(`mount /dev/md0 /data`, 'info');
+      log(`mdadm --create ${MD_DEVICE_NAME} --level=${mdLevel} --raid-devices=${selectedDisks.length} ${partPaths.join(' ')}`, 'info');
+      log(`mkfs.btrfs ${MD_DEVICE_NAME}`, 'info');
+      log(`mount ${MD_DEVICE_NAME} /data`, 'info');
       log('✓ Dry run completed', 'success');
 
       return res.json({
@@ -2095,7 +2175,7 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
 
     for (let i = 0; i < selectedDisks.length; i++) {
       const disk = selectedDisks[i];
-      const label = `md0_${String.fromCharCode(97 + i)}`;
+      const label = `ryvie_${String.fromCharCode(97 + i)}`;
       const partPath = getPartitionPath(disk, 1);
       partitionPaths.push(partPath);
 
@@ -2164,7 +2244,7 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
           } catch (e: any) {}
         }
         // Re-destroy old member superblocks (dd)
-        for (const member of oldMd0Members) {
+        for (const member of oldMdMembers) {
           try {
             await executeCommand('sudo', ['-n', 'dd', 'if=/dev/zero', `of=${member}`, 'bs=1M', 'count=100', 'conv=notrunc']);
           } catch (e: any) {}
@@ -2184,17 +2264,20 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     } catch (e: any) {}
 
     try {
+      // Ensure /dev/md directory exists
+      await executeCommand('sudo', ['-n', 'mkdir', '-p', '/dev/md']);
       const createArgs = [
-        '-n', 'mdadm', '--create', '/dev/md0',
+        '-n', 'mdadm', '--create', MD_DEVICE_NAME,
         '--level=' + mdLevel,
         '--raid-devices=' + selectedDisks.length,
+        '--name=ryvie',
         '--homehost=any',
         '--run', '--force',
         ...partitionPaths
       ];
-      log(`Running: mdadm --create /dev/md0 --level=${mdLevel} --raid-devices=${selectedDisks.length} ${partitionPaths.join(' ')}`, 'info');
+      log(`Running: mdadm --create ${MD_DEVICE_NAME} --level=${mdLevel} --raid-devices=${selectedDisks.length} ${partitionPaths.join(' ')}`, 'info');
       await executeCommand('sudo', createArgs);
-      log(`✓ RAID array created: /dev/md0 (${level.toUpperCase()})`, 'success');
+      log(`✓ RAID array created: ${MD_DEVICE_NAME} (${level.toUpperCase()})`, 'success');
     } catch (e: any) {
       log(`Error creating array: ${e.message}`, 'error');
       throw e;
@@ -2202,25 +2285,25 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
 
     // Step 4b: Verify the new array is correct (not the old one re-assembled)
     try {
-      const verifyResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+      const verifyResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', MD_DEVICE_NAME]);
       const verifyOutput = verifyResult.stdout;
       const raidLevelMatch = verifyOutput.match(/Raid Level\s*:\s*(\S+)/);
       const actualLevel = raidLevelMatch ? raidLevelMatch[1] : 'unknown';
       const expectedLevel = `raid${mdLevel}`;
       if (actualLevel !== expectedLevel) {
-        log(`❌ FATAL: /dev/md0 is ${actualLevel} but expected ${expectedLevel} — old array re-assembled!`, 'error');
+        log(`❌ FATAL: ${MD_DEVICE_NAME} is ${actualLevel} but expected ${expectedLevel} — old array re-assembled!`, 'error');
         // Try to stop it and abort
-        try { await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']); } catch (e: any) {}
+        try { await executeCommand('sudo', ['-n', 'mdadm', '--stop', MD_DEVICE_NAME]); } catch (e: any) {}
         try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (e: any) {}
         return res.status(500).json({
           success: false,
-          error: `Array verification failed: /dev/md0 is ${actualLevel}, expected ${expectedLevel}. The old array may have re-assembled. Please reboot and try again.`,
+          error: `Array verification failed: ${MD_DEVICE_NAME} is ${actualLevel}, expected ${expectedLevel}. The old array may have re-assembled. Please reboot and try again.`,
           logs
         });
       }
       // Also verify member count
       const deviceLines = verifyOutput.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
-      log(`✓ Verified: /dev/md0 is ${actualLevel} with ${deviceLines.length} device(s)`, 'success');
+      log(`✓ Verified: ${MD_DEVICE_NAME} is ${actualLevel} with ${deviceLines.length} device(s)`, 'success');
     } catch (e: any) {
       log(`Warning: Could not verify array: ${e.message}`, 'warning');
     }
@@ -2228,7 +2311,7 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     // Step 5: Create filesystem
     log('=== Step 5: Creating btrfs filesystem ===', 'step');
     try {
-      await executeCommand('sudo', ['-n', 'mkfs.btrfs', '-f', '/dev/md0']);
+      await executeCommand('sudo', ['-n', 'mkfs.btrfs', '-f', MD_DEVICE_NAME]);
       log(`✓ btrfs filesystem created`, 'success');
     } catch (e: any) {
       log(`Error creating filesystem: ${e.message}`, 'error');
@@ -2240,8 +2323,8 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     try {
       // Ensure /data directory exists
       await executeCommand('sudo', ['-n', 'mkdir', '-p', '/data']);
-      await executeCommand('sudo', ['-n', 'mount', '-o', 'defaults,noatime,compress=zstd,space_cache=v2', '/dev/md0', '/data']);
-      log(`✓ Mounted /dev/md0 on /data (btrfs, compress=zstd)`, 'success');
+      await executeCommand('sudo', ['-n', 'mount', '-o', 'defaults,noatime,compress=zstd,space_cache=v2', MD_DEVICE_NAME, '/data']);
+      log(`✓ Mounted ${MD_DEVICE_NAME} on /data (btrfs, compress=zstd)`, 'success');
     } catch (e: any) {
       log(`Error mounting: ${e.message}`, 'error');
       // Try to restart Docker before failing
@@ -2267,7 +2350,6 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     log('=== Step 7: Saving configuration ===', 'step');
     try {
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
-      const fs = require('fs');
       const tmpFile = '/tmp/mdadm.conf.new';
       fs.writeFileSync(tmpFile, scanResult.stdout);
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
@@ -2283,10 +2365,10 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     // Step 7b: Update /etc/fstab with new UUID
     log('Updating /etc/fstab...', 'info');
     try {
-      const blkidResult = await executeCommand('sudo', ['-n', 'blkid', '-s', 'UUID', '-o', 'value', '/dev/md0']);
+      const blkidResult = await executeCommand('sudo', ['-n', 'blkid', '-s', 'UUID', '-o', 'value', MD_DEVICE_NAME]);
       const newUUID = blkidResult.stdout.trim();
       if (newUUID) {
-        log(`New /dev/md0 UUID: ${newUUID}`, 'info');
+        log(`New ${MD_DEVICE_NAME} UUID: ${newUUID}`, 'info');
 
         // Read current fstab
         const fstabResult = await executeCommand('cat', ['/etc/fstab']);
@@ -2306,14 +2388,13 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
           newFstabLines.push(`UUID=${newUUID}  /data  btrfs  defaults,noatime,compress=zstd,space_cache=v2  0  0`);
         }
 
-        const fs = require('fs');
         const tmpFstab = '/tmp/fstab.new';
         fs.writeFileSync(tmpFstab, newFstabLines.join('\n'));
         await executeCommand('sudo', ['-n', 'cp', tmpFstab, '/etc/fstab']);
         fs.unlinkSync(tmpFstab);
         log(`✓ Updated /etc/fstab with UUID=${newUUID}`, 'success');
       } else {
-        log('⚠ Could not get UUID of /dev/md0', 'warning');
+        log(`⚠ Could not get UUID of ${MD_DEVICE_NAME}`, 'warning');
       }
     } catch (e: any) {
       log(`Warning: fstab update: ${e.message}`, 'warning');
@@ -2395,7 +2476,7 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     // Final status
     log('=== Final status ===', 'step');
     try {
-      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', MD_DEVICE_NAME]);
       log(detailResult.stdout.trim(), 'info');
       const dfResult = await executeCommand('df', ['-h', '/data']);
       log(dfResult.stdout.trim(), 'info');
@@ -2458,12 +2539,12 @@ router.post('/storage/mdraid-create-prechecks', authenticateToken, async (req: a
       canProceed = false;
     }
 
-    // Check if /dev/md0 already exists
-    try {
-      await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
-      reasons.push(`⚠ /dev/md0 already exists - it will be stopped and recreated`);
-    } catch (e: any) {
-      reasons.push(`✓ /dev/md0 does not exist yet`);
+    // Check if an md array already exists
+    const existingMd = await findActiveMdDevice();
+    if (existingMd) {
+      reasons.push(`⚠ ${existingMd} already exists - it will be stopped and recreated`);
+    } else {
+      reasons.push(`✓ No existing RAID array found`);
     }
 
     // Check if /data is already mounted
@@ -2528,7 +2609,7 @@ router.post('/storage/mdraid-create-prechecks', authenticateToken, async (req: a
       const partEndMiB = Math.floor(partSize / 1024 / 1024);
       const partPaths = [];
       selectedDisks.forEach((disk, i) => {
-        const label = `md0_${String.fromCharCode(97 + i)}`;
+        const label = `ryvie_${String.fromCharCode(97 + i)}`;
         const partPath = getPartitionPath(disk, 1);
         partPaths.push(partPath);
         plan.push(`wipefs -a ${disk}`);
@@ -2538,9 +2619,9 @@ router.post('/storage/mdraid-create-prechecks', authenticateToken, async (req: a
         plan.push(`parted -s ${disk} set 1 raid on`);
       });
       const mdLevel = level.replace('raid', '');
-      plan.push(`mdadm --create /dev/md0 --level=${mdLevel} --raid-devices=${diskCount} ${partPaths.join(' ')}`);
-      plan.push(`mkfs.btrfs -f /dev/md0`);
-      plan.push(`mount /dev/md0 /data`);
+      plan.push(`mdadm --create ${MD_DEVICE_NAME} --level=${mdLevel} --raid-devices=${diskCount} ${partPaths.join(' ')}`);
+      plan.push(`mkfs.btrfs -f ${MD_DEVICE_NAME}`);
+      plan.push(`mount ${MD_DEVICE_NAME} /data`);
       plan.push(`mdadm --detail --scan > /etc/mdadm/mdadm.conf`);
       plan.push(`update-initramfs -u`);
     }
