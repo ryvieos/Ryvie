@@ -1905,12 +1905,108 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     log(`Disks: ${selectedDisks.join(', ')}`, 'info');
     log(`Dry Run: ${dryRun}`, 'info');
 
+    // Step 0: Stop Docker and unmount /data if needed
+    log('=== Step 0: Stopping services and unmounting /data ===', 'step');
+
+    // Stop Docker first (it uses /data/docker)
+    try {
+      log('Stopping Docker...', 'info');
+      await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
+      await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
+      log('✓ Docker stopped', 'success');
+    } catch (e: any) {
+      log(`Warning: Could not stop Docker: ${e.message}`, 'warning');
+    }
+
+    // Stop containerd if needed
+    try {
+      await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
+      log('✓ containerd stopped', 'success');
+    } catch (e: any) {
+      // OK if not running
+    }
+
+    // Wait for processes to release /data
+    await executeCommand('sleep', ['2']);
+
+    // Kill any processes still using /data
+    try {
+      await executeCommand('sudo', ['-n', 'fuser', '-km', '/data']);
+      await executeCommand('sleep', ['1']);
+    } catch (e: any) {
+      // OK if no processes
+    }
+
+    // Unmount /data (may be mounted multiple times, loop until clean)
+    let unmountAttempts = 0;
+    while (unmountAttempts < 5) {
+      try {
+        await executeCommand('sudo', ['-n', 'umount', '/data']);
+        log(`✓ Unmounted /data`, 'success');
+        unmountAttempts++;
+      } catch (e: any) {
+        // No more mounts
+        break;
+      }
+    }
+    if (unmountAttempts > 0) {
+      log(`Unmounted /data (${unmountAttempts} mount(s) removed)`, 'info');
+    }
+
+    // Stop existing md0 and prevent udev auto-reassemble
+    let oldMd0Members: string[] = [];
+    try {
+      // Get current members before stopping
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+      const memberRegex = /\/dev\/\S+/g;
+      const lines = detailResult.stdout.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
+      for (const line of lines) {
+        const match = line.match(/(\/dev\/\S+)/);
+        if (match) oldMd0Members.push(match[1]);
+      }
+      log(`Old md0 members: ${oldMd0Members.join(', ') || 'none'}`, 'info');
+
+      await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']);
+      log('✓ Stopped existing /dev/md0', 'success');
+    } catch (e: any) {
+      log('No existing /dev/md0 to stop', 'info');
+    }
+
+    // Zero superblocks on OLD members to prevent auto-reassemble
+    for (const member of oldMd0Members) {
+      try {
+        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', member]);
+        log(`✓ Zeroed superblock on old member ${member}`, 'success');
+      } catch (e: any) {
+        log(`Warning: Could not zero superblock on ${member}: ${e.message}`, 'warning');
+      }
+    }
+
+    // Prevent udev from auto-reassembling any md device
+    try {
+      await executeCommand('sudo', ['-n', 'bash', '-c', 'echo 0 > /proc/sys/dev/raid/speed_limit_max']);
+    } catch (e: any) {}
+
+    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
+    await executeCommand('sleep', ['1']);
+
+    // Double-check md0 is really gone
+    try {
+      await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']);
+      log('Stopped auto-reassembled /dev/md0 again', 'warning');
+      await executeCommand('sleep', ['1']);
+    } catch (e: any) {
+      // Good - it's gone
+    }
+
     // Step 1: Verify all disks are not mounted
     log('=== Step 1: Verifying disks ===', 'step');
     for (const disk of selectedDisks) {
       const mountCheck = await isDeviceMounted(disk);
       if (mountCheck.mounted) {
         log(`❌ Disk ${disk} is mounted on ${mountCheck.mountpoint}`, 'error');
+        // Try to restart Docker before failing
+        try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (e: any) {}
         return res.status(400).json({
           success: false,
           error: `Disk ${disk} is mounted on ${mountCheck.mountpoint}`,
@@ -2025,16 +2121,12 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     log('=== Step 4: Creating RAID array ===', 'step');
     const mdLevel = level.replace('raid', '');
 
+    // Restore raid speed limit
     try {
-      // Check if /dev/md0 already exists and stop it
-      try {
-        await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']);
-        log('Stopped existing /dev/md0', 'info');
-        await executeCommand('sleep', ['1']);
-      } catch (e: any) {
-        // md0 doesn't exist, that's fine
-      }
+      await executeCommand('sudo', ['-n', 'bash', '-c', 'echo 200000 > /proc/sys/dev/raid/speed_limit_max']);
+    } catch (e: any) {}
 
+    try {
       const createArgs = [
         '-n', 'mdadm', '--create', '/dev/md0',
         '--level=' + mdLevel,
@@ -2065,14 +2157,30 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     try {
       // Ensure /data directory exists
       await executeCommand('sudo', ['-n', 'mkdir', '-p', '/data']);
-      await executeCommand('sudo', ['-n', 'mount', '/dev/md0', '/data']);
-      log(`✓ Mounted /dev/md0 on /data`, 'success');
+      await executeCommand('sudo', ['-n', 'mount', '-o', 'defaults,noatime,compress=zstd,space_cache=v2', '/dev/md0', '/data']);
+      log(`✓ Mounted /dev/md0 on /data (btrfs, compress=zstd)`, 'success');
     } catch (e: any) {
       log(`Error mounting: ${e.message}`, 'error');
+      // Try to restart Docker before failing
+      try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (restartErr: any) {}
       throw e;
     }
 
-    // Step 7: Save mdadm config
+    // Step 6b: Recreate essential /data directories
+    log('Recreating essential /data directories...', 'info');
+    const essentialDirs = ['/data/apps', '/data/config', '/data/docker', '/data/logs', '/data/images', '/data/snapshot'];
+    for (const dir of essentialDirs) {
+      try {
+        await executeCommand('sudo', ['-n', 'mkdir', '-p', dir]);
+      } catch (e: any) {}
+    }
+    // Set ownership for user-accessible dirs
+    try {
+      await executeCommand('sudo', ['-n', 'chown', '-R', 'ryvie:ryvie', '/data/apps', '/data/config', '/data/logs', '/data/images']);
+    } catch (e: any) {}
+    log('✓ Essential directories created', 'success');
+
+    // Step 7: Save mdadm config + update fstab
     log('=== Step 7: Saving configuration ===', 'step');
     try {
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
@@ -2087,6 +2195,56 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
       log(`✓ Updated initramfs`, 'success');
     } catch (e: any) {
       log(`Warning: Config save: ${e.message}`, 'warning');
+    }
+
+    // Step 7b: Update /etc/fstab with new UUID
+    log('Updating /etc/fstab...', 'info');
+    try {
+      const blkidResult = await executeCommand('sudo', ['-n', 'blkid', '-s', 'UUID', '-o', 'value', '/dev/md0']);
+      const newUUID = blkidResult.stdout.trim();
+      if (newUUID) {
+        log(`New /dev/md0 UUID: ${newUUID}`, 'info');
+
+        // Read current fstab
+        const fstabResult = await executeCommand('cat', ['/etc/fstab']);
+        const fstabLines = fstabResult.stdout.split('\n');
+        let foundDataEntry = false;
+        const newFstabLines = fstabLines.map((line: string) => {
+          // Match any line that mounts /data (by UUID or device)
+          if (line.match(/\s+\/data\s+/) && !line.startsWith('#')) {
+            foundDataEntry = true;
+            return `UUID=${newUUID}  /data  btrfs  defaults,noatime,compress=zstd,space_cache=v2  0  0`;
+          }
+          return line;
+        });
+
+        if (!foundDataEntry) {
+          // Add new entry if none exists
+          newFstabLines.push(`UUID=${newUUID}  /data  btrfs  defaults,noatime,compress=zstd,space_cache=v2  0  0`);
+        }
+
+        const fs = require('fs');
+        const tmpFstab = '/tmp/fstab.new';
+        fs.writeFileSync(tmpFstab, newFstabLines.join('\n'));
+        await executeCommand('sudo', ['-n', 'cp', tmpFstab, '/etc/fstab']);
+        fs.unlinkSync(tmpFstab);
+        log(`✓ Updated /etc/fstab with UUID=${newUUID}`, 'success');
+      } else {
+        log('⚠ Could not get UUID of /dev/md0', 'warning');
+      }
+    } catch (e: any) {
+      log(`Warning: fstab update: ${e.message}`, 'warning');
+    }
+
+    // Step 7c: Restart Docker and containerd
+    log('Restarting Docker...', 'info');
+    try {
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'containerd']);
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker.socket']);
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']);
+      log('✓ Docker restarted', 'success');
+    } catch (e: any) {
+      log(`Warning: Could not restart Docker: ${e.message}`, 'warning');
     }
 
     // Step 8: Monitor initial sync (for raid5/6/10)
@@ -2170,6 +2328,13 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
   } catch (error: any) {
     console.error('Error creating RAID array:', error);
     log(`Fatal error: ${error.message}`, 'error');
+
+    // Try to restart Docker on failure
+    try {
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'containerd']);
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']);
+      log('Docker restarted after failure', 'info');
+    } catch (restartErr: any) {}
 
     res.status(500).json({
       success: false,
