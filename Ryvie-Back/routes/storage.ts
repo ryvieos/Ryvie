@@ -1939,176 +1939,23 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     log(`Disks: ${selectedDisks.join(', ')}`, 'info');
     log(`Dry Run: ${dryRun}`, 'info');
 
-    // Step 0: Stop Docker and unmount /data if needed
-    log('=== Step 0: Stopping services and unmounting /data ===', 'step');
+    // Step 0: Detect current state — Docker stays running during RAID creation + bulk rsync
+    log('=== Step 0: Detecting current state ===', 'step');
 
-    // Stop Docker first (it uses /data/docker)
+    // Detect if /data is currently mounted (old RAID with data to migrate)
+    let oldDataMounted = false;
+    let oldDataSource = '';
     try {
-      log('Stopping Docker...', 'info');
-      await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
-      await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
-      log('✓ Docker stopped', 'success');
+      const findmntResult = await executeCommand('findmnt', ['-no', 'SOURCE', '/data']);
+      oldDataSource = findmntResult.stdout.trim();
+      if (oldDataSource) {
+        oldDataMounted = true;
+        log(`/data is currently mounted on ${oldDataSource} — data will be migrated`, 'info');
+        log('Docker and apps will stay running during bulk data copy (minimal downtime)', 'info');
+      }
     } catch (e: any) {
-      log(`Warning: Could not stop Docker: ${e.message}`, 'warning');
+      log('/data is not mounted — no data to migrate', 'info');
     }
-
-    // Stop containerd if needed
-    try {
-      await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
-      log('✓ containerd stopped', 'success');
-    } catch (e: any) {
-      // OK if not running
-    }
-
-    // Wait for processes to release /data
-    await executeCommand('sleep', ['2']);
-
-    // Kill any processes still using /data
-    try {
-      await executeCommand('sudo', ['-n', 'fuser', '-km', '/data']);
-      await executeCommand('sleep', ['1']);
-    } catch (e: any) {
-      // OK if no processes
-    }
-
-    // Unmount /data (may be mounted multiple times, loop until clean)
-    let unmountAttempts = 0;
-    while (unmountAttempts < 5) {
-      try {
-        await executeCommand('sudo', ['-n', 'umount', '/data']);
-        log(`✓ Unmounted /data`, 'success');
-        unmountAttempts++;
-      } catch (e: any) {
-        // No more mounts
-        break;
-      }
-    }
-    if (unmountAttempts > 0) {
-      log(`Unmounted /data (${unmountAttempts} mount(s) removed)`, 'info');
-    }
-
-    // === Disable mdadm auto-assembly FIRST (before any stop/zero) ===
-    try {
-      await executeCommand('sudo', ['-n', 'bash', '-c',
-        'cp /etc/mdadm/mdadm.conf /etc/mdadm/mdadm.conf.pre-raid 2>/dev/null; printf "AUTO -all\\nDEVICE\\n" > /tmp/mdadm_noauto && sudo cp /tmp/mdadm_noauto /etc/mdadm/mdadm.conf']);
-      await executeCommand('sudo', ['-n', 'udevadm', 'control', '--reload-rules']);
-      await executeCommand('sudo', ['-n', 'udevadm', 'trigger']);
-      log('✓ Disabled mdadm auto-assembly (AUTO -all, empty DEVICE)', 'success');
-    } catch (e: any) {
-      log(`Warning: Could not disable auto-assembly: ${e.message}`, 'warning');
-    }
-
-    // === Collect old members from ALL active md arrays ===
-    let oldMdMembers: string[] = [];
-    const oldMdDevices: string[] = [];
-    try {
-      const mdStat = await executeCommand('cat', ['/proc/mdstat']);
-      const activeArrays = mdStat.stdout.match(/^(md\S+)\s/gm);
-      if (activeArrays) {
-        for (const md of activeArrays) {
-          const mdName = md.trim();
-          oldMdDevices.push(`/dev/${mdName}`);
-          try {
-            const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', `/dev/${mdName}`]);
-            const lines = detailResult.stdout.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
-            for (const line of lines) {
-              const match = line.match(/(\/dev\/\S+)/);
-              if (match && !oldMdMembers.includes(match[1])) oldMdMembers.push(match[1]);
-            }
-          } catch (e: any) {}
-        }
-      }
-    } catch (e: any) {}
-    // Also check /dev/md/ryvie and /dev/md0 explicitly
-    for (const mdDev of [MD_DEVICE_NAME, '/dev/md0']) {
-      try {
-        const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDev]);
-        if (!oldMdDevices.includes(mdDev)) oldMdDevices.push(mdDev);
-        const lines = detailResult.stdout.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
-        for (const line of lines) {
-          const match = line.match(/(\/dev\/\S+)/);
-          if (match && !oldMdMembers.includes(match[1])) oldMdMembers.push(match[1]);
-        }
-      } catch (e: any) {}
-    }
-    // Filter out members that are on the NEW selected disks (don't delete those partitions!)
-    const oldMembersNotOnNewDisks = oldMdMembers.filter(m => !selectedDisks.some(d => m.startsWith(d)));
-    log(`Old md members to clean: ${oldMdMembers.join(', ') || 'none'}`, 'info');
-    if (oldMembersNotOnNewDisks.length > 0) {
-      log(`Old members on OTHER disks (partitions will be deleted): ${oldMembersNotOnNewDisks.join(', ')}`, 'info');
-    }
-
-    // === Nuclear cleanup: stop ALL md arrays ===
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        const mdStat = await executeCommand('cat', ['/proc/mdstat']);
-        const activeArrays = mdStat.stdout.match(/^(md\S+)\s/gm);
-        if (!activeArrays || activeArrays.length === 0) {
-          log(`✓ All md arrays stopped (attempt ${attempt + 1})`, 'success');
-          break;
-        }
-        for (const md of activeArrays) {
-          const mdName = md.trim();
-          try {
-            await executeCommand('sudo', ['-n', 'mdadm', '--stop', `/dev/${mdName}`]);
-            log(`Stopped /dev/${mdName}`, 'info');
-          } catch (e: any) {}
-        }
-      } catch (e: any) {}
-
-      // Zero superblocks on all old members
-      for (const member of oldMdMembers) {
-        try {
-          await executeCommand('sudo', ['-n', 'wipefs', '-af', member]);
-          await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', '--force', member]);
-          await executeCommand('sudo', ['-n', 'dd', 'if=/dev/zero', `of=${member}`, 'bs=1M', 'count=100', 'conv=notrunc']);
-        } catch (e: any) {}
-      }
-      await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
-      await executeCommand('sleep', ['1']);
-    }
-
-    // === DELETE old member partitions from their parent disk's partition table ===
-    // This is the REAL fix: removing /dev/sda6 from /dev/sda so the kernel can never re-detect it
-    for (const member of oldMembersNotOnNewDisks) {
-      try {
-        // Parse parent disk and partition number: /dev/sda6 -> /dev/sda, 6
-        const partMatch = member.match(/^(\/dev\/[a-z]+)(\d+)$/) || member.match(/^(\/dev\/nvme\d+n\d+)p(\d+)$/);
-        if (partMatch) {
-          const parentDisk = partMatch[1];
-          const partNum = partMatch[2];
-          log(`Deleting partition ${partNum} from ${parentDisk} (was old RAID member ${member})...`, 'info');
-          // Use sfdisk to delete the partition
-          await executeCommand('sudo', ['-n', 'sfdisk', '--delete', parentDisk, partNum]);
-          await executeCommand('sudo', ['-n', 'partprobe', parentDisk]);
-          log(`✓ Deleted partition ${member} from ${parentDisk}'s partition table`, 'success');
-        }
-      } catch (e: any) {
-        log(`Warning: Could not delete partition ${member}: ${e.message}`, 'warning');
-        // Fallback: try to dd the whole partition to at least wipe the superblock
-        try {
-          await executeCommand('sudo', ['-n', 'dd', 'if=/dev/zero', `of=${member}`, 'bs=1M', 'count=100', 'conv=notrunc']);
-        } catch (e2: any) {}
-      }
-    }
-
-    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
-    await executeCommand('sleep', ['2']);
-
-    // === Final verification: /proc/mdstat must be clean ===
-    try {
-      const finalMdStat = await executeCommand('cat', ['/proc/mdstat']);
-      const remaining = finalMdStat.stdout.match(/^(md\S+)\s/gm);
-      if (remaining && remaining.length > 0) {
-        log(`⚠ WARNING: md arrays still active after cleanup: ${remaining.map((m: string) => m.trim()).join(', ')}`, 'warning');
-        // One more attempt to stop everything
-        for (const md of remaining) {
-          try { await executeCommand('sudo', ['-n', 'mdadm', '--stop', `/dev/${md.trim()}`]); } catch (e: any) {}
-        }
-      } else {
-        log('✓ /proc/mdstat is clean - no active arrays', 'success');
-      }
-    } catch (e: any) {}
 
     // Step 1: Verify all disks are not mounted
     log('=== Step 1: Verifying disks ===', 'step');
@@ -2226,32 +2073,18 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
       }
     }
 
-    // === Pre-create: final cleanup of any re-assembled arrays ===
-    log('Final md cleanup before array creation...', 'info');
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // === Pre-create: ensure no stale arrays use the NEW partitions ===
+    log('Checking for stale arrays on new partitions...', 'info');
+    for (const partPath of partitionPaths) {
       try {
-        const mdStat = await executeCommand('cat', ['/proc/mdstat']);
-        const activeArrays = mdStat.stdout.match(/^(md\d+)\s/gm);
-        if (!activeArrays || activeArrays.length === 0) {
-          log('✓ No stale md arrays before create', 'success');
-          break;
-        }
-        for (const md of activeArrays) {
-          const mdName = md.trim();
-          try {
-            await executeCommand('sudo', ['-n', 'mdadm', '--stop', `/dev/${mdName}`]);
-            log(`Stopped re-assembled /dev/${mdName}`, 'warning');
-          } catch (e: any) {}
-        }
-        // Re-destroy old member superblocks (dd)
-        for (const member of oldMdMembers) {
-          try {
-            await executeCommand('sudo', ['-n', 'dd', 'if=/dev/zero', `of=${member}`, 'bs=1M', 'count=100', 'conv=notrunc']);
-          } catch (e: any) {}
-        }
-        await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
-        await executeCommand('sleep', ['1']);
-      } catch (e: any) {}
+        const examResult = await executeCommand('sudo', ['-n', 'mdadm', '--examine', partPath]);
+        // If mdadm --examine succeeds, there's a superblock — wipe it again
+        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', '--force', partPath]);
+        await executeCommand('sudo', ['-n', 'wipefs', '-af', partPath]);
+        log(`Wiped residual superblock on ${partPath}`, 'warning');
+      } catch (e: any) {
+        // No superblock — good
+      }
     }
 
     // Step 4: Create the RAID array
@@ -2308,43 +2141,204 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
       log(`Warning: Could not verify array: ${e.message}`, 'warning');
     }
 
-    // Step 5: Create filesystem
+    // Step 5: Create filesystem on new RAID
     log('=== Step 5: Creating btrfs filesystem ===', 'step');
     try {
       await executeCommand('sudo', ['-n', 'mkfs.btrfs', '-f', MD_DEVICE_NAME]);
-      log(`✓ btrfs filesystem created`, 'success');
+      log(`✓ btrfs filesystem created on ${MD_DEVICE_NAME}`, 'success');
     } catch (e: any) {
       log(`Error creating filesystem: ${e.message}`, 'error');
       throw e;
     }
 
-    // Step 6: Mount
-    log('=== Step 6: Mounting /data ===', 'step');
+    // Step 6: Data migration — two-pass rsync for minimal downtime
+    // Pass 1: bulk rsync WITH Docker running (apps stay accessible)
+    // Pass 2: stop Docker, quick incremental rsync, swap mounts (downtime ~1-2 min)
+    log('=== Step 6: Data migration ===', 'step');
+    const tmpMount = '/mnt/new_raid';
+
+    // Collect old RAID members BEFORE we stop anything (needed later for cleanup)
+    let oldMdMembers: string[] = [];
+    if (oldDataMounted && oldDataSource) {
+      try {
+        const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', oldDataSource]);
+        const lines = detailResult.stdout.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
+        for (const line of lines) {
+          const match = line.match(/(\/dev\/\S+)/);
+          if (match && !oldMdMembers.includes(match[1])) oldMdMembers.push(match[1]);
+        }
+        log(`Old RAID members: ${oldMdMembers.join(', ')}`, 'info');
+      } catch (e: any) {
+        // Try known partitions
+        try {
+          await executeCommand('sudo', ['-n', 'mdadm', '--examine', '/dev/sda6']);
+          oldMdMembers.push('/dev/sda6');
+          log('Old RAID member detected: /dev/sda6', 'info');
+        } catch (e2: any) {}
+      }
+    }
+
+    if (oldDataMounted) {
+      // 6a: Mount new RAID on temporary mount point
+      try {
+        await executeCommand('sudo', ['-n', 'mkdir', '-p', tmpMount]);
+        await executeCommand('sudo', ['-n', 'mount', '-o', 'defaults,noatime,compress=zstd,space_cache=v2', MD_DEVICE_NAME, tmpMount]);
+        log(`✓ Mounted new RAID (${MD_DEVICE_NAME}) on ${tmpMount}`, 'success');
+      } catch (e: any) {
+        log(`Error mounting new RAID on ${tmpMount}: ${e.message}`, 'error');
+        throw e;
+      }
+
+      // 6b: PASS 1 — Bulk rsync WITH Docker still running (zero downtime)
+      log('📦 Pass 1: Bulk data copy (Docker still running, apps accessible)...', 'info');
+      log('This may take a while depending on the amount of data...', 'info');
+      try {
+        const rsyncResult = await executeCommand('sudo', ['-n', 'rsync', '-aHAX', '--info=progress2', '/data/', `${tmpMount}/`]);
+        log('✓ Pass 1 completed — bulk data copied', 'success');
+        if (rsyncResult.stdout) {
+          const lastLines = rsyncResult.stdout.split('\n').filter((l: string) => l.trim()).slice(-3);
+          for (const line of lastLines) {
+            log(`  rsync: ${line.trim()}`, 'info');
+          }
+        }
+      } catch (e: any) {
+        log(`Error during bulk copy: ${e.message}`, 'error');
+        try { await executeCommand('sudo', ['-n', 'umount', tmpMount]); } catch (umErr: any) {}
+        throw e;
+      }
+
+      // 6c: Stop Docker — START of brief downtime
+      log('⏸ Stopping Docker for final sync (brief downtime starts now)...', 'warning');
+      try {
+        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
+        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
+        log('✓ Docker stopped', 'success');
+      } catch (e: any) {
+        log(`Warning: Could not stop Docker: ${e.message}`, 'warning');
+      }
+      try {
+        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
+        log('✓ containerd stopped', 'success');
+      } catch (e: any) {}
+
+      await executeCommand('sleep', ['2']);
+
+      // Kill any remaining processes using /data
+      try {
+        await executeCommand('sudo', ['-n', 'fuser', '-km', '/data']);
+        await executeCommand('sleep', ['1']);
+      } catch (e: any) {}
+
+      // 6d: PASS 2 — Quick incremental rsync (only changed files since pass 1)
+      log('📦 Pass 2: Incremental sync (only changes since pass 1)...', 'info');
+      try {
+        const rsync2Result = await executeCommand('sudo', ['-n', 'rsync', '-aHAX', '--delete', '--info=progress2', '/data/', `${tmpMount}/`]);
+        log('✓ Pass 2 completed — all data synchronized', 'success');
+        if (rsync2Result.stdout) {
+          const lastLines = rsync2Result.stdout.split('\n').filter((l: string) => l.trim()).slice(-3);
+          for (const line of lastLines) {
+            log(`  rsync: ${line.trim()}`, 'info');
+          }
+        }
+      } catch (e: any) {
+        log(`Error during incremental sync: ${e.message}`, 'error');
+        // Abort — restart Docker on old RAID
+        try { await executeCommand('sudo', ['-n', 'umount', tmpMount]); } catch (umErr: any) {}
+        try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (restartErr: any) {}
+        throw e;
+      }
+
+      // 6e: Swap mounts — unmount temp, unmount old /data, mount new on /data
+      log('🔄 Swapping mounts...', 'info');
+      try {
+        await executeCommand('sudo', ['-n', 'umount', tmpMount]);
+        log(`✓ Unmounted ${tmpMount}`, 'success');
+      } catch (e: any) {
+        log(`Warning: Could not unmount ${tmpMount}: ${e.message}`, 'warning');
+      }
+
+      // Unmount old /data (may be mounted multiple times)
+      let unmountAttempts = 0;
+      while (unmountAttempts < 5) {
+        try {
+          await executeCommand('sudo', ['-n', 'umount', '/data']);
+          unmountAttempts++;
+        } catch (e: any) {
+          break;
+        }
+      }
+      if (unmountAttempts > 0) {
+        log(`✓ Unmounted old /data (${unmountAttempts} mount(s))`, 'success');
+      }
+
+      // 6f: Stop old RAID array
+      if (oldDataSource && oldDataSource.startsWith('/dev/md')) {
+        try {
+          await executeCommand('sudo', ['-n', 'mdadm', '--stop', oldDataSource]);
+          log(`✓ Stopped old array ${oldDataSource}`, 'success');
+        } catch (e: any) {
+          log(`Warning: Could not stop old array ${oldDataSource}: ${e.message}`, 'warning');
+        }
+      }
+
+      // 6g: Destroy old RAID — zero superblocks and delete partition from parent disk
+      log('🗑 Destroying old RAID...', 'info');
+      const oldMembersNotOnNewDisks = oldMdMembers.filter(m => !selectedDisks.some(d => m.startsWith(d)));
+
+      for (const member of oldMembersNotOnNewDisks) {
+        try {
+          await executeCommand('sudo', ['-n', 'wipefs', '-af', member]);
+          await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', '--force', member]);
+          const partMatch = member.match(/^(\/dev\/[a-z]+)(\d+)$/) || member.match(/^(\/dev\/nvme\d+n\d+)p(\d+)$/);
+          if (partMatch) {
+            const parentDisk = partMatch[1];
+            const partNum = partMatch[2];
+            log(`Deleting partition ${partNum} from ${parentDisk} (old RAID member ${member})...`, 'info');
+            await executeCommand('sudo', ['-n', 'sfdisk', '--delete', parentDisk, partNum]);
+            await executeCommand('sudo', ['-n', 'partprobe', parentDisk]);
+            log(`✓ Deleted ${member} from partition table`, 'success');
+          }
+        } catch (e: any) {
+          log(`Warning: Could not fully clean up ${member}: ${e.message}`, 'warning');
+        }
+      }
+
+    } else {
+      log('No existing data to migrate — fresh install', 'info');
+      // No old RAID — stop Docker if running (for clean mount)
+      try {
+        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
+        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
+        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
+      } catch (e: any) {}
+    }
+
+    // Step 6h: Mount new RAID on /data
+    log('Mounting new RAID on /data...', 'info');
     try {
-      // Ensure /data directory exists
       await executeCommand('sudo', ['-n', 'mkdir', '-p', '/data']);
       await executeCommand('sudo', ['-n', 'mount', '-o', 'defaults,noatime,compress=zstd,space_cache=v2', MD_DEVICE_NAME, '/data']);
       log(`✓ Mounted ${MD_DEVICE_NAME} on /data (btrfs, compress=zstd)`, 'success');
     } catch (e: any) {
       log(`Error mounting: ${e.message}`, 'error');
-      // Try to restart Docker before failing
       try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (restartErr: any) {}
       throw e;
     }
 
-    // Step 6b: Recreate essential /data directories
-    log('Recreating essential /data directories...', 'info');
-    const essentialDirs = ['/data/apps', '/data/config', '/data/docker', '/data/logs', '/data/images', '/data/snapshot'];
-    for (const dir of essentialDirs) {
+    // Step 6i: Ensure essential /data directories exist (in case of fresh install)
+    if (!oldDataMounted) {
+      log('Creating essential /data directories...', 'info');
+      const essentialDirs = ['/data/apps', '/data/config', '/data/docker', '/data/logs', '/data/images', '/data/snapshot'];
+      for (const dir of essentialDirs) {
+        try {
+          await executeCommand('sudo', ['-n', 'mkdir', '-p', dir]);
+        } catch (e: any) {}
+      }
       try {
-        await executeCommand('sudo', ['-n', 'mkdir', '-p', dir]);
+        await executeCommand('sudo', ['-n', 'chown', '-R', 'ryvie:ryvie', '/data/apps', '/data/config', '/data/logs', '/data/images']);
       } catch (e: any) {}
+      log('✓ Essential directories created', 'success');
     }
-    // Set ownership for user-accessible dirs
-    try {
-      await executeCommand('sudo', ['-n', 'chown', '-R', 'ryvie:ryvie', '/data/apps', '/data/config', '/data/logs', '/data/images']);
-    } catch (e: any) {}
-    log('✓ Essential directories created', 'success');
 
     // Step 7: Save mdadm config + update fstab
     log('=== Step 7: Saving configuration ===', 'step');
