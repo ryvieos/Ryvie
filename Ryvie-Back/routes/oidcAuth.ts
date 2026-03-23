@@ -155,7 +155,7 @@ router.get('/callback', async (req: any, res: any) => {
     let role = 'Guest';
     
     try {
-      const ldapClient = ldap.createClient({ url: ldapConfig.url });
+      const ldapClient = ldapService.createSafeClient();
       await new Promise((resolve, reject) => {
         ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err: any) => {
           if (err) return reject(err);

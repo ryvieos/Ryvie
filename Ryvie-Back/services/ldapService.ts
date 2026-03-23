@@ -2,6 +2,20 @@ const ldap = require('ldapjs');
 const ldapConfig = require('../config/ldap');
 const DEFAULT_EMAIL_DOMAIN = process.env.DEFAULT_EMAIL_DOMAIN || 'localhost';
 
+function createSafeClient(opts: any = {}) {
+  const client = ldap.createClient({
+    url: ldapConfig.url,
+    timeout: 5000,
+    connectTimeout: 5000,
+    reconnect: false,
+    ...opts,
+  });
+  client.on('error', (err: any) => {
+    console.error('[ldap] Client error (handled):', err.code || err.message);
+  });
+  return client;
+}
+
 function escapeLdapFilterValue(value) {
   if (value == null) return '';
   return String(value)
@@ -48,7 +62,7 @@ function getRole(dn, groupMemberships) {
 
 // Resolve a user's role by searching for groups that include the user's DN as member
 async function getUserRole(userDN) {
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  const ldapClient = createSafeClient();
   return new Promise((resolve) => {
     ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
       if (err) {
@@ -79,7 +93,7 @@ async function getUserRole(userDN) {
 }
 
 async function listUsersWithRoles() {
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  const ldapClient = createSafeClient();
   
   return new Promise((resolve, reject) => {
     ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
@@ -138,7 +152,7 @@ async function listUsersWithRoles() {
 }
 
 async function listUsersPublic() {
-  const ldapClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
+  const ldapClient = createSafeClient();
 
   return new Promise((resolve, reject) => {
     ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
@@ -178,6 +192,7 @@ async function listUsersPublic() {
 }
 
 export = {
+  createSafeClient,
   escapeLdapFilterValue,
   escapeRdnValue,
   parseDnParts,

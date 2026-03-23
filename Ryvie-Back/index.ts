@@ -464,3 +464,14 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+
+// Safety net: prevent unhandled errors from crashing the process
+// (e.g. LDAP reconnect failures when Docker is stopped during RAID operations)
+process.on('uncaughtException', (err: any) => {
+  console.error('[UNCAUGHT EXCEPTION] (process kept alive):', err.code || err.message);
+  if (err.stack) console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[UNHANDLED REJECTION] (process kept alive):', reason?.code || reason?.message || reason);
+});

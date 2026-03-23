@@ -5,7 +5,7 @@ const ldap = require('ldapjs');
 const jwt = require('jsonwebtoken');
 const { ensureConnected } = require('../redisClient');
 const ldapConfig = require('../config/ldap');
-const { escapeLdapFilterValue, getUserRole } = require('../services/ldapService');
+const { createSafeClient, escapeLdapFilterValue, getUserRole } = require('../services/ldapService');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const {
   getTokenExpirationSeconds,
@@ -43,7 +43,7 @@ router.post('/authenticate', authLimiter, async (req: any, res: any) => {
     return res.status(429).json({ error: 'Trop de tentatives échouées. Réessayez plus tard.', retryAfter: bruteForceCheck.retryAfter });
   }
 
-  const ldapClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
+  const ldapClient = createSafeClient();
 
   // 1) Bind initial
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
@@ -91,7 +91,7 @@ router.post('/authenticate', authLimiter, async (req: any, res: any) => {
 
       function proceed(userEntry) {
         const userDN = userEntry.pojo.objectName;
-        const userAuthClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
+        const userAuthClient = createSafeClient();
         userAuthClient.bind(userDN, password, async (err) => {
           if (err) {
             ldapClient.unbind();
@@ -207,7 +207,7 @@ async function syncLdapWithApps() {
 
 // GET /api/ldap/check-first-time - Vérifier si c'est la première connexion
 router.get('/ldap/check-first-time', async (req: any, res: any) => {
-  const ldapClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
+  const ldapClient = createSafeClient();
 
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
     if (err) {
@@ -266,7 +266,7 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
     return res.status(400).json({ error: 'Tous les champs sont requis (uid, name, email, password)' });
   }
 
-  const ldapClient = ldap.createClient({ url: ldapConfig.url, timeout: 5000, connectTimeout: 5000 });
+  const ldapClient = createSafeClient();
 
   // Utiliser les credentials admin pour la création d'utilisateur
   ldapClient.bind(ldapConfig.adminBindDN, ldapConfig.adminBindPassword, (err) => {
@@ -422,7 +422,7 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
 
 // GET /api/ldap/sync - Synchroniser les utilisateurs LDAP avec les applications
 router.get('/ldap/sync', async (req: any, res: any) => {
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  const ldapClient = createSafeClient();
   let users = [];
 
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {

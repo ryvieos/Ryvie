@@ -3,13 +3,13 @@ const ldap = require('ldapjs');
 const router = express.Router();
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const ldapConfig = require('../config/ldap');
-const { getRole, parseDnParts, escapeRdnValue } = require('../services/ldapService');
+const { createSafeClient, getRole, parseDnParts, escapeRdnValue } = require('../services/ldapService');
 const { startApp } = require('../services/dockerService');
 const { listInstalledApps } = require('../services/appManagerService');
 
 // GET /api/admin/users/sync-ldap
 router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req: any, res: any) => {
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  const ldapClient = createSafeClient();
   let users = [];
 
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
@@ -64,7 +64,7 @@ router.post('/check-user-exists', verifyToken, async (req: any, res: any) => {
     return res.status(400).json({ error: 'UID ou email requis' });
   }
 
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  const ldapClient = createSafeClient();
 
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
     if (err) {
@@ -123,7 +123,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
     return res.status(400).json({ error: 'Champs requis manquants pour newUser (uid, cn, sn, mail, password, role)' });
   }
 
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  const ldapClient = createSafeClient();
 
   // 1) Bind initial as service account
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
@@ -149,7 +149,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
         }
 
         const adminDN = adminEntry.pojo.objectName;
-        const adminAuthClient = ldap.createClient({ url: ldapConfig.url });
+        const adminAuthClient = createSafeClient();
 
         // 3) Verify admin credentials
         adminAuthClient.bind(adminDN, adminPassword, (err) => {
@@ -217,7 +217,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                   };
 
                   // Utiliser les credentials admin LDAP pour créer l'utilisateur
-                  const ldapAdminClient = ldap.createClient({ url: ldapConfig.url });
+                  const ldapAdminClient = createSafeClient();
                   ldapAdminClient.bind(ldapConfig.adminBindDN, ldapConfig.adminBindPassword, (err) => {
                     if (err) {
                       console.error('Erreur bind LDAP admin:', err);
@@ -244,7 +244,7 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                         return res.status(400).json({ error: `Rôle inconnu : ${role}` });
                       }
 
-                      const groupClient = ldap.createClient({ url: ldapConfig.url });
+                      const groupClient = createSafeClient();
                       groupClient.bind(ldapConfig.adminBindDN, ldapConfig.adminBindPassword, (err) => {
                       if (err) {
                         console.error('Échec bind admin pour ajout au groupe');
@@ -358,7 +358,7 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
     return res.status(403).json({ error: "Vous ne pouvez pas supprimer votre propre compte" });
   }
 
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  const ldapClient = createSafeClient();
 
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
     if (err) {
@@ -387,7 +387,7 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
           }
 
           const adminDN = adminEntry.pojo.objectName;
-          const adminAuthClient = ldap.createClient({ url: ldapConfig.url });
+          const adminAuthClient = createSafeClient();
 
           adminAuthClient.bind(adminDN, adminPassword, (err) => {
             if (err) {
@@ -436,7 +436,7 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
                           ldapConfig.guestGroup,
                         ];
 
-                        const groupClient = ldap.createClient({ url: ldapConfig.url });
+                        const groupClient = createSafeClient();
                         groupClient.bind(adminDN, adminPassword, (err) => {
                           if (err) {
                             console.error('Erreur bind pour nettoyage groupes');
@@ -576,7 +576,7 @@ router.put('/update-user', verifyToken, isAdmin, async (req: any, res: any) => {
     return res.status(400).json({ error: "Changement d'UID interdit" });
   }
 
-  const ldapClient = ldap.createClient({ url: ldapConfig.url });
+  const ldapClient = createSafeClient();
   let adminAuthClient;
 
   // Step 1: Bind as service account
@@ -603,7 +603,7 @@ router.put('/update-user', verifyToken, isAdmin, async (req: any, res: any) => {
         }
 
         const adminDN = adminEntry.pojo.objectName;
-        adminAuthClient = ldap.createClient({ url: ldapConfig.url });
+        adminAuthClient = createSafeClient();
 
         // Step 3: Verify admin credentials
         adminAuthClient.bind(adminDN, adminPassword, (err) => {
