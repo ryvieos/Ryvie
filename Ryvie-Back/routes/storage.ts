@@ -1953,61 +1953,82 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
       log(`Unmounted /data (${unmountAttempts} mount(s) removed)`, 'info');
     }
 
-    // Stop existing md0 and prevent udev auto-reassemble
+    // === Disable mdadm auto-assembly FIRST (before any stop/zero) ===
+    try {
+      await executeCommand('sudo', ['-n', 'bash', '-c',
+        'cp /etc/mdadm/mdadm.conf /etc/mdadm/mdadm.conf.pre-raid 2>/dev/null; printf "AUTO -all\\nDEVICE\\n" > /tmp/mdadm_noauto && sudo cp /tmp/mdadm_noauto /etc/mdadm/mdadm.conf']);
+      await executeCommand('sudo', ['-n', 'udevadm', 'control', '--reload-rules']);
+      await executeCommand('sudo', ['-n', 'udevadm', 'trigger']);
+      log('✓ Disabled mdadm auto-assembly (AUTO -all, empty DEVICE)', 'success');
+    } catch (e: any) {
+      log(`Warning: Could not disable auto-assembly: ${e.message}`, 'warning');
+    }
+
+    // === Collect old md0 members before stopping ===
     let oldMd0Members: string[] = [];
     try {
-      // Get current members before stopping
       const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
-      const memberRegex = /\/dev\/\S+/g;
       const lines = detailResult.stdout.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
       for (const line of lines) {
         const match = line.match(/(\/dev\/\S+)/);
         if (match) oldMd0Members.push(match[1]);
       }
       log(`Old md0 members: ${oldMd0Members.join(', ') || 'none'}`, 'info');
-
-      await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']);
-      log('✓ Stopped existing /dev/md0', 'success');
     } catch (e: any) {
-      log('No existing /dev/md0 to stop', 'info');
+      log('No existing /dev/md0 found', 'info');
     }
 
-    // Zero superblocks on OLD members to prevent auto-reassemble
-    for (const member of oldMd0Members) {
+    // === Nuclear cleanup: stop ALL md arrays, then DESTROY superblocks with dd ===
+    // Loop until /proc/mdstat shows no active arrays (max 5 attempts)
+    for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', member]);
-        log(`✓ Zeroed superblock on old member ${member}`, 'success');
-      } catch (e: any) {
-        log(`Warning: Could not zero superblock on ${member}: ${e.message}`, 'warning');
+        const mdStat = await executeCommand('cat', ['/proc/mdstat']);
+        const activeArrays = mdStat.stdout.match(/^(md\d+)\s/gm);
+        if (!activeArrays || activeArrays.length === 0) {
+          log(`✓ All md arrays stopped (attempt ${attempt + 1})`, 'success');
+          break;
+        }
+        for (const md of activeArrays) {
+          const mdName = md.trim();
+          try {
+            await executeCommand('sudo', ['-n', 'mdadm', '--stop', `/dev/${mdName}`]);
+            log(`Stopped /dev/${mdName}`, 'info');
+          } catch (e: any) {}
+        }
+      } catch (e: any) {}
+
+      // Destroy superblocks on old members using dd (wipefs + mdadm --zero are not enough)
+      for (const member of oldMd0Members) {
+        try {
+          // wipefs -af: erase all filesystem/raid signatures
+          await executeCommand('sudo', ['-n', 'wipefs', '-af', member]);
+          // mdadm --zero-superblock --force
+          await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', '--force', member]);
+          // dd: overwrite first 100MB (metadata 1.2 is at offset 4096 from start)
+          await executeCommand('sudo', ['-n', 'dd', 'if=/dev/zero', `of=${member}`, 'bs=1M', 'count=100', 'conv=notrunc']);
+          // dd: overwrite last 10MB (metadata 1.0 is at end of device)
+          await executeCommand('sudo', ['-n', 'bash', '-c',
+            `SIZE=$(blockdev --getsize64 ${member}); SKIP=$(( (SIZE / 1048576) - 10 )); dd if=/dev/zero of=${member} bs=1M count=10 seek=$SKIP conv=notrunc 2>/dev/null`]);
+          if (attempt === 0) log(`✓ Destroyed all superblocks on ${member} (wipefs + dd)`, 'success');
+        } catch (e: any) {
+          log(`Warning: Could not fully wipe ${member}: ${e.message}`, 'warning');
+        }
       }
-    }
 
-    // Disable mdadm auto-assembly BEFORE any disk operations
-    try {
-      await executeCommand('sudo', ['-n', 'bash', '-c',
-        'cp /etc/mdadm/mdadm.conf /etc/mdadm/mdadm.conf.pre-raid 2>/dev/null; echo "AUTO -all" > /tmp/mdadm_noauto && sudo cp /tmp/mdadm_noauto /etc/mdadm/mdadm.conf']);
-      await executeCommand('sudo', ['-n', 'udevadm', 'control', '--reload-rules']);
-      log('✓ Disabled mdadm auto-assembly in mdadm.conf', 'success');
-    } catch (e: any) {
-      log(`Warning: Could not disable auto-assembly: ${e.message}`, 'warning');
-    }
-
-    // Also limit raid speed and settle udev
-    try {
-      await executeCommand('sudo', ['-n', 'bash', '-c', 'echo 0 > /proc/sys/dev/raid/speed_limit_max']);
-    } catch (e: any) {}
-
-    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
-    await executeCommand('sleep', ['1']);
-
-    // Double-check md0 is really gone
-    try {
-      await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']);
-      log('Stopped auto-reassembled /dev/md0 again', 'warning');
+      await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
       await executeCommand('sleep', ['1']);
-    } catch (e: any) {
-      // Good - it's gone
     }
+
+    // Verify /proc/mdstat is clean
+    try {
+      const finalMdStat = await executeCommand('cat', ['/proc/mdstat']);
+      const remaining = finalMdStat.stdout.match(/^(md\d+)\s/gm);
+      if (remaining && remaining.length > 0) {
+        log(`⚠ WARNING: md arrays still active after cleanup: ${remaining.map((m: string) => m.trim()).join(', ')}`, 'warning');
+      } else {
+        log('✓ /proc/mdstat is clean - no active arrays', 'success');
+      }
+    } catch (e: any) {}
 
     // Step 1: Verify all disks are not mounted
     log('=== Step 1: Verifying disks ===', 'step');
@@ -2125,49 +2146,32 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
       }
     }
 
-    // === AGGRESSIVE udev/md suppression before create ===
-    // 1) Re-enforce AUTO -all (in case udev reloaded config)
-    try {
-      await executeCommand('sudo', ['-n', 'bash', '-c',
-        'echo "AUTO -all" > /tmp/mdadm_noauto && sudo cp /tmp/mdadm_noauto /etc/mdadm/mdadm.conf']);
-      await executeCommand('sudo', ['-n', 'udevadm', 'control', '--reload-rules']);
-      log('Re-enforced mdadm auto-assembly block', 'info');
-    } catch (e: any) {}
-
-    // 2) Stop ALL md devices (md0, md127, etc.) that may have been auto-assembled
-    try {
-      const mdStat = await executeCommand('cat', ['/proc/mdstat']);
-      const activeArrays = mdStat.stdout.match(/^(md\d+)\s/gm);
-      if (activeArrays) {
+    // === Pre-create: final cleanup of any re-assembled arrays ===
+    log('Final md cleanup before array creation...', 'info');
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const mdStat = await executeCommand('cat', ['/proc/mdstat']);
+        const activeArrays = mdStat.stdout.match(/^(md\d+)\s/gm);
+        if (!activeArrays || activeArrays.length === 0) {
+          log('✓ No stale md arrays before create', 'success');
+          break;
+        }
         for (const md of activeArrays) {
           const mdName = md.trim();
           try {
             await executeCommand('sudo', ['-n', 'mdadm', '--stop', `/dev/${mdName}`]);
-            log(`Stopped auto-assembled /dev/${mdName}`, 'warning');
+            log(`Stopped re-assembled /dev/${mdName}`, 'warning');
           } catch (e: any) {}
         }
-      }
-    } catch (e: any) {}
-
-    // 3) Re-zero superblocks on ALL old md0 members (udev may have re-read them)
-    for (const member of oldMd0Members) {
-      try {
-        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', member]);
-        log(`Re-zeroed superblock on old member ${member}`, 'info');
+        // Re-destroy old member superblocks (dd)
+        for (const member of oldMd0Members) {
+          try {
+            await executeCommand('sudo', ['-n', 'dd', 'if=/dev/zero', `of=${member}`, 'bs=1M', 'count=100', 'conv=notrunc']);
+          } catch (e: any) {}
+        }
+        await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
+        await executeCommand('sleep', ['1']);
       } catch (e: any) {}
-    }
-
-    // 4) Trigger udev settle after all stops and zeros
-    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
-    await executeCommand('sleep', ['2']);
-
-    // 5) Final check: if md0 somehow reappeared, stop it one last time
-    try {
-      await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']);
-      log('Stopped md0 one final time before create', 'warning');
-      await executeCommand('sleep', ['1']);
-    } catch (e: any) {
-      // Good - it's gone
     }
 
     // Step 4: Create the RAID array
@@ -2194,6 +2198,31 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     } catch (e: any) {
       log(`Error creating array: ${e.message}`, 'error');
       throw e;
+    }
+
+    // Step 4b: Verify the new array is correct (not the old one re-assembled)
+    try {
+      const verifyResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+      const verifyOutput = verifyResult.stdout;
+      const raidLevelMatch = verifyOutput.match(/Raid Level\s*:\s*(\S+)/);
+      const actualLevel = raidLevelMatch ? raidLevelMatch[1] : 'unknown';
+      const expectedLevel = `raid${mdLevel}`;
+      if (actualLevel !== expectedLevel) {
+        log(`❌ FATAL: /dev/md0 is ${actualLevel} but expected ${expectedLevel} — old array re-assembled!`, 'error');
+        // Try to stop it and abort
+        try { await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']); } catch (e: any) {}
+        try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (e: any) {}
+        return res.status(500).json({
+          success: false,
+          error: `Array verification failed: /dev/md0 is ${actualLevel}, expected ${expectedLevel}. The old array may have re-assembled. Please reboot and try again.`,
+          logs
+        });
+      }
+      // Also verify member count
+      const deviceLines = verifyOutput.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
+      log(`✓ Verified: /dev/md0 is ${actualLevel} with ${deviceLines.length} device(s)`, 'success');
+    } catch (e: any) {
+      log(`Warning: Could not verify array: ${e.message}`, 'warning');
     }
 
     // Step 5: Create filesystem
