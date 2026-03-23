@@ -139,9 +139,74 @@ const hasPermission = (permission: string) => {
   };
 };
 
+// Cache for first-time check (avoid LDAP lookup on every request)
+let _isFirstTimeCache: boolean | null = null;
+let _isFirstTimeCacheTime = 0;
+const FIRST_TIME_CACHE_TTL = 30000; // 30 seconds
+
+async function checkIsFirstTime(): Promise<boolean> {
+  const now = Date.now();
+  if (_isFirstTimeCache !== null && (now - _isFirstTimeCacheTime) < FIRST_TIME_CACHE_TTL) {
+    return _isFirstTimeCache;
+  }
+  try {
+    const ldap = require('ldapjs');
+    const ldapConfig = require('../config/ldap');
+    return new Promise((resolve) => {
+      const client = ldap.createClient({ url: ldapConfig.url, timeout: 3000, connectTimeout: 3000, reconnect: false });
+      client.on('error', () => { resolve(false); });
+      client.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err: any) => {
+        if (err) { client.destroy(); _isFirstTimeCache = false; _isFirstTimeCacheTime = now; resolve(false); return; }
+        let userCount = 0;
+        client.search(ldapConfig.userSearchBase, { scope: 'one', filter: '(objectClass=inetOrgPerson)' }, (searchErr: any, searchRes: any) => {
+          if (searchErr) { client.unbind(); _isFirstTimeCache = false; _isFirstTimeCacheTime = now; resolve(false); return; }
+          searchRes.on('searchEntry', (entry: any) => {
+            try {
+              const uid = entry.ppiObject?.uid || entry.attributes?.find((a: any) => a.type === 'uid')?.values?.[0] || '';
+              if (uid !== 'read-only') userCount++;
+            } catch (e: any) {}
+          });
+          searchRes.on('end', () => { client.unbind(); _isFirstTimeCache = userCount === 0; _isFirstTimeCacheTime = now; resolve(_isFirstTimeCache!); });
+          searchRes.on('error', () => { client.unbind(); _isFirstTimeCache = false; _isFirstTimeCacheTime = now; resolve(false); });
+        });
+      });
+    });
+  } catch (e: any) {
+    _isFirstTimeCache = false;
+    _isFirstTimeCacheTime = Date.now();
+    return false;
+  }
+}
+
+// Reset cache when a user is created
+function resetFirstTimeCache() {
+  _isFirstTimeCache = null;
+  _isFirstTimeCacheTime = 0;
+}
+
+// Middleware: allow access if authenticated OR if no users exist (first-time setup)
+const authenticateTokenOrFirstTime = async (req: any, res: any, next: any) => {
+  // First check if there's a valid token
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token) {
+    // Delegate to normal auth
+    return verifyToken(req, res, next);
+  }
+  // No token — check if it's first-time setup
+  const isFirstTime = await checkIsFirstTime();
+  if (isFirstTime) {
+    req.user = { uid: 'setup', role: 'Admin', firstTimeSetup: true };
+    return next();
+  }
+  return res.status(401).json({ error: 'Accès refusé. Authentification requise.' });
+};
+
 module.exports = {
   verifyToken,
   authenticateToken: verifyToken, // Alias pour compatibilité
+  authenticateTokenOrFirstTime,
+  resetFirstTimeCache,
   isAdmin,
   hasPermission,
   JWT_SECRET

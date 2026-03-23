@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/StorageSettings.css';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -11,6 +11,8 @@ import {
   faPlay,
   faCopy,
   faArrowLeft,
+  faArrowRight,
+  faUserPlus,
   faCheck,
   faStop,
   faThermometerHalf,
@@ -93,8 +95,12 @@ const RAID_LEVELS = [
 
 const StorageSettings = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useLanguage();
   const logsEndRef = useRef(null);
+
+  // Detect if we're in first-time setup mode (no user created yet)
+  const isSetupMode = location.pathname === '/setup/storage';
 
   // Data states
   const [loading, setLoading] = useState(true);
@@ -308,8 +314,8 @@ const StorageSettings = () => {
         
         console.log('RAID Status received:', status);
         
-        // Déterminer le type de RAID
-        if (status.mounted && status.source === '/dev/md0' && status.fstype === 'btrfs') {
+        // Déterminer le type de RAID — detect any active md array
+        if (status.exists && status.activeDevices > 0) {
           // Mode mdadm
           setRaidType('mdadm');
           
@@ -332,14 +338,17 @@ const StorageSettings = () => {
           setRaidMemberPartitions(members);
           setRaidMemberDisksMap(diskMap);
           setRaidStatus({
-            isRaid: status.exists && status.activeDevices > 0,
-            level: 'raid1', // mdadm RAID1
+            isRaid: true,
+            level: status.raidLevel || 'raid1',
             deviceCount: status.activeDevices || 0,
             totalDevices: status.totalDevices || 0,
             state: status.state,
             syncProgress: status.syncProgress,
+            syncPending: status.syncPending || false,
             details: status.mdstat,
-            members: status.members || [], // Inclure les membres avec leurs tailles
+            members: status.members || [],
+            array: status.array || '/dev/md0',
+            mounted: status.mounted,
             type: 'mdadm'
           });
           
@@ -698,13 +707,33 @@ const StorageSettings = () => {
     }
   };
 
+  // Activate array (resume PENDING resync after reboot)
+  const handleActivateArray = async () => {
+    const arrayDev = raidStatus?.array || '/dev/md0';
+    try {
+      addLog(`Activating ${arrayDev} (resuming resync)...`, 'info');
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-activate`, { array: arrayDev });
+      if (response.data.success) {
+        addLog(`✓ ${arrayDev} activated — resync resumed`, 'success');
+        setTimeout(() => { checkRaidStatus(); loadInventory(); }, 2000);
+      } else {
+        addLog(`Error: ${response.data.error}`, 'error');
+      }
+    } catch (error) {
+      addLog(`Error activating array: ${error.response?.data?.error || error.message}`, 'error');
+    }
+  };
+
   // Stop resync
   const handleStopResync = async () => {
     if (!window.confirm(t('storageSettings.confirmStopResync'))) return;
     try {
+      const arrayDev = raidStatus?.array || '/dev/md0';
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
-      const response = await axios.post(`${serverUrl}/api/storage/mdraid-stop-resync`, { array: '/dev/md0' });
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-stop-resync`, { array: arrayDev });
       if (response.data.success) {
         setResyncProgress(null); setExecutionStatus('success');
         if (response.data.logs) response.data.logs.forEach(log => addLog(log.message, log.type));
@@ -824,13 +853,28 @@ const StorageSettings = () => {
                     <FontAwesomeIcon icon={faCheckCircle} /> {t('storageSettings.raidMdadmActive')}
                   </div>
                   <div className="raid-status-meta">
-                    <span className="raid-badge">{t('storageSettings.arrayMd0')}</span>
+                    <span className="raid-badge">{raidStatus.array || t('storageSettings.arrayMd0')}</span>
+                    <span className="raid-badge">{raidStatus.level?.toUpperCase()}</span>
                     <span className="raid-badge raid-badge-state">{t('storageSettings.state')}: {raidStatus.state}</span>
                     <span className="raid-badge">{t('storageSettings.members')}: {raidStatus.deviceCount}/{raidStatus.totalDevices}</span>
-                    {raidStatus.syncProgress !== null && (
+                    {raidStatus.syncProgress !== null && raidStatus.syncProgress !== undefined && (
                       <span className="raid-badge">{t('storageSettings.resync')}: {raidStatus.syncProgress.toFixed(1)}%</span>
                     )}
                   </div>
+                  {raidStatus.syncPending && (
+                    <div className="raid-pending-alert">
+                      <div className="alert-warning" style={{ marginTop: '0.75rem' }}>
+                        <FontAwesomeIcon icon={faExclamationTriangle} />
+                        <div style={{ flex: 1 }}>
+                          <strong>{t('storageSettings.resyncPaused')}</strong>
+                          <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.9em' }}>{t('storageSettings.resyncPausedDesc')}</p>
+                        </div>
+                        <button className="btn-create-raid" style={{ marginLeft: '1rem', whiteSpace: 'nowrap', padding: '0.5rem 1rem' }} onClick={handleActivateArray}>
+                          <FontAwesomeIcon icon={faPlay} /> {t('storageSettings.resumeResync')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1019,13 +1063,28 @@ const StorageSettings = () => {
               <div className="raid-status-card">
                 <div className="raid-status-title"><FontAwesomeIcon icon={faCheckCircle} /> {t('storageSettings.raidMdadmActive')}</div>
                 <div className="raid-status-meta">
-                  <span className="raid-badge">{t('storageSettings.arrayMd0')}</span>
+                  <span className="raid-badge">{raidStatus.array || t('storageSettings.arrayMd0')}</span>
+                  <span className="raid-badge">{raidStatus.level?.toUpperCase()}</span>
                   <span className="raid-badge raid-badge-state">{t('storageSettings.state')}: {raidStatus.state}</span>
                   <span className="raid-badge">{t('storageSettings.members')}: {raidStatus.deviceCount}/{raidStatus.totalDevices}</span>
-                  {raidStatus.syncProgress !== null && (
+                  {raidStatus.syncProgress !== null && raidStatus.syncProgress !== undefined && (
                     <span className="raid-badge">{t('storageSettings.resync')}: {raidStatus.syncProgress.toFixed(1)}%</span>
                   )}
                 </div>
+                {raidStatus.syncPending && (
+                  <div className="raid-pending-alert">
+                    <div className="alert-warning" style={{ marginTop: '0.75rem' }}>
+                      <FontAwesomeIcon icon={faExclamationTriangle} />
+                      <div style={{ flex: 1 }}>
+                        <strong>{t('storageSettings.resyncPaused')}</strong>
+                        <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.9em' }}>{t('storageSettings.resyncPausedDesc')}</p>
+                      </div>
+                      <button className="btn-create-raid" style={{ marginLeft: '1rem', whiteSpace: 'nowrap', padding: '0.5rem 1rem' }} onClick={handleActivateArray}>
+                        <FontAwesomeIcon icon={faPlay} /> {t('storageSettings.resumeResync')}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {smartSuggestion && smartSuggestion.type === 'replace_small' && (
@@ -1224,6 +1283,24 @@ const StorageSettings = () => {
               <button className="btn-danger" onClick={executeAddDisk}>{t('storageSettings.addToRaid')}</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Setup mode: Continue to create account */}
+      {isSetupMode && (
+        <div className="setup-continue-section" style={{ marginTop: '2rem', padding: '1.5rem', background: 'linear-gradient(135deg, #e8f4fd 0%, #d1ecf9 100%)', borderRadius: '12px', textAlign: 'center', border: '1px solid #b8daff' }}>
+          <p style={{ margin: '0 0 1rem 0', fontSize: '1.05em', color: '#333' }}>
+            {t('storageSettings.setupContinueDesc')}
+          </p>
+          <button
+            className="btn-create-raid"
+            style={{ padding: '0.75rem 2rem', fontSize: '1.05em' }}
+            onClick={() => navigate('/first-time-setup')}
+          >
+            <FontAwesomeIcon icon={faUserPlus} style={{ marginRight: '0.5rem' }} />
+            {t('storageSettings.setupContinueButton')}
+            <FontAwesomeIcon icon={faArrowRight} style={{ marginLeft: '0.5rem' }} />
+          </button>
         </div>
       )}
 

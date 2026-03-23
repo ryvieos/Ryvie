@@ -2,7 +2,7 @@ export {};
 const express = require('express');
 const router = express.Router();
 const { spawn } = require('child_process');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateTokenOrFirstTime } = require('../middleware/auth');
 
 // Type for command execution result
 interface CommandResult {
@@ -31,18 +31,34 @@ async function findActiveMdDevice(): Promise<string | null> {
     return MD_DEVICE_NAME;
   } catch (e: any) {}
 
-  // 2. Check /dev/md0
-  try {
-    await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
-    return '/dev/md0';
-  } catch (e: any) {}
-
-  // 3. Check what /data is mounted on
+  // 2. Check what /data is mounted on
   try {
     const findmntResult = await executeCommand('findmnt', ['-no', 'SOURCE', '/data']);
     const source = findmntResult.stdout.trim();
     if (source && source.startsWith('/dev/md')) {
       return source;
+    }
+  } catch (e: any) {}
+
+  // 3. Check /dev/md0
+  try {
+    await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+    return '/dev/md0';
+  } catch (e: any) {}
+
+  // 4. Scan /proc/mdstat for any active md array (catches md127, md126, etc.)
+  try {
+    const mdStat = await executeCommand('cat', ['/proc/mdstat']);
+    const activeArrays = mdStat.stdout.match(/^(md\S+)\s/gm);
+    if (activeArrays) {
+      for (const md of activeArrays) {
+        const mdName = md.trim();
+        const mdDev = `/dev/${mdName}`;
+        try {
+          await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDev]);
+          return mdDev;
+        } catch (e: any) {}
+      }
     }
   } catch (e: any) {}
 
@@ -209,7 +225,7 @@ function getPartitionPath(diskPath, partNum) {
  * GET /api/storage/inventory
  * Récupère l'inventaire complet des devices et points de montage
  */
-router.get('/storage/inventory', authenticateToken, async (req: any, res: any) => {
+router.get('/storage/inventory', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   try {
     // Exécuter les commandes d'inventaire en parallèle
     const [lsblkResult, findmntResult, blkidResult] = await Promise.all([
@@ -258,7 +274,7 @@ router.get('/storage/inventory', authenticateToken, async (req: any, res: any) =
  * Effectue les pré-vérifications avant d'ajouter un disque au RAID mdadm
  * Body: { array: string, disk: string }
  */
-router.post('/storage/mdraid-prechecks', authenticateToken, async (req: any, res: any) => {
+router.post('/storage/mdraid-prechecks', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   try {
     const { array, disk } = req.body;
 
@@ -492,7 +508,7 @@ router.post('/storage/mdraid-prechecks', authenticateToken, async (req: any, res
  * Optimise le RAID en retirant le plus petit membre, agrandissant un autre, et ajoutant un nouveau disque
  * Body: { array: string, smartOptimization: object }
  */
-router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req: any, res: any) => {
+router.post('/storage/mdraid-optimize-and-add', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   const { array, smartOptimization } = req.body;
 
   const logs = [];
@@ -789,7 +805,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateToken, async (req: a
  * Ajoute un disque au RAID mdadm /dev/md0
  * Body: { array: string, disk: string, dryRun: boolean }
  */
-router.post('/storage/mdraid-add-disk', authenticateToken, async (req: any, res: any) => {
+router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   const { array, disk, dryRun = false } = req.body;
 
   // Initialiser logs en dehors du try pour qu'il soit accessible dans le catch
@@ -1290,7 +1306,7 @@ router.post('/storage/mdraid-add-disk', authenticateToken, async (req: any, res:
  * GET /api/storage/mdraid-status
  * Récupère l'état du RAID mdadm
  */
-router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: any) => {
+router.get('/storage/mdraid-status', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   try {
     const activeMd = await findActiveMdDevice();
     const status: any = {
@@ -1307,7 +1323,7 @@ router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: an
       const findmntResult = await executeCommand('findmnt', ['-no', 'FSTYPE,SOURCE', '/data']);
       const [fstype, source] = findmntResult.stdout.trim().split(/\s+/);
       
-      status.mounted = (source && source.startsWith('/dev/md') && fstype === 'btrfs');
+      status.mounted = !!(source && source.startsWith('/dev/md'));
       status.fstype = fstype;
       status.source = source;
     } catch (error: any) {
@@ -1325,10 +1341,12 @@ router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: an
       const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
       const totalMatch = detailResult.stdout.match(/Total Devices\s*:\s*(\d+)/i);
       const stateMatch = detailResult.stdout.match(/State\s*:\s*(.+)/i);
+      const raidLevelMatch = detailResult.stdout.match(/Raid Level\s*:\s*(\S+)/i);
       
       if (activeMatch) status.activeDevices = parseInt(activeMatch[1]);
       if (totalMatch) status.totalDevices = parseInt(totalMatch[1]);
       if (stateMatch) status.state = stateMatch[1].trim();
+      if (raidLevelMatch) status.raidLevel = raidLevelMatch[1];
       
       // Extraire les membres avec leurs tailles
       const memberMatches = detailResult.stdout.matchAll(/\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\w+)\s+(\w+)\s+(\/dev\/\S+)/g);
@@ -1364,11 +1382,23 @@ router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: an
       const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
       status.mdstat = mdstatResult.stdout;
       
+      // Detect resync=PENDING (auto-read-only after reboot — needs mdadm --readwrite to resume)
+      const pendingMatch = mdstatResult.stdout.match(/resync\s*=\s*PENDING/i);
+      const autoReadOnlyMatch = mdstatResult.stdout.match(/\(auto-read-only\)/);
+      if (pendingMatch || autoReadOnlyMatch) {
+        status.syncPending = true;
+        status.syncing = false;
+        status.syncProgress = null;
+      } else {
+        status.syncPending = false;
+      }
+
       // Parser la progression de resync/recovery
       const progressMatch = mdstatResult.stdout.match(/(?:recovery|resync)\s*=\s*(\d+\.\d+)%/);
       if (progressMatch) {
         status.syncProgress = parseFloat(progressMatch[1]);
         status.syncing = true;
+        status.syncPending = false;
         
         // Parser l'ETA
         const finishMatch = mdstatResult.stdout.match(/finish\s*=\s*([\d.]+min)/);
@@ -1381,7 +1411,7 @@ router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: an
         if (speedMatch) {
           status.syncSpeed = speedMatch[1];
         }
-      } else {
+      } else if (!status.syncPending) {
         status.syncing = false;
       }
     } catch (error: any) {
@@ -1404,11 +1434,33 @@ router.get('/storage/mdraid-status', authenticateToken, async (req: any, res: an
 });
 
 /**
+ * POST /api/storage/mdraid-activate
+ * Activates an array that is in auto-read-only mode (resync=PENDING after reboot).
+ * Runs: mdadm --readwrite <array>
+ * Body: { array: string }
+ */
+router.post('/storage/mdraid-activate', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  const { array } = req.body;
+
+  if (!array || !array.startsWith('/dev/md')) {
+    return res.status(400).json({ success: false, error: 'Invalid array device' });
+  }
+
+  try {
+    await executeCommand('sudo', ['-n', 'mdadm', '--readwrite', array]);
+    res.json({ success: true, message: `Array ${array} activated (read-write mode)` });
+  } catch (error: any) {
+    console.error('Error activating array:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * POST /api/storage/mdraid-stop-resync
  * Arrête la resynchronisation en cours sur un array RAID
  * Body: { array: string }
  */
-router.post('/storage/mdraid-stop-resync', authenticateToken, async (req: any, res: any) => {
+router.post('/storage/mdraid-stop-resync', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   const { array } = req.body;
 
   const logs = [];
@@ -1573,7 +1625,7 @@ router.post('/storage/mdraid-stop-resync', authenticateToken, async (req: any, r
  * Retire un disque du RAID mdadm /dev/md0
  * Body: { array: string, partition: string }
  */
-router.post('/storage/mdraid-remove-disk', authenticateToken, async (req: any, res: any) => {
+router.post('/storage/mdraid-remove-disk', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   const { array, partition } = req.body;
 
   const logs = [];
@@ -1771,7 +1823,7 @@ router.post('/storage/mdraid-remove-disk', authenticateToken, async (req: any, r
  * GET /api/storage/disk-health
  * Récupère les données SMART de tous les disques
  */
-router.get('/storage/disk-health', authenticateToken, async (req: any, res: any) => {
+router.get('/storage/disk-health', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   try {
     // Lister les disques physiques
     const lsblkResult = await executeCommand('lsblk', ['-J', '-d', '-o', 'NAME,SIZE,MODEL,SERIAL,TYPE,TRAN,ROTA']);
@@ -1880,7 +1932,7 @@ router.get('/storage/disk-health', authenticateToken, async (req: any, res: any)
  * Crée un nouvel array RAID mdadm avec le niveau et les disques choisis
  * Body: { level: string, disks: string[], dryRun: boolean }
  */
-router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: any) => {
+router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   const { level, disks: selectedDisks, dryRun = false } = req.body;
 
   const logs = [];
@@ -2508,7 +2560,7 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
  * Pré-vérifications pour la création d'un nouvel array RAID
  * Body: { level: string, disks: string[] }
  */
-router.post('/storage/mdraid-create-prechecks', authenticateToken, async (req: any, res: any) => {
+router.post('/storage/mdraid-create-prechecks', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   try {
     const { level, disks: selectedDisks } = req.body;
     const reasons = [];

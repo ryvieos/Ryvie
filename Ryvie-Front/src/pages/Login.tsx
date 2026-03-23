@@ -85,8 +85,8 @@ const Login = () => {
         const response = await axios.get(`${serverUrl}/api/ldap/check-first-time`);
         
         if (response.data && response.data.isFirstTime) {
-          console.log('[Login] Première connexion détectée - redirection vers FirstTimeSetup');
-          navigate('/first-time-setup', { replace: true });
+          console.log('[Login] Première connexion détectée - redirection vers Assistant RAID');
+          navigate('/setup/storage', { replace: true });
           return;
         }
 
