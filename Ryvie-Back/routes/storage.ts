@@ -1982,7 +1982,17 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
       }
     }
 
-    // Prevent udev from auto-reassembling any md device
+    // Disable mdadm auto-assembly BEFORE any disk operations
+    try {
+      await executeCommand('sudo', ['-n', 'bash', '-c',
+        'cp /etc/mdadm/mdadm.conf /etc/mdadm/mdadm.conf.pre-raid 2>/dev/null; echo "AUTO -all" > /tmp/mdadm_noauto && sudo cp /tmp/mdadm_noauto /etc/mdadm/mdadm.conf']);
+      await executeCommand('sudo', ['-n', 'udevadm', 'control', '--reload-rules']);
+      log('✓ Disabled mdadm auto-assembly in mdadm.conf', 'success');
+    } catch (e: any) {
+      log(`Warning: Could not disable auto-assembly: ${e.message}`, 'warning');
+    }
+
+    // Also limit raid speed and settle udev
     try {
       await executeCommand('sudo', ['-n', 'bash', '-c', 'echo 0 > /proc/sys/dev/raid/speed_limit_max']);
     } catch (e: any) {}
@@ -2105,7 +2115,7 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
     await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
     await executeCommand('sleep', ['2']);
 
-    // Wipe superblocks on all partitions
+    // Wipe superblocks on all new partitions
     for (const partPath of partitionPaths) {
       try {
         await executeCommand('sudo', ['-n', 'wipefs', '-a', partPath]);
@@ -2114,8 +2124,51 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
         // OK if no superblock
       }
     }
+
+    // === AGGRESSIVE udev/md suppression before create ===
+    // 1) Re-enforce AUTO -all (in case udev reloaded config)
+    try {
+      await executeCommand('sudo', ['-n', 'bash', '-c',
+        'echo "AUTO -all" > /tmp/mdadm_noauto && sudo cp /tmp/mdadm_noauto /etc/mdadm/mdadm.conf']);
+      await executeCommand('sudo', ['-n', 'udevadm', 'control', '--reload-rules']);
+      log('Re-enforced mdadm auto-assembly block', 'info');
+    } catch (e: any) {}
+
+    // 2) Stop ALL md devices (md0, md127, etc.) that may have been auto-assembled
+    try {
+      const mdStat = await executeCommand('cat', ['/proc/mdstat']);
+      const activeArrays = mdStat.stdout.match(/^(md\d+)\s/gm);
+      if (activeArrays) {
+        for (const md of activeArrays) {
+          const mdName = md.trim();
+          try {
+            await executeCommand('sudo', ['-n', 'mdadm', '--stop', `/dev/${mdName}`]);
+            log(`Stopped auto-assembled /dev/${mdName}`, 'warning');
+          } catch (e: any) {}
+        }
+      }
+    } catch (e: any) {}
+
+    // 3) Re-zero superblocks on ALL old md0 members (udev may have re-read them)
+    for (const member of oldMd0Members) {
+      try {
+        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', member]);
+        log(`Re-zeroed superblock on old member ${member}`, 'info');
+      } catch (e: any) {}
+    }
+
+    // 4) Trigger udev settle after all stops and zeros
     await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
     await executeCommand('sleep', ['2']);
+
+    // 5) Final check: if md0 somehow reappeared, stop it one last time
+    try {
+      await executeCommand('sudo', ['-n', 'mdadm', '--stop', '/dev/md0']);
+      log('Stopped md0 one final time before create', 'warning');
+      await executeCommand('sleep', ['1']);
+    } catch (e: any) {
+      // Good - it's gone
+    }
 
     // Step 4: Create the RAID array
     log('=== Step 4: Creating RAID array ===', 'step');
@@ -2131,6 +2184,7 @@ router.post('/storage/mdraid-create', authenticateToken, async (req: any, res: a
         '-n', 'mdadm', '--create', '/dev/md0',
         '--level=' + mdLevel,
         '--raid-devices=' + selectedDisks.length,
+        '--homehost=any',
         '--run', '--force',
         ...partitionPaths
       ];
