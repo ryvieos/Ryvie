@@ -746,6 +746,33 @@ const StorageSettings = () => {
     }
   };
 
+  // Destroy RAID array and rollback to previous config
+  const handleDestroyRaid = async () => {
+    if (!window.confirm('⚠️ Are you sure you want to destroy the RAID array?\n\nThis will:\n- Stop the RAID array\n- Wipe all member disks\n- Restore the previous configuration if possible\n\nThis action cannot be undone!')) return;
+    try {
+      setExecutionStatus('running'); setLogs([]); setResyncProgress(null);
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const arrayDev = raidStatus?.array || undefined;
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-destroy`, {
+        array: arrayDev
+      }, { timeout: 300000 });
+      if (response.data.success) {
+        setExecutionStatus('success');
+        if (response.data.logs) response.data.logs.forEach(log => addLog(log.message, log.type));
+        addLog(response.data.message, 'success');
+        setTimeout(() => { checkRaidStatus(); loadInventory(); loadDiskHealth(); }, 2000);
+      } else {
+        setExecutionStatus('error');
+        addLog(`Failed: ${response.data.error}`, 'error');
+      }
+    } catch (error) {
+      setExecutionStatus('error');
+      const msg = error.response?.data?.error || error.message;
+      addLog(`Failed to destroy RAID: ${msg}`, 'error');
+    }
+  };
+
   // Format bytes
   const formatBytes = (bytes) => {
     if (bytes === null || bytes === undefined || isNaN(bytes)) return 'N/A';
@@ -1045,13 +1072,20 @@ const StorageSettings = () => {
               )}
 
               <div className="action-section">
-                <button className="btn-create-raid" disabled={!canProceed || executionStatus === 'running'} onClick={openConfirmModal}>
-                  {executionStatus === 'running' ? (
-                    <><FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.creatingInProgress')}...</>
-                  ) : (
-                    <><FontAwesomeIcon icon={faPlay} /> {t('storageSettings.createRaidArray')}</>
+                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                  <button className="btn-create-raid" disabled={!canProceed || executionStatus === 'running'} onClick={openConfirmModal}>
+                    {executionStatus === 'running' ? (
+                      <><FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.creatingInProgress')}...</>
+                    ) : (
+                      <><FontAwesomeIcon icon={faPlay} /> {t('storageSettings.createRaidArray')}</>
+                    )}
+                  </button>
+                  {(executionStatus === 'success' || executionStatus === 'running') && (
+                    <button onClick={handleDestroyRaid} disabled={executionStatus === 'running'} style={{ background: '#f44336', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '8px', cursor: executionStatus === 'running' ? 'not-allowed' : 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: executionStatus === 'running' ? 0.5 : 1 }}>
+                      <FontAwesomeIcon icon={faStop} /> {t('storageSettings.destroyRaid') || 'Destroy RAID'}
+                    </button>
                   )}
-                </button>
+                </div>
               </div>
             </>
           )}
