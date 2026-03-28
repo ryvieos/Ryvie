@@ -565,6 +565,7 @@
     "diskWillBeErasedWarning": "Le disque {disk} sera complètement effacé. Toutes les données seront perdues.",
     "confirmCreateRaid": "Confirmer la création du RAID",
     "createRaidWarning": "Tous les disques sélectionnés seront effacés et partitionnés. Toutes les données seront perdues. Assurez-vous d'avoir des sauvegardes.",
+    "destroyRaid": "Arrêter et détruire le RAID",
     "memberLimitsCapacity": "Le membre {device} ({size}) limite la capacité du RAID. Considérez le retirer pour utiliser uniquement les disques plus grands.",
     "reshapeTitle": "Conversion du niveau RAID",
     "reshapeDesc": "Votre array est actuellement en {{currentLevel}} avec {{disks}} disques. Vous pouvez le convertir vers un autre niveau RAID sans perte de données.",

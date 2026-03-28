@@ -305,33 +305,36 @@ const StorageSettings = () => {
     }
   }, [logs]);
 
-  // Vérifier l'état du RAID actuel
+  // Vérifier l'état du RAID actuel (tous les arrays)
   const checkRaidStatus = async () => {
     try {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       
-      // Détecter le type de RAID (mdadm ou btrfs)
+      // Détecter les arrays RAID (mdadm)
       const response = await axios.get(`${serverUrl}/api/storage/mdraid-status`, {
         timeout: 30000 // 30 secondes
       });
       
-      if (response.data.success && response.data.status) {
-        const status = response.data.status;
+      if (response.data.success && response.data.arrays) {
+        const arrays = response.data.arrays;
+        const dataDevice = response.data.dataDevice;
         
-        console.log('RAID Status received:', status);
+        console.log('RAID Arrays received:', arrays);
         
-        // Déterminer le type de RAID — detect any active md array
-        if (status.exists && status.activeDevices > 0) {
+        // Trouver l'array monté sur /data (principal)
+        const dataArray = arrays.find((a: any) => a.mountedOnData) || arrays[0];
+        
+        if (dataArray && dataArray.exists) {
           // Mode mdadm
           setRaidType('mdadm');
           
           // Construire la liste de partitions membres et la map disque -> partition
           const members = [];
           const diskMap = {};
-          if (status.members && status.members.length > 0) {
-            status.members.forEach(member => {
-              const part = member.device; // ex: /dev/sda6
+          if (dataArray.members && dataArray.members.length > 0) {
+            dataArray.members.forEach((member: any) => {
+              const part = member.device;
               if (part) {
                 members.push(part);
                 const diskMatch = part.match(/\/dev\/(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)/);
@@ -346,36 +349,35 @@ const StorageSettings = () => {
           setRaidMemberDisksMap(diskMap);
           setRaidStatus({
             isRaid: true,
-            level: status.raidLevel || 'raid1',
-            deviceCount: status.activeDevices || 0,
-            totalDevices: status.totalDevices || 0,
-            state: status.state,
-            syncProgress: status.syncProgress,
-            syncPending: status.syncPending || false,
-            details: status.mdstat,
-            members: status.members || [],
-            array: status.array || '/dev/md0',
-            mounted: status.mounted,
-            type: 'mdadm'
+            level: dataArray.raidLevel || 'raid1',
+            deviceCount: dataArray.activeDevices || 0,
+            totalDevices: dataArray.totalDevices || 0,
+            state: dataArray.state,
+            syncProgress: dataArray.syncProgress,
+            syncPending: dataArray.syncPending || false,
+            details: dataArray.detail,
+            members: dataArray.members || [],
+            array: dataArray.array || '/dev/md0',
+            mounted: dataArray.mountedOnData,
+            type: 'mdadm',
+            allArrays: arrays // Store all arrays for display
           });
           
-          // Détecter si une resynchronisation est en cours
-          if (status.syncing === true && status.syncProgress !== undefined) {
+          // Détecter si une resynchronisation est en cours (sur n'importe quel array)
+          const syncingArray = arrays.find((a: any) => a.syncing);
+          if (syncingArray) {
             setResyncProgress({
-              percent: status.syncProgress,
-              eta: status.syncETA || null,
-              speed: status.syncSpeed || null
+              percent: syncingArray.syncProgress,
+              eta: syncingArray.syncETA || null,
+              speed: syncingArray.syncSpeed || null,
+              array: syncingArray.array
             });
-          } else if (status.syncing === false) {
-            // La resynchronisation est terminée ou n'a jamais été en cours
-            if (resyncProgress) {
-              console.log('[StorageSettings] Resync terminé, nettoyage de resyncProgress');
-            }
+          } else {
             setResyncProgress(null);
           }
           
           // Analyser pour suggestion intelligente
-          analyzeSmartSuggestion(status.members);
+          analyzeSmartSuggestion(dataArray.members);
         } else {
           // Pas de mdadm détecté
           setRaidType(null);
@@ -761,20 +763,21 @@ const StorageSettings = () => {
       setExecutionStatus('running'); setLogs([]); setResyncProgress(null);
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
-      const arrayDev = raidStatus?.array || undefined;
+      // If there's a syncing array in progress, destroy that one, otherwise use raidStatus
+      const arrayDev = resyncProgress?.array || raidStatus?.array || undefined;
       const response = await axios.post(`${serverUrl}/api/storage/mdraid-destroy`, {
         array: arrayDev
       }, { timeout: 300000 });
       if (response.data.success) {
         setExecutionStatus('success');
-        if (response.data.logs) response.data.logs.forEach(log => addLog(log.message, log.type));
+        if (response.data.logs) response.data.logs.forEach((log: any) => addLog(log.message, log.type));
         addLog(response.data.message, 'success');
         setTimeout(() => { checkRaidStatus(); loadInventory(); loadDiskHealth(); }, 2000);
       } else {
         setExecutionStatus('error');
         addLog(`Failed: ${response.data.error}`, 'error');
       }
-    } catch (error) {
+    } catch (error: any) {
       setExecutionStatus('error');
       const msg = error.response?.data?.error || error.message;
       addLog(`Failed to destroy RAID: ${msg}`, 'error');
@@ -959,6 +962,38 @@ const StorageSettings = () => {
                 </div>
               )}
 
+              {/* Display all RAID arrays (including non-mounted ones) */}
+              {raidStatus && raidStatus.allArrays && raidStatus.allArrays.length > 1 && (
+                <div className="targets-section">
+                  <h2><FontAwesomeIcon icon={faLayerGroup} /> Tous les arrays RAID</h2>
+                  <div className="disks-grid">
+                    {raidStatus.allArrays.map((array: any) => (
+                      <div key={array.array} className={`disk-card-simple ${array.mountedOnData ? 'in-raid' : ''}`}>
+                        <div className="storage-disk-icon" style={{ background: array.syncing ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #2563eb)' }}>
+                          <FontAwesomeIcon icon={faHdd} />
+                        </div>
+                        <div className="disk-name">{array.array}</div>
+                        <div className="disk-size">{array.raidLevel?.toUpperCase()} · {array.activeDevices || 0} disques</div>
+                        <div className="disk-health-row">
+                          <span className="health-indicator" style={{ color: array.syncing ? '#f59e0b' : '#10b981' }}>
+                            {array.syncing ? (
+                              <><FontAwesomeIcon icon={faSpinner} spin /> {array.syncProgress?.toFixed(1)}% — {array.syncETA || 'calcul...'}</>
+                            ) : (
+                              <><FontAwesomeIcon icon={faCheckCircle} /> {array.state || 'clean'}</>
+                            )}
+                          </span>
+                        </div>
+                        {array.mountedOnData && (
+                          <div className="disk-status">
+                            <span className="storage-badge-raid-active">/data</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {!dataSource && !raidStatus && (
                 <div className="alert-warning">
                   <FontAwesomeIcon icon={faExclamationTriangle} />
@@ -1026,6 +1061,29 @@ const StorageSettings = () => {
           {/* ==================== CREATE MODE ==================== */}
           {mode === 'create' && (
             <>
+              {/* Block creation if RAID sync in progress */}
+              {resyncProgress && (
+                <div className="alert-error" style={{ marginBottom: '1rem' }}>
+                  <FontAwesomeIcon icon={faExclamationTriangle} />
+                  <div>
+                    <strong>Opération RAID en cours</strong>
+                    <p style={{ margin: '0.3rem 0 0 0' }}>
+                      Un RAID est actuellement en cours de {resyncProgress.array || 'synchronisation'} ({resyncProgress.percent?.toFixed(1)}%). 
+                      Veuillez attendre la fin ou arrêter l'opération avant de créer un nouveau RAID.
+                    </p>
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <button 
+                        className="btn-danger" 
+                        onClick={handleDestroyRaid}
+                        style={{ background: '#ef4444', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        <FontAwesomeIcon icon={faStop} /> Arrêter et détruire le RAID en cours
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* RAID level selector */}
               <div className="targets-section">
                 <h2>{t('storageSettings.chooseRaidLevel')}</h2>
@@ -1127,16 +1185,18 @@ const StorageSettings = () => {
 
               <div className="action-section">
                 <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                  <button className="btn-create-raid" disabled={!canProceed || executionStatus === 'running'} onClick={openConfirmModal}>
+                  <button className="btn-create-raid" disabled={!canProceed || executionStatus === 'running' || resyncProgress} onClick={openConfirmModal}>
                     {executionStatus === 'running' ? (
                       <><FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.creatingInProgress')}...</>
+                    ) : resyncProgress ? (
+                      <><FontAwesomeIcon icon={faSpinner} spin /> RAID en cours...</>
                     ) : (
                       <><FontAwesomeIcon icon={faPlay} /> {t('storageSettings.createRaidArray')}</>
                     )}
                   </button>
-                  {(executionStatus === 'success' || executionStatus === 'running') && (
+                  {resyncProgress && (
                     <button onClick={handleDestroyRaid} disabled={executionStatus === 'running'} style={{ background: '#f44336', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '8px', cursor: executionStatus === 'running' ? 'not-allowed' : 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: executionStatus === 'running' ? 0.5 : 1 }}>
-                      <FontAwesomeIcon icon={faStop} /> {t('storageSettings.destroyRaid') || 'Destroy RAID'}
+                      <FontAwesomeIcon icon={faStop} /> {t('storageSettings.destroyRaid')}
                     </button>
                   )}
                 </div>

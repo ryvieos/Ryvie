@@ -558,6 +558,7 @@
     "diskWillBeErasedWarning": "Disk {disk} will be completely erased. All data will be lost.",
     "confirmCreateRaid": "Confirm RAID Creation",
     "createRaidWarning": "All selected disks will be erased and partitioned. All data will be lost. Make sure you have backups.",
+    "destroyRaid": "Stop and Destroy RAID",
     "memberLimitsCapacity": "Member {device} ({size}) limits RAID capacity. Consider removing it to use only larger disks.",
     "reshapeTitle": "RAID Level Conversion",
     "reshapeDesc": "Your array is currently {{currentLevel}} with {{disks}} disks. You can convert it to another RAID level without data loss.",
