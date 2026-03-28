@@ -1259,8 +1259,37 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
  */
 router.get('/storage/mdraid-status', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   try {
+    // Détecter dynamiquement le device md monté sur /data
+    let mdDevice = '/dev/md0'; // fallback par défaut
+    
+    try {
+      const findmntResult = await executeCommand('findmnt', ['-no', 'FSTYPE,SOURCE', '/data']);
+      const parts = findmntResult.stdout.trim().split(/\s+/);
+      const fstype = parts[0];
+      const source = parts[1];
+      
+      if (source && source.match(/\/dev\/md\d+/)) {
+        mdDevice = source;
+      }
+    } catch (error: any) {
+      // /data n'est pas monté, essayer de trouver un array actif via mdstat
+      try {
+        const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+        const mdstatLines = mdstatResult.stdout.split('\n');
+        for (const line of mdstatLines) {
+          const match = line.match(/^(md\d+)\s*:/);
+          if (match) {
+            mdDevice = '/dev/' + match[1];
+            break;
+          }
+        }
+      } catch (e: any) {
+        // Garder le fallback /dev/md0
+      }
+    }
+
     const status: any = {
-      array: '/dev/md0',
+      array: mdDevice,
       exists: false,
       mounted: false,
       members: [],
@@ -1271,9 +1300,11 @@ router.get('/storage/mdraid-status', authenticateTokenOrFirstTime, async (req: a
     // Vérifier si /data est monté
     try {
       const findmntResult = await executeCommand('findmnt', ['-no', 'FSTYPE,SOURCE', '/data']);
-      const [fstype, source] = findmntResult.stdout.trim().split(/\s+/);
+      const parts = findmntResult.stdout.trim().split(/\s+/);
+      const fstype = parts[0];
+      const source = parts[1];
       
-      status.mounted = (source === '/dev/md0' && fstype === 'btrfs');
+      status.mounted = (source === mdDevice);
       status.fstype = fstype;
       status.source = source;
     } catch (error: any) {
@@ -1282,18 +1313,22 @@ router.get('/storage/mdraid-status', authenticateTokenOrFirstTime, async (req: a
 
     // Vérifier l'état du RAID
     try {
-      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDevice]);
       status.exists = true;
       status.detail = detailResult.stdout;
       
       // Parser les informations
       const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
       const totalMatch = detailResult.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+      const raidDevicesMatch = detailResult.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
       const stateMatch = detailResult.stdout.match(/State\s*:\s*(.+)/i);
+      const levelMatch = detailResult.stdout.match(/Raid Level\s*:\s*(\S+)/i);
       
       if (activeMatch) status.activeDevices = parseInt(activeMatch[1]);
       if (totalMatch) status.totalDevices = parseInt(totalMatch[1]);
+      if (raidDevicesMatch) status.raidDevices = parseInt(raidDevicesMatch[1]);
       if (stateMatch) status.state = stateMatch[1].trim();
+      if (levelMatch) status.raidLevel = levelMatch[1];
       
       // Extraire les membres avec leurs tailles
       const memberMatches = detailResult.stdout.matchAll(/\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\w+)\s+(\w+)\s+(\/dev\/\S+)/g);
@@ -1329,20 +1364,24 @@ router.get('/storage/mdraid-status', authenticateTokenOrFirstTime, async (req: a
       const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
       status.mdstat = mdstatResult.stdout;
       
-      // Parser la progression de resync/recovery
-      const progressMatch = mdstatResult.stdout.match(/(?:recovery|resync)\s*=\s*(\d+\.\d+)%/);
+      // Parser la progression de resync/recovery pour le bon array
+      const mdName = mdDevice.replace('/dev/', '');
+      const mdstatSections = mdstatResult.stdout.split(/^(?=md\d+\s*:)/m);
+      const targetSection = mdstatSections.find(s => s.startsWith(mdName)) || mdstatResult.stdout;
+      
+      const progressMatch = targetSection.match(/(?:recovery|resync|reshape)\s*=\s*(\d+\.\d+)%/);
       if (progressMatch) {
         status.syncProgress = parseFloat(progressMatch[1]);
         status.syncing = true;
         
         // Parser l'ETA
-        const finishMatch = mdstatResult.stdout.match(/finish\s*=\s*([\d.]+min)/);
+        const finishMatch = targetSection.match(/finish\s*=\s*([\d.]+min)/);
         if (finishMatch) {
           status.syncETA = finishMatch[1];
         }
         
         // Parser la vitesse
-        const speedMatch = mdstatResult.stdout.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
+        const speedMatch = targetSection.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
         if (speedMatch) {
           status.syncSpeed = speedMatch[1];
         }
@@ -1766,8 +1805,20 @@ router.get('/storage/disk-health', authenticateTokenOrFirstTime, async (req: any
       };
       
       try {
-        const smartResult = await executeCommand('sudo', ['-n', 'smartctl', '-j', '-a', device]);
-        const smart = JSON.parse(smartResult.stdout);
+        let smartResult = await executeCommand('sudo', ['-n', 'smartctl', '-j', '-a', device]);
+        let smart = JSON.parse(smartResult.stdout);
+        
+        // If smartctl reports a USB bridge error or no SMART data, retry with -d sat
+        const hasUsbBridgeError = smart.smartctl?.messages?.some((m: any) => m.string?.includes('USB bridge'));
+        const noSmartData = !smart.smart_status && !smart.ata_smart_attributes;
+        if (hasUsbBridgeError || (smart.smartctl?.exit_status !== 0 && noSmartData)) {
+          try {
+            smartResult = await executeCommand('sudo', ['-n', 'smartctl', '-j', '-a', '-d', 'sat', device]);
+            smart = JSON.parse(smartResult.stdout);
+          } catch (retryErr: any) {
+            // SAT passthrough also failed, keep original result
+          }
+        }
         
         // Health assessment
         if (smart.smart_status && smart.smart_status.passed !== undefined) {
@@ -1793,6 +1844,16 @@ router.get('/storage/disk-health', authenticateTokenOrFirstTime, async (req: any
             if (attr.id === 5) diskInfo.reallocatedSectors = attr.raw.value;
             if (attr.id === 194 && diskInfo.temperature === null) diskInfo.temperature = attr.raw.value;
           }
+        }
+        
+        // NVMe temperature fallback
+        if (diskInfo.temperature === null && smart.nvme_smart_health_information_log) {
+          diskInfo.temperature = smart.nvme_smart_health_information_log.temperature;
+        }
+        
+        // NVMe power on hours fallback
+        if (diskInfo.powerOnHours === null && smart.nvme_smart_health_information_log) {
+          diskInfo.powerOnHours = smart.nvme_smart_health_information_log.power_on_hours;
         }
         
         // Check for warning conditions
@@ -2714,6 +2775,330 @@ router.post('/storage/mdraid-destroy', authenticateTokenOrFirstTime, async (req:
       details: error.message,
       logs
     });
+  }
+});
+
+/**
+ * POST /api/storage/mdraid-reshape
+ * Convertit le niveau RAID d'un array existant (ex: RAID1 -> RAID5)
+ * Body: { array: string, targetLevel: string, dryRun?: boolean }
+ */
+router.post('/storage/mdraid-reshape', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  const { array, targetLevel, dryRun = false } = req.body;
+
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = { timestamp: new Date().toISOString(), type, message };
+    logs.push(logEntry);
+    console.log(`[mdraid-reshape] [${type}] ${message}`);
+    if (io) io.emit('raid-log', logEntry);
+  };
+
+  try {
+    if (!array || !targetLevel) {
+      return res.status(400).json({ success: false, error: 'Missing array or targetLevel parameter' });
+    }
+
+    // Validate target level
+    const validLevels = ['0', '1', '4', '5', '6', '10'];
+    const normalizedLevel = targetLevel.replace('raid', '');
+    if (!validLevels.includes(normalizedLevel)) {
+      return res.status(400).json({ success: false, error: `Unsupported target RAID level: ${targetLevel}` });
+    }
+
+    log(`=== RAID Reshape: ${array} → RAID ${normalizedLevel} ===`, 'step');
+
+    // Step 1: Get current array details
+    log('Step 1: Checking current array status...', 'step');
+    const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+    
+    const currentLevelMatch = detailResult.stdout.match(/Raid Level\s*:\s*(\S+)/i);
+    const stateMatch = detailResult.stdout.match(/State\s*:\s*(.+)/i);
+    const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+    const raidDevicesMatch = detailResult.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+    
+    if (!currentLevelMatch) {
+      log('❌ Could not determine current RAID level', 'error');
+      return res.status(400).json({ success: false, error: 'Could not determine current RAID level', logs });
+    }
+
+    const currentLevel = currentLevelMatch[1]; // e.g. "raid1"
+    const currentLevelNum = currentLevel.replace('raid', '');
+    const state = stateMatch ? stateMatch[1].trim() : 'unknown';
+    const activeDevices = activeMatch ? parseInt(activeMatch[1]) : 0;
+    const raidDevices = raidDevicesMatch ? parseInt(raidDevicesMatch[1]) : 0;
+
+    log(`Current: ${currentLevel}, State: ${state}, Active devices: ${activeDevices}, Raid devices: ${raidDevices}`, 'info');
+
+    if (currentLevelNum === normalizedLevel) {
+      log(`❌ Array is already at RAID level ${normalizedLevel}`, 'error');
+      return res.status(400).json({ success: false, error: `Array is already ${currentLevel}`, logs });
+    }
+
+    // Step 2: Validate state
+    log('Step 2: Validating array state...', 'step');
+    if (!state.includes('clean') && !state.includes('active')) {
+      log(`❌ Array state is "${state}" — must be clean or active for reshape`, 'error');
+      return res.status(400).json({ success: false, error: `Array must be clean/active for reshape (current: ${state})`, logs });
+    }
+
+    if (state.includes('resync') || state.includes('recover') || state.includes('reshape')) {
+      log(`❌ Array is busy (${state}) — wait for completion before reshaping`, 'error');
+      return res.status(400).json({ success: false, error: `Array is busy: ${state}`, logs });
+    }
+
+    // Step 3: Validate device count for target level
+    log('Step 3: Checking disk count requirements...', 'step');
+    const minDisksMap = { '0': 2, '1': 2, '4': 3, '5': 3, '6': 4, '10': 4 };
+    const minDisks = minDisksMap[normalizedLevel] || 2;
+
+    if (activeDevices < minDisks) {
+      log(`❌ RAID ${normalizedLevel} requires at least ${minDisks} disks, but only ${activeDevices} are active`, 'error');
+      return res.status(400).json({ 
+        success: false, 
+        error: `RAID ${normalizedLevel} requires at least ${minDisks} disks (currently ${activeDevices})`, 
+        logs 
+      });
+    }
+
+    // Step 4: Validate conversion path
+    log('Step 4: Validating conversion path...', 'step');
+    const allowedConversions = {
+      '1': ['0', '5'],
+      '5': ['0', '1', '6'],
+      '6': ['5'],
+      '0': ['5', '6'],
+      '10': [],
+      '4': ['5']
+    };
+
+    const allowed = allowedConversions[currentLevelNum] || [];
+    if (!allowed.includes(normalizedLevel)) {
+      log(`❌ Conversion from RAID ${currentLevelNum} to RAID ${normalizedLevel} is not supported by mdadm`, 'error');
+      return res.status(400).json({ 
+        success: false, 
+        error: `Conversion from ${currentLevel} to RAID ${normalizedLevel} is not supported. Allowed: ${allowed.map(l => 'RAID ' + l).join(', ') || 'none'}`, 
+        logs 
+      });
+    }
+
+    log(`✓ Conversion ${currentLevel} → RAID ${normalizedLevel} is valid`, 'success');
+
+    // Step 5: Calculate new capacity
+    log('Step 5: Estimating new capacity...', 'step');
+    let arraySizeMatch = detailResult.stdout.match(/Array Size\s*:\s*(\d+)/i);
+    let usedDevSizeMatch = detailResult.stdout.match(/Used Dev Size\s*:\s*(\d+)/i);
+    const arraySizeKB = arraySizeMatch ? parseInt(arraySizeMatch[1]) : 0;
+    const usedDevSizeKB = usedDevSizeMatch ? parseInt(usedDevSizeMatch[1]) : 0;
+
+    let newCapacityEstimate = '';
+    if (usedDevSizeKB > 0) {
+      const devSizeGB = (usedDevSizeKB / 1024 / 1024).toFixed(1);
+      if (normalizedLevel === '5') {
+        const capacityGB = ((activeDevices - 1) * usedDevSizeKB / 1024 / 1024).toFixed(1);
+        newCapacityEstimate = `~${capacityGB} GiB (${activeDevices - 1} x ${devSizeGB} GiB)`;
+      } else if (normalizedLevel === '0') {
+        const capacityGB = (activeDevices * usedDevSizeKB / 1024 / 1024).toFixed(1);
+        newCapacityEstimate = `~${capacityGB} GiB (${activeDevices} x ${devSizeGB} GiB)`;
+      } else if (normalizedLevel === '6') {
+        const capacityGB = ((activeDevices - 2) * usedDevSizeKB / 1024 / 1024).toFixed(1);
+        newCapacityEstimate = `~${capacityGB} GiB (${activeDevices - 2} x ${devSizeGB} GiB)`;
+      } else if (normalizedLevel === '1') {
+        newCapacityEstimate = `~${devSizeGB} GiB (mirrored)`;
+      }
+    }
+
+    if (newCapacityEstimate) {
+      log(`Estimated new capacity: ${newCapacityEstimate}`, 'info');
+    }
+
+    // Dry run mode
+    if (dryRun) {
+      log(`[DRY RUN] Would execute: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices}`, 'info');
+      log('✓ Dry run completed — no changes made', 'success');
+      return res.json({ 
+        success: true, 
+        dryRun: true, 
+        logs,
+        currentLevel: currentLevel,
+        targetLevel: `raid${normalizedLevel}`,
+        activeDevices,
+        newCapacityEstimate,
+        command: `mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices}`
+      });
+    }
+
+    // Step 6: Execute reshape
+    log('Step 6: Starting RAID reshape...', 'step');
+    log(`Executing: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices}`, 'info');
+
+    try {
+      const reshapeResult = await executeCommand('sudo', [
+        '-n', 'mdadm', '--grow', array, 
+        `--level=${normalizedLevel}`,
+        `--raid-devices=${activeDevices}`
+      ]);
+      
+      if (reshapeResult.stderr && reshapeResult.stderr.trim()) {
+        log(`mdadm output: ${reshapeResult.stderr.trim()}`, 'info');
+      }
+      if (reshapeResult.stdout && reshapeResult.stdout.trim()) {
+        log(`mdadm output: ${reshapeResult.stdout.trim()}`, 'info');
+      }
+      
+      log(`✓ Reshape initiated: ${currentLevel} → RAID ${normalizedLevel}`, 'success');
+    } catch (reshapeErr: any) {
+      log(`❌ Reshape failed: ${reshapeErr.message}`, 'error');
+      if (reshapeErr.stderr) log(`stderr: ${reshapeErr.stderr}`, 'error');
+      return res.status(500).json({ success: false, error: `Reshape failed: ${reshapeErr.message}`, logs });
+    }
+
+    // Step 7: Update mdadm.conf
+    log('Step 7: Updating configuration...', 'step');
+    try {
+      await executeCommand('sudo', ['-n', 'bash', '-c', 'mdadm --detail --scan > /etc/mdadm/mdadm.conf']);
+      log('✓ Updated /etc/mdadm/mdadm.conf', 'success');
+    } catch (e: any) {
+      log(`Warning: Could not update mdadm.conf: ${e.message}`, 'warning');
+    }
+
+    try {
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log('✓ Updated initramfs', 'success');
+    } catch (e: any) {
+      log(`Warning: Could not update initramfs: ${e.message}`, 'warning');
+    }
+
+    // Step 8: Check if reshape is in progress
+    log('Step 8: Checking reshape progress...', 'step');
+    try {
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      const mdName = array.replace('/dev/', '');
+      const mdstatSections = mdstatResult.stdout.split(/^(?=md\d+\s*:)/m);
+      const targetSection = mdstatSections.find(s => s.startsWith(mdName)) || '';
+      
+      const reshapeMatch = targetSection.match(/reshape\s*=\s*(\d+\.\d+)%/);
+      if (reshapeMatch) {
+        log(`Reshape in progress: ${reshapeMatch[1]}%`, 'info');
+      } else {
+        log('Reshape completed immediately or is pending', 'info');
+      }
+    } catch (e: any) {
+      // Not critical
+    }
+
+    // Step 9: If filesystem is btrfs, resize after reshape completes
+    log('Step 9: Filesystem resize will be needed after reshape completes', 'info');
+    log('Run: btrfs filesystem resize max /data', 'info');
+
+    log(`✅ RAID reshape initiated: ${currentLevel} → RAID ${normalizedLevel}`, 'success');
+
+    res.json({
+      success: true,
+      logs,
+      currentLevel,
+      targetLevel: `raid${normalizedLevel}`,
+      activeDevices,
+      newCapacityEstimate,
+      message: `Reshape started: ${currentLevel} → RAID ${normalizedLevel}`
+    });
+  } catch (error: any) {
+    console.error('Error during RAID reshape:', error);
+    log(`Fatal error: ${error.message}`, 'error');
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reshape RAID array',
+      details: error.message,
+      logs
+    });
+  }
+});
+
+/**
+ * GET /api/storage/mdraid-reshape-options
+ * Retourne les conversions RAID possibles pour l'array actuel
+ */
+router.get('/storage/mdraid-reshape-options', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  try {
+    // Détecter le device md monté sur /data
+    let mdDevice = '/dev/md0';
+    try {
+      const findmntResult = await executeCommand('findmnt', ['-no', 'FSTYPE,SOURCE', '/data']);
+      const parts = findmntResult.stdout.trim().split(/\s+/);
+      if (parts[1] && parts[1].match(/\/dev\/md\d+/)) {
+        mdDevice = parts[1];
+      }
+    } catch (e: any) {
+      try {
+        const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+        const match = mdstatResult.stdout.match(/^(md\d+)\s*:/m);
+        if (match) mdDevice = '/dev/' + match[1];
+      } catch (e2: any) {}
+    }
+
+    const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDevice]);
+    
+    const levelMatch = detailResult.stdout.match(/Raid Level\s*:\s*(\S+)/i);
+    const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+    const stateMatch = detailResult.stdout.match(/State\s*:\s*(.+)/i);
+    const usedDevSizeMatch = detailResult.stdout.match(/Used Dev Size\s*:\s*(\d+)/i);
+    
+    const currentLevel = levelMatch ? levelMatch[1] : 'unknown';
+    const currentLevelNum = currentLevel.replace('raid', '');
+    const activeDevices = activeMatch ? parseInt(activeMatch[1]) : 0;
+    const state = stateMatch ? stateMatch[1].trim() : 'unknown';
+    const usedDevSizeKB = usedDevSizeMatch ? parseInt(usedDevSizeMatch[1]) : 0;
+
+    const allowedConversions = {
+      '1': ['0', '5'],
+      '5': ['0', '1', '6'],
+      '6': ['5'],
+      '0': ['5', '6'],
+      '10': [],
+      '4': ['5']
+    };
+
+    const minDisksMap = { '0': 2, '1': 2, '4': 3, '5': 3, '6': 4, '10': 4 };
+
+    const allowed = allowedConversions[currentLevelNum] || [];
+    const options = allowed.map(level => {
+      const minDisks = minDisksMap[level] || 2;
+      const hasEnoughDisks = activeDevices >= minDisks;
+      
+      let capacityEstimate = '';
+      if (usedDevSizeKB > 0) {
+        const devSizeGB = usedDevSizeKB / 1024 / 1024;
+        if (level === '5') capacityEstimate = `~${((activeDevices - 1) * devSizeGB).toFixed(1)} GiB`;
+        else if (level === '0') capacityEstimate = `~${(activeDevices * devSizeGB).toFixed(1)} GiB`;
+        else if (level === '6') capacityEstimate = `~${((activeDevices - 2) * devSizeGB).toFixed(1)} GiB`;
+        else if (level === '1') capacityEstimate = `~${devSizeGB.toFixed(1)} GiB`;
+      }
+
+      return {
+        level: `raid${level}`,
+        available: hasEnoughDisks,
+        minDisks,
+        capacityEstimate,
+        reason: !hasEnoughDisks ? `Requires at least ${minDisks} disks (you have ${activeDevices})` : null
+      };
+    });
+
+    const canReshape = state.includes('clean') || state.includes('active');
+    const isBusy = state.includes('resync') || state.includes('recover') || state.includes('reshape');
+
+    res.json({
+      success: true,
+      array: mdDevice,
+      currentLevel,
+      activeDevices,
+      state,
+      canReshape: canReshape && !isBusy,
+      busyReason: isBusy ? `Array is busy: ${state}` : null,
+      options
+    });
+  } catch (error: any) {
+    console.error('Error getting reshape options:', error);
+    res.status(500).json({ success: false, error: 'Failed to get reshape options', details: error.message });
   }
 });
 

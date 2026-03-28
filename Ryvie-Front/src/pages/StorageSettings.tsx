@@ -21,7 +21,8 @@ import {
   faPlus,
   faShieldAlt,
   faBolt,
-  faLayerGroup
+  faLayerGroup,
+  faExchangeAlt
 } from '@fortawesome/free-solid-svg-icons';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
@@ -107,7 +108,7 @@ const StorageSettings = () => {
   const [disks, setDisks] = useState([]);
   const [diskHealth, setDiskHealth] = useState({});
   const [dataSource, setDataSource] = useState(null);
-  const [raidStatus, setRaidStatus] = useState(null);
+  const [raidStatus, setRaidStatus] = useState<any>(null);
   const [raidMemberPartitions, setRaidMemberPartitions] = useState([]);
   const [raidMemberDisksMap, setRaidMemberDisksMap] = useState({});
 
@@ -142,6 +143,12 @@ const StorageSettings = () => {
   const [validationWarnings, setValidationWarnings] = useState([]);
   const [canProceed, setCanProceed] = useState(false);
   const [expectedCapacity, setExpectedCapacity] = useState(0);
+
+  // Reshape (RAID level conversion)
+  const [reshapeOptions, setReshapeOptions] = useState<any>(null);
+  const [selectedReshapeLevel, setSelectedReshapeLevel] = useState('');
+  const [showReshapeModal, setShowReshapeModal] = useState(false);
+  const [reshapeStatus, setReshapeStatus] = useState('idle');
 
   // Helper: strip emojis from strings for consistent UI DA
   const stripEmojis = (str) => {
@@ -438,25 +445,26 @@ const StorageSettings = () => {
         const { devices: devicesData } = response.data.data;
         const disksList = [];
 
-        const findMd0 = (devices) => {
+        const findMdArray = (devices) => {
           if (!devices) return;
           devices.forEach(device => {
-            if (device.name === 'md0' && (device.type === 'raid1' || device.type === 'raid5' || device.type === 'raid6' || device.type === 'raid10' || device.type === 'raid0')) {
+            if (device.name && device.name.match(/^md\d+$/) && (device.type === 'raid1' || device.type === 'raid5' || device.type === 'raid6' || device.type === 'raid10' || device.type === 'raid0')) {
               if (device.mountpoints && device.mountpoints.length > 0 && device.mountpoints[0] === '/data') {
+                const mdDev = `/dev/${device.name}`;
                 setDataSource({
-                  device: '/dev/md0',
+                  device: mdDev,
                   size: device.size,
                   fstype: `btrfs (on mdadm ${device.type.toUpperCase()})`
                 });
-                setSourceDevice('/dev/md0');
+                setSourceDevice(mdDev);
               }
             }
-            if (device.children) findMd0(device.children);
+            if (device.children) findMdArray(device.children);
           });
         };
 
         if (devicesData.blockdevices) {
-          findMd0(devicesData.blockdevices);
+          findMdArray(devicesData.blockdevices);
           devicesData.blockdevices.forEach(device => {
             if (device.type === 'disk' && !device.name.includes('sr')) {
               let isMounted = false;
@@ -536,7 +544,7 @@ const StorageSettings = () => {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       const response = await axios.post(`${serverUrl}/api/storage/mdraid-prechecks`, {
-        array: '/dev/md0', disk: selectedDisk
+        array: raidStatus?.array || '/dev/md0', disk: selectedDisk
       }, { timeout: 60000 });
 
       if (response.data.success) {
@@ -641,7 +649,7 @@ const StorageSettings = () => {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       const response = await axios.post(`${serverUrl}/api/storage/mdraid-optimize-and-add`, {
-        array: '/dev/md0', smartOptimization
+        array: raidStatus?.array || '/dev/md0', smartOptimization
       }, { timeout: 1800000 });
       if (response.data.success) {
         setExecutionStatus('success');
@@ -664,7 +672,7 @@ const StorageSettings = () => {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       const response = await axios.post(`${serverUrl}/api/storage/mdraid-add-disk`, {
-        array: '/dev/md0', disk: selectedDisk, dryRun
+        array: raidStatus?.array || '/dev/md0', disk: selectedDisk, dryRun
       }, { timeout: 1800000 });
       if (response.data.success) {
         if (!resyncProgress) {
@@ -773,6 +781,52 @@ const StorageSettings = () => {
     }
   };
 
+  // Load reshape options from backend
+  const loadReshapeOptions = async () => {
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const response = await axios.get(`${serverUrl}/api/storage/mdraid-reshape-options`, { timeout: 30000 });
+      if (response.data.success) {
+        setReshapeOptions(response.data);
+        setSelectedReshapeLevel('');
+      }
+    } catch (error) {
+      console.error('Failed to load reshape options:', error);
+    }
+  };
+
+  // Execute RAID reshape
+  const executeReshape = async () => {
+    if (!selectedReshapeLevel) return;
+    setShowReshapeModal(false);
+    setReshapeStatus('running');
+    setLogs([]);
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const arrayDev = raidStatus?.array || reshapeOptions?.array || '/dev/md0';
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-reshape`, {
+        array: arrayDev,
+        targetLevel: selectedReshapeLevel
+      }, { timeout: 1800000 });
+      if (response.data.success) {
+        setReshapeStatus('success');
+        if (response.data.logs) response.data.logs.forEach(log => addLog(log.message, log.type));
+        setTimeout(() => { checkRaidStatus(); loadReshapeOptions(); }, 3000);
+      } else {
+        setReshapeStatus('error');
+        if (response.data.logs) response.data.logs.forEach(log => addLog(log.message, log.type));
+        addLog(`Failed: ${response.data.error}`, 'error');
+      }
+    } catch (error) {
+      setReshapeStatus('error');
+      const msg = error.response?.data?.error || error.message;
+      if (error.response?.data?.logs) error.response.data.logs.forEach(log => addLog(log.message, log.type));
+      addLog(`Reshape failed: ${msg}`, 'error');
+    }
+  };
+
   // Format bytes
   const formatBytes = (bytes) => {
     if (bytes === null || bytes === undefined || isNaN(bytes)) return 'N/A';
@@ -852,7 +906,7 @@ const StorageSettings = () => {
               <FontAwesomeIcon icon={faPlus} /> {t('storageSettings.createRaid')}
             </button>
             {raidStatus && raidStatus.type === 'mdadm' && (
-              <button className={`mode-tab ${mode === 'manage' ? 'active' : ''}`} onClick={() => { setMode('manage'); setSelectedDisks([]); setSelectedDisk(''); setCanProceed(false); setValidationErrors([]); }}>
+              <button className={`mode-tab ${mode === 'manage' ? 'active' : ''}`} onClick={() => { setMode('manage'); setSelectedDisks([]); setSelectedDisk(''); setCanProceed(false); setValidationErrors([]); loadReshapeOptions(); }}>
                 <FontAwesomeIcon icon={faHdd} /> {t('storageSettings.manageRaid')}
               </button>
             )}
@@ -1131,10 +1185,74 @@ const StorageSettings = () => {
                 </div>
               )}
 
+              {/* RAID Level Conversion (Reshape) */}
+              {reshapeOptions && reshapeOptions.options && reshapeOptions.options.length > 0 && (
+                <div className="targets-section">
+                  <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.reshapeTitle')}</h2>
+                  <p className="section-subtitle">
+                    {t('storageSettings.reshapeDesc', { currentLevel: reshapeOptions.currentLevel?.toUpperCase(), disks: reshapeOptions.activeDevices })}
+                  </p>
+
+                  {!reshapeOptions.canReshape && reshapeOptions.busyReason && (
+                    <div className="alert-warning" style={{ marginBottom: '1rem' }}>
+                      <FontAwesomeIcon icon={faExclamationTriangle} />
+                      <div>{reshapeOptions.busyReason}</div>
+                    </div>
+                  )}
+
+                  <div className="raid-levels-grid">
+                    {reshapeOptions.options.map((opt: any) => {
+                      const isSelected = selectedReshapeLevel === opt.level;
+                      const isDisabled = !opt.available || !reshapeOptions.canReshape;
+                      return (
+                        <div
+                          key={opt.level}
+                          className={`raid-level-card ${isSelected ? 'active' : ''} ${isDisabled ? 'unavailable' : ''}`}
+                          onClick={() => !isDisabled && setSelectedReshapeLevel(isSelected ? '' : opt.level)}
+                          style={isSelected ? { borderColor: '#6366f1', boxShadow: '0 0 20px rgba(99,102,241,0.2)' } : {}}
+                        >
+                          <div className="raid-level-icon" style={{ background: isDisabled ? '#94a3b8' : '#6366f1' }}>
+                            <FontAwesomeIcon icon={faExchangeAlt} />
+                          </div>
+                          <div className="raid-level-info">
+                            <div className="raid-level-label">{opt.level.toUpperCase()}</div>
+                            {opt.capacityEstimate && (
+                              <div className="raid-level-subtitle">{t('storageSettings.estimatedCapacity')}: {opt.capacityEstimate}</div>
+                            )}
+                            <div className="raid-level-meta">
+                              <span>{t('storageSettings.minDisks')}: {opt.minDisks}</span>
+                            </div>
+                            {opt.reason && <div className="raid-level-desc" style={{ color: '#ef4444' }}>{opt.reason}</div>}
+                          </div>
+                          {isSelected && <div className="raid-level-check"><FontAwesomeIcon icon={faCheck} /></div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {selectedReshapeLevel && (
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
+                      <button
+                        className="btn-create-raid"
+                        style={{ background: '#6366f1' }}
+                        disabled={reshapeStatus === 'running'}
+                        onClick={() => setShowReshapeModal(true)}
+                      >
+                        {reshapeStatus === 'running' ? (
+                          <><FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.reshapeInProgress')}...</>
+                        ) : (
+                          <><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.convertTo')} {selectedReshapeLevel.toUpperCase()}</>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Disk selection to add */}
               <div className="targets-section">
                 <h2>{t('storageSettings.selectDiskToAdd')}</h2>
-                <p className="section-subtitle">{t('storageSettings.diskWillBeErased')}</p>
+                <p className="section-subtitle">{t('storageSettings.diskWillBeErased')} {raidStatus?.array || ''}</p>
 
                 <div className="disks-grid">
                   {disks.map(disk => {
@@ -1296,7 +1414,7 @@ const StorageSettings = () => {
             <div className="modal-section">
               <h3>{t('storageSettings.configSummary')}</h3>
               <div className="summary-grid">
-                <div className="summary-item"><strong>Array:</strong> /dev/md0</div>
+                <div className="summary-item"><strong>Array:</strong> {raidStatus?.array || '/dev/md0'}</div>
                 <div className="summary-item"><strong>{t('storageSettings.diskToAdd')}:</strong> {selectedDisk}</div>
               </div>
             </div>
@@ -1315,6 +1433,39 @@ const StorageSettings = () => {
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowConfirmModal(false)}>{t('storageSettings.cancel')}</button>
               <button className="btn-danger" onClick={executeAddDisk}>{t('storageSettings.addToRaid')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reshape confirmation modal */}
+      {showReshapeModal && selectedReshapeLevel && (
+        <div className="modal-overlay" onClick={() => setShowReshapeModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.confirmReshape')}</h2>
+            <div className="modal-section">
+              <h3>{t('storageSettings.configSummary')}</h3>
+              <div className="summary-grid">
+                <div className="summary-item"><strong>Array:</strong> {raidStatus?.array || reshapeOptions?.array}</div>
+                <div className="summary-item"><strong>{t('storageSettings.currentLevel')}:</strong> {reshapeOptions?.currentLevel?.toUpperCase()}</div>
+                <div className="summary-item"><strong>{t('storageSettings.targetLevel')}:</strong> {selectedReshapeLevel.toUpperCase()}</div>
+                <div className="summary-item"><strong>{t('storageSettings.activeDisks')}:</strong> {reshapeOptions?.activeDevices}</div>
+                {reshapeOptions?.options?.find((o: any) => o.level === selectedReshapeLevel)?.capacityEstimate && (
+                  <div className="summary-item"><strong>{t('storageSettings.estimatedCapacity')}:</strong> {reshapeOptions.options.find((o: any) => o.level === selectedReshapeLevel).capacityEstimate}</div>
+                )}
+              </div>
+            </div>
+            <div className="modal-warning">
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              <div>
+                <strong>ATTENTION:</strong> {t('storageSettings.reshapeWarning')}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowReshapeModal(false)}>{t('storageSettings.cancel')}</button>
+              <button className="btn-danger" style={{ background: '#6366f1' }} onClick={executeReshape}>
+                <FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.convertTo')} {selectedReshapeLevel.toUpperCase()}
+              </button>
             </div>
           </div>
         </div>
