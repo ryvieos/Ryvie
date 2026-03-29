@@ -1982,9 +1982,14 @@ router.post('/storage/mdraid-create-prechecks', authenticateTokenOrFirstTime, as
     const partPaths = disks.map(d => getPartitionPath(d, 1));
     plan.push(`mdadm --create /dev/md0 --level=${raidConfig.mdLevel} --raid-devices=${disks.length} ${partPaths.join(' ')}`);
     plan.push(`mkfs.btrfs -f /dev/md0`);
-    plan.push(`mount /dev/md0 /data`);
-    plan.push(`mdadm --detail --scan > /etc/mdadm/mdadm.conf`);
+    plan.push(`mount /dev/md0 /mnt/new_raid`);
+    plan.push(`systemctl stop docker.socket docker containerd`);
+    plan.push(`# btrfs send/receive for each subvolume (preserves Docker data)`);
+    plan.push(`rsync -a (remaining non-subvolume files)`);
+    plan.push(`umount /mnt/new_raid && umount /data && mount /dev/md0 /data`);
+    plan.push(`# Write clean mdadm.conf with HOMEHOST <ignore>`);
     plan.push(`update-initramfs -u`);
+    plan.push(`systemctl start containerd docker.socket docker`);
     
     res.json({
       success: true,
@@ -2365,9 +2370,10 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
     
     try {
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const cleanConf = `# mdadm.conf - RAID configuration (auto-generated)\nHOMEHOST <ignore>\n${scanResult.stdout.trim()}\n`;
       const fs = require('fs');
       const tmpFile = '/tmp/mdadm.conf.new';
-      fs.writeFileSync(tmpFile, scanResult.stdout);
+      fs.writeFileSync(tmpFile, cleanConf);
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
       fs.unlinkSync(tmpFile);
       log('✓ Updated /etc/mdadm/mdadm.conf', 'success');
@@ -2448,19 +2454,117 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
       log(`Could not monitor resync: ${e.message}`, 'warning');
     }
     
-    // === Step 8: Copy data from old /data to new array ===
+    // === Step 8: Stop Docker & migrate data (preserving btrfs subvolumes) ===
     log('=== Step 8: Migrating data from old /data ===', 'step');
     
     try {
       const oldDataCheck = await executeCommand('ls', ['/data']);
       if (oldDataCheck.stdout.trim()) {
-        log('📦 Copying data from old /data to new array...', 'info');
-        log('This may take a while depending on data size...', 'info');
+        // 8a. Stop Docker and containerd so data is consistent during copy
+        log('🛑 Stopping Docker & containerd before migration...', 'info');
+        try {
+          await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
+          await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
+          await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
+          log('✓ Docker & containerd stopped', 'success');
+        } catch (e: any) {
+          log(`Warning stopping Docker: ${e.message}`, 'warning');
+        }
         
-        // Use rsync to copy everything, preserving permissions, links, etc.
-        const rsyncResult = await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', '/data/', `${tmpMount}/`]);
-        if (rsyncResult.stdout) log(rsyncResult.stdout.trim(), 'info');
-        log('✓ Data migration completed', 'success');
+        // 8b. Detect btrfs subvolumes on old /data and migrate them properly
+        log('📦 Detecting btrfs subvolumes on old /data...', 'info');
+        let subvolumes: string[] = [];
+        try {
+          const subvolResult = await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'list', '-o', '/data']);
+          subvolumes = subvolResult.stdout.trim().split('\n')
+            .filter(line => line.includes('path '))
+            .map(line => {
+              const m = line.match(/path\s+(.+)$/);
+              return m ? m[1] : '';
+            })
+            .filter(p => p);
+          
+          if (subvolumes.length > 0) {
+            log(`Found ${subvolumes.length} subvolume(s): ${subvolumes.join(', ')}`, 'info');
+          } else {
+            log('No subvolumes found, will use rsync', 'info');
+          }
+        } catch (e: any) {
+          log('Could not list subvolumes (source may not be btrfs), will use rsync', 'info');
+        }
+        
+        if (subvolumes.length > 0) {
+          // 8c. Use btrfs send/receive to preserve subvolumes (Docker/containerd need this)
+          log('📦 Migrating with btrfs send/receive (preserves subvolumes)...', 'info');
+          
+          // First, create read-only snapshots of each subvolume, send/receive, then delete snapshots
+          for (const subvol of subvolumes) {
+            const subvolPath = `/data/${subvol}`;
+            const snapPath = `/data/${subvol}.migration-snap`;
+            
+            try {
+              // Create read-only snapshot
+              await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'snapshot', '-r', subvolPath, snapPath]);
+              log(`  📸 Snapshot created: ${subvol}`, 'info');
+              
+              // Send/receive to new array
+              const sendReceiveResult = await executeCommand('sudo', ['-n', 'bash', '-c', `btrfs send "${snapPath}" | btrfs receive "${tmpMount}/"`]);
+              if (sendReceiveResult.exitCode === 0) {
+                log(`  ✓ Subvolume ${subvol} migrated via btrfs send/receive`, 'success');
+                
+                // Make the received snapshot read-write
+                const receivedName = `${subvol}.migration-snap`;
+                const receivedPath = `${tmpMount}/${receivedName}`;
+                const finalPath = `${tmpMount}/${subvol}`;
+                
+                // Delete the read-only received snapshot and create a rw snapshot from it
+                try {
+                  await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'snapshot', receivedPath, finalPath]);
+                  await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'delete', receivedPath]);
+                  log(`  ✓ ${subvol} set to read-write`, 'success');
+                } catch (rwErr: any) {
+                  // If renaming fails, the snapshot name works too
+                  log(`  ⚠ Could not rename ${receivedName} → ${subvol}: ${rwErr.message}`, 'warning');
+                }
+              } else {
+                log(`  ⚠ btrfs send/receive failed for ${subvol}, falling back to rsync`, 'warning');
+                await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', `${subvolPath}/`, `${tmpMount}/${subvol}/`]);
+              }
+              
+              // Cleanup source snapshot
+              try {
+                await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'delete', snapPath]);
+              } catch (e: any) {}
+            } catch (subvolErr: any) {
+              log(`  ⚠ Failed to migrate subvolume ${subvol} via btrfs: ${subvolErr.message}`, 'warning');
+              log(`  Falling back to rsync for ${subvol}...`, 'info');
+              try {
+                await executeCommand('sudo', ['-n', 'mkdir', '-p', `${tmpMount}/${subvol}`]);
+                await executeCommand('sudo', ['-n', 'rsync', '-a', `${subvolPath}/`, `${tmpMount}/${subvol}/`]);
+                log(`  ✓ ${subvol} migrated via rsync (fallback)`, 'success');
+              } catch (rsyncErr: any) {
+                log(`  ❌ Failed to migrate ${subvol}: ${rsyncErr.message}`, 'error');
+              }
+            }
+          }
+          
+          // 8d. Copy non-subvolume files/dirs with rsync (excluding already-migrated subvolumes)
+          log('📦 Copying remaining files (non-subvolume data)...', 'info');
+          const excludeArgs = subvolumes.flatMap(sv => ['--exclude', sv, '--exclude', `${sv}.migration-snap`]);
+          try {
+            await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', ...excludeArgs, '/data/', `${tmpMount}/`]);
+            log('✓ Remaining files copied', 'success');
+          } catch (e: any) {
+            log(`Warning copying remaining files: ${e.message}`, 'warning');
+          }
+        } else {
+          // No subvolumes — plain rsync is fine
+          log('📦 Copying data with rsync...', 'info');
+          log('This may take a while depending on data size...', 'info');
+          const rsyncResult = await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', '/data/', `${tmpMount}/`]);
+          if (rsyncResult.stdout) log(rsyncResult.stdout.trim(), 'info');
+          log('✓ Data migration completed', 'success');
+        }
       } else {
         log('ℹ️ Old /data is empty, nothing to migrate', 'info');
       }
@@ -2509,13 +2613,66 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
       log(`Warning fstab: ${e.message}`, 'warning');
     }
     
+    // Write clean mdadm.conf (avoid capturing stderr as config data)
+    try {
+      const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const cleanConf = `# mdadm.conf - RAID configuration (auto-generated)\nHOMEHOST <ignore>\n${scanResult.stdout.trim()}\n`;
+      const fs = require('fs');
+      const tmpConf = '/tmp/mdadm.conf.new';
+      fs.writeFileSync(tmpConf, cleanConf);
+      await executeCommand('sudo', ['-n', 'cp', tmpConf, '/etc/mdadm/mdadm.conf']);
+      fs.unlinkSync(tmpConf);
+      log('✓ Written clean /etc/mdadm/mdadm.conf', 'success');
+    } catch (e: any) {
+      log(`Warning mdadm.conf: ${e.message}`, 'warning');
+    }
+    
     try {
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('✓ Updated initramfs', 'success');
     } catch (e: any) {}
     
-    // === Step 10: Final status ===
-    log('=== Step 10: Final status ===', 'step');
+    // === Step 10: Restart Docker & containerd on new /data ===
+    log('=== Step 10: Restarting Docker & containerd ===', 'step');
+    
+    try {
+      log('🔄 Starting containerd...', 'info');
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'containerd']);
+      await executeCommand('sleep', ['2']);
+      log('✓ containerd started', 'success');
+      
+      log('🔄 Starting Docker...', 'info');
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker.socket']);
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']);
+      await executeCommand('sleep', ['3']);
+      log('✓ Docker started', 'success');
+      
+      // Ensure ryvie-network exists (Docker recreates networks on restart)
+      try {
+        await executeCommand('sudo', ['-n', 'docker', 'network', 'inspect', 'ryvie-network']);
+        log('✓ ryvie-network already exists', 'success');
+      } catch (e: any) {
+        await executeCommand('sudo', ['-n', 'docker', 'network', 'create', 'ryvie-network']);
+        log('✓ ryvie-network created', 'success');
+      }
+      
+      // Verify Docker sees the containers from the migrated data
+      const psResult = await executeCommand('sudo', ['-n', 'docker', 'ps', '-a', '--format', '{{.Names}}\t{{.Status}}']);
+      const containerLines = psResult.stdout.trim().split('\n').filter(l => l.trim());
+      log(`📊 Docker sees ${containerLines.length} container(s) after migration`, 'info');
+      for (const line of containerLines.slice(0, 10)) {
+        log(`  ${line}`, 'info');
+      }
+      if (containerLines.length > 10) {
+        log(`  ... and ${containerLines.length - 10} more`, 'info');
+      }
+    } catch (e: any) {
+      log(`⚠ Error restarting Docker: ${e.message}`, 'warning');
+      log('Docker may need to be restarted manually after reboot', 'warning');
+    }
+    
+    // === Step 11: Final status ===
+    log('=== Step 11: Final status ===', 'step');
     
     try {
       const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDevice]);
@@ -2530,6 +2687,7 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
     } catch (e: any) {}
     
     log('✅ RAID array created and /data migrated successfully!', 'success');
+    log('ℹ️ Docker containers have been preserved with their btrfs subvolumes', 'info');
     
     res.json({
       success: true,
