@@ -10,7 +10,7 @@
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "diskusage": "^1.2.0",
-    "dockerode": "^4.0.9",
+    "dockerode": "^5.0.0",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.0.1",
