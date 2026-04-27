@@ -1984,12 +1984,12 @@ router.post('/storage/mdraid-create-prechecks', authenticateTokenOrFirstTime, as
     plan.push(`mkfs.btrfs -f /dev/md0`);
     plan.push(`mount /dev/md0 /mnt/new_raid`);
     plan.push(`systemctl stop docker.socket docker containerd`);
-    plan.push(`# btrfs send/receive for each subvolume (preserves Docker data)`);
-    plan.push(`rsync -a (remaining non-subvolume files)`);
+    plan.push(`rsync -a --exclude /docker/ --exclude /containerd/ --exclude /snapshot/ /data/ /mnt/new_raid/`);
     plan.push(`umount /mnt/new_raid && umount /data && mount /dev/md0 /data`);
     plan.push(`# Write clean mdadm.conf with HOMEHOST <ignore>`);
     plan.push(`update-initramfs -u`);
     plan.push(`systemctl start containerd docker.socket docker`);
+    plan.push(`# Reinstall all Docker apps from /data/config/manifests/ via docker compose up`);
     
     res.json({
       success: true,
@@ -2454,8 +2454,16 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
       log(`Could not monitor resync: ${e.message}`, 'warning');
     }
     
-    // === Step 8: Stop Docker & migrate data (preserving btrfs subvolumes) ===
+    // === Step 8: Stop Docker & migrate user data (excluding Docker/containerd runtime) ===
     log('=== Step 8: Migrating data from old /data ===', 'step');
+    
+    // STRATEGY: Never copy /data/docker or /data/containerd.
+    // These contain btrfs subvolumes with internal IDs that break when copied.
+    // Docker will recreate them cleanly when apps are reinstalled via docker compose up.
+    // All user data (apps source, configs, manifests, images, logs) is copied via rsync.
+    
+    // Directories to EXCLUDE from migration (runtime data, regenerated automatically)
+    const MIGRATION_EXCLUDE_DIRS = ['docker', 'containerd', 'snapshot'];
     
     try {
       const oldDataCheck = await executeCommand('ls', ['/data']);
@@ -2471,100 +2479,40 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
           log(`Warning stopping Docker: ${e.message}`, 'warning');
         }
         
-        // 8b. Detect btrfs subvolumes on old /data and migrate them properly
-        log('📦 Detecting btrfs subvolumes on old /data...', 'info');
-        let subvolumes: string[] = [];
+        // 8b. Copy user data with rsync, excluding Docker/containerd runtime dirs
+        log('📦 Migrating user data via rsync (excluding Docker/containerd runtime)...', 'info');
+        log(`Excluded directories: ${MIGRATION_EXCLUDE_DIRS.join(', ')}`, 'info');
+        log('This may take a while depending on data size...', 'info');
+        
+        const rsyncExcludeArgs = MIGRATION_EXCLUDE_DIRS.flatMap(dir => ['--exclude', `/${dir}/`]);
+        
         try {
-          const subvolResult = await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'list', '-o', '/data']);
-          subvolumes = subvolResult.stdout.trim().split('\n')
-            .filter(line => line.includes('path '))
-            .map(line => {
-              const m = line.match(/path\s+(.+)$/);
-              return m ? m[1] : '';
-            })
-            .filter(p => p);
-          
-          if (subvolumes.length > 0) {
-            log(`Found ${subvolumes.length} subvolume(s): ${subvolumes.join(', ')}`, 'info');
-          } else {
-            log('No subvolumes found, will use rsync', 'info');
-          }
-        } catch (e: any) {
-          log('Could not list subvolumes (source may not be btrfs), will use rsync', 'info');
+          await executeCommand('sudo', [
+            '-n', 'rsync', '-a', '--info=progress2',
+            ...rsyncExcludeArgs,
+            '/data/', `${tmpMount}/`
+          ]);
+          log('✓ User data migration completed', 'success');
+        } catch (rsyncErr: any) {
+          log(`Warning during rsync: ${rsyncErr.message}`, 'warning');
         }
         
-        if (subvolumes.length > 0) {
-          // 8c. Use btrfs send/receive to preserve subvolumes (Docker/containerd need this)
-          log('📦 Migrating with btrfs send/receive (preserves subvolumes)...', 'info');
-          
-          // First, create read-only snapshots of each subvolume, send/receive, then delete snapshots
-          for (const subvol of subvolumes) {
-            const subvolPath = `/data/${subvol}`;
-            const snapPath = `/data/${subvol}.migration-snap`;
-            
-            try {
-              // Create read-only snapshot
-              await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'snapshot', '-r', subvolPath, snapPath]);
-              log(`  📸 Snapshot created: ${subvol}`, 'info');
-              
-              // Send/receive to new array
-              const sendReceiveResult = await executeCommand('sudo', ['-n', 'bash', '-c', `btrfs send "${snapPath}" | btrfs receive "${tmpMount}/"`]);
-              if (sendReceiveResult.exitCode === 0) {
-                log(`  ✓ Subvolume ${subvol} migrated via btrfs send/receive`, 'success');
-                
-                // Make the received snapshot read-write
-                const receivedName = `${subvol}.migration-snap`;
-                const receivedPath = `${tmpMount}/${receivedName}`;
-                const finalPath = `${tmpMount}/${subvol}`;
-                
-                // Delete the read-only received snapshot and create a rw snapshot from it
-                try {
-                  await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'snapshot', receivedPath, finalPath]);
-                  await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'delete', receivedPath]);
-                  log(`  ✓ ${subvol} set to read-write`, 'success');
-                } catch (rwErr: any) {
-                  // If renaming fails, the snapshot name works too
-                  log(`  ⚠ Could not rename ${receivedName} → ${subvol}: ${rwErr.message}`, 'warning');
-                }
-              } else {
-                log(`  ⚠ btrfs send/receive failed for ${subvol}, falling back to rsync`, 'warning');
-                await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', `${subvolPath}/`, `${tmpMount}/${subvol}/`]);
-              }
-              
-              // Cleanup source snapshot
-              try {
-                await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'delete', snapPath]);
-              } catch (e: any) {}
-            } catch (subvolErr: any) {
-              log(`  ⚠ Failed to migrate subvolume ${subvol} via btrfs: ${subvolErr.message}`, 'warning');
-              log(`  Falling back to rsync for ${subvol}...`, 'info');
-              try {
-                await executeCommand('sudo', ['-n', 'mkdir', '-p', `${tmpMount}/${subvol}`]);
-                await executeCommand('sudo', ['-n', 'rsync', '-a', `${subvolPath}/`, `${tmpMount}/${subvol}/`]);
-                log(`  ✓ ${subvol} migrated via rsync (fallback)`, 'success');
-              } catch (rsyncErr: any) {
-                log(`  ❌ Failed to migrate ${subvol}: ${rsyncErr.message}`, 'error');
-              }
-            }
-          }
-          
-          // 8d. Copy non-subvolume files/dirs with rsync (excluding already-migrated subvolumes)
-          log('📦 Copying remaining files (non-subvolume data)...', 'info');
-          const excludeArgs = subvolumes.flatMap(sv => ['--exclude', sv, '--exclude', `${sv}.migration-snap`]);
+        // 8c. Verify critical directories were copied
+        const criticalDirs = ['config', 'apps'];
+        for (const dir of criticalDirs) {
           try {
-            await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', ...excludeArgs, '/data/', `${tmpMount}/`]);
-            log('✓ Remaining files copied', 'success');
+            const checkResult = await executeCommand('ls', [`${tmpMount}/${dir}`]);
+            if (checkResult.stdout.trim()) {
+              log(`  ✓ ${dir}/ copied successfully`, 'success');
+            } else {
+              log(`  ⚠ ${dir}/ appears empty after copy`, 'warning');
+            }
           } catch (e: any) {
-            log(`Warning copying remaining files: ${e.message}`, 'warning');
+            log(`  ⚠ ${dir}/ not found after copy (may not exist on source)`, 'warning');
           }
-        } else {
-          // No subvolumes — plain rsync is fine
-          log('📦 Copying data with rsync...', 'info');
-          log('This may take a while depending on data size...', 'info');
-          const rsyncResult = await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', '/data/', `${tmpMount}/`]);
-          if (rsyncResult.stdout) log(rsyncResult.stdout.trim(), 'info');
-          log('✓ Data migration completed', 'success');
         }
+        
+        log('ℹ️ Docker/containerd runtime excluded — will be recreated when apps are reinstalled', 'info');
       } else {
         log('ℹ️ Old /data is empty, nothing to migrate', 'info');
       }
@@ -2655,24 +2603,131 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
         await executeCommand('sudo', ['-n', 'docker', 'network', 'create', 'ryvie-network']);
         log('✓ ryvie-network created', 'success');
       }
-      
-      // Verify Docker sees the containers from the migrated data
-      const psResult = await executeCommand('sudo', ['-n', 'docker', 'ps', '-a', '--format', '{{.Names}}\t{{.Status}}']);
-      const containerLines = psResult.stdout.trim().split('\n').filter(l => l.trim());
-      log(`📊 Docker sees ${containerLines.length} container(s) after migration`, 'info');
-      for (const line of containerLines.slice(0, 10)) {
-        log(`  ${line}`, 'info');
-      }
-      if (containerLines.length > 10) {
-        log(`  ... and ${containerLines.length - 10} more`, 'info');
-      }
     } catch (e: any) {
       log(`⚠ Error restarting Docker: ${e.message}`, 'warning');
       log('Docker may need to be restarted manually after reboot', 'warning');
     }
     
-    // === Step 11: Final status ===
-    log('=== Step 11: Final status ===', 'step');
+    // === Step 11: Reinstall all apps from manifests ===
+    log('=== Step 11: Reinstalling Docker apps from manifests ===', 'step');
+    log('ℹ️ Docker runtime was excluded from migration — apps will be reinstalled cleanly', 'info');
+    
+    try {
+      const fsNode = require('fs');
+      const pathNode = require('path');
+      const MANIFESTS_DIR = '/data/config/manifests';
+      const APPS_DIR = '/data/apps';
+      
+      let appDirs: string[] = [];
+      try {
+        appDirs = fsNode.readdirSync(MANIFESTS_DIR, { withFileTypes: true })
+          .filter((d: any) => d.isDirectory())
+          .map((d: any) => d.name);
+      } catch (e: any) {
+        log('ℹ️ No manifests directory found — no apps to reinstall', 'info');
+      }
+      
+      if (appDirs.length > 0) {
+        log(`📦 Found ${appDirs.length} app(s) to reinstall: ${appDirs.join(', ')}`, 'info');
+        
+        let reinstalledCount = 0;
+        let failedCount = 0;
+        
+        for (const appId of appDirs) {
+          try {
+            // Read manifest to find docker-compose path
+            const manifestPath = pathNode.join(MANIFESTS_DIR, appId, 'manifest.json');
+            if (!fsNode.existsSync(manifestPath)) {
+              log(`  ⏭ ${appId}: no manifest.json, skipping`, 'info');
+              continue;
+            }
+            
+            const manifest = JSON.parse(fsNode.readFileSync(manifestPath, 'utf8'));
+            const appDir = manifest.sourceDir || pathNode.join(APPS_DIR, appId);
+            
+            if (!fsNode.existsSync(appDir)) {
+              log(`  ⏭ ${appId}: source dir ${appDir} not found, skipping`, 'warning');
+              continue;
+            }
+            
+            // Find docker-compose file
+            let composeFile = manifest.dockerComposePath || null;
+            if (composeFile) {
+              const fullPath = pathNode.join(appDir, composeFile);
+              if (!fsNode.existsSync(fullPath)) {
+                log(`  ⚠ ${appId}: compose file ${composeFile} not found, searching...`, 'warning');
+                composeFile = null;
+              }
+            }
+            
+            if (!composeFile) {
+              for (const candidate of ['docker-compose.yml', 'docker-compose.yaml']) {
+                if (fsNode.existsSync(pathNode.join(appDir, candidate))) {
+                  composeFile = candidate;
+                  break;
+                }
+              }
+            }
+            
+            if (!composeFile) {
+              log(`  ⏭ ${appId}: no docker-compose file found, skipping`, 'warning');
+              continue;
+            }
+            
+            // Determine working directory
+            const workingDir = composeFile.includes('/')
+              ? pathNode.join(appDir, pathNode.dirname(composeFile))
+              : appDir;
+            const composeFileName = pathNode.basename(composeFile);
+            
+            log(`  🔄 Reinstalling ${appId} (${composeFileName} in ${workingDir})...`, 'info');
+            
+            if (io) {
+              io.emit('mdraid-log', {
+                timestamp: new Date().toISOString(),
+                type: 'info',
+                message: `Reinstalling app: ${appId}`
+              });
+            }
+            
+            // Pull images and start containers (must cd to workingDir first)
+            try {
+              await executeCommand('sudo', ['-n', 'bash', '-c', `cd "${workingDir}" && docker compose -f "${composeFileName}" up -d --pull always`]);
+              log(`  ✅ ${appId} reinstalled successfully`, 'success');
+              reinstalledCount++;
+            } catch (composeErr: any) {
+              // Retry once without --pull (in case of network issues, use cached images)
+              log(`  ⚠ ${appId}: first attempt failed, retrying without pull...`, 'warning');
+              try {
+                await executeCommand('sudo', ['-n', 'bash', '-c', `cd "${workingDir}" && docker compose -f "${composeFileName}" up -d`]);
+                log(`  ✅ ${appId} reinstalled (from cache)`, 'success');
+                reinstalledCount++;
+              } catch (retryErr: any) {
+                log(`  ❌ ${appId}: reinstallation failed: ${retryErr.message}`, 'error');
+                failedCount++;
+              }
+            }
+          } catch (appErr: any) {
+            log(`  ❌ ${appId}: error: ${appErr.message}`, 'error');
+            failedCount++;
+          }
+        }
+        
+        log(`📊 App reinstallation complete: ${reinstalledCount} succeeded, ${failedCount} failed`, 'info');
+        
+        if (failedCount > 0) {
+          log('💡 Failed apps can be reinstalled manually from the App Store or via POST /api/storage/docker-reinstall-apps', 'info');
+        }
+      } else {
+        log('ℹ️ No apps found to reinstall', 'info');
+      }
+    } catch (e: any) {
+      log(`⚠ Error during app reinstallation: ${e.message}`, 'warning');
+      log('💡 Apps can be reinstalled manually via POST /api/storage/docker-reinstall-apps', 'info');
+    }
+    
+    // === Step 12: Final status ===
+    log('=== Step 12: Final status ===', 'step');
     
     try {
       const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDevice]);
@@ -2686,15 +2741,27 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
       log(dfResult.stdout.trim(), 'info');
     } catch (e: any) {}
     
-    log('✅ RAID array created and /data migrated successfully!', 'success');
-    log('ℹ️ Docker containers have been preserved with their btrfs subvolumes', 'info');
+    // Show Docker container status
+    try {
+      const psResult = await executeCommand('sudo', ['-n', 'docker', 'ps', '-a', '--format', '{{.Names}}\t{{.Status}}']);
+      const containerLines = psResult.stdout.trim().split('\n').filter(l => l.trim());
+      log(`📊 Docker: ${containerLines.length} container(s) running`, 'info');
+      for (const line of containerLines.slice(0, 10)) {
+        log(`  ${line}`, 'info');
+      }
+      if (containerLines.length > 10) {
+        log(`  ... and ${containerLines.length - 10} more`, 'info');
+      }
+    } catch (e: any) {}
+    
+    log('✅ RAID array created, data migrated, and apps reinstalled!', 'success');
     
     res.json({
       success: true,
       dryRun: false,
       logs,
       mdDevice,
-      message: `${level.toUpperCase()} array created on ${mdDevice}, data migrated, /data switched`
+      message: `${level.toUpperCase()} array created on ${mdDevice}, data migrated, apps reinstalled on /data`
     });
   } catch (error: any) {
     console.error('Error creating RAID array:', error);
@@ -2703,6 +2770,192 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
     res.status(500).json({
       success: false,
       error: 'Failed to create RAID array',
+      details: error.message,
+      logs
+    });
+  }
+});
+
+/**
+ * POST /api/storage/docker-reinstall-apps
+ * Réinstalle toutes les apps Docker depuis leurs manifests.
+ * Utile après une migration RAID, une corruption Docker, ou comme bouton de secours.
+ * Ne touche pas aux données utilisateur (configs, volumes bind-mount dans /data/apps/).
+ * Body: { dryRun?: boolean }
+ */
+router.post('/storage/docker-reinstall-apps', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  const { dryRun = false } = req.body;
+
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = { timestamp: new Date().toISOString(), type, message };
+    logs.push(logEntry);
+    console.log(`[docker-reinstall] [${type.toUpperCase()}] ${message}`);
+    if (io) io.emit('mdraid-log', logEntry);
+  };
+
+  try {
+    const fsNode = require('fs');
+    const pathNode = require('path');
+    const MANIFESTS_DIR = '/data/config/manifests';
+    const APPS_DIR = '/data/apps';
+
+    log('🔄 Starting Docker apps reinstallation from manifests...', 'info');
+
+    // 1. Ensure Docker is running
+    try {
+      await executeCommand('sudo', ['-n', 'docker', 'info']);
+      log('✓ Docker is running', 'success');
+    } catch (e: any) {
+      log('Docker not running, attempting to start...', 'warning');
+      try {
+        await executeCommand('sudo', ['-n', 'systemctl', 'start', 'containerd']);
+        await executeCommand('sleep', ['2']);
+        await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker.socket']);
+        await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']);
+        await executeCommand('sleep', ['3']);
+        log('✓ Docker started', 'success');
+      } catch (startErr: any) {
+        log(`❌ Could not start Docker: ${startErr.message}`, 'error');
+        return res.status(500).json({ success: false, error: 'Docker is not running and could not be started', logs });
+      }
+    }
+
+    // 2. Ensure ryvie-network exists
+    try {
+      await executeCommand('sudo', ['-n', 'docker', 'network', 'inspect', 'ryvie-network']);
+    } catch (e: any) {
+      try {
+        await executeCommand('sudo', ['-n', 'docker', 'network', 'create', 'ryvie-network']);
+        log('✓ ryvie-network created', 'success');
+      } catch (netErr: any) {
+        log(`⚠ Could not create ryvie-network: ${netErr.message}`, 'warning');
+      }
+    }
+
+    // 3. List all apps from manifests
+    let appDirs: string[] = [];
+    try {
+      appDirs = fsNode.readdirSync(MANIFESTS_DIR, { withFileTypes: true })
+        .filter((d: any) => d.isDirectory())
+        .map((d: any) => d.name);
+    } catch (e: any) {
+      log('ℹ️ No manifests directory found — no apps to reinstall', 'info');
+      return res.json({ success: true, logs, message: 'No apps found to reinstall', reinstalled: 0, failed: 0 });
+    }
+
+    if (appDirs.length === 0) {
+      log('ℹ️ No apps found in manifests', 'info');
+      return res.json({ success: true, logs, message: 'No apps found to reinstall', reinstalled: 0, failed: 0 });
+    }
+
+    log(`📦 Found ${appDirs.length} app(s): ${appDirs.join(', ')}`, 'info');
+
+    if (dryRun) {
+      log('🔍 DRY RUN — no changes will be made', 'warning');
+      for (const appId of appDirs) {
+        const manifestPath = pathNode.join(MANIFESTS_DIR, appId, 'manifest.json');
+        if (fsNode.existsSync(manifestPath)) {
+          const manifest = JSON.parse(fsNode.readFileSync(manifestPath, 'utf8'));
+          const appDir = manifest.sourceDir || pathNode.join(APPS_DIR, appId);
+          log(`  ${appId}: sourceDir=${appDir}, composePath=${manifest.dockerComposePath || 'auto-detect'}`, 'info');
+        } else {
+          log(`  ${appId}: no manifest.json`, 'warning');
+        }
+      }
+      return res.json({ success: true, dryRun: true, logs, message: 'Dry run completed', appCount: appDirs.length });
+    }
+
+    // 4. Reinstall each app
+    let reinstalledCount = 0;
+    let failedCount = 0;
+    const failedApps: string[] = [];
+
+    for (const appId of appDirs) {
+      try {
+        const manifestPath = pathNode.join(MANIFESTS_DIR, appId, 'manifest.json');
+        if (!fsNode.existsSync(manifestPath)) {
+          log(`  ⏭ ${appId}: no manifest.json, skipping`, 'info');
+          continue;
+        }
+
+        const manifest = JSON.parse(fsNode.readFileSync(manifestPath, 'utf8'));
+        const appDir = manifest.sourceDir || pathNode.join(APPS_DIR, appId);
+
+        if (!fsNode.existsSync(appDir)) {
+          log(`  ⏭ ${appId}: source dir ${appDir} not found, skipping`, 'warning');
+          continue;
+        }
+
+        // Find docker-compose file
+        let composeFile = manifest.dockerComposePath || null;
+        if (composeFile) {
+          const fullPath = pathNode.join(appDir, composeFile);
+          if (!fsNode.existsSync(fullPath)) {
+            log(`  ⚠ ${appId}: compose file ${composeFile} not found, searching...`, 'warning');
+            composeFile = null;
+          }
+        }
+        if (!composeFile) {
+          for (const candidate of ['docker-compose.yml', 'docker-compose.yaml']) {
+            if (fsNode.existsSync(pathNode.join(appDir, candidate))) {
+              composeFile = candidate;
+              break;
+            }
+          }
+        }
+        if (!composeFile) {
+          log(`  ⏭ ${appId}: no docker-compose file found, skipping`, 'warning');
+          continue;
+        }
+
+        const workingDir = composeFile.includes('/')
+          ? pathNode.join(appDir, pathNode.dirname(composeFile))
+          : appDir;
+        const composeFileName = pathNode.basename(composeFile);
+
+        log(`  🔄 Reinstalling ${appId} (${composeFileName} in ${workingDir})...`, 'info');
+
+        // First try with pull, then fallback without (must cd to workingDir first)
+        try {
+          await executeCommand('sudo', ['-n', 'bash', '-c', `cd "${workingDir}" && docker compose -f "${composeFileName}" up -d --pull always`]);
+          log(`  ✅ ${appId} reinstalled successfully`, 'success');
+          reinstalledCount++;
+        } catch (composeErr: any) {
+          log(`  ⚠ ${appId}: pull failed, retrying without pull...`, 'warning');
+          try {
+            await executeCommand('sudo', ['-n', 'bash', '-c', `cd "${workingDir}" && docker compose -f "${composeFileName}" up -d`]);
+            log(`  ✅ ${appId} reinstalled (from cache)`, 'success');
+            reinstalledCount++;
+          } catch (retryErr: any) {
+            log(`  ❌ ${appId}: reinstallation failed: ${retryErr.message}`, 'error');
+            failedCount++;
+            failedApps.push(appId);
+          }
+        }
+      } catch (appErr: any) {
+        log(`  ❌ ${appId}: error: ${appErr.message}`, 'error');
+        failedCount++;
+        failedApps.push(appId);
+      }
+    }
+
+    log(`📊 Reinstallation complete: ${reinstalledCount} succeeded, ${failedCount} failed`, 'info');
+
+    res.json({
+      success: failedCount === 0,
+      logs,
+      message: `${reinstalledCount} app(s) reinstalled, ${failedCount} failed`,
+      reinstalled: reinstalledCount,
+      failed: failedCount,
+      failedApps
+    });
+  } catch (error: any) {
+    console.error('Error reinstalling Docker apps:', error);
+    log(`Fatal error: ${error.message}`, 'error');
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reinstall Docker apps',
       details: error.message,
       logs
     });
