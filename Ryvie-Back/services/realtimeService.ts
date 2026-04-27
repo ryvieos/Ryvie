@@ -12,8 +12,13 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
   let statusPollingInterval = null;
   let dockerEventStream = null;
   let lastAppStatus = null; // Cache du dernier statut envoyé
+  let broadcastPaused = false; // Pause pendant les opérations docker compose
 
-  const broadcastAppStatus = () => getAppStatus()
+  const broadcastAppStatus = () => {
+    if (broadcastPaused) {
+      return Promise.resolve(lastAppStatus || []);
+    }
+    return getAppStatus()
     .then(apps => {
       // Comparer avec le dernier statut pour détecter les changements
       const currentStatusStr = JSON.stringify(apps);
@@ -35,6 +40,7 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
       console.error('[realtime] Erreur lors de la mise à jour des statuts d\'applications:', err);
       throw err;
     });
+  };
 
   const ensureStatusPolling = () => {
     if (!statusPollingInterval) {
@@ -153,6 +159,17 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
   return {
     initializeActiveContainers: () => initializeActiveContainers().then(() => activeContainers),
     stopPolling: () => stopStatusPolling(),
+    pauseBroadcast: () => {
+      broadcastPaused = true;
+      console.log('[realtime] ⏸️  Broadcast des statuts mis en pause');
+    },
+    resumeBroadcast: () => {
+      broadcastPaused = false;
+      console.log('[realtime] ▶️  Broadcast des statuts repris');
+      // Forcer une mise à jour immédiate après la reprise
+      lastAppStatus = null;
+      broadcastAppStatus().catch(() => {});
+    },
     cleanup: () => {
       stopStatusPolling();
       if (dockerEventStream) {

@@ -367,6 +367,7 @@ async function startServer() {
     // Initialize realtime service
     try {
       realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
+      (global as any).realtimeService = realtime;
       await realtime.initializeActiveContainers();
       startupTracker.markDone('realtime');
     } catch (realtimeError: any) {
