@@ -2,7 +2,7 @@ export {};
 const express = require('express');
 const router = express.Router();
 const { spawn } = require('child_process');
-const { authenticateTokenOrFirstTime } = require('../middleware/auth');
+const { authenticateToken, authenticateTokenOrFirstTime } = require('../middleware/auth');
 
 // Type for command execution result
 interface CommandResult {
@@ -11,59 +11,8 @@ interface CommandResult {
   exitCode: number;
 }
 
-const fs = require('fs');
-
-// Named md device — avoids conflict with auto-assembled /dev/md0
-const MD_DEVICE_NAME = '/dev/md/ryvie';
-
 // Instance Socket.IO pour les logs en temps réel
 let io = null;
-
-/**
- * Find the active RAID array device for /data.
- * Checks /dev/md/ryvie first, then falls back to /dev/md0, then scans /proc/mdstat.
- * Returns the device path or null if none found.
- */
-async function findActiveMdDevice(): Promise<string | null> {
-  // 1. Check named device
-  try {
-    await executeCommand('sudo', ['-n', 'mdadm', '--detail', MD_DEVICE_NAME]);
-    return MD_DEVICE_NAME;
-  } catch (e: any) {}
-
-  // 2. Check what /data is mounted on
-  try {
-    const findmntResult = await executeCommand('findmnt', ['-no', 'SOURCE', '/data']);
-    const source = findmntResult.stdout.trim();
-    if (source && source.startsWith('/dev/md')) {
-      return source;
-    }
-  } catch (e: any) {}
-
-  // 3. Check /dev/md0
-  try {
-    await executeCommand('sudo', ['-n', 'mdadm', '--detail', '/dev/md0']);
-    return '/dev/md0';
-  } catch (e: any) {}
-
-  // 4. Scan /proc/mdstat for any active md array (catches md127, md126, etc.)
-  try {
-    const mdStat = await executeCommand('cat', ['/proc/mdstat']);
-    const activeArrays = mdStat.stdout.match(/^(md\S+)\s/gm);
-    if (activeArrays) {
-      for (const md of activeArrays) {
-        const mdName = md.trim();
-        const mdDev = `/dev/${mdName}`;
-        try {
-          await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDev]);
-          return mdDev;
-        } catch (e: any) {}
-      }
-    }
-  } catch (e: any) {}
-
-  return null;
-}
 
 // Fonction pour initialiser Socket.IO
 function setSocketIO(socketIO) {
@@ -685,6 +634,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateTokenOrFirstTime, as
     
     try {
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const fs = require('fs');
       const tmpFile = '/tmp/mdadm.conf.new';
       fs.writeFileSync(tmpFile, scanResult.stdout);
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
@@ -1147,6 +1097,7 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
     try {
       log(`Updating /etc/mdadm/mdadm.conf...`, 'info');
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const fs = require('fs');
       const tmpFile = '/tmp/mdadm.conf.new';
       fs.writeFileSync(tmpFile, scanResult.stdout);
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
@@ -1304,124 +1255,112 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
 
 /**
  * GET /api/storage/mdraid-status
- * Récupère l'état du RAID mdadm
+ * Récupère l'état de TOUS les RAID mdadm actifs
  */
 router.get('/storage/mdraid-status', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   try {
-    const activeMd = await findActiveMdDevice();
-    const status: any = {
-      array: activeMd || MD_DEVICE_NAME,
-      exists: false,
-      mounted: false,
-      members: [],
-      syncProgress: null,
-      syncing: false
-    };
-
-    // Vérifier si /data est monté
+    // Get the device mounted on /data
+    let dataDevice = null;
     try {
-      const findmntResult = await executeCommand('findmnt', ['-no', 'FSTYPE,SOURCE', '/data']);
-      const [fstype, source] = findmntResult.stdout.trim().split(/\s+/);
-      
-      status.mounted = !!(source && source.startsWith('/dev/md'));
-      status.fstype = fstype;
-      status.source = source;
-    } catch (error: any) {
-      // /data n'est pas monté
+      const findmntResult = await executeCommand('findmnt', ['-no', 'SOURCE', '/data']);
+      dataDevice = findmntResult.stdout.trim();
+    } catch (e: any) {
+      // /data not mounted
     }
 
-    // Vérifier l'état du RAID
-    const mdDeviceToCheck = activeMd || MD_DEVICE_NAME;
-    try {
-      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDeviceToCheck]);
-      status.exists = true;
-      status.detail = detailResult.stdout;
-      
-      // Parser les informations
-      const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
-      const totalMatch = detailResult.stdout.match(/Total Devices\s*:\s*(\d+)/i);
-      const stateMatch = detailResult.stdout.match(/State\s*:\s*(.+)/i);
-      const raidLevelMatch = detailResult.stdout.match(/Raid Level\s*:\s*(\S+)/i);
-      
-      if (activeMatch) status.activeDevices = parseInt(activeMatch[1]);
-      if (totalMatch) status.totalDevices = parseInt(totalMatch[1]);
-      if (stateMatch) status.state = stateMatch[1].trim();
-      if (raidLevelMatch) status.raidLevel = raidLevelMatch[1];
-      
-      // Extraire les membres avec leurs tailles
-      const memberMatches = detailResult.stdout.matchAll(/\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\w+)\s+(\w+)\s+(\/dev\/\S+)/g);
-      for (const match of memberMatches) {
-        const device = match[7];
+    // Find all active md arrays
+    const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+    const mdLines = mdstatResult.stdout.split('\n');
+    const arrays = [];
+    
+    for (const line of mdLines) {
+      const match = line.match(/^(md\d+)\s*:\s*active\s+(\S+)\s+(.+)/);
+      if (match) {
+        const mdName = match[1];
+        const mdDevice = `/dev/${mdName}`;
+        const level = match[2];
+        const devicesLine = match[3];
         
-        // Obtenir la taille du device
-        let size = null;
+        const arrayStatus: any = {
+          array: mdDevice,
+          raidLevel: level,
+          exists: true,
+          mountedOnData: (dataDevice === mdDevice),
+          members: [],
+          syncProgress: null,
+          syncing: false
+        };
+
+        // Parse member devices from the line
+        const deviceMatches = devicesLine.matchAll(/(\S+)\[(\d+)\](\((\S+)\))?/g);
+        for (const devMatch of deviceMatches) {
+          const devPath = devMatch[1].startsWith('/dev/') ? devMatch[1] : `/dev/${devMatch[1]}`;
+          const devNum = devMatch[2];
+          const state = devMatch[4] || 'active'; // S, F, etc.
+          arrayStatus.members.push({
+            device: devPath,
+            number: devNum,
+            state: state === 'S' ? 'spare' : state === 'F' ? 'faulty' : 'active'
+          });
+        }
+
+        // Get detailed info from mdadm
         try {
-          const lsblkResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', device]);
-          size = parseInt(lsblkResult.stdout.trim());
+          const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDevice]);
+          arrayStatus.detail = detailResult.stdout;
+          
+          const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+          const totalMatch = detailResult.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+          const raidDevicesMatch = detailResult.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+          const stateMatch = detailResult.stdout.match(/State\s*:\s*(.+)/i);
+          const arraySizeMatch = detailResult.stdout.match(/Array Size\s*:\s*(\d+)/i);
+          
+          if (activeMatch) arrayStatus.activeDevices = parseInt(activeMatch[1]);
+          if (totalMatch) arrayStatus.totalDevices = parseInt(totalMatch[1]);
+          if (raidDevicesMatch) arrayStatus.raidDevices = parseInt(raidDevicesMatch[1]);
+          if (stateMatch) arrayStatus.state = stateMatch[1].trim();
+          if (arraySizeMatch) arrayStatus.arraySize = parseInt(arraySizeMatch[1]);
+          
+          // Get member sizes
+          const memberMatches = detailResult.stdout.matchAll(/\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\w+)\s+(\w+)\s+(\/dev\/\S+)/g);
+          for (const m of memberMatches) {
+            const device = m[7];
+            const existingMember = arrayStatus.members.find((mem: any) => mem.device === device);
+            if (existingMember) {
+              try {
+                const lsblkResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', device]);
+                existingMember.size = parseInt(lsblkResult.stdout.trim());
+              } catch (e: any) {}
+              existingMember.raidState = m[5];
+            }
+          }
         } catch (e: any) {
-          // Ignorer l'erreur
+          // Array might not be accessible for detail
         }
-        
-        status.members.push({
-          number: match[1],
-          major: match[2],
-          minor: match[3],
-          raidDevice: match[4],
-          state: match[5],
-          device: device,
-          size: size
-        });
-      }
-    } catch (error: any) {
-      // Le RAID n'existe pas ou erreur
-      status.error = error.message;
-    }
 
-    // Lire /proc/mdstat pour la progression
-    try {
-      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
-      status.mdstat = mdstatResult.stdout;
-      
-      // Detect resync=PENDING (auto-read-only after reboot — needs mdadm --readwrite to resume)
-      const pendingMatch = mdstatResult.stdout.match(/resync\s*=\s*PENDING/i);
-      const autoReadOnlyMatch = mdstatResult.stdout.match(/\(auto-read-only\)/);
-      if (pendingMatch || autoReadOnlyMatch) {
-        status.syncPending = true;
-        status.syncing = false;
-        status.syncProgress = null;
-      } else {
-        status.syncPending = false;
-      }
+        // Check sync/recovery/reshape progress from mdstat
+        const targetSection = mdstatResult.stdout.split(/^(?=md\d+\s*:)/m).find(s => s.startsWith(mdName)) || '';
+        const progressMatch = targetSection.match(/(?:recovery|resync|reshape)\s*=\s*(\d+\.\d+)%/);
+        if (progressMatch) {
+          arrayStatus.syncProgress = parseFloat(progressMatch[1]);
+          arrayStatus.syncing = true;
+          
+          const finishMatch = targetSection.match(/finish\s*=\s*([\d.]+min)/);
+          if (finishMatch) arrayStatus.syncETA = finishMatch[1];
+          
+          const speedMatch = targetSection.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
+          if (speedMatch) arrayStatus.syncSpeed = speedMatch[1];
+        }
 
-      // Parser la progression de resync/recovery
-      const progressMatch = mdstatResult.stdout.match(/(?:recovery|resync)\s*=\s*(\d+\.\d+)%/);
-      if (progressMatch) {
-        status.syncProgress = parseFloat(progressMatch[1]);
-        status.syncing = true;
-        status.syncPending = false;
-        
-        // Parser l'ETA
-        const finishMatch = mdstatResult.stdout.match(/finish\s*=\s*([\d.]+min)/);
-        if (finishMatch) {
-          status.syncETA = finishMatch[1];
-        }
-        
-        // Parser la vitesse
-        const speedMatch = mdstatResult.stdout.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
-        if (speedMatch) {
-          status.syncSpeed = speedMatch[1];
-        }
-      } else if (!status.syncPending) {
-        status.syncing = false;
+        arrays.push(arrayStatus);
       }
-    } catch (error: any) {
-      // Erreur lecture mdstat - s'assurer que syncing est false
-      status.syncing = false;
     }
 
     res.json({
       success: true,
-      status
+      arrays,
+      dataDevice,
+      count: arrays.length
     });
   } catch (error: any) {
     console.error('Error fetching mdraid status:', error);
@@ -1430,28 +1369,6 @@ router.get('/storage/mdraid-status', authenticateTokenOrFirstTime, async (req: a
       error: 'Failed to fetch mdraid status',
       details: error.message
     });
-  }
-});
-
-/**
- * POST /api/storage/mdraid-activate
- * Activates an array that is in auto-read-only mode (resync=PENDING after reboot).
- * Runs: mdadm --readwrite <array>
- * Body: { array: string }
- */
-router.post('/storage/mdraid-activate', authenticateTokenOrFirstTime, async (req: any, res: any) => {
-  const { array } = req.body;
-
-  if (!array || !array.startsWith('/dev/md')) {
-    return res.status(400).json({ success: false, error: 'Invalid array device' });
-  }
-
-  try {
-    await executeCommand('sudo', ['-n', 'mdadm', '--readwrite', array]);
-    res.json({ success: true, message: `Array ${array} activated (read-write mode)` });
-  } catch (error: any) {
-    console.error('Error activating array:', error);
-    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -1765,6 +1682,7 @@ router.post('/storage/mdraid-remove-disk', authenticateTokenOrFirstTime, async (
     try {
       log(`Updating /etc/mdadm/mdadm.conf...`, 'info');
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const fs = require('fs');
       const tmpFile = '/tmp/mdadm.conf.new';
       fs.writeFileSync(tmpFile, scanResult.stdout);
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
@@ -1821,107 +1739,272 @@ router.post('/storage/mdraid-remove-disk', authenticateTokenOrFirstTime, async (
 
 /**
  * GET /api/storage/disk-health
- * Récupère les données SMART de tous les disques
+ * Récupère les données SMART de tous les disques physiques
  */
 router.get('/storage/disk-health', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   try {
     // Lister les disques physiques
-    const lsblkResult = await executeCommand('lsblk', ['-J', '-d', '-o', 'NAME,SIZE,MODEL,SERIAL,TYPE,TRAN,ROTA']);
-    const lsblkData = JSON.parse(lsblkResult.stdout);
-    const disks = (lsblkData.blockdevices || []).filter((d: any) => d.type === 'disk' && !d.name.includes('sr'));
-
-    const healthData = [];
-
-    for (const disk of disks) {
-      const devicePath = `/dev/${disk.name}`;
-      const entry: any = {
-        device: devicePath,
-        name: disk.name,
-        size: disk.size,
-        model: disk.model || 'Unknown',
-        serial: disk.serial || 'N/A',
-        transport: disk.tran || 'unknown',
-        rotational: disk.rota === true || disk.rota === '1',
-        smart: null,
+    const lsblkResult = await executeCommand('lsblk', ['-d', '-n', '-o', 'NAME,TYPE']);
+    const lines = lsblkResult.stdout.trim().split('\n').filter(l => l.trim());
+    
+    const disks = [];
+    
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      const name = parts[0];
+      const type = parts[1];
+      
+      if (type !== 'disk') continue;
+      // Skip loop, ram, etc.
+      if (name.startsWith('loop') || name.startsWith('ram') || name.startsWith('sr')) continue;
+      
+      const device = `/dev/${name}`;
+      const diskInfo: any = {
+        device,
         health: 'unknown',
         temperature: null,
+        model: null,
+        serial: null,
         powerOnHours: null,
-        reallocatedSectors: null,
-        pendingSectors: null
+        reallocatedSectors: null
       };
-
+      
       try {
-        const smartResult = await executeCommand('sudo', ['-n', 'smartctl', '-j', '-a', devicePath]);
-        const smartData = JSON.parse(smartResult.stdout);
-
-        // Overall health
-        if (smartData.smart_status && smartData.smart_status.passed !== undefined) {
-          entry.health = smartData.smart_status.passed ? 'good' : 'failing';
-        }
-
-        // Parse SMART attributes
-        if (smartData.ata_smart_attributes && smartData.ata_smart_attributes.table) {
-          for (const attr of smartData.ata_smart_attributes.table) {
-            switch (attr.id) {
-              case 194: // Temperature
-              case 190:
-                entry.temperature = attr.raw?.value ?? null;
-                break;
-              case 9: // Power-On Hours
-                entry.powerOnHours = attr.raw?.value ?? null;
-                break;
-              case 5: // Reallocated Sectors
-                entry.reallocatedSectors = attr.raw?.value ?? null;
-                break;
-              case 197: // Current Pending Sector
-                entry.pendingSectors = attr.raw?.value ?? null;
-                break;
-            }
+        let smartResult = await executeCommand('sudo', ['-n', 'smartctl', '-j', '-a', device]);
+        let smart = JSON.parse(smartResult.stdout);
+        
+        // If smartctl reports a USB bridge error or no SMART data, retry with -d sat
+        const hasUsbBridgeError = smart.smartctl?.messages?.some((m: any) => m.string?.includes('USB bridge'));
+        const noSmartData = !smart.smart_status && !smart.ata_smart_attributes;
+        if (hasUsbBridgeError || (smart.smartctl?.exit_status !== 0 && noSmartData)) {
+          try {
+            smartResult = await executeCommand('sudo', ['-n', 'smartctl', '-j', '-a', '-d', 'sat', device]);
+            smart = JSON.parse(smartResult.stdout);
+          } catch (retryErr: any) {
+            // SAT passthrough also failed, keep original result
           }
         }
-
-        // NVMe attributes
-        if (smartData.nvme_smart_health_information_log) {
-          const nvme = smartData.nvme_smart_health_information_log;
-          entry.temperature = nvme.temperature ?? null;
-          entry.powerOnHours = nvme.power_on_hours ?? null;
-          entry.reallocatedSectors = null;
-          entry.pendingSectors = null;
-          if (nvme.media_errors !== undefined && nvme.media_errors > 0) {
-            entry.health = 'warning';
+        
+        // Health assessment
+        if (smart.smart_status && smart.smart_status.passed !== undefined) {
+          diskInfo.health = smart.smart_status.passed ? 'good' : 'failing';
+        }
+        
+        // Model
+        if (smart.model_name) diskInfo.model = smart.model_name;
+        else if (smart.model_family) diskInfo.model = smart.model_family;
+        
+        // Serial
+        if (smart.serial_number) diskInfo.serial = smart.serial_number;
+        
+        // Temperature
+        if (smart.temperature && smart.temperature.current !== undefined) {
+          diskInfo.temperature = smart.temperature.current;
+        }
+        
+        // SMART attributes
+        if (smart.ata_smart_attributes && smart.ata_smart_attributes.table) {
+          for (const attr of smart.ata_smart_attributes.table) {
+            if (attr.id === 9) diskInfo.powerOnHours = attr.raw.value;
+            if (attr.id === 5) diskInfo.reallocatedSectors = attr.raw.value;
+            if (attr.id === 194 && diskInfo.temperature === null) diskInfo.temperature = attr.raw.value;
           }
         }
-
-        // Compute health score from attributes
-        if (entry.reallocatedSectors !== null && entry.reallocatedSectors > 0) {
-          entry.health = entry.reallocatedSectors > 100 ? 'failing' : 'warning';
+        
+        // NVMe temperature fallback
+        if (diskInfo.temperature === null && smart.nvme_smart_health_information_log) {
+          diskInfo.temperature = smart.nvme_smart_health_information_log.temperature;
         }
-        if (entry.pendingSectors !== null && entry.pendingSectors > 0) {
-          entry.health = 'warning';
+        
+        // NVMe power on hours fallback
+        if (diskInfo.powerOnHours === null && smart.nvme_smart_health_information_log) {
+          diskInfo.powerOnHours = smart.nvme_smart_health_information_log.power_on_hours;
         }
-
-        entry.smart = {
-          available: true,
-          enabled: smartData.smart_status !== undefined
-        };
-      } catch (smartError: any) {
-        // smartctl may fail if SMART not supported
-        entry.smart = { available: false, enabled: false };
-        entry.health = 'unknown';
+        
+        // Check for warning conditions
+        if (diskInfo.health === 'good') {
+          if (diskInfo.reallocatedSectors && diskInfo.reallocatedSectors > 0) {
+            diskInfo.health = 'warning';
+          }
+          if (diskInfo.temperature && diskInfo.temperature > 55) {
+            diskInfo.health = 'warning';
+          }
+        }
+      } catch (e: any) {
+        // smartctl not available or failed for this disk
       }
-
-      healthData.push(entry);
+      
+      disks.push(diskInfo);
     }
-
-    res.json({
-      success: true,
-      disks: healthData
-    });
+    
+    res.json({ success: true, disks });
   } catch (error: any) {
-    console.error('Error fetching disk health:', error);
+    console.error('Error getting disk health:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch disk health data',
+      error: 'Failed to get disk health',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/storage/mdraid-create-prechecks
+ * Pré-vérifications avant la création d'un nouvel array RAID
+ * Body: { level: string, disks: string[] }
+ */
+router.post('/storage/mdraid-create-prechecks', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  try {
+    const { level, disks } = req.body;
+    
+    if (!level || !disks || !Array.isArray(disks) || disks.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid parameters: level and disks[] are required'
+      });
+    }
+    
+    // Validate RAID level
+    const raidLevelMap = {
+      'raid0': { minDisks: 2, mdLevel: '0' },
+      'raid1': { minDisks: 2, mdLevel: '1' },
+      'raid5': { minDisks: 3, mdLevel: '5' },
+      'raid6': { minDisks: 4, mdLevel: '6' },
+      'raid10': { minDisks: 4, mdLevel: '10' }
+    };
+    
+    const raidConfig = raidLevelMap[level];
+    if (!raidConfig) {
+      return res.status(400).json({
+        success: false,
+        error: `Unsupported RAID level: ${level}`
+      });
+    }
+    
+    const reasons = [];
+    const plan = [];
+    let canProceed = true;
+    
+    // 1. Check minimum disk count
+    if (disks.length < raidConfig.minDisks) {
+      reasons.push(`❌ ${level.toUpperCase()} requires at least ${raidConfig.minDisks} disks (${disks.length} selected)`);
+      canProceed = false;
+    } else {
+      reasons.push(`✓ Disk count OK: ${disks.length} disks for ${level.toUpperCase()} (min: ${raidConfig.minDisks})`);
+    }
+    
+    // RAID 10 requires even number
+    if (level === 'raid10' && disks.length % 2 !== 0) {
+      reasons.push(`❌ RAID 10 requires an even number of disks`);
+      canProceed = false;
+    }
+    
+    // 2. Validate each disk
+    let smallestSize = Infinity;
+    const diskSizes = [];
+    
+    for (const disk of disks) {
+      if (!isValidDevicePath(disk)) {
+        reasons.push(`❌ Invalid device path: ${disk}`);
+        canProceed = false;
+        continue;
+      }
+      
+      // Check not mounted
+      const mountCheck = await isDeviceMounted(disk);
+      if (mountCheck.mounted) {
+        reasons.push(`❌ ${disk} is mounted on ${mountCheck.mountpoint}`);
+        canProceed = false;
+      } else {
+        reasons.push(`✓ ${disk} is not mounted`);
+      }
+      
+      // Check size
+      try {
+        const sizeResult = await executeCommand('lsblk', ['-b', '-d', '-n', '-o', 'SIZE', disk]);
+        const sizeBytes = parseInt(sizeResult.stdout.trim());
+        diskSizes.push({ disk, size: sizeBytes });
+        if (sizeBytes < smallestSize) smallestSize = sizeBytes;
+        reasons.push(`✓ ${disk} size: ${Math.floor(sizeBytes / 1024 / 1024 / 1024)} GiB`);
+      } catch (e: any) {
+        reasons.push(`❌ Could not determine size of ${disk}: ${e.message}`);
+        canProceed = false;
+      }
+      
+      // Check for existing superblocks
+      try {
+        const examResult = await executeCommand('sudo', ['-n', 'mdadm', '--examine', disk]);
+        if (examResult.stdout.includes('Magic')) {
+          reasons.push(`⚠ ${disk} has existing RAID superblock (will be wiped)`);
+        }
+      } catch (e: any) {
+        // No superblock, OK
+      }
+    }
+    
+    // 3. Check if /dev/md0 already exists
+    try {
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      if (mdstatResult.stdout.includes('md0 :')) {
+        reasons.push(`⚠ /dev/md0 already exists — it will need to be reconfigured`);
+      }
+    } catch (e: any) {}
+    
+    // 4. Calculate expected capacity
+    let expectedCapacity = 0;
+    if (smallestSize < Infinity) {
+      const usablePerDisk = smallestSize - (2 * 1024 * 1024); // 2 MiB GPT overhead
+      const n = disks.length;
+      switch (level) {
+        case 'raid0': expectedCapacity = usablePerDisk * n; break;
+        case 'raid1': expectedCapacity = usablePerDisk; break;
+        case 'raid5': expectedCapacity = usablePerDisk * (n - 1); break;
+        case 'raid6': expectedCapacity = usablePerDisk * (n - 2); break;
+        case 'raid10': expectedCapacity = usablePerDisk * Math.floor(n / 2); break;
+      }
+      reasons.push(`✓ Expected usable capacity: ~${Math.floor(expectedCapacity / 1024 / 1024 / 1024)} GiB`);
+    }
+    
+    // 5. Build command plan
+    const partEndMiB = smallestSize < Infinity ? Math.floor((smallestSize - (2 * 1024 * 1024)) / 1024 / 1024) : 0;
+    
+    for (let i = 0; i < disks.length; i++) {
+      const d = disks[i];
+      const label = `md0_${String.fromCharCode(97 + i)}`;
+      plan.push(`wipefs -a ${d}`);
+      plan.push(`parted -s ${d} mklabel gpt`);
+      plan.push(`parted -s ${d} mkpart primary 1MiB ${partEndMiB}MiB`);
+      plan.push(`parted -s ${d} name 1 ${label}`);
+      plan.push(`parted -s ${d} set 1 raid on`);
+    }
+    plan.push(`partprobe && udevadm settle && sleep 2`);
+    
+    const partPaths = disks.map(d => getPartitionPath(d, 1));
+    plan.push(`mdadm --create /dev/md0 --level=${raidConfig.mdLevel} --raid-devices=${disks.length} ${partPaths.join(' ')}`);
+    plan.push(`mkfs.btrfs -f /dev/md0`);
+    plan.push(`mount /dev/md0 /mnt/new_raid`);
+    plan.push(`systemctl stop docker.socket docker containerd`);
+    plan.push(`# btrfs send/receive for each subvolume (preserves Docker data)`);
+    plan.push(`rsync -a (remaining non-subvolume files)`);
+    plan.push(`umount /mnt/new_raid && umount /data && mount /dev/md0 /data`);
+    plan.push(`# Write clean mdadm.conf with HOMEHOST <ignore>`);
+    plan.push(`update-initramfs -u`);
+    plan.push(`systemctl start containerd docker.socket docker`);
+    
+    res.json({
+      success: true,
+      canProceed,
+      reasons,
+      plan,
+      expectedCapacity,
+      raidLevel: level,
+      diskCount: disks.length
+    });
+  } catch (error: any) {
+    console.error('Error during create pre-checks:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to perform create pre-checks',
       details: error.message
     });
   }
@@ -1929,12 +2012,12 @@ router.get('/storage/disk-health', authenticateTokenOrFirstTime, async (req: any
 
 /**
  * POST /api/storage/mdraid-create
- * Crée un nouvel array RAID mdadm avec le niveau et les disques choisis
+ * Crée un nouvel array RAID depuis zéro
  * Body: { level: string, disks: string[], dryRun: boolean }
  */
 router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: any, res: any) => {
-  const { level, disks: selectedDisks, dryRun = false } = req.body;
-
+  const { level, disks, dryRun = false } = req.body;
+  
   const logs = [];
   const log = (message, type = 'info') => {
     const logEntry = {
@@ -1950,602 +2033,673 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
   };
 
   try {
-    // Validate level
-    const validLevels = ['raid0', 'raid1', 'raid5', 'raid6', 'raid10'];
-    if (!level || !validLevels.includes(level)) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid RAID level. Must be one of: ${validLevels.join(', ')}`
-      });
+    if (!level || !disks || !Array.isArray(disks) || disks.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid parameters' });
     }
-
-    // Validate disk count for level
-    const minDisks = { raid0: 2, raid1: 2, raid5: 3, raid6: 4, raid10: 4 };
-    if (!selectedDisks || !Array.isArray(selectedDisks) || selectedDisks.length < minDisks[level]) {
-      return res.status(400).json({
-        success: false,
-        error: `RAID level ${level} requires at least ${minDisks[level]} disks (got ${selectedDisks?.length || 0})`
-      });
+    
+    const raidLevelMap = {
+      'raid0': { minDisks: 2, mdLevel: '0' },
+      'raid1': { minDisks: 2, mdLevel: '1' },
+      'raid5': { minDisks: 3, mdLevel: '5' },
+      'raid6': { minDisks: 4, mdLevel: '6' },
+      'raid10': { minDisks: 4, mdLevel: '10' }
+    };
+    
+    const raidConfig = raidLevelMap[level];
+    if (!raidConfig) {
+      return res.status(400).json({ success: false, error: `Unsupported RAID level: ${level}` });
     }
-
-    // For RAID10, need even number
-    if (level === 'raid10' && selectedDisks.length % 2 !== 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'RAID 10 requires an even number of disks'
-      });
+    
+    if (disks.length < raidConfig.minDisks) {
+      return res.status(400).json({ success: false, error: `${level} requires at least ${raidConfig.minDisks} disks` });
     }
-
-    // Validate all disk paths
-    for (const disk of selectedDisks) {
-      if (!isValidDevicePath(disk)) {
-        return res.status(400).json({
-          success: false,
-          error: `Invalid device path: ${disk}`
-        });
-      }
-    }
-
-    log(`🚀 Creating new ${level.toUpperCase()} array with ${selectedDisks.length} disks`, 'info');
-    log(`Level: ${level}`, 'info');
-    log(`Disks: ${selectedDisks.join(', ')}`, 'info');
-    log(`Dry Run: ${dryRun}`, 'info');
-
-    // Step 0: Detect current state — Docker stays running during RAID creation + bulk rsync
-    log('=== Step 0: Detecting current state ===', 'step');
-
-    // Detect if /data is currently mounted (old RAID with data to migrate)
-    let oldDataMounted = false;
-    let oldDataSource = '';
+    
+    // Check if any RAID array is currently syncing/recovering/reshaping
+    log('Checking for active RAID operations...', 'info');
     try {
-      const findmntResult = await executeCommand('findmnt', ['-no', 'SOURCE', '/data']);
-      oldDataSource = findmntResult.stdout.trim();
-      if (oldDataSource) {
-        oldDataMounted = true;
-        log(`/data is currently mounted on ${oldDataSource} — data will be migrated`, 'info');
-        log('Docker and apps will stay running during bulk data copy (minimal downtime)', 'info');
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      const syncingMatch = mdstatResult.stdout.match(/(recovery|resync|reshape)\s*=\s*(\d+\.\d+)%/);
+      if (syncingMatch) {
+        const operation = syncingMatch[1];
+        const progress = syncingMatch[2];
+        log(`❌ Cannot create new RAID: another array is currently ${operation}ing (${progress}%)`, 'error');
+        return res.status(400).json({ 
+          success: false, 
+          error: `Cannot create RAID while another array is ${operation}ing (${progress}%). Please wait for it to complete or stop it first.`,
+          syncingInProgress: true,
+          operation,
+          progress: parseFloat(progress)
+        });
       }
     } catch (e: any) {
-      log('/data is not mounted — no data to migrate', 'info');
+      log('Could not check mdstat, continuing...', 'warning');
     }
-
-    // Step 1: Verify all disks are not mounted
-    log('=== Step 1: Verifying disks ===', 'step');
-    for (const disk of selectedDisks) {
-      const mountCheck = await isDeviceMounted(disk);
-      if (mountCheck.mounted) {
-        log(`❌ Disk ${disk} is mounted on ${mountCheck.mountpoint}`, 'error');
-        // Try to restart Docker before failing
-        try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (e: any) {}
-        return res.status(400).json({
-          success: false,
-          error: `Disk ${disk} is mounted on ${mountCheck.mountpoint}`,
-          logs
-        });
+    
+    // Validate all disks
+    for (const disk of disks) {
+      if (!isValidDevicePath(disk)) {
+        return res.status(400).json({ success: false, error: `Invalid device path: ${disk}` });
       }
-      log(`✓ ${disk} is not mounted`, 'success');
     }
-
-    // Step 2: Determine partition sizes (use smallest disk as reference)
-    log('=== Step 2: Calculating partition sizes ===', 'step');
-    let minSizeBytes = Infinity;
-    const diskSizes = {};
-    for (const disk of selectedDisks) {
-      const sizeResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', disk]);
+    
+    log(`🚀 Starting RAID array creation: ${level.toUpperCase()} with ${disks.length} disks`, 'info');
+    log(`Disks: ${disks.join(', ')}`, 'info');
+    log(`Dry Run: ${dryRun}`, 'info');
+    
+    // Calculate partition size (use smallest disk)
+    let smallestSize = Infinity;
+    for (const disk of disks) {
+      const sizeResult = await executeCommand('lsblk', ['-b', '-d', '-n', '-o', 'SIZE', disk]);
       const sizeBytes = parseInt(sizeResult.stdout.trim());
-      diskSizes[disk] = sizeBytes;
-      if (sizeBytes < minSizeBytes) minSizeBytes = sizeBytes;
-      log(`${disk}: ${Math.floor(sizeBytes / 1024 / 1024)} MiB`, 'info');
+      if (sizeBytes < smallestSize) smallestSize = sizeBytes;
     }
-    const partEndMiB = Math.floor((minSizeBytes - 2 * 1024 * 1024) / 1024 / 1024);
-    log(`Partition size per disk: ${partEndMiB} MiB`, 'info');
-
+    const partEndMiB = Math.floor((smallestSize - (2 * 1024 * 1024)) / 1024 / 1024);
+    
     if (dryRun) {
       log('🔍 DRY RUN MODE - No changes will be made', 'warning');
-      log('=== Commands that would be executed ===', 'step');
-      const partPaths = [];
-      selectedDisks.forEach((disk, i) => {
-        const label = `ryvie_${String.fromCharCode(97 + i)}`;
-        const partPath = getPartitionPath(disk, 1);
-        partPaths.push(partPath);
-        log(`wipefs -a ${disk}`, 'info');
-        log(`parted -s ${disk} mklabel gpt`, 'info');
-        log(`parted -s ${disk} mkpart primary 1MiB ${partEndMiB}MiB`, 'info');
-        log(`parted -s ${disk} name 1 ${label}`, 'info');
-        log(`parted -s ${disk} set 1 raid on`, 'info');
-      });
-      const mdLevel = level.replace('raid', '');
-      log(`mdadm --create ${MD_DEVICE_NAME} --level=${mdLevel} --raid-devices=${selectedDisks.length} ${partPaths.join(' ')}`, 'info');
-      log(`mkfs.btrfs ${MD_DEVICE_NAME}`, 'info');
-      log(`mount ${MD_DEVICE_NAME} /data`, 'info');
+      for (let i = 0; i < disks.length; i++) {
+        const d = disks[i];
+        const label = `md0_${String.fromCharCode(97 + i)}`;
+        log(`wipefs -a ${d}`, 'info');
+        log(`parted -s ${d} mklabel gpt`, 'info');
+        log(`parted -s ${d} mkpart primary 1MiB ${partEndMiB}MiB`, 'info');
+        log(`parted -s ${d} name 1 ${label}`, 'info');
+        log(`parted -s ${d} set 1 raid on`, 'info');
+      }
+      const partPaths = disks.map(d => getPartitionPath(d, 1));
+      log(`mdadm --create /dev/md0 --level=${raidConfig.mdLevel} --raid-devices=${disks.length} ${partPaths.join(' ')}`, 'info');
+      log(`mkfs.btrfs -f /dev/md0`, 'info');
+      log(`mount /dev/md0 /data`, 'info');
       log('✓ Dry run completed', 'success');
-
-      return res.json({
-        success: true,
-        dryRun: true,
-        logs,
-        message: 'Dry run completed - no changes made'
-      });
+      return res.json({ success: true, dryRun: true, logs, message: 'Dry run completed' });
     }
-
-    // Step 3: Prepare all disks
-    log('=== Step 3: Preparing disks ===', 'step');
+    
+    // === Step 1: Find a free md device slot & cleanup ghost arrays ===
+    log('=== Step 1: Preparing environment ===', 'step');
+    
+    // Check if requested disks are trapped in a ghost/auto-reassembled array
+    try {
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      const mdLines = mdstatResult.stdout.split('\n');
+      const ghostArrays = new Set();
+      
+      for (let i = 0; i < mdLines.length; i++) {
+        const headerMatch = mdLines[i].match(/^(md\d+)\s*:/);
+        if (headerMatch) {
+          const mdName = headerMatch[1];
+          // Check if any of our target disks are in this array
+          for (const disk of disks) {
+            const diskBase = disk.replace('/dev/', '');
+            if (mdLines[i].includes(diskBase)) {
+              ghostArrays.add(mdName);
+            }
+          }
+        }
+      }
+      
+      if (ghostArrays.size > 0) {
+        log(`⚠ Found ghost arrays using requested disks: ${[...ghostArrays].join(', ')}`, 'warning');
+        for (const ghost of ghostArrays) {
+          const ghostDev = `/dev/${ghost}`;
+          try {
+            await executeCommand('sudo', ['-n', 'umount', '-l', ghostDev]).catch(() => {});
+            await executeCommand('sudo', ['-n', 'mdadm', '--stop', ghostDev]);
+            log(`✓ Stopped ghost array ${ghostDev}`, 'success');
+          } catch (e: any) {
+            log(`Warning stopping ${ghostDev}: ${e.message}`, 'warning');
+          }
+        }
+        await executeCommand('sleep', ['1']);
+      }
+      
+      // ALWAYS clean superblocks on all target disks before creating new RAID
+      log('Cleaning all target disks...', 'info');
+      for (const disk of disks) {
+        // Remove any existing partitions first
+        try {
+          await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'rm', '1']).catch(() => {});
+        } catch (e: any) {}
+        
+        // Zap GPT/MBR
+        try {
+          await executeCommand('sudo', ['-n', 'sgdisk', '--zap-all', disk]);
+        } catch (e: any) {}
+        
+        // Wipe all signatures
+        try {
+          await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]);
+        } catch (e: any) {}
+        
+        // Zero superblock on disk
+        try {
+          await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', disk]);
+          log(`✓ Cleaned ${disk}`, 'success');
+        } catch (e: any) {
+          log(`Note: ${disk}: ${e.message}`, 'info');
+        }
+        
+        // Also zero superblock on potential partition paths
+        for (let partNum = 1; partNum <= 4; partNum++) {
+          const testPart = getPartitionPath(disk, partNum);
+          try {
+            await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', testPart]);
+          } catch (e: any) {}
+        }
+      }
+      await executeCommand('sleep', ['1']);
+      await executeCommand('sudo', ['-n', 'partprobe']);
+      await executeCommand('sleep', ['1']);
+    } catch (e: any) {
+      log(`Ghost array check: ${e.message}`, 'info');
+    }
+    
+    let mdDevice = '/dev/md0';
+    try {
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      // Find all active md devices
+      const activeMds = [];
+      const mdLines = mdstatResult.stdout.split('\n');
+      for (const line of mdLines) {
+        const match = line.match(/^(md\d+)\s*:/);
+        if (match) activeMds.push(parseInt(match[1].replace('md', '')));
+      }
+      
+      if (activeMds.length > 0) {
+        // Find next free slot
+        let slot = 0;
+        while (activeMds.includes(slot)) slot++;
+        mdDevice = `/dev/md${slot}`;
+        log(`Existing arrays detected: ${activeMds.map(n => 'md' + n).join(', ')}`, 'info');
+        log(`Using free slot: ${mdDevice}`, 'info');
+      } else {
+        log('No existing arrays, using /dev/md0', 'info');
+      }
+    } catch (e: any) {
+      log('Using default /dev/md0', 'info');
+    }
+    
+    // === Step 2: Prepare all disks ===
+    log('=== Step 2: Preparing disks ===', 'step');
+    
     const partitionPaths = [];
-
-    for (let i = 0; i < selectedDisks.length; i++) {
-      const disk = selectedDisks[i];
-      const label = `ryvie_${String.fromCharCode(97 + i)}`;
+    const mdNum = mdDevice.replace('/dev/md', '');
+    
+    for (let i = 0; i < disks.length; i++) {
+      const disk = disks[i];
+      const label = `md${mdNum}_${String.fromCharCode(97 + i)}`;
       const partPath = getPartitionPath(disk, 1);
       partitionPaths.push(partPath);
-
-      log(`--- Preparing ${disk} ---`, 'info');
-
+      
+      log(`--- Preparing ${disk} (${i + 1}/${disks.length}) ---`, 'info');
+      
+      // Check not mounted
+      const mountCheck = await isDeviceMounted(disk);
+      if (mountCheck.mounted) {
+        log(`❌ ${disk} is mounted on ${mountCheck.mountpoint}, cannot proceed`, 'error');
+        throw new Error(`${disk} is mounted`);
+      }
+      
+      // Zero any existing superblock on disk and partitions
+      log(`Cleaning RAID signatures on ${disk}...`, 'info');
       try {
-        log(`Wiping ${disk}...`, 'info');
+        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', disk]);
+        log(`  ✓ Zeroed superblock on disk`, 'success');
+      } catch (e: any) {}
+      
+      // Remove any existing partitions first
+      try {
+        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'rm', '1']);
+        log(`  ✓ Removed old partition 1`, 'success');
+      } catch (e: any) {}
+      
+      // Wipe all signatures
+      try {
         await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]);
-        log(`✓ Wiped`, 'success');
-      } catch (e: any) {
-        log(`Error wiping ${disk}: ${e.message}`, 'error');
-        throw e;
-      }
-
+        log(`  ✓ Wiped all signatures`, 'success');
+      } catch (e: any) {}
+      
+      // Also try sgdisk to zap GPT
       try {
-        log(`Creating GPT table on ${disk}...`, 'info');
-        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mklabel', 'gpt']);
-        log(`✓ GPT table created`, 'success');
-      } catch (e: any) {
-        log(`Error creating GPT: ${e.message}`, 'error');
-        throw e;
-      }
-
+        await executeCommand('sudo', ['-n', 'sgdisk', '--zap-all', disk]);
+        log(`  ✓ Zapped GPT`, 'success');
+      } catch (e: any) {}
+      
+      // Zero superblock on the partition path if it exists
       try {
-        log(`Creating partition (1MiB to ${partEndMiB}MiB)...`, 'info');
-        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mkpart', 'primary', '1MiB', `${partEndMiB}MiB`]);
-        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'name', '1', label]);
-        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'set', '1', 'raid', 'on']);
-        log(`✓ Partition created: ${partPath} (${label})`, 'success');
-      } catch (e: any) {
-        log(`Error creating partition: ${e.message}`, 'error');
-        throw e;
-      }
-
+        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partPath]);
+      } catch (e: any) {}
+      
+      // Wipe partition signatures
+      log(`Wiping ${disk}...`, 'info');
+      await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]);
+      
+      log(`Creating GPT table on ${disk}...`, 'info');
+      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mklabel', 'gpt']);
+      
+      log(`Creating partition (1MiB to ${partEndMiB}MiB)...`, 'info');
+      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mkpart', 'primary', '1MiB', `${partEndMiB}MiB`]);
+      
+      log(`Setting label ${label} and RAID flag...`, 'info');
+      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'name', '1', label]);
+      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'set', '1', 'raid', 'on']);
+      
+      log(`✓ ${disk} ready`, 'success');
+    }
+    
+    // Partprobe all at once
+    log('Updating partition tables...', 'info');
+    for (const disk of disks) {
       await executeCommand('sudo', ['-n', 'partprobe', disk]);
     }
-
     await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
     await executeCommand('sleep', ['2']);
-
-    // Wipe superblocks on all new partitions
+    log('✓ All partition tables updated', 'success');
+    
+    // Wipe partition signatures
     for (const partPath of partitionPaths) {
       try {
         await executeCommand('sudo', ['-n', 'wipefs', '-a', partPath]);
-        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partPath]);
-      } catch (e: any) {
-        // OK if no superblock
-      }
+      } catch (e: any) {}
     }
-
-    // === Pre-create: ensure no stale arrays use the NEW partitions ===
-    log('Checking for stale arrays on new partitions...', 'info');
-    for (const partPath of partitionPaths) {
-      try {
-        const examResult = await executeCommand('sudo', ['-n', 'mdadm', '--examine', partPath]);
-        // If mdadm --examine succeeds, there's a superblock — wipe it again
-        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', '--force', partPath]);
-        await executeCommand('sudo', ['-n', 'wipefs', '-af', partPath]);
-        log(`Wiped residual superblock on ${partPath}`, 'warning');
-      } catch (e: any) {
-        // No superblock — good
-      }
+    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
+    await executeCommand('sleep', ['2']);
+    
+    // === Step 3: Create RAID array ===
+    log('=== Step 3: Creating RAID array ===', 'step');
+    
+    const mdadmArgs = [
+      '-n', 'mdadm', '--create', mdDevice,
+      '--level=' + raidConfig.mdLevel,
+      '--raid-devices=' + disks.length.toString(),
+      '--name=ryvie',
+      '--force',  // Force creation even if disks have existing signatures
+      '--run',
+      ...partitionPaths
+    ];
+    
+    log(`Creating ${level.toUpperCase()} array with: ${partitionPaths.join(', ')}`, 'info');
+    const createResult = await executeCommand('sudo', mdadmArgs);
+    if (createResult.stdout) log(createResult.stdout.trim(), 'info');
+    if (createResult.stderr) log(createResult.stderr.trim(), 'warning');
+    
+    // Check if creation actually failed
+    if (createResult.exitCode !== 0 || createResult.stderr.includes('already in use')) {
+      log(`❌ mdadm --create failed (exit code: ${createResult.exitCode})`, 'error');
+      throw new Error(`mdadm --create failed: ${createResult.stderr.trim()}`);
     }
-
-    // Step 4: Create the RAID array
-    log('=== Step 4: Creating RAID array ===', 'step');
-    const mdLevel = level.replace('raid', '');
-
-    // Restore raid speed limit
-    try {
-      await executeCommand('sudo', ['-n', 'bash', '-c', 'echo 200000 > /proc/sys/dev/raid/speed_limit_max']);
-    } catch (e: any) {}
-
-    try {
-      // Ensure /dev/md directory exists
-      await executeCommand('sudo', ['-n', 'mkdir', '-p', '/dev/md']);
-      const createArgs = [
-        '-n', 'mdadm', '--create', MD_DEVICE_NAME,
-        '--level=' + mdLevel,
-        '--raid-devices=' + selectedDisks.length,
-        '--name=ryvie',
-        '--homehost=any',
-        '--run', '--force',
-        ...partitionPaths
-      ];
-      log(`Running: mdadm --create ${MD_DEVICE_NAME} --level=${mdLevel} --raid-devices=${selectedDisks.length} ${partitionPaths.join(' ')}`, 'info');
-      await executeCommand('sudo', createArgs);
-      log(`✓ RAID array created: ${MD_DEVICE_NAME} (${level.toUpperCase()})`, 'success');
-    } catch (e: any) {
-      log(`Error creating array: ${e.message}`, 'error');
-      throw e;
+    
+    // Verify md0 now exists with our new disks
+    const verifyResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDevice]);
+    const hasNewDisk = partitionPaths.some(p => verifyResult.stdout.includes(p));
+    if (!hasNewDisk) {
+      log('❌ New array does not contain expected disks!', 'error');
+      throw new Error('Created array does not contain expected partition paths');
     }
-
-    // Step 4b: Verify the new array is correct (not the old one re-assembled)
-    try {
-      const verifyResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', MD_DEVICE_NAME]);
-      const verifyOutput = verifyResult.stdout;
-      const raidLevelMatch = verifyOutput.match(/Raid Level\s*:\s*(\S+)/);
-      const actualLevel = raidLevelMatch ? raidLevelMatch[1] : 'unknown';
-      const expectedLevel = `raid${mdLevel}`;
-      if (actualLevel !== expectedLevel) {
-        log(`❌ FATAL: ${MD_DEVICE_NAME} is ${actualLevel} but expected ${expectedLevel} — old array re-assembled!`, 'error');
-        // Try to stop it and abort
-        try { await executeCommand('sudo', ['-n', 'mdadm', '--stop', MD_DEVICE_NAME]); } catch (e: any) {}
-        try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (e: any) {}
-        return res.status(500).json({
-          success: false,
-          error: `Array verification failed: ${MD_DEVICE_NAME} is ${actualLevel}, expected ${expectedLevel}. The old array may have re-assembled. Please reboot and try again.`,
-          logs
-        });
-      }
-      // Also verify member count
-      const deviceLines = verifyOutput.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
-      log(`✓ Verified: ${MD_DEVICE_NAME} is ${actualLevel} with ${deviceLines.length} device(s)`, 'success');
-    } catch (e: any) {
-      log(`Warning: Could not verify array: ${e.message}`, 'warning');
-    }
-
-    // Step 5: Create filesystem on new RAID
-    log('=== Step 5: Creating btrfs filesystem ===', 'step');
-    try {
-      await executeCommand('sudo', ['-n', 'mkfs.btrfs', '-f', MD_DEVICE_NAME]);
-      log(`✓ btrfs filesystem created on ${MD_DEVICE_NAME}`, 'success');
-    } catch (e: any) {
-      log(`Error creating filesystem: ${e.message}`, 'error');
-      throw e;
-    }
-
-    // Step 6: Data migration — two-pass rsync for minimal downtime
-    // Pass 1: bulk rsync WITH Docker running (apps stay accessible)
-    // Pass 2: stop Docker, quick incremental rsync, swap mounts (downtime ~1-2 min)
-    log('=== Step 6: Data migration ===', 'step');
+    log('✓ RAID array created and verified', 'success');
+    
+    await executeCommand('sleep', ['2']);
+    
+    // === Step 4: Create filesystem ===
+    log('=== Step 4: Creating btrfs filesystem ===', 'step');
+    
+    log(`Creating btrfs filesystem on ${mdDevice}...`, 'info');
+    const mkfsResult = await executeCommand('sudo', ['-n', 'mkfs.btrfs', '-f', mdDevice]);
+    if (mkfsResult.stdout) log(mkfsResult.stdout.trim(), 'info');
+    log('✓ Filesystem created', 'success');
+    
+    // === Step 5: Mount on temporary location (keep old /data intact) ===
+    log('=== Step 5: Mounting on temporary location ===', 'step');
+    
     const tmpMount = '/mnt/new_raid';
-
-    // Collect old RAID members BEFORE we stop anything (needed later for cleanup)
-    let oldMdMembers: string[] = [];
-    if (oldDataMounted && oldDataSource) {
-      try {
-        const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', oldDataSource]);
-        const lines = detailResult.stdout.split('\n').filter((l: string) => /^\s+\d+\s+\d+\s+\d+/.test(l));
-        for (const line of lines) {
-          const match = line.match(/(\/dev\/\S+)/);
-          if (match && !oldMdMembers.includes(match[1])) oldMdMembers.push(match[1]);
-        }
-        log(`Old RAID members: ${oldMdMembers.join(', ')}`, 'info');
-      } catch (e: any) {
-        // Try known partitions
-        try {
-          await executeCommand('sudo', ['-n', 'mdadm', '--examine', '/dev/sda6']);
-          oldMdMembers.push('/dev/sda6');
-          log('Old RAID member detected: /dev/sda6', 'info');
-        } catch (e2: any) {}
-      }
-    }
-
-    if (oldDataMounted) {
-      // 6a: Mount new RAID on temporary mount point
-      try {
-        await executeCommand('sudo', ['-n', 'mkdir', '-p', tmpMount]);
-        await executeCommand('sudo', ['-n', 'mount', '-o', 'defaults,noatime,compress=zstd,space_cache=v2', MD_DEVICE_NAME, tmpMount]);
-        log(`✓ Mounted new RAID (${MD_DEVICE_NAME}) on ${tmpMount}`, 'success');
-      } catch (e: any) {
-        log(`Error mounting new RAID on ${tmpMount}: ${e.message}`, 'error');
-        throw e;
-      }
-
-      // 6b: PASS 1 — Bulk rsync WITH Docker still running (zero downtime)
-      log('📦 Pass 1: Bulk data copy (Docker still running, apps accessible)...', 'info');
-      log('This may take a while depending on the amount of data...', 'info');
-      try {
-        const rsyncResult = await executeCommand('sudo', ['-n', 'rsync', '-aHAX', '--info=progress2', '/data/', `${tmpMount}/`]);
-        log('✓ Pass 1 completed — bulk data copied', 'success');
-        if (rsyncResult.stdout) {
-          const lastLines = rsyncResult.stdout.split('\n').filter((l: string) => l.trim()).slice(-3);
-          for (const line of lastLines) {
-            log(`  rsync: ${line.trim()}`, 'info');
-          }
-        }
-      } catch (e: any) {
-        log(`Error during bulk copy: ${e.message}`, 'error');
-        try { await executeCommand('sudo', ['-n', 'umount', tmpMount]); } catch (umErr: any) {}
-        throw e;
-      }
-
-      // 6c: Stop Docker — START of brief downtime
-      log('⏸ Stopping Docker for final sync (brief downtime starts now)...', 'warning');
-      try {
-        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
-        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
-        log('✓ Docker stopped', 'success');
-      } catch (e: any) {
-        log(`Warning: Could not stop Docker: ${e.message}`, 'warning');
-      }
-      try {
-        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
-        log('✓ containerd stopped', 'success');
-      } catch (e: any) {}
-
-      await executeCommand('sleep', ['2']);
-
-      // Kill any remaining processes using /data
-      try {
-        await executeCommand('sudo', ['-n', 'fuser', '-km', '/data']);
-        await executeCommand('sleep', ['1']);
-      } catch (e: any) {}
-
-      // 6d: PASS 2 — Quick incremental rsync (only changed files since pass 1)
-      log('📦 Pass 2: Incremental sync (only changes since pass 1)...', 'info');
-      try {
-        const rsync2Result = await executeCommand('sudo', ['-n', 'rsync', '-aHAX', '--delete', '--info=progress2', '/data/', `${tmpMount}/`]);
-        log('✓ Pass 2 completed — all data synchronized', 'success');
-        if (rsync2Result.stdout) {
-          const lastLines = rsync2Result.stdout.split('\n').filter((l: string) => l.trim()).slice(-3);
-          for (const line of lastLines) {
-            log(`  rsync: ${line.trim()}`, 'info');
-          }
-        }
-      } catch (e: any) {
-        log(`Error during incremental sync: ${e.message}`, 'error');
-        // Abort — restart Docker on old RAID
-        try { await executeCommand('sudo', ['-n', 'umount', tmpMount]); } catch (umErr: any) {}
-        try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (restartErr: any) {}
-        throw e;
-      }
-
-      // 6e: Swap mounts — unmount temp, unmount old /data, mount new on /data
-      log('🔄 Swapping mounts...', 'info');
-      try {
-        await executeCommand('sudo', ['-n', 'umount', tmpMount]);
-        log(`✓ Unmounted ${tmpMount}`, 'success');
-      } catch (e: any) {
-        log(`Warning: Could not unmount ${tmpMount}: ${e.message}`, 'warning');
-      }
-
-      // Unmount old /data (may be mounted multiple times)
-      let unmountAttempts = 0;
-      while (unmountAttempts < 5) {
-        try {
-          await executeCommand('sudo', ['-n', 'umount', '/data']);
-          unmountAttempts++;
-        } catch (e: any) {
-          break;
-        }
-      }
-      if (unmountAttempts > 0) {
-        log(`✓ Unmounted old /data (${unmountAttempts} mount(s))`, 'success');
-      }
-
-      // 6f: Stop old RAID array
-      if (oldDataSource && oldDataSource.startsWith('/dev/md')) {
-        try {
-          await executeCommand('sudo', ['-n', 'mdadm', '--stop', oldDataSource]);
-          log(`✓ Stopped old array ${oldDataSource}`, 'success');
-        } catch (e: any) {
-          log(`Warning: Could not stop old array ${oldDataSource}: ${e.message}`, 'warning');
-        }
-      }
-
-      // 6g: Destroy old RAID — zero superblocks and delete partition from parent disk
-      log('🗑 Destroying old RAID...', 'info');
-      const oldMembersNotOnNewDisks = oldMdMembers.filter(m => !selectedDisks.some(d => m.startsWith(d)));
-
-      for (const member of oldMembersNotOnNewDisks) {
-        try {
-          await executeCommand('sudo', ['-n', 'wipefs', '-af', member]);
-          await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', '--force', member]);
-          const partMatch = member.match(/^(\/dev\/[a-z]+)(\d+)$/) || member.match(/^(\/dev\/nvme\d+n\d+)p(\d+)$/);
-          if (partMatch) {
-            const parentDisk = partMatch[1];
-            const partNum = partMatch[2];
-            log(`Deleting partition ${partNum} from ${parentDisk} (old RAID member ${member})...`, 'info');
-            await executeCommand('sudo', ['-n', 'sfdisk', '--delete', parentDisk, partNum]);
-            await executeCommand('sudo', ['-n', 'partprobe', parentDisk]);
-            log(`✓ Deleted ${member} from partition table`, 'success');
-          }
-        } catch (e: any) {
-          log(`Warning: Could not fully clean up ${member}: ${e.message}`, 'warning');
-        }
-      }
-
-    } else {
-      log('No existing data to migrate — fresh install', 'info');
-      // No old RAID — stop Docker if running (for clean mount)
-      try {
-        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
-        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
-        await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
-      } catch (e: any) {}
-    }
-
-    // Step 6h: Mount new RAID on /data
-    log('Mounting new RAID on /data...', 'info');
     try {
-      await executeCommand('sudo', ['-n', 'mkdir', '-p', '/data']);
-      await executeCommand('sudo', ['-n', 'mount', '-o', 'defaults,noatime,compress=zstd,space_cache=v2', MD_DEVICE_NAME, '/data']);
-      log(`✓ Mounted ${MD_DEVICE_NAME} on /data (btrfs, compress=zstd)`, 'success');
-    } catch (e: any) {
-      log(`Error mounting: ${e.message}`, 'error');
-      try { await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']); } catch (restartErr: any) {}
-      throw e;
-    }
-
-    // Step 6i: Ensure essential /data directories exist (in case of fresh install)
-    if (!oldDataMounted) {
-      log('Creating essential /data directories...', 'info');
-      const essentialDirs = ['/data/apps', '/data/config', '/data/docker', '/data/logs', '/data/images', '/data/snapshot'];
-      for (const dir of essentialDirs) {
-        try {
-          await executeCommand('sudo', ['-n', 'mkdir', '-p', dir]);
-        } catch (e: any) {}
-      }
-      try {
-        await executeCommand('sudo', ['-n', 'chown', '-R', 'ryvie:ryvie', '/data/apps', '/data/config', '/data/logs', '/data/images']);
-      } catch (e: any) {}
-      log('✓ Essential directories created', 'success');
-    }
-
-    // Step 7: Save mdadm config + update fstab
-    log('=== Step 7: Saving configuration ===', 'step');
+      await executeCommand('sudo', ['-n', 'mkdir', '-p', tmpMount]);
+    } catch (e: any) {}
+    
+    log(`Mounting ${mdDevice} on ${tmpMount} (keeping /data on old array)...`, 'info');
+    await executeCommand('sudo', ['-n', 'mount', mdDevice, tmpMount]);
+    log(`✓ Mounted on ${tmpMount}`, 'success');
+    
+    // Set permissions
+    try {
+      await executeCommand('sudo', ['-n', 'chown', 'ryvie:ryvie', tmpMount]);
+      log('✓ Permissions set', 'success');
+    } catch (e: any) {}
+    
+    // === Step 6: Save mdadm.conf (so new array survives reboot) ===
+    log('=== Step 6: Saving RAID configuration ===', 'step');
+    
     try {
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const cleanConf = `# mdadm.conf - RAID configuration (auto-generated)\nHOMEHOST <ignore>\n${scanResult.stdout.trim()}\n`;
+      const fs = require('fs');
       const tmpFile = '/tmp/mdadm.conf.new';
-      fs.writeFileSync(tmpFile, scanResult.stdout);
+      fs.writeFileSync(tmpFile, cleanConf);
       await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
       fs.unlinkSync(tmpFile);
-      log(`✓ Updated /etc/mdadm/mdadm.conf`, 'success');
-
-      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
-      log(`✓ Updated initramfs`, 'success');
+      log('✓ Updated /etc/mdadm/mdadm.conf', 'success');
     } catch (e: any) {
-      log(`Warning: Config save: ${e.message}`, 'warning');
+      log(`Warning: ${e.message}`, 'warning');
     }
-
-    // Step 7b: Update /etc/fstab with new UUID
-    log('Updating /etc/fstab...', 'info');
+    
     try {
-      const blkidResult = await executeCommand('sudo', ['-n', 'blkid', '-s', 'UUID', '-o', 'value', MD_DEVICE_NAME]);
-      const newUUID = blkidResult.stdout.trim();
-      if (newUUID) {
-        log(`New ${MD_DEVICE_NAME} UUID: ${newUUID}`, 'info');
-
-        // Read current fstab
-        const fstabResult = await executeCommand('cat', ['/etc/fstab']);
-        const fstabLines = fstabResult.stdout.split('\n');
-        let foundDataEntry = false;
-        const newFstabLines = fstabLines.map((line: string) => {
-          // Match any line that mounts /data (by UUID or device)
-          if (line.match(/\s+\/data\s+/) && !line.startsWith('#')) {
-            foundDataEntry = true;
-            return `UUID=${newUUID}  /data  btrfs  defaults,noatime,compress=zstd,space_cache=v2  0  0`;
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log('✓ Updated initramfs', 'success');
+    } catch (e: any) {
+      log(`Warning initramfs: ${e.message}`, 'warning');
+    }
+    
+    // === Step 7: Monitor resync ===
+    log('=== Step 7: Monitoring resync ===', 'step');
+    log('ℹ️ /data remains on old array during resync — no downtime', 'info');
+    
+    try {
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      log('📊 /proc/mdstat:', 'info');
+      log(mdstatResult.stdout.trim(), 'info');
+      
+      if (mdstatResult.stdout.includes('recovery') || mdstatResult.stdout.includes('resync')) {
+        log('🔄 Resynchronization started...', 'info');
+        
+        let lastProgress = -1;
+        let resyncComplete = false;
+        const maxWaitMinutes = 1440;
+        const startTime = Date.now();
+        
+        while (!resyncComplete) {
+          await executeCommand('sleep', ['5']);
+          
+          const elapsedMinutes = (Date.now() - startTime) / 1000 / 60;
+          if (elapsedMinutes > maxWaitMinutes) {
+            log('⚠ Resync monitoring timeout (24h)', 'warning');
+            break;
           }
-          return line;
-        });
-
-        if (!foundDataEntry) {
-          // Add new entry if none exists
-          newFstabLines.push(`UUID=${newUUID}  /data  btrfs  defaults,noatime,compress=zstd,space_cache=v2  0  0`);
+          
+          const currentMdstat = await executeCommand('cat', ['/proc/mdstat']);
+          const mdstatOutput = currentMdstat.stdout;
+          
+          const progressMatch = mdstatOutput.match(/(?:recovery|resync)\s*=\s*(\d+\.\d+)%/);
+          if (progressMatch) {
+            const progress = parseFloat(progressMatch[1]);
+            if (Math.abs(progress - lastProgress) >= 0.5 || lastProgress === -1) {
+              const finishMatch = mdstatOutput.match(/finish\s*=\s*([\d.]+min)/);
+              const speedMatch = mdstatOutput.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
+              
+              let progressMsg = `🔄 Resync: ${progress.toFixed(1)}%`;
+              if (finishMatch) progressMsg += ` | ETA: ${finishMatch[1]}`;
+              if (speedMatch) progressMsg += ` | Speed: ${speedMatch[1]}`;
+              
+              log(progressMsg, 'info');
+              
+              if (io) {
+                io.emit('mdraid-resync-progress', {
+                  percent: progress,
+                  eta: finishMatch ? finishMatch[1] : null,
+                  speed: speedMatch ? speedMatch[1] : null
+                });
+              }
+              lastProgress = progress;
+            }
+          } else if (mdstatOutput.includes('[UU') || (!mdstatOutput.includes('recovery') && !mdstatOutput.includes('resync'))) {
+            log('✅ Resynchronization completed!', 'success');
+            if (io) {
+              io.emit('mdraid-resync-progress', { percent: 100, completed: true });
+            }
+            resyncComplete = true;
+          }
         }
-
-        const tmpFstab = '/tmp/fstab.new';
-        fs.writeFileSync(tmpFstab, newFstabLines.join('\n'));
-        await executeCommand('sudo', ['-n', 'cp', tmpFstab, '/etc/fstab']);
-        fs.unlinkSync(tmpFstab);
-        log(`✓ Updated /etc/fstab with UUID=${newUUID}`, 'success');
       } else {
-        log(`⚠ Could not get UUID of ${MD_DEVICE_NAME}`, 'warning');
+        log('ℹ️ No resync needed (clean creation)', 'info');
       }
     } catch (e: any) {
-      log(`Warning: fstab update: ${e.message}`, 'warning');
+      log(`Could not monitor resync: ${e.message}`, 'warning');
     }
-
-    // Step 7c: Restart Docker and containerd
-    log('Restarting Docker...', 'info');
+    
+    // === Step 8: Stop Docker & migrate data (preserving btrfs subvolumes) ===
+    log('=== Step 8: Migrating data from old /data ===', 'step');
+    
     try {
-      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'containerd']);
-      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker.socket']);
-      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']);
-      log('✓ Docker restarted', 'success');
-    } catch (e: any) {
-      log(`Warning: Could not restart Docker: ${e.message}`, 'warning');
-    }
-
-    // Step 8: Monitor initial sync (for raid5/6/10)
-    if (level !== 'raid0') {
-      log('=== Step 8: Monitoring initial sync ===', 'step');
-      try {
-        const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
-        if (mdstatResult.stdout.includes('recovery') || mdstatResult.stdout.includes('resync')) {
-          log('🔄 Resynchronization started...', 'info');
-
-          let lastProgress = -1;
-          let resyncComplete = false;
-          const maxWaitMinutes = 120;
-          const startTime = Date.now();
-
-          while (!resyncComplete) {
-            await executeCommand('sleep', ['3']);
-
-            const elapsedMinutes = (Date.now() - startTime) / 1000 / 60;
-            if (elapsedMinutes > maxWaitMinutes) {
-              log('⚠ Resync monitoring timeout - continuing in background', 'warning');
-              break;
-            }
-
-            const currentMdstat = await executeCommand('cat', ['/proc/mdstat']);
-            const mdstatOutput = currentMdstat.stdout;
-
-            const progressMatch = mdstatOutput.match(/(?:recovery|resync)\s*=\s*(\d+\.\d+)%/);
-            if (progressMatch) {
-              const progress = parseFloat(progressMatch[1]);
-              if (Math.abs(progress - lastProgress) >= 0.5 || lastProgress === -1) {
-                const finishMatch = mdstatOutput.match(/finish\s*=\s*([\d.]+min)/);
-                const speedMatch = mdstatOutput.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
-
-                let progressMsg = `🔄 Resync: ${progress.toFixed(1)}%`;
-                if (finishMatch) progressMsg += ` | ETA: ${finishMatch[1]}`;
-                if (speedMatch) progressMsg += ` | Speed: ${speedMatch[1]}`;
-                log(progressMsg, 'info');
-
-                if (io) {
-                  io.emit('mdraid-resync-progress', {
-                    percent: progress,
-                    eta: finishMatch ? finishMatch[1] : null,
-                    speed: speedMatch ? speedMatch[1] : null
-                  });
+      const oldDataCheck = await executeCommand('ls', ['/data']);
+      if (oldDataCheck.stdout.trim()) {
+        // 8a. Stop Docker and containerd so data is consistent during copy
+        log('🛑 Stopping Docker & containerd before migration...', 'info');
+        try {
+          await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
+          await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
+          await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
+          log('✓ Docker & containerd stopped', 'success');
+        } catch (e: any) {
+          log(`Warning stopping Docker: ${e.message}`, 'warning');
+        }
+        
+        // 8b. Detect btrfs subvolumes on old /data and migrate them properly
+        log('📦 Detecting btrfs subvolumes on old /data...', 'info');
+        let subvolumes: string[] = [];
+        try {
+          const subvolResult = await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'list', '-o', '/data']);
+          subvolumes = subvolResult.stdout.trim().split('\n')
+            .filter(line => line.includes('path '))
+            .map(line => {
+              const m = line.match(/path\s+(.+)$/);
+              return m ? m[1] : '';
+            })
+            .filter(p => p);
+          
+          if (subvolumes.length > 0) {
+            log(`Found ${subvolumes.length} subvolume(s): ${subvolumes.join(', ')}`, 'info');
+          } else {
+            log('No subvolumes found, will use rsync', 'info');
+          }
+        } catch (e: any) {
+          log('Could not list subvolumes (source may not be btrfs), will use rsync', 'info');
+        }
+        
+        if (subvolumes.length > 0) {
+          // 8c. Use btrfs send/receive to preserve subvolumes (Docker/containerd need this)
+          log('📦 Migrating with btrfs send/receive (preserves subvolumes)...', 'info');
+          
+          // First, create read-only snapshots of each subvolume, send/receive, then delete snapshots
+          for (const subvol of subvolumes) {
+            const subvolPath = `/data/${subvol}`;
+            const snapPath = `/data/${subvol}.migration-snap`;
+            
+            try {
+              // Create read-only snapshot
+              await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'snapshot', '-r', subvolPath, snapPath]);
+              log(`  📸 Snapshot created: ${subvol}`, 'info');
+              
+              // Send/receive to new array
+              const sendReceiveResult = await executeCommand('sudo', ['-n', 'bash', '-c', `btrfs send "${snapPath}" | btrfs receive "${tmpMount}/"`]);
+              if (sendReceiveResult.exitCode === 0) {
+                log(`  ✓ Subvolume ${subvol} migrated via btrfs send/receive`, 'success');
+                
+                // Make the received snapshot read-write
+                const receivedName = `${subvol}.migration-snap`;
+                const receivedPath = `${tmpMount}/${receivedName}`;
+                const finalPath = `${tmpMount}/${subvol}`;
+                
+                // Delete the read-only received snapshot and create a rw snapshot from it
+                try {
+                  await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'snapshot', receivedPath, finalPath]);
+                  await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'delete', receivedPath]);
+                  log(`  ✓ ${subvol} set to read-write`, 'success');
+                } catch (rwErr: any) {
+                  // If renaming fails, the snapshot name works too
+                  log(`  ⚠ Could not rename ${receivedName} → ${subvol}: ${rwErr.message}`, 'warning');
                 }
-                lastProgress = progress;
+              } else {
+                log(`  ⚠ btrfs send/receive failed for ${subvol}, falling back to rsync`, 'warning');
+                await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', `${subvolPath}/`, `${tmpMount}/${subvol}/`]);
               }
-            } else if (mdstatOutput.includes('[UU') || (!mdstatOutput.includes('recovery') && !mdstatOutput.includes('resync'))) {
-              log('✅ Resynchronization completed!', 'success');
-              if (io) {
-                io.emit('mdraid-resync-progress', { percent: 100, completed: true });
+              
+              // Cleanup source snapshot
+              try {
+                await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'delete', snapPath]);
+              } catch (e: any) {}
+            } catch (subvolErr: any) {
+              log(`  ⚠ Failed to migrate subvolume ${subvol} via btrfs: ${subvolErr.message}`, 'warning');
+              log(`  Falling back to rsync for ${subvol}...`, 'info');
+              try {
+                await executeCommand('sudo', ['-n', 'mkdir', '-p', `${tmpMount}/${subvol}`]);
+                await executeCommand('sudo', ['-n', 'rsync', '-a', `${subvolPath}/`, `${tmpMount}/${subvol}/`]);
+                log(`  ✓ ${subvol} migrated via rsync (fallback)`, 'success');
+              } catch (rsyncErr: any) {
+                log(`  ❌ Failed to migrate ${subvol}: ${rsyncErr.message}`, 'error');
               }
-              resyncComplete = true;
             }
+          }
+          
+          // 8d. Copy non-subvolume files/dirs with rsync (excluding already-migrated subvolumes)
+          log('📦 Copying remaining files (non-subvolume data)...', 'info');
+          const excludeArgs = subvolumes.flatMap(sv => ['--exclude', sv, '--exclude', `${sv}.migration-snap`]);
+          try {
+            await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', ...excludeArgs, '/data/', `${tmpMount}/`]);
+            log('✓ Remaining files copied', 'success');
+          } catch (e: any) {
+            log(`Warning copying remaining files: ${e.message}`, 'warning');
           }
         } else {
-          log('✓ No resync needed (instant sync)', 'success');
+          // No subvolumes — plain rsync is fine
+          log('📦 Copying data with rsync...', 'info');
+          log('This may take a while depending on data size...', 'info');
+          const rsyncResult = await executeCommand('sudo', ['-n', 'rsync', '-a', '--info=progress2', '/data/', `${tmpMount}/`]);
+          if (rsyncResult.stdout) log(rsyncResult.stdout.trim(), 'info');
+          log('✓ Data migration completed', 'success');
         }
-      } catch (e: any) {
-        log(`Could not monitor resync: ${e.message}`, 'warning');
+      } else {
+        log('ℹ️ Old /data is empty, nothing to migrate', 'info');
       }
+    } catch (e: any) {
+      log(`Warning during data migration: ${e.message}`, 'warning');
+      log('⚠ Data migration failed — old data remains on old array', 'warning');
     }
-
-    // Final status
-    log('=== Final status ===', 'step');
+    
+    // === Step 9: Swap mounts — switch /data to new array ===
+    log('=== Step 9: Switching /data to new array ===', 'step');
+    
+    // Unmount temporary mount
     try {
-      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', MD_DEVICE_NAME]);
+      await executeCommand('sudo', ['-n', 'umount', tmpMount]);
+      log(`✓ Unmounted ${tmpMount}`, 'success');
+    } catch (e: any) {
+      log(`Warning unmount tmp: ${e.message}`, 'warning');
+    }
+    
+    // Unmount old /data
+    try {
+      await executeCommand('sudo', ['-n', 'umount', '-l', '/data']);
+      log('✓ Unmounted old /data', 'success');
+    } catch (e: any) {
+      log(`Warning unmount old /data: ${e.message}`, 'warning');
+    }
+    
+    // Mount new array on /data
+    await executeCommand('sudo', ['-n', 'mount', mdDevice, '/data']);
+    log(`✓ ${mdDevice} now mounted on /data`, 'success');
+    
+    // Update fstab to point to new device
+    try {
+      const fstabResult = await executeCommand('cat', ['/etc/fstab']);
+      const fs = require('fs');
+      // Remove any old /data entry
+      let fstabLines = fstabResult.stdout.split('\n').filter(line => !line.match(/\s+\/data\s+/));
+      // Add new entry
+      fstabLines.push(`${mdDevice} /data btrfs defaults,nofail 0 0`);
+      const tmpFstab = '/tmp/fstab.new';
+      fs.writeFileSync(tmpFstab, fstabLines.join('\n') + '\n');
+      await executeCommand('sudo', ['-n', 'cp', tmpFstab, '/etc/fstab']);
+      fs.unlinkSync(tmpFstab);
+      log(`✓ Updated /etc/fstab (${mdDevice} → /data)`, 'success');
+    } catch (e: any) {
+      log(`Warning fstab: ${e.message}`, 'warning');
+    }
+    
+    // Write clean mdadm.conf (avoid capturing stderr as config data)
+    try {
+      const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const cleanConf = `# mdadm.conf - RAID configuration (auto-generated)\nHOMEHOST <ignore>\n${scanResult.stdout.trim()}\n`;
+      const fs = require('fs');
+      const tmpConf = '/tmp/mdadm.conf.new';
+      fs.writeFileSync(tmpConf, cleanConf);
+      await executeCommand('sudo', ['-n', 'cp', tmpConf, '/etc/mdadm/mdadm.conf']);
+      fs.unlinkSync(tmpConf);
+      log('✓ Written clean /etc/mdadm/mdadm.conf', 'success');
+    } catch (e: any) {
+      log(`Warning mdadm.conf: ${e.message}`, 'warning');
+    }
+    
+    try {
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log('✓ Updated initramfs', 'success');
+    } catch (e: any) {}
+    
+    // === Step 10: Restart Docker & containerd on new /data ===
+    log('=== Step 10: Restarting Docker & containerd ===', 'step');
+    
+    try {
+      log('🔄 Starting containerd...', 'info');
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'containerd']);
+      await executeCommand('sleep', ['2']);
+      log('✓ containerd started', 'success');
+      
+      log('🔄 Starting Docker...', 'info');
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker.socket']);
+      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']);
+      await executeCommand('sleep', ['3']);
+      log('✓ Docker started', 'success');
+      
+      // Ensure ryvie-network exists (Docker recreates networks on restart)
+      try {
+        await executeCommand('sudo', ['-n', 'docker', 'network', 'inspect', 'ryvie-network']);
+        log('✓ ryvie-network already exists', 'success');
+      } catch (e: any) {
+        await executeCommand('sudo', ['-n', 'docker', 'network', 'create', 'ryvie-network']);
+        log('✓ ryvie-network created', 'success');
+      }
+      
+      // Verify Docker sees the containers from the migrated data
+      const psResult = await executeCommand('sudo', ['-n', 'docker', 'ps', '-a', '--format', '{{.Names}}\t{{.Status}}']);
+      const containerLines = psResult.stdout.trim().split('\n').filter(l => l.trim());
+      log(`📊 Docker sees ${containerLines.length} container(s) after migration`, 'info');
+      for (const line of containerLines.slice(0, 10)) {
+        log(`  ${line}`, 'info');
+      }
+      if (containerLines.length > 10) {
+        log(`  ... and ${containerLines.length - 10} more`, 'info');
+      }
+    } catch (e: any) {
+      log(`⚠ Error restarting Docker: ${e.message}`, 'warning');
+      log('Docker may need to be restarted manually after reboot', 'warning');
+    }
+    
+    // === Step 11: Final status ===
+    log('=== Step 11: Final status ===', 'step');
+    
+    try {
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDevice]);
+      log('📊 RAID status:', 'info');
       log(detailResult.stdout.trim(), 'info');
+    } catch (e: any) {}
+    
+    try {
       const dfResult = await executeCommand('df', ['-h', '/data']);
+      log('📊 Filesystem:', 'info');
       log(dfResult.stdout.trim(), 'info');
     } catch (e: any) {}
-
-    log(`✅ ${level.toUpperCase()} array created successfully with ${selectedDisks.length} disks!`, 'success');
-
+    
+    log('✅ RAID array created and /data migrated successfully!', 'success');
+    log('ℹ️ Docker containers have been preserved with their btrfs subvolumes', 'info');
+    
     res.json({
       success: true,
+      dryRun: false,
       logs,
-      message: `${level.toUpperCase()} array created successfully`
+      mdDevice,
+      message: `${level.toUpperCase()} array created on ${mdDevice}, data migrated, /data switched`
     });
   } catch (error: any) {
     console.error('Error creating RAID array:', error);
     log(`Fatal error: ${error.message}`, 'error');
-
-    // Try to restart Docker on failure
-    try {
-      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'containerd']);
-      await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']);
-      log('Docker restarted after failure', 'info');
-    } catch (restartErr: any) {}
-
+    
     res.status(500).json({
       success: false,
       error: 'Failed to create RAID array',
@@ -2556,138 +2710,629 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
 });
 
 /**
- * POST /api/storage/mdraid-create-prechecks
- * Pré-vérifications pour la création d'un nouvel array RAID
- * Body: { level: string, disks: string[] }
+ * POST /api/storage/mdraid-activate
+ * Active/réassemble un array RAID existant (reprend le resync après reboot)
+ * Body: { array: string }
  */
-router.post('/storage/mdraid-create-prechecks', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+router.post('/storage/mdraid-activate', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  const { array = '/dev/md0' } = req.body;
+
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = { timestamp: new Date().toISOString(), type, message };
+    logs.push(logEntry);
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    if (io) io.emit('mdraid-log', logEntry);
+  };
+
   try {
-    const { level, disks: selectedDisks } = req.body;
-    const reasons = [];
-    const plan = [];
-    let canProceed = true;
-
-    const validLevels = ['raid0', 'raid1', 'raid5', 'raid6', 'raid10'];
-    if (!level || !validLevels.includes(level)) {
-      return res.status(400).json({ success: false, error: 'Invalid RAID level' });
-    }
-
-    const minDisks = { raid0: 2, raid1: 2, raid5: 3, raid6: 4, raid10: 4 };
-    if (!selectedDisks || !Array.isArray(selectedDisks) || selectedDisks.length < minDisks[level]) {
-      reasons.push(`❌ ${level.toUpperCase()} requires at least ${minDisks[level]} disks (got ${selectedDisks?.length || 0})`);
-      canProceed = false;
-    } else {
-      reasons.push(`✓ ${selectedDisks.length} disks selected (minimum ${minDisks[level]} for ${level.toUpperCase()})`);
-    }
-
-    if (level === 'raid10' && selectedDisks && selectedDisks.length % 2 !== 0) {
-      reasons.push(`❌ RAID 10 requires an even number of disks`);
-      canProceed = false;
-    }
-
-    // Check if an md array already exists
-    const existingMd = await findActiveMdDevice();
-    if (existingMd) {
-      reasons.push(`⚠ ${existingMd} already exists - it will be stopped and recreated`);
-    } else {
-      reasons.push(`✓ No existing RAID array found`);
-    }
-
-    // Check if /data is already mounted
+    log(`Activating ${array}...`, 'info');
+    
+    // Try to re-read array
     try {
-      const findmntResult = await executeCommand('findmnt', ['-no', 'SOURCE', '/data']);
-      const source = findmntResult.stdout.trim();
-      if (source) {
-        reasons.push(`⚠ /data is currently mounted on ${source} - will need to be unmounted`);
+      await executeCommand('sudo', ['-n', 'mdadm', '--readwrite', array]);
+      log(`✓ Array set to read-write`, 'success');
+    } catch (e: any) {
+      log(`Note: ${e.message}`, 'info');
+    }
+    
+    // Ensure mounted
+    try {
+      const findmntResult = await executeCommand('findmnt', ['-no', 'TARGET', '/data']);
+      if (findmntResult.stdout.trim()) {
+        log('✓ /data already mounted', 'info');
       }
     } catch (e: any) {
-      reasons.push(`✓ /data is not currently mounted`);
+      try {
+        await executeCommand('sudo', ['-n', 'mount', '/data']);
+        log('✓ Mounted /data', 'success');
+      } catch (e2: any) {
+        log(`Could not mount /data: ${e2.message}`, 'warning');
+      }
     }
+    
+    log('✅ Array activated', 'success');
+    
+    res.json({ success: true, logs, message: 'Array activated' });
+  } catch (error: any) {
+    log(`Error: ${error.message}`, 'error');
+    res.status(500).json({
+      success: false,
+      error: 'Failed to activate array',
+      details: error.message,
+      logs
+    });
+  }
+});
 
-    // Check each disk
-    let minSizeBytes = Infinity;
-    if (selectedDisks && Array.isArray(selectedDisks)) {
-      for (const disk of selectedDisks) {
-        if (!isValidDevicePath(disk)) {
-          reasons.push(`❌ Invalid device path: ${disk}`);
-          canProceed = false;
-          continue;
-        }
+/**
+ * POST /api/storage/mdraid-destroy
+ * Détruit un array RAID, nettoie les disques, et restaure l'ancien array si possible
+ * Body: { array?: string }
+ */
+router.post('/storage/mdraid-destroy', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  const { array } = req.body;
 
-        const mountCheck = await isDeviceMounted(disk);
-        if (mountCheck.mounted) {
-          reasons.push(`❌ ${disk} is mounted on ${mountCheck.mountpoint}`);
-          canProceed = false;
-        } else {
-          reasons.push(`✓ ${disk} is not mounted`);
-        }
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = { timestamp: new Date().toISOString(), type, message };
+    logs.push(logEntry);
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    if (io) io.emit('mdraid-log', logEntry);
+  };
 
-        try {
-          const sizeResult = await executeCommand('lsblk', ['-b', '-no', 'SIZE', disk]);
-          const sizeBytes = parseInt(sizeResult.stdout.trim());
-          if (sizeBytes < minSizeBytes) minSizeBytes = sizeBytes;
-          reasons.push(`✓ ${disk} size: ${Math.floor(sizeBytes / 1024 / 1024)} MiB`);
-        } catch (e: any) {
-          reasons.push(`❌ Cannot read size of ${disk}`);
-          canProceed = false;
+  try {
+    // Determine which array to destroy
+    let targetArray = array;
+    if (!targetArray) {
+      // First, check if any array is currently syncing/recovering/reshaping
+      // If so, prioritize destroying that one
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      
+      // Find array with ongoing sync/recovery/reshape
+      const syncingMatch = mdstatResult.stdout.match(/(md\d+)\s*:\s*active\s+\S+\s+.+\[\d+\/\d+\].*(?:recovery|resync|reshape)\s*=/);
+      if (syncingMatch) {
+        targetArray = `/dev/${syncingMatch[1]}`;
+        log(`⚠ Found array ${targetArray} with ongoing sync/recovery — targeting it for destruction`, 'warning');
+      } else {
+        // No syncing array, find the newest non-system array (highest md number)
+        const mdNums = [];
+        for (const line of mdstatResult.stdout.split('\n')) {
+          const match = line.match(/^(md(\d+))\s*:/);
+          if (match) mdNums.push(parseInt(match[2]));
         }
+        if (mdNums.length === 0) {
+          return res.status(400).json({ success: false, error: 'No RAID arrays found' });
+        }
+        const highest = Math.max(...mdNums);
+        if (highest === 0 && mdNums.length === 1) {
+          return res.status(400).json({ success: false, error: 'Only md0 exists, cannot destroy system array without explicit target' });
+        }
+        targetArray = `/dev/md${highest}`;
       }
     }
 
-    // Compute expected capacity
-    let expectedCapacity = 0;
-    const partSize = minSizeBytes !== Infinity ? minSizeBytes - 2 * 1024 * 1024 : 0;
-    const diskCount = selectedDisks?.length || 0;
-    switch (level) {
-      case 'raid0': expectedCapacity = partSize * diskCount; break;
-      case 'raid1': expectedCapacity = partSize; break;
-      case 'raid5': expectedCapacity = partSize * (diskCount - 1); break;
-      case 'raid6': expectedCapacity = partSize * (diskCount - 2); break;
-      case 'raid10': expectedCapacity = partSize * (diskCount / 2); break;
+    log(`🛑 Starting RAID destroy: ${targetArray}`, 'info');
+
+    // === Step 1: Get array members before destroying ===
+    log('=== Step 1: Getting array members ===', 'step');
+    let members = [];
+    let memberDisks = [];
+    try {
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', targetArray]);
+      const lines = detailResult.stdout.split('\n');
+      for (const line of lines) {
+        const match = line.match(/\s+(\/dev\/\S+)\s*$/);
+        if (match) {
+          const dev = match[1].trim();
+          if (dev.startsWith('/dev/sd') || dev.startsWith('/dev/nvme') || dev.startsWith('/dev/vd')) {
+            members.push(dev);
+            // Extract base disk (e.g., /dev/sdb1 -> /dev/sdb)
+            const diskMatch = dev.match(/^(\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+))/);
+            if (diskMatch && !memberDisks.includes(diskMatch[1])) {
+              memberDisks.push(diskMatch[1]);
+            }
+          }
+        }
+      }
+      log(`Members: ${members.join(', ')}`, 'info');
+      log(`Base disks: ${memberDisks.join(', ')}`, 'info');
+    } catch (e: any) {
+      log(`Could not get array details: ${e.message}`, 'warning');
     }
 
-    if (expectedCapacity > 0) {
-      reasons.push(`✓ Expected usable capacity: ${Math.floor(expectedCapacity / 1024 / 1024 / 1024)} GiB`);
+    // === Step 2: Stop any ongoing sync/recovery/reshape ===
+    log('=== Step 2: Stopping any ongoing sync/recovery ===', 'step');
+    try {
+      const mdName = targetArray.replace('/dev/', '');
+      const syncActionPath = `/sys/block/${mdName}/md/sync_action`;
+      
+      // Check if there's an ongoing operation
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      const targetSection = mdstatResult.stdout.split(/^(?=md\d+\s*:)/m).find(s => s.startsWith(mdName)) || '';
+      
+      if (targetSection.match(/(recovery|resync|reshape)\s*=/)) {
+        log(`⚠ ${targetArray} is syncing — stopping sync first...`, 'warning');
+        try {
+          await executeCommand('bash', ['-c', `echo idle | sudo -n tee ${syncActionPath} > /dev/null`]);
+          log('✓ Stopped sync/recovery operation', 'success');
+          await executeCommand('sleep', ['2']);
+        } catch (e: any) {
+          log(`Could not stop sync: ${e.message}`, 'warning');
+        }
+      }
+    } catch (e: any) {
+      log('No sync to stop or already stopped', 'info');
     }
 
-    // Build plan
-    if (canProceed && selectedDisks) {
-      const partEndMiB = Math.floor(partSize / 1024 / 1024);
-      const partPaths = [];
-      selectedDisks.forEach((disk, i) => {
-        const label = `ryvie_${String.fromCharCode(97 + i)}`;
-        const partPath = getPartitionPath(disk, 1);
-        partPaths.push(partPath);
-        plan.push(`wipefs -a ${disk}`);
-        plan.push(`parted -s ${disk} mklabel gpt`);
-        plan.push(`parted -s ${disk} mkpart primary 1MiB ${partEndMiB}MiB`);
-        plan.push(`parted -s ${disk} name 1 ${label}`);
-        plan.push(`parted -s ${disk} set 1 raid on`);
-      });
-      const mdLevel = level.replace('raid', '');
-      plan.push(`mdadm --create ${MD_DEVICE_NAME} --level=${mdLevel} --raid-devices=${diskCount} ${partPaths.join(' ')}`);
-      plan.push(`mkfs.btrfs -f ${MD_DEVICE_NAME}`);
-      plan.push(`mount ${MD_DEVICE_NAME} /data`);
-      plan.push(`mdadm --detail --scan > /etc/mdadm/mdadm.conf`);
-      plan.push(`update-initramfs -u`);
+    // === Step 3: Unmount ===
+    log('=== Step 3: Unmounting ===', 'step');
+    try {
+      // Try to unmount the array itself (not just find mountpoints)
+      log(`Unmounting ${targetArray}...`, 'info');
+      await executeCommand('sudo', ['-n', 'umount', targetArray]);
+      log(`✓ Unmounted ${targetArray}`, 'success');
+    } catch (e: any) {
+      log(`Direct unmount failed: ${e.message}, trying lazy unmount...`, 'warning');
+      try {
+        await executeCommand('sudo', ['-n', 'umount', '-l', targetArray]);
+        log(`✓ Lazy unmounted ${targetArray}`, 'success');
+      } catch (e2: any) {
+        log('Array not mounted or already unmounted', 'info');
+      }
     }
+
+    // === Step 4: Stop the array ===
+    log('=== Step 4: Stopping array ===', 'step');
+    try {
+      await executeCommand('sudo', ['-n', 'mdadm', '--stop', targetArray]);
+      log(`✓ Stopped ${targetArray}`, 'success');
+    } catch (e: any) {
+      log(`Warning stopping array: ${e.message}`, 'warning');
+    }
+    await executeCommand('sleep', ['1']);
+
+    // === Step 4: Zero superblocks on members ===
+    log('=== Step 4: Cleaning member disks ===', 'step');
+    for (const member of members) {
+      try {
+        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', member]);
+        log(`✓ Zeroed superblock on ${member}`, 'success');
+      } catch (e: any) {
+        log(`Note: ${member}: ${e.message}`, 'info');
+      }
+    }
+
+    // === Step 5: Wipe partitions and disks ===
+    log('=== Step 5: Wiping disks ===', 'step');
+    for (const member of members) {
+      try {
+        await executeCommand('sudo', ['-n', 'wipefs', '-a', member]);
+        log(`✓ Wiped signatures on ${member}`, 'success');
+      } catch (e: any) {}
+    }
+    for (const disk of memberDisks) {
+      try {
+        await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]);
+        await executeCommand('sudo', ['-n', 'sgdisk', '--zap-all', disk]);
+        await executeCommand('sudo', ['-n', 'partprobe', disk]);
+        log(`✓ Cleaned ${disk} (GPT removed)`, 'success');
+      } catch (e: any) {
+        log(`Note cleaning ${disk}: ${e.message}`, 'info');
+      }
+    }
+    await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
+
+    // === Step 6: Update mdadm.conf (remove destroyed array) ===
+    log('=== Step 6: Updating configuration ===', 'step');
+    try {
+      const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const fs = require('fs');
+      const tmpFile = '/tmp/mdadm.conf.new';
+      fs.writeFileSync(tmpFile, scanResult.stdout || '');
+      await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
+      fs.unlinkSync(tmpFile);
+      log('✓ Updated /etc/mdadm/mdadm.conf', 'success');
+    } catch (e: any) {
+      log(`Warning updating mdadm.conf: ${e.message}`, 'warning');
+    }
+
+    // Remove destroyed array from fstab if present
+    try {
+      const fstabResult = await executeCommand('cat', ['/etc/fstab']);
+      const fstabLines = fstabResult.stdout.split('\n');
+      const filteredLines = fstabLines.filter(line => !line.includes(targetArray));
+      if (filteredLines.length !== fstabLines.length) {
+        const fs = require('fs');
+        const tmpFstab = '/tmp/fstab.new';
+        fs.writeFileSync(tmpFstab, filteredLines.join('\n'));
+        await executeCommand('sudo', ['-n', 'cp', tmpFstab, '/etc/fstab']);
+        fs.unlinkSync(tmpFstab);
+        log(`✓ Removed ${targetArray} from /etc/fstab`, 'success');
+      }
+    } catch (e: any) {
+      log(`Warning updating fstab: ${e.message}`, 'warning');
+    }
+
+    // === Step 7: Try to restore old md0 if it exists ===
+    log('=== Step 7: Restoring previous configuration ===', 'step');
+    let oldRestored = false;
+    try {
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      if (mdstatResult.stdout.includes('md0 :')) {
+        // md0 still exists, try to mount it
+        try {
+          const findmntCheck = await executeCommand('findmnt', ['-no', 'TARGET', '/data']);
+          if (!findmntCheck.stdout.trim()) {
+            await executeCommand('sudo', ['-n', 'mount', '/dev/md0', '/data']);
+            log('✓ Restored /data mount from /dev/md0', 'success');
+            oldRestored = true;
+          }
+        } catch (e: any) {
+          try {
+            await executeCommand('sudo', ['-n', 'mkdir', '-p', '/data']);
+            await executeCommand('sudo', ['-n', 'mount', '/dev/md0', '/data']);
+            log('✓ Restored /data mount from /dev/md0', 'success');
+            oldRestored = true;
+          } catch (e2: any) {
+            log(`Could not remount old md0: ${e2.message}`, 'warning');
+          }
+        }
+      }
+    } catch (e: any) {}
+
+    if (!oldRestored) {
+      log('ℹ️ No previous array to restore, /data is unmounted', 'info');
+    }
+
+    try {
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log('✓ Updated initramfs', 'success');
+    } catch (e: any) {}
+
+    log('✅ RAID array destroyed and disks cleaned', 'success');
 
     res.json({
       success: true,
-      canProceed,
-      reasons,
-      plan,
-      expectedCapacity,
-      level,
-      diskCount
+      logs,
+      destroyedArray: targetArray,
+      cleanedDisks: memberDisks,
+      oldArrayRestored: oldRestored,
+      message: `${targetArray} destroyed, ${memberDisks.length} disks cleaned${oldRestored ? ', old md0 restored on /data' : ''}`
     });
   } catch (error: any) {
-    console.error('Error during create prechecks:', error);
+    console.error('Error destroying RAID array:', error);
+    log(`Fatal error: ${error.message}`, 'error');
     res.status(500).json({
       success: false,
-      error: 'Failed to perform pre-checks',
-      details: error.message
+      error: 'Failed to destroy RAID array',
+      details: error.message,
+      logs
     });
+  }
+});
+
+/**
+ * POST /api/storage/mdraid-reshape
+ * Convertit le niveau RAID d'un array existant (ex: RAID1 -> RAID5)
+ * Body: { array: string, targetLevel: string, dryRun?: boolean }
+ */
+router.post('/storage/mdraid-reshape', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  const { array, targetLevel, dryRun = false } = req.body;
+
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = { timestamp: new Date().toISOString(), type, message };
+    logs.push(logEntry);
+    console.log(`[mdraid-reshape] [${type}] ${message}`);
+    if (io) io.emit('raid-log', logEntry);
+  };
+
+  try {
+    if (!array || !targetLevel) {
+      return res.status(400).json({ success: false, error: 'Missing array or targetLevel parameter' });
+    }
+
+    // Validate target level
+    const validLevels = ['0', '1', '4', '5', '6', '10'];
+    const normalizedLevel = targetLevel.replace('raid', '');
+    if (!validLevels.includes(normalizedLevel)) {
+      return res.status(400).json({ success: false, error: `Unsupported target RAID level: ${targetLevel}` });
+    }
+
+    log(`=== RAID Reshape: ${array} → RAID ${normalizedLevel} ===`, 'step');
+
+    // Step 1: Get current array details
+    log('Step 1: Checking current array status...', 'step');
+    const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+    
+    const currentLevelMatch = detailResult.stdout.match(/Raid Level\s*:\s*(\S+)/i);
+    const stateMatch = detailResult.stdout.match(/State\s*:\s*(.+)/i);
+    const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+    const raidDevicesMatch = detailResult.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+    
+    if (!currentLevelMatch) {
+      log('❌ Could not determine current RAID level', 'error');
+      return res.status(400).json({ success: false, error: 'Could not determine current RAID level', logs });
+    }
+
+    const currentLevel = currentLevelMatch[1]; // e.g. "raid1"
+    const currentLevelNum = currentLevel.replace('raid', '');
+    const state = stateMatch ? stateMatch[1].trim() : 'unknown';
+    const activeDevices = activeMatch ? parseInt(activeMatch[1]) : 0;
+    const raidDevices = raidDevicesMatch ? parseInt(raidDevicesMatch[1]) : 0;
+
+    log(`Current: ${currentLevel}, State: ${state}, Active devices: ${activeDevices}, Raid devices: ${raidDevices}`, 'info');
+
+    if (currentLevelNum === normalizedLevel) {
+      log(`❌ Array is already at RAID level ${normalizedLevel}`, 'error');
+      return res.status(400).json({ success: false, error: `Array is already ${currentLevel}`, logs });
+    }
+
+    // Step 2: Validate state
+    log('Step 2: Validating array state...', 'step');
+    if (!state.includes('clean') && !state.includes('active')) {
+      log(`❌ Array state is "${state}" — must be clean or active for reshape`, 'error');
+      return res.status(400).json({ success: false, error: `Array must be clean/active for reshape (current: ${state})`, logs });
+    }
+
+    if (state.includes('resync') || state.includes('recover') || state.includes('reshape')) {
+      log(`❌ Array is busy (${state}) — wait for completion before reshaping`, 'error');
+      return res.status(400).json({ success: false, error: `Array is busy: ${state}`, logs });
+    }
+
+    // Step 3: Validate device count for target level
+    log('Step 3: Checking disk count requirements...', 'step');
+    const minDisksMap = { '0': 2, '1': 2, '4': 3, '5': 3, '6': 4, '10': 4 };
+    const minDisks = minDisksMap[normalizedLevel] || 2;
+
+    if (activeDevices < minDisks) {
+      log(`❌ RAID ${normalizedLevel} requires at least ${minDisks} disks, but only ${activeDevices} are active`, 'error');
+      return res.status(400).json({ 
+        success: false, 
+        error: `RAID ${normalizedLevel} requires at least ${minDisks} disks (currently ${activeDevices})`, 
+        logs 
+      });
+    }
+
+    // Step 4: Validate conversion path
+    log('Step 4: Validating conversion path...', 'step');
+    const allowedConversions = {
+      '1': ['0', '5'],
+      '5': ['0', '1', '6'],
+      '6': ['5'],
+      '0': ['5', '6'],
+      '10': [],
+      '4': ['5']
+    };
+
+    const allowed = allowedConversions[currentLevelNum] || [];
+    if (!allowed.includes(normalizedLevel)) {
+      log(`❌ Conversion from RAID ${currentLevelNum} to RAID ${normalizedLevel} is not supported by mdadm`, 'error');
+      return res.status(400).json({ 
+        success: false, 
+        error: `Conversion from ${currentLevel} to RAID ${normalizedLevel} is not supported. Allowed: ${allowed.map(l => 'RAID ' + l).join(', ') || 'none'}`, 
+        logs 
+      });
+    }
+
+    log(`✓ Conversion ${currentLevel} → RAID ${normalizedLevel} is valid`, 'success');
+
+    // Step 5: Calculate new capacity
+    log('Step 5: Estimating new capacity...', 'step');
+    let arraySizeMatch = detailResult.stdout.match(/Array Size\s*:\s*(\d+)/i);
+    let usedDevSizeMatch = detailResult.stdout.match(/Used Dev Size\s*:\s*(\d+)/i);
+    const arraySizeKB = arraySizeMatch ? parseInt(arraySizeMatch[1]) : 0;
+    const usedDevSizeKB = usedDevSizeMatch ? parseInt(usedDevSizeMatch[1]) : 0;
+
+    let newCapacityEstimate = '';
+    if (usedDevSizeKB > 0) {
+      const devSizeGB = (usedDevSizeKB / 1024 / 1024).toFixed(1);
+      if (normalizedLevel === '5') {
+        const capacityGB = ((activeDevices - 1) * usedDevSizeKB / 1024 / 1024).toFixed(1);
+        newCapacityEstimate = `~${capacityGB} GiB (${activeDevices - 1} x ${devSizeGB} GiB)`;
+      } else if (normalizedLevel === '0') {
+        const capacityGB = (activeDevices * usedDevSizeKB / 1024 / 1024).toFixed(1);
+        newCapacityEstimate = `~${capacityGB} GiB (${activeDevices} x ${devSizeGB} GiB)`;
+      } else if (normalizedLevel === '6') {
+        const capacityGB = ((activeDevices - 2) * usedDevSizeKB / 1024 / 1024).toFixed(1);
+        newCapacityEstimate = `~${capacityGB} GiB (${activeDevices - 2} x ${devSizeGB} GiB)`;
+      } else if (normalizedLevel === '1') {
+        newCapacityEstimate = `~${devSizeGB} GiB (mirrored)`;
+      }
+    }
+
+    if (newCapacityEstimate) {
+      log(`Estimated new capacity: ${newCapacityEstimate}`, 'info');
+    }
+
+    // Dry run mode
+    if (dryRun) {
+      log(`[DRY RUN] Would execute: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices}`, 'info');
+      log('✓ Dry run completed — no changes made', 'success');
+      return res.json({ 
+        success: true, 
+        dryRun: true, 
+        logs,
+        currentLevel: currentLevel,
+        targetLevel: `raid${normalizedLevel}`,
+        activeDevices,
+        newCapacityEstimate,
+        command: `mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices}`
+      });
+    }
+
+    // Step 6: Execute reshape
+    log('Step 6: Starting RAID reshape...', 'step');
+    log(`Executing: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices}`, 'info');
+
+    try {
+      const reshapeResult = await executeCommand('sudo', [
+        '-n', 'mdadm', '--grow', array, 
+        `--level=${normalizedLevel}`,
+        `--raid-devices=${activeDevices}`
+      ]);
+      
+      if (reshapeResult.stderr && reshapeResult.stderr.trim()) {
+        log(`mdadm output: ${reshapeResult.stderr.trim()}`, 'info');
+      }
+      if (reshapeResult.stdout && reshapeResult.stdout.trim()) {
+        log(`mdadm output: ${reshapeResult.stdout.trim()}`, 'info');
+      }
+      
+      log(`✓ Reshape initiated: ${currentLevel} → RAID ${normalizedLevel}`, 'success');
+    } catch (reshapeErr: any) {
+      log(`❌ Reshape failed: ${reshapeErr.message}`, 'error');
+      if (reshapeErr.stderr) log(`stderr: ${reshapeErr.stderr}`, 'error');
+      return res.status(500).json({ success: false, error: `Reshape failed: ${reshapeErr.message}`, logs });
+    }
+
+    // Step 7: Update mdadm.conf
+    log('Step 7: Updating configuration...', 'step');
+    try {
+      await executeCommand('sudo', ['-n', 'bash', '-c', 'mdadm --detail --scan > /etc/mdadm/mdadm.conf']);
+      log('✓ Updated /etc/mdadm/mdadm.conf', 'success');
+    } catch (e: any) {
+      log(`Warning: Could not update mdadm.conf: ${e.message}`, 'warning');
+    }
+
+    try {
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log('✓ Updated initramfs', 'success');
+    } catch (e: any) {
+      log(`Warning: Could not update initramfs: ${e.message}`, 'warning');
+    }
+
+    // Step 8: Check if reshape is in progress
+    log('Step 8: Checking reshape progress...', 'step');
+    try {
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      const mdName = array.replace('/dev/', '');
+      const mdstatSections = mdstatResult.stdout.split(/^(?=md\d+\s*:)/m);
+      const targetSection = mdstatSections.find(s => s.startsWith(mdName)) || '';
+      
+      const reshapeMatch = targetSection.match(/reshape\s*=\s*(\d+\.\d+)%/);
+      if (reshapeMatch) {
+        log(`Reshape in progress: ${reshapeMatch[1]}%`, 'info');
+      } else {
+        log('Reshape completed immediately or is pending', 'info');
+      }
+    } catch (e: any) {
+      // Not critical
+    }
+
+    // Step 9: If filesystem is btrfs, resize after reshape completes
+    log('Step 9: Filesystem resize will be needed after reshape completes', 'info');
+    log('Run: btrfs filesystem resize max /data', 'info');
+
+    log(`✅ RAID reshape initiated: ${currentLevel} → RAID ${normalizedLevel}`, 'success');
+
+    res.json({
+      success: true,
+      logs,
+      currentLevel,
+      targetLevel: `raid${normalizedLevel}`,
+      activeDevices,
+      newCapacityEstimate,
+      message: `Reshape started: ${currentLevel} → RAID ${normalizedLevel}`
+    });
+  } catch (error: any) {
+    console.error('Error during RAID reshape:', error);
+    log(`Fatal error: ${error.message}`, 'error');
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reshape RAID array',
+      details: error.message,
+      logs
+    });
+  }
+});
+
+/**
+ * GET /api/storage/mdraid-reshape-options
+ * Retourne les conversions RAID possibles pour l'array actuel
+ */
+router.get('/storage/mdraid-reshape-options', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  try {
+    // Détecter le device md monté sur /data
+    let mdDevice = '/dev/md0';
+    try {
+      const findmntResult = await executeCommand('findmnt', ['-no', 'FSTYPE,SOURCE', '/data']);
+      const parts = findmntResult.stdout.trim().split(/\s+/);
+      if (parts[1] && parts[1].match(/\/dev\/md\d+/)) {
+        mdDevice = parts[1];
+      }
+    } catch (e: any) {
+      try {
+        const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+        const match = mdstatResult.stdout.match(/^(md\d+)\s*:/m);
+        if (match) mdDevice = '/dev/' + match[1];
+      } catch (e2: any) {}
+    }
+
+    const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdDevice]);
+    
+    const levelMatch = detailResult.stdout.match(/Raid Level\s*:\s*(\S+)/i);
+    const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+    const stateMatch = detailResult.stdout.match(/State\s*:\s*(.+)/i);
+    const usedDevSizeMatch = detailResult.stdout.match(/Used Dev Size\s*:\s*(\d+)/i);
+    
+    const currentLevel = levelMatch ? levelMatch[1] : 'unknown';
+    const currentLevelNum = currentLevel.replace('raid', '');
+    const activeDevices = activeMatch ? parseInt(activeMatch[1]) : 0;
+    const state = stateMatch ? stateMatch[1].trim() : 'unknown';
+    const usedDevSizeKB = usedDevSizeMatch ? parseInt(usedDevSizeMatch[1]) : 0;
+
+    const allowedConversions = {
+      '1': ['0', '5'],
+      '5': ['0', '1', '6'],
+      '6': ['5'],
+      '0': ['5', '6'],
+      '10': [],
+      '4': ['5']
+    };
+
+    const minDisksMap = { '0': 2, '1': 2, '4': 3, '5': 3, '6': 4, '10': 4 };
+
+    const allowed = allowedConversions[currentLevelNum] || [];
+    const options = allowed.map(level => {
+      const minDisks = minDisksMap[level] || 2;
+      const hasEnoughDisks = activeDevices >= minDisks;
+      
+      let capacityEstimate = '';
+      if (usedDevSizeKB > 0) {
+        const devSizeGB = usedDevSizeKB / 1024 / 1024;
+        if (level === '5') capacityEstimate = `~${((activeDevices - 1) * devSizeGB).toFixed(1)} GiB`;
+        else if (level === '0') capacityEstimate = `~${(activeDevices * devSizeGB).toFixed(1)} GiB`;
+        else if (level === '6') capacityEstimate = `~${((activeDevices - 2) * devSizeGB).toFixed(1)} GiB`;
+        else if (level === '1') capacityEstimate = `~${devSizeGB.toFixed(1)} GiB`;
+      }
+
+      return {
+        level: `raid${level}`,
+        available: hasEnoughDisks,
+        minDisks,
+        capacityEstimate,
+        reason: !hasEnoughDisks ? `Requires at least ${minDisks} disks (you have ${activeDevices})` : null
+      };
+    });
+
+    const canReshape = state.includes('clean') || state.includes('active');
+    const isBusy = state.includes('resync') || state.includes('recover') || state.includes('reshape');
+
+    res.json({
+      success: true,
+      array: mdDevice,
+      currentLevel,
+      activeDevices,
+      state,
+      canReshape: canReshape && !isBusy,
+      busyReason: isBusy ? `Array is busy: ${state}` : null,
+      options
+    });
+  } catch (error: any) {
+    console.error('Error getting reshape options:', error);
+    res.status(500).json({ success: false, error: 'Failed to get reshape options', details: error.message });
   }
 });
 

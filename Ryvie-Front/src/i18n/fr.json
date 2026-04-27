@@ -492,11 +492,11 @@
   "storageSettings": {
     "raidAssistant": "Assistant RAID",
     "raidAssistantDesc": "Visualisez vos disques, leur état de santé, et configurez votre RAID",
-    "addDisksToRaid": "Ajouter des disques au RAID /dev/md0",
+    "addDisksToRaid": "Ajouter des disques au RAID",
     "dataVolumeSource": "Volume /data (source)",
     "arrayMd0": "Array: /dev/md0",
     "selectDiskToAdd": "Sélectionnez un disque à ajouter au RAID",
-    "diskWillBeErased": "Le disque sera effacé, partitionné (GPT), et ajouté comme membre du RAID /dev/md0",
+    "diskWillBeErased": "Le disque sera effacé, partitionné (GPT), et ajouté comme membre du RAID",
     "loadingDisks": "Chargement des disques...",
     "detected": "Détecté",
     "info": "Info",
@@ -565,7 +565,18 @@
     "diskWillBeErasedWarning": "Le disque {disk} sera complètement effacé. Toutes les données seront perdues.",
     "confirmCreateRaid": "Confirmer la création du RAID",
     "createRaidWarning": "Tous les disques sélectionnés seront effacés et partitionnés. Toutes les données seront perdues. Assurez-vous d'avoir des sauvegardes.",
-    "memberLimitsCapacity": "Le membre {device} ({size}) limite la capacité du RAID. Considérez le retirer pour utiliser uniquement les disques plus grands."
+    "destroyRaid": "Arrêter et détruire le RAID",
+    "memberLimitsCapacity": "Le membre {device} ({size}) limite la capacité du RAID. Considérez le retirer pour utiliser uniquement les disques plus grands.",
+    "reshapeTitle": "Conversion du niveau RAID",
+    "reshapeDesc": "Votre array est actuellement en {{currentLevel}} avec {{disks}} disques. Vous pouvez le convertir vers un autre niveau RAID sans perte de données.",
+    "reshapeInProgress": "Conversion en cours",
+    "convertTo": "Convertir en",
+    "confirmReshape": "Confirmer la conversion RAID",
+    "currentLevel": "Niveau actuel",
+    "targetLevel": "Niveau cible",
+    "activeDisks": "Disques actifs",
+    "estimatedCapacity": "Capacité estimée",
+    "reshapeWarning": "La conversion RAID peut prendre plusieurs heures selon la taille des disques. Le RAID reste accessible pendant l'opération, mais les performances seront réduites. Assurez-vous d'avoir des sauvegardes avant de continuer."
   },
   "raidLevelDesc": {
     "raid0": "Performance maximale sans redondance. Si un disque tombe, toutes les données sont perdues.",
