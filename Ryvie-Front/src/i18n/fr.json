@@ -576,7 +576,19 @@
     "targetLevel": "Niveau cible",
     "activeDisks": "Disques actifs",
     "estimatedCapacity": "Capacité estimée",
-    "reshapeWarning": "La conversion RAID peut prendre plusieurs heures selon la taille des disques. Le RAID reste accessible pendant l'opération, mais les performances seront réduites. Assurez-vous d'avoir des sauvegardes avant de continuer."
+    "reshapeWarning": "La conversion RAID peut prendre plusieurs heures selon la taille des disques. Le RAID reste accessible pendant l'opération, mais les performances seront réduites. Assurez-vous d'avoir des sauvegardes avant de continuer.",
+    "raidMembers": "Membres du RAID",
+    "raidMembersDesc": "Disques actuels dans l'array. Vous pouvez retirer un membre pour dégrader l'array (ex: avant d'agrandir ou remplacer un disque).",
+    "removeMember": "Retirer du RAID",
+    "confirmRemoveDisk": "Confirmer le retrait du disque",
+    "partitionToRemove": "Partition à retirer",
+    "removeDiskWarning": "Cela va retirer {{partition}} de l'array RAID. L'array passera en mode dégradé et la redondance sera réduite. Assurez-vous d'avoir au moins 2 membres actifs avant d'en retirer un.",
+    "growArray": "Agrandir l'array au maximum",
+    "growingInProgress": "Agrandissement",
+    "confirmGrowArray": "Confirmer l'agrandissement",
+    "growArrayDesc": "Agrandir le RAID et le filesystem pour utiliser toute la capacité des membres",
+    "growArrayExplanation": "Les membres du RAID sont plus grands que la taille actuelle de l'array. Cette opération va agrandir le RAID pour utiliser toute la taille des partitions, puis redimensionner le filesystem btrfs. Aucune perte de données, aucun arrêt — fonctionne à chaud.",
+    "operation": "Opération"
   },
   "raidLevelDesc": {
     "raid0": "Performance maximale sans redondance. Si un disque tombe, toutes les données sont perdues.",

@@ -569,7 +569,19 @@
     "targetLevel": "Target level",
     "activeDisks": "Active disks",
     "estimatedCapacity": "Estimated capacity",
-    "reshapeWarning": "RAID conversion may take several hours depending on disk size. The RAID remains accessible during the operation, but performance will be reduced. Make sure you have backups before proceeding."
+    "reshapeWarning": "RAID conversion may take several hours depending on disk size. The RAID remains accessible during the operation, but performance will be reduced. Make sure you have backups before proceeding.",
+    "raidMembers": "RAID Members",
+    "raidMembersDesc": "Current disks in the array. You can remove a member to degrade the array (e.g., before growing or replacing a disk).",
+    "removeMember": "Remove from RAID",
+    "confirmRemoveDisk": "Confirm Disk Removal",
+    "partitionToRemove": "Partition to remove",
+    "removeDiskWarning": "This will remove {{partition}} from the RAID array. The array will become degraded and redundancy will be reduced. Make sure you have at least 2 active members before removing one.",
+    "growArray": "Expand Array to Max",
+    "growingInProgress": "Expanding",
+    "confirmGrowArray": "Confirm Array Expansion",
+    "growArrayDesc": "Expand RAID and filesystem to use full member capacity",
+    "growArrayExplanation": "The RAID members are larger than the current array size. This operation will grow the RAID to use the full partition size, then resize the btrfs filesystem. No data loss, no downtime — works live.",
+    "operation": "Operation"
   },
   "raidLevelDesc": {
     "raid0": "Maximum performance with no redundancy. If one disk fails, all data is lost.",

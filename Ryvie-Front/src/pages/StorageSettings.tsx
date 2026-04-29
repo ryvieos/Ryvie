@@ -22,7 +22,10 @@ import {
   faShieldAlt,
   faBolt,
   faLayerGroup,
-  faExchangeAlt
+  faExchangeAlt,
+  faTrash,
+  faExpand,
+  faMinus
 } from '@fortawesome/free-solid-svg-icons';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
@@ -149,6 +152,16 @@ const StorageSettings = () => {
   const [selectedReshapeLevel, setSelectedReshapeLevel] = useState('');
   const [showReshapeModal, setShowReshapeModal] = useState(false);
   const [reshapeStatus, setReshapeStatus] = useState('idle');
+
+  // Remove disk from RAID
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
+  const [partitionToRemove, setPartitionToRemove] = useState('');
+  const [removeStatus, setRemoveStatus] = useState('idle');
+
+  // Grow array to max
+  const [growStatus, setGrowStatus] = useState('idle');
+  const [showGrowModal, setShowGrowModal] = useState(false);
+  const [canGrow, setCanGrow] = useState(false);
 
   // Helper: strip emojis from strings for consistent UI DA
   const stripEmojis = (str) => {
@@ -574,13 +587,16 @@ const StorageSettings = () => {
     }
   };
 
-  // Prechecks for creating a new RAID array
+  // Smart prechecks: detects current state and plans optimal strategy
+  const [setupStrategy, setSetupStrategy] = useState<string | null>(null);
+
   const performCreatePrechecks = async () => {
     try {
       setValidationErrors([]);
       setValidationWarnings([]);
       setCanProceed(false);
       setExpectedCapacity(0);
+      setSetupStrategy(null);
       if (selectedDisks.length === 0) return;
 
       const raidDef = RAID_LEVELS.find(r => r.id === raidLevel);
@@ -594,15 +610,16 @@ const StorageSettings = () => {
         return;
       }
 
-      addLog('Running create pre-checks...', 'info');
+      addLog('Running smart pre-checks...', 'info');
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
-      const response = await axios.post(`${serverUrl}/api/storage/mdraid-create-prechecks`, {
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-smart-prechecks`, {
         level: raidLevel, disks: selectedDisks
       }, { timeout: 60000 });
 
       if (response.data.success) {
-        const { canProceed: cp, reasons, plan, expectedCapacity: ec } = response.data;
+        const { canProceed: cp, reasons, plan, expectedCapacity: ec, strategy } = response.data;
+        setSetupStrategy(strategy);
         const errors = [], warnings = [];
         reasons.forEach(reason => {
           if (reason.startsWith('\u274C')) { errors.push(reason); addLog(reason, 'error'); }
@@ -613,7 +630,7 @@ const StorageSettings = () => {
         setValidationWarnings(warnings);
         setCommandsList(plan.map(cmd => ({ command: cmd, description: cmd })));
         setExpectedCapacity(ec || 0);
-        if (cp) { addLog('Create pre-checks passed', 'success'); setCanProceed(true); }
+        if (cp) { addLog(`Smart pre-checks passed (strategy: ${strategy})`, 'success'); setCanProceed(true); }
       } else {
         setValidationErrors([response.data.error]);
       }
@@ -692,28 +709,33 @@ const StorageSettings = () => {
     }
   };
 
-  // Execute create new RAID array
+  // Execute smart RAID setup (handles both fresh create and progressive migration)
   const executeCreateRaid = async () => {
     try {
       setShowConfirmModal(false); setExecutionStatus('running'); setLogs([]); setResyncProgress(null);
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
-      const response = await axios.post(`${serverUrl}/api/storage/mdraid-create`, {
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-smart-setup`, {
         level: raidLevel, disks: selectedDisks, dryRun
-      }, { timeout: 1800000 });
+      }, { timeout: 0 }); // No timeout — migration can take hours
       if (response.data.success) {
-        if (!resyncProgress) {
-          setExecutionStatus('success');
-          setTimeout(() => { checkRaidStatus(); loadInventory(); loadDiskHealth(); }, 2000);
-        }
+        setExecutionStatus('success');
+        setTimeout(() => { checkRaidStatus(); loadInventory(); loadDiskHealth(); }, 2000);
       } else {
         setExecutionStatus('error'); setResyncProgress(null);
         if (!logs.some(l => l.message.includes(response.data.error))) addLog(`Failed: ${response.data.error}`, 'error');
       }
     } catch (error) {
-      setExecutionStatus('error'); setResyncProgress(null);
-      const msg = error.response?.data?.error || error.message;
-      if (!logs.some(l => l.message.includes(msg))) addLog(`Failed: ${msg}`, 'error');
+      // Connection may timeout but operation continues server-side — check status
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        addLog('Connection timeout — operation continues server-side. Check RAID status.', 'warning');
+        setExecutionStatus('running');
+        setTimeout(() => checkRaidStatus(), 5000);
+      } else {
+        setExecutionStatus('error'); setResyncProgress(null);
+        const msg = error.response?.data?.error || error.message;
+        if (!logs.some(l => l.message.includes(msg))) addLog(`Failed: ${msg}`, 'error');
+      }
     }
   };
 
@@ -830,6 +852,95 @@ const StorageSettings = () => {
     }
   };
 
+  // Remove a disk from the RAID array
+  const executeRemoveDisk = async () => {
+    if (!partitionToRemove) return;
+    setShowRemoveModal(false);
+    setRemoveStatus('running');
+    setExecutionStatus('running');
+    setLogs([]);
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const arrayDev = raidStatus?.array || '/dev/md0';
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-remove-disk`, {
+        array: arrayDev,
+        partition: partitionToRemove
+      }, { timeout: 300000 });
+      if (response.data.success) {
+        setRemoveStatus('success');
+        setExecutionStatus('success');
+        if (response.data.logs) response.data.logs.forEach(log => addLog(log.message, log.type));
+        setTimeout(() => { checkRaidStatus(); loadInventory(); loadReshapeOptions(); checkCanGrow(); }, 2000);
+      } else {
+        setRemoveStatus('error');
+        setExecutionStatus('error');
+        if (response.data.logs) response.data.logs.forEach(log => addLog(log.message, log.type));
+        addLog(`Failed: ${response.data.error}`, 'error');
+      }
+    } catch (error) {
+      setRemoveStatus('error');
+      setExecutionStatus('error');
+      const msg = error.response?.data?.error || error.message;
+      if (error.response?.data?.logs) error.response.data.logs.forEach(log => addLog(log.message, log.type));
+      addLog(`Remove failed: ${msg}`, 'error');
+    }
+  };
+
+  // Grow the RAID array to max size
+  const executeGrowArray = async () => {
+    setShowGrowModal(false);
+    setGrowStatus('running');
+    setExecutionStatus('running');
+    setLogs([]);
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const arrayDev = raidStatus?.array || '/dev/md0';
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-grow-size`, {
+        array: arrayDev
+      }, { timeout: 300000 });
+      if (response.data.success) {
+        setGrowStatus('success');
+        setExecutionStatus('success');
+        if (response.data.logs) response.data.logs.forEach(log => addLog(log.message, log.type));
+        setCanGrow(false);
+        setTimeout(() => { checkRaidStatus(); loadInventory(); }, 2000);
+      } else {
+        setGrowStatus('error');
+        setExecutionStatus('error');
+        if (response.data.logs) response.data.logs.forEach(log => addLog(log.message, log.type));
+        addLog(`Failed: ${response.data.error}`, 'error');
+      }
+    } catch (error) {
+      setGrowStatus('error');
+      setExecutionStatus('error');
+      const msg = error.response?.data?.error || error.message;
+      if (error.response?.data?.logs) error.response.data.logs.forEach(log => addLog(log.message, log.type));
+      addLog(`Grow failed: ${msg}`, 'error');
+    }
+  };
+
+  // Check if the array can be grown (members larger than used dev size)
+  const checkCanGrow = useCallback(async () => {
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const arrayDev = raidStatus?.array || '/dev/md0';
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-grow-size`, {
+        array: arrayDev,
+        dryRun: true
+      }, { timeout: 30000 });
+      if (response.data.success && response.data.potentialGrowKB && response.data.potentialGrowKB > 1024) {
+        setCanGrow(true);
+      } else {
+        setCanGrow(false);
+      }
+    } catch (error) {
+      setCanGrow(false);
+    }
+  }, [raidStatus]);
+
   // Format bytes
   const formatBytes = (bytes) => {
     if (bytes === null || bytes === undefined || isNaN(bytes)) return 'N/A';
@@ -909,7 +1020,7 @@ const StorageSettings = () => {
               <FontAwesomeIcon icon={faPlus} /> {t('storageSettings.createRaid')}
             </button>
             {raidStatus && raidStatus.type === 'mdadm' && (
-              <button className={`mode-tab ${mode === 'manage' ? 'active' : ''}`} onClick={() => { setMode('manage'); setSelectedDisks([]); setSelectedDisk(''); setCanProceed(false); setValidationErrors([]); loadReshapeOptions(); }}>
+              <button className={`mode-tab ${mode === 'manage' ? 'active' : ''}`} onClick={() => { setMode('manage'); setSelectedDisks([]); setSelectedDisk(''); setCanProceed(false); setValidationErrors([]); loadReshapeOptions(); checkCanGrow(); }}>
                 <FontAwesomeIcon icon={faHdd} /> {t('storageSettings.manageRaid')}
               </button>
             )}
@@ -1131,7 +1242,8 @@ const StorageSettings = () => {
                   {disks.map(disk => {
                     const isSelected = selectedDisks.includes(disk.path);
                     const diskHasRaidPartition = !!raidMemberDisksMap[disk.path];
-                    const isDisabled = disk.isSystemDisk || disk.isMounted || diskHasRaidPartition;
+                    const isNonRaidMounted = disk.isMounted && !diskHasRaidPartition;
+                    const isDisabled = disk.isSystemDisk || isNonRaidMounted;
                     const health = diskHealth[disk.path] || {};
 
                     return (
@@ -1156,7 +1268,7 @@ const StorageSettings = () => {
                           {diskHasRaidPartition && <span className="storage-badge-raid-active">RAID</span>}
                           {disk.isSystemDisk && <span className="storage-badge-system">{t('storageSettings.system')}</span>}
                           {!diskHasRaidPartition && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">{t('storageSettings.available')}</span>}
-                          {!diskHasRaidPartition && disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-mounted">{t('storageSettings.mounted')}</span>}
+                          {isNonRaidMounted && !disk.isSystemDisk && <span className="storage-badge-mounted">{t('storageSettings.mounted')}</span>}
                         </div>
                       </div>
                     );
@@ -1242,6 +1354,59 @@ const StorageSettings = () => {
                     <strong>{t('storageSettings.smartSuggestion')}:</strong>
                     <p style={{ margin: '0.5rem 0 0 0' }}>{stripEmojis(smartSuggestion.message)}</p>
                   </div>
+                </div>
+              )}
+
+              {/* RAID Members — show current members with remove button */}
+              {raidStatus.members && raidStatus.members.length > 0 && (
+                <div className="targets-section">
+                  <h2><FontAwesomeIcon icon={faHdd} /> {t('storageSettings.raidMembers')}</h2>
+                  <p className="section-subtitle">{t('storageSettings.raidMembersDesc')}</p>
+
+                  <div className="disks-grid">
+                    {raidStatus.members.map((member: any) => (
+                      <div key={member.device} className="disk-card-simple in-raid">
+                        <div className="storage-disk-icon" style={{ background: member.state === 'active' ? 'linear-gradient(135deg, #10b981, #059669)' : member.state === 'spare' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #ef4444, #dc2626)' }}>
+                          <FontAwesomeIcon icon={faHdd} />
+                        </div>
+                        <div className="disk-name">{member.device}</div>
+                        <div className="disk-size">{member.size ? formatBytes(member.size) : 'N/A'}</div>
+                        <div className="disk-health-row">
+                          <span className="health-indicator" style={{ color: member.state === 'active' ? '#10b981' : member.state === 'spare' ? '#f59e0b' : '#ef4444' }}>
+                            <FontAwesomeIcon icon={faCheckCircle} /> {member.state}
+                          </span>
+                        </div>
+                        {raidStatus.deviceCount > 1 && !resyncProgress && (
+                          <button
+                            className="btn-remove-member"
+                            style={{ marginTop: '0.5rem', background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem', width: '100%', justifyContent: 'center' }}
+                            disabled={removeStatus === 'running' || executionStatus === 'running'}
+                            onClick={(e) => { e.stopPropagation(); setPartitionToRemove(member.device); setShowRemoveModal(true); }}
+                          >
+                            <FontAwesomeIcon icon={faMinus} /> {t('storageSettings.removeMember')}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Grow array button */}
+                  {canGrow && !resyncProgress && (
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
+                      <button
+                        className="btn-create-raid"
+                        style={{ background: '#10b981' }}
+                        disabled={growStatus === 'running' || executionStatus === 'running'}
+                        onClick={() => setShowGrowModal(true)}
+                      >
+                        {growStatus === 'running' ? (
+                          <><FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.growingInProgress')}...</>
+                        ) : (
+                          <><FontAwesomeIcon icon={faExpand} /> {t('storageSettings.growArray')}</>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1577,6 +1742,59 @@ const StorageSettings = () => {
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowConfirmModal(false)}>{t('storageSettings.cancel')}</button>
               <button className="btn-danger" onClick={executeCreateRaid}>{t('storageSettings.createRaidArray')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove disk confirmation modal */}
+      {showRemoveModal && partitionToRemove && (
+        <div className="modal-overlay" onClick={() => setShowRemoveModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2><FontAwesomeIcon icon={faMinus} /> {t('storageSettings.confirmRemoveDisk')}</h2>
+            <div className="modal-section">
+              <h3>{t('storageSettings.configSummary')}</h3>
+              <div className="summary-grid">
+                <div className="summary-item"><strong>Array:</strong> {raidStatus?.array || '/dev/md0'}</div>
+                <div className="summary-item"><strong>{t('storageSettings.partitionToRemove')}:</strong> {partitionToRemove}</div>
+              </div>
+            </div>
+            <div className="modal-warning">
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              <div>
+                <strong>ATTENTION:</strong> {t('storageSettings.removeDiskWarning', { partition: partitionToRemove })}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowRemoveModal(false)}>{t('storageSettings.cancel')}</button>
+              <button className="btn-danger" onClick={executeRemoveDisk}>
+                <FontAwesomeIcon icon={faMinus} /> {t('storageSettings.removeMember')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grow array confirmation modal */}
+      {showGrowModal && (
+        <div className="modal-overlay" onClick={() => setShowGrowModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2><FontAwesomeIcon icon={faExpand} /> {t('storageSettings.confirmGrowArray')}</h2>
+            <div className="modal-section">
+              <h3>{t('storageSettings.configSummary')}</h3>
+              <div className="summary-grid">
+                <div className="summary-item"><strong>Array:</strong> {raidStatus?.array || '/dev/md0'}</div>
+                <div className="summary-item"><strong>{t('storageSettings.operation')}:</strong> {t('storageSettings.growArrayDesc')}</div>
+              </div>
+            </div>
+            <div className="modal-section" style={{ background: '#e8f5e9', padding: '1rem', borderRadius: '6px' }}>
+              <p style={{ margin: 0, fontSize: '0.95rem' }}>{t('storageSettings.growArrayExplanation')}</p>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowGrowModal(false)}>{t('storageSettings.cancel')}</button>
+              <button className="btn-danger" style={{ background: '#10b981' }} onClick={executeGrowArray}>
+                <FontAwesomeIcon icon={faExpand} /> {t('storageSettings.growArray')}
+              </button>
             </div>
           </div>
         </div>
