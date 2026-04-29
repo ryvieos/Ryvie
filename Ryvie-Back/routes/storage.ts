@@ -2579,6 +2579,31 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('✓ Updated initramfs', 'success');
     } catch (e: any) {}
+
+    // === Step 9.5: Create specific BTRFS subvolumes for Docker ===
+    log('=== Step 9.5: Creating BTRFS subvolumes for Docker ===', 'step');
+    try {
+      // Force subvolume creation for docker and containerd so they are explicitly segregated
+      try {
+        await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'create', '/data/docker']);
+        log('✓ Subvolume /data/docker created', 'success');
+      } catch (e: any) {
+        if (!e.message.includes('File exists')) {
+          log(`Warning btrfs create /data/docker: ${e.message}`, 'warning');
+        }
+      }
+      
+      try {
+        await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'create', '/data/containerd']);
+        log('✓ Subvolume /data/containerd created', 'success');
+      } catch (e: any) {
+        if (!e.message.includes('File exists')) {
+          log(`Warning btrfs create /data/containerd: ${e.message}`, 'warning');
+        }
+      }
+    } catch (e: any) {
+      log(`Warning creating subvolumes: ${e.message}`, 'warning');
+    }
     
     // === Step 10: Restart Docker & containerd on new /data ===
     log('=== Step 10: Restarting Docker & containerd ===', 'step');
@@ -2608,6 +2633,29 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
       log('Docker may need to be restarted manually after reboot', 'warning');
     }
     
+    // === Step 10.5: Reinstall Core Services ===
+    log('=== Step 10.5: Reinstalling Core Services ===', 'step');
+    try {
+      const coreStacks = [
+        { name: 'LDAP', dir: '/data/config/ldap' },
+        { name: 'Keycloak', dir: '/opt/Ryvie/keycloak' },
+        { name: 'Reverse Proxy (Caddy)', dir: '/opt/Ryvie/caddy' },
+        { name: 'Portainer', dir: '/data/config/portainer' }
+      ];
+
+      for (const stack of coreStacks) {
+        log(`🔄 Starting ${stack.name}...`, 'info');
+        try {
+          await executeCommand('sudo', ['-n', 'bash', '-c', `cd "${stack.dir}" && docker compose up -d`]);
+          log(`  ✓ ${stack.name} started successfully`, 'success');
+        } catch (e: any) {
+          log(`  ⚠ Error starting ${stack.name}: ${e.message}`, 'warning');
+        }
+      }
+    } catch (e: any) {
+      log(`⚠ Error during core services restart: ${e.message}`, 'warning');
+    }
+
     // === Step 11: Reinstall all apps from manifests ===
     log('=== Step 11: Reinstalling Docker apps from manifests ===', 'step');
     log('ℹ️ Docker runtime was excluded from migration — apps will be reinstalled cleanly', 'info');

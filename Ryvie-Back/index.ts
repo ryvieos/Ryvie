@@ -276,6 +276,7 @@ try {
 async function startServer() {
   try {
     // Enregistrer tous les services de démarrage
+    startupTracker.registerService('architecture');
     startupTracker.registerService('redis');
     startupTracker.registerService('network');
     startupTracker.registerService('caddy');
@@ -286,6 +287,17 @@ async function startServer() {
     startupTracker.registerService('appstore');
     startupTracker.registerService('backgrounds');
     startupTracker.registerService('netbird');
+
+    // Mettre à niveau et auto-corriger l'architecture localement
+    const { enforceArchitectureBase } = require('./services/architectureService');
+    try {
+      await enforceArchitectureBase();
+      startupTracker.markDone('architecture');
+    } catch (archError: any) {
+      console.error('Erreur non bloquante lors de la vérification de l\'architecture:', archError);
+      startupTracker.markError('architecture', archError.message);
+      // On ne throw pas, l'erreur n'empêche pas la suite (ou du moins on essaie de continuer)
+    }
 
     // Vérifier et redémarrer Redis si nécessaire
     const { ensureRedisRunning } = require('./utils/redisHealthCheck');

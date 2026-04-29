@@ -7,6 +7,15 @@ const { createSafeClient, getRole, parseDnParts, escapeRdnValue } = require('../
 const { startApp } = require('../services/dockerService');
 const { listInstalledApps } = require('../services/appManagerService');
 
+function escapeLdapFilterValue(value: any) {
+  return String(value || '')
+    .replace(/\\/g, '\\5c')
+    .replace(/\*/g, '\\2a')
+    .replace(/\(/g, '\\28')
+    .replace(/\)/g, '\\29')
+    .replace(/\x00/g, '\\00');
+}
+
 // GET /api/admin/users/sync-ldap
 router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req: any, res: any) => {
   const ldapClient = createSafeClient();
@@ -359,6 +368,8 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
   }
 
   const ldapClient = createSafeClient();
+  const escapedAdminUid = escapeLdapFilterValue(adminUid);
+  const escapedUid = escapeLdapFilterValue(uid);
 
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
     if (err) {
@@ -366,7 +377,7 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
       return res.status(500).json({ error: 'Connexion LDAP échouée' });
     }
 
-    const adminFilter = `(&(|(uid=${adminUid})(mail=${adminUid}))${ldapConfig.userFilter})`;
+    const adminFilter = `(&(|(uid=${escapedAdminUid})(mail=${escapedAdminUid}))${ldapConfig.userFilter})`;
 
     ldapClient.search(
       ldapConfig.userSearchBase,
@@ -400,6 +411,13 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
               ldapConfig.adminGroup,
               { filter: `(member=${adminDN})`, scope: 'base', attributes: ['cn'] },
               (err, groupRes) => {
+                if (err) {
+                  console.error('Erreur vérification droits admin :', err);
+                  ldapClient.unbind();
+                  adminAuthClient.unbind();
+                  return res.status(500).json({ error: 'Erreur vérification droits admin' });
+                }
+
                 let isAdmin = false;
                 groupRes.on('searchEntry', () => (isAdmin = true));
 
@@ -412,7 +430,7 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
 
                   ldapClient.search(
                     ldapConfig.userSearchBase,
-                    { filter: `(uid=${uid})`, scope: 'sub', attributes: ['dn'] },
+                    { filter: `(uid=${escapedUid})`, scope: 'sub', attributes: ['dn'] },
                     (err, userRes) => {
                       if (err) {
                         console.error('Erreur recherche utilisateur à supprimer :', err);
@@ -436,43 +454,62 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
                           ldapConfig.guestGroup,
                         ];
 
-                        const groupClient = createSafeClient();
-                        groupClient.bind(adminDN, adminPassword, (err) => {
-                          if (err) {
-                            console.error('Erreur bind pour nettoyage groupes');
-                            return res.status(500).json({ error: 'Erreur de nettoyage groupes' });
+                        let tasksDone = 0;
+                        const groups = removeFromGroups.filter(Boolean);
+
+                        const ldapAdminClient = createSafeClient();
+                        ldapAdminClient.bind(ldapConfig.adminBindDN, ldapConfig.adminBindPassword, (bindErr) => {
+                          if (bindErr) {
+                            console.error('Erreur bind LDAP admin pour suppression:', bindErr);
+                            ldapClient.unbind();
+                            adminAuthClient.unbind();
+                            return res.status(500).json({ error: 'Erreur de connexion LDAP admin' });
                           }
 
-                          let tasksDone = 0;
-                          removeFromGroups.forEach((groupDN) => {
-                            const change = new ldap.Change({
-                              operation: 'delete',
-                              modification: new ldap.Attribute({ type: 'member', values: [userDN] }),
-                            });
+                        const deleteUserEntry = () => {
+                          ldapAdminClient.del(userDN, (delErr) => {
+                            ldapClient.unbind();
+                            adminAuthClient.unbind();
+                            ldapAdminClient.unbind();
 
-                            groupClient.modify(groupDN, change, () => {
-                              tasksDone++;
-                              if (tasksDone === removeFromGroups.length) {
-                                adminAuthClient.del(userDN, (err) => {
-                                  ldapClient.unbind();
-                                  adminAuthClient.unbind();
-                                  groupClient.unbind();
+                            if (delErr) {
+                              console.error('Erreur suppression utilisateur :', delErr);
+                              return res.status(500).json({ error: 'Erreur suppression utilisateur' });
+                            }
 
-                                  if (err) {
-                                    console.error('Erreur suppression utilisateur :', err);
-                                    return res.status(500).json({ error: 'Erreur suppression utilisateur' });
-                                  }
-
-                                  // Trigger sync and start container, then respond
-                                  syncLdapWithApps()
-                                    .catch(() => {})
-                                    .finally(() => {
-                                      return res.json({ message: `Utilisateur "${uid}" supprimé avec succès` });
-                                    });
-                                });
-                              }
-                            });
+                            syncLdapWithApps()
+                              .catch(() => {})
+                              .finally(() => {
+                                return res.json({ message: `Utilisateur "${uid}" supprimé avec succès` });
+                              });
                           });
+                        };
+
+                        if (!groups.length) {
+                          return deleteUserEntry();
+                        }
+
+                        groups.forEach((groupDN) => {
+                          const change = new ldap.Change({
+                            operation: 'delete',
+                            modification: new ldap.Attribute({ type: 'member', values: [userDN] }),
+                          });
+
+                          ldapAdminClient.modify(groupDN, change, (modifyErr) => {
+                            if (
+                              modifyErr &&
+                              modifyErr.code !== 16 &&
+                              modifyErr.code !== 32
+                            ) {
+                              console.warn(`Nettoyage groupe échoué sur ${groupDN}:`, modifyErr.message || modifyErr);
+                            }
+
+                            tasksDone++;
+                            if (tasksDone === groups.length) {
+                              deleteUserEntry();
+                            }
+                          });
+                        });
                         });
                       });
                     }
