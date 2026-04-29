@@ -59,6 +59,15 @@ function executeCommand(command: string, args: string[] = [], streamLogs = false
   });
 }
 
+async function executeCommandStrict(command: string, args: string[] = [], errorContext = command): Promise<CommandResult> {
+  const result = await executeCommand(command, args);
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.trim();
+    throw new Error(stderr || `${errorContext} failed with exit code ${result.exitCode}`);
+  }
+  return result;
+}
+
 /**
  * Valide qu'un chemin de device est sécurisé
  * @param {string} devicePath - Le chemin du device à valider
@@ -4731,12 +4740,22 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
       // Add to array
       log(`Adding ${newPartPath} to ${array}...`, 'info');
       setStep(0, { message: `Ajout de ${newPartPath} au RAID...` });
-      await executeCommand('sudo', ['-n', 'mdadm', '--add', array, newPartPath]);
+      const addResult = await executeCommandStrict('sudo', ['-n', 'mdadm', '--add', array, newPartPath], `mdadm --add ${array} ${newPartPath}`);
+      if (addResult.stderr.trim()) {
+        log(addResult.stderr.trim(), 'warning');
+      }
 
       // Verify
-      await executeCommand('sleep', ['3']);
-      const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
-      if (!verify.stdout.includes(newPartPath)) {
+      let added = false;
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        await executeCommand('sleep', ['2']);
+        const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+        if (verify.stdout.includes(newPartPath)) {
+          added = true;
+          break;
+        }
+      }
+      if (!added) {
         throw new Error(`${newPartPath} was NOT added to ${array}`);
       }
       log(`${newPartPath} added to RAID`, 'success');
@@ -4922,12 +4941,22 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
 
         // Add
         log(`Adding ${partPath} to ${array}...`, 'info');
-        await executeCommand('sudo', ['-n', 'mdadm', '--add', array, partPath]);
+        const addResult = await executeCommandStrict('sudo', ['-n', 'mdadm', '--add', array, partPath], `mdadm --add ${array} ${partPath}`);
+        if (addResult.stderr.trim()) {
+          log(addResult.stderr.trim(), 'warning');
+        }
 
         // Verify
-        await executeCommand('sleep', ['3']);
-        const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
-        if (!verify.stdout.includes(partPath)) {
+        let added = false;
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          await executeCommand('sleep', ['2']);
+          const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+          if (verify.stdout.includes(partPath)) {
+            added = true;
+            break;
+          }
+        }
+        if (!added) {
           throw new Error(`${partPath} was NOT added to ${array}`);
         }
         log(`${partPath} added`, 'success');
