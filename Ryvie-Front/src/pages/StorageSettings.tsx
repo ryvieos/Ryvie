@@ -163,6 +163,12 @@ const StorageSettings = () => {
   const [showGrowModal, setShowGrowModal] = useState(false);
   const [canGrow, setCanGrow] = useState(false);
 
+  // Auto-migrate
+  const [migrateLevel, setMigrateLevel] = useState('raid1');
+  const [migrateDisks, setMigrateDisks] = useState<string[]>([]);
+  const [showMigrateModal, setShowMigrateModal] = useState(false);
+  const [migrationState, setMigrationState] = useState<any>(null);
+
   // Helper: strip emojis from strings for consistent UI DA
   const stripEmojis = (str) => {
     if (!str) return '';
@@ -277,11 +283,23 @@ const StorageSettings = () => {
         }
       });
 
+      // Écouter les événements de migration auto
+      socket.on('mdraid-migration-progress', (state) => {
+        setMigrationState(state);
+        if (state.status === 'completed') {
+          setTimeout(() => {
+            checkRaidStatus();
+            loadInventory();
+          }, 2000);
+        }
+      });
+
       // Nettoyage à la destruction du composant
       return () => {
         console.log('[StorageSettings] Déconnexion Socket.IO');
         socket.off('mdraid-log');
         socket.off('mdraid-resync-progress');
+        socket.off('mdraid-migration-progress');
         socket.disconnect();
       };
     }
@@ -941,6 +959,108 @@ const StorageSettings = () => {
     }
   }, [raidStatus]);
 
+  // Toggle migrate disk selection
+  const handleMigrateDiskToggle = (devicePath: string) => {
+    setMigrateDisks(prev =>
+      prev.includes(devicePath) ? prev.filter(d => d !== devicePath) : [...prev, devicePath]
+    );
+  };
+
+  // Compute estimated capacity for auto-migrate
+  const getMigrateCapacity = () => {
+    if (migrateDisks.length === 0) return 0;
+    const levelDef = RAID_LEVELS.find(r => r.id === migrateLevel);
+    if (!levelDef) return 0;
+    // Find smallest disk size among selected
+    let smallest = Infinity;
+    for (const dp of migrateDisks) {
+      const d = disks.find(dd => dd.path === dp);
+      if (d) {
+        const bytes = parseSizeToBytes(d.size);
+        if (!isNaN(bytes) && bytes < smallest) smallest = bytes;
+      }
+    }
+    if (smallest === Infinity) return 0;
+    // Include current RAID members count if their parent disk is in selection
+    const totalDisks = migrateDisks.length;
+    return Math.floor(levelDef.capacityFormula(totalDisks) * smallest);
+  };
+
+  // Check if enough disks for migrate level
+  const getMigrateMinDisks = () => {
+    const levelDef = RAID_LEVELS.find(r => r.id === migrateLevel);
+    return levelDef ? levelDef.minDisks : 2;
+  };
+
+  const canMigrate = () => {
+    const levelDef = RAID_LEVELS.find(r => r.id === migrateLevel);
+    if (!levelDef) return false;
+    if (migrateDisks.length < levelDef.minDisks) return false;
+    if (levelDef.evenOnly && migrateDisks.length % 2 !== 0) return false;
+    if (migrationState && migrationState.status === 'running') return false;
+    return true;
+  };
+
+  // Start auto-migration
+  const executeAutoMigrate = async () => {
+    setShowMigrateModal(false);
+    setLogs([]);
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const levelNum = migrateLevel.replace('raid', '');
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-auto-migrate`, {
+        level: parseInt(levelNum),
+        disks: migrateDisks
+      }, { timeout: 30000 });
+      if (response.data.success) {
+        addLog('Migration started', 'success');
+      } else {
+        addLog(`Failed: ${response.data.error}`, 'error');
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.error || error.message;
+      addLog(`Migration error: ${msg}`, 'error');
+    }
+  };
+
+  // Poll migration status (fallback if socket missed)
+  useEffect(() => {
+    if (!migrationState || migrationState.status !== 'running') return;
+    const intervalId = setInterval(async () => {
+      try {
+        const accessMode = getCurrentAccessMode() || 'private';
+        const serverUrl = getServerUrl(accessMode);
+        const response = await axios.get(`${serverUrl}/api/storage/mdraid-migration-status`, { timeout: 10000 });
+        if (response.data.success) {
+          setMigrationState(response.data.migration);
+          if (response.data.migration.status !== 'running') {
+            clearInterval(intervalId);
+            if (response.data.migration.status === 'completed') {
+              setTimeout(() => { checkRaidStatus(); loadInventory(); }, 2000);
+            }
+          }
+        }
+      } catch (e) {}
+    }, 5000);
+    return () => clearInterval(intervalId);
+  }, [migrationState?.status]);
+
+  // Load migration state on mount (in case page was refreshed during migration)
+  useEffect(() => {
+    const loadMigrationState = async () => {
+      try {
+        const accessMode = getCurrentAccessMode() || 'private';
+        const serverUrl = getServerUrl(accessMode);
+        const response = await axios.get(`${serverUrl}/api/storage/mdraid-migration-status`, { timeout: 10000 });
+        if (response.data.success && response.data.migration && response.data.migration.status === 'running') {
+          setMigrationState(response.data.migration);
+        }
+      } catch (e) {}
+    };
+    loadMigrationState();
+  }, []);
+
   // Format bytes
   const formatBytes = (bytes) => {
     if (bytes === null || bytes === undefined || isNaN(bytes)) return 'N/A';
@@ -1551,6 +1671,186 @@ const StorageSettings = () => {
                   )}
                 </div>
               </div>
+
+              {/* ==================== AUTO-MIGRATE SECTION ==================== */}
+              <div className="targets-section" style={{ marginTop: '2rem', borderTop: '2px solid #e0e0e0', paddingTop: '2rem' }}>
+                <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.autoMigrate')}</h2>
+                <p className="section-subtitle">{t('storageSettings.autoMigrateDesc')}</p>
+
+                {/* Migration in progress — show timeline */}
+                {migrationState && migrationState.status === 'running' && (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    {/* Global progress bar */}
+                    <div style={{ marginBottom: '1rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                        <strong>{t('storageSettings.globalProgress')}</strong>
+                        <span style={{ fontWeight: 'bold', color: '#2196f3' }}>{migrationState.globalProgress}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '12px', background: '#e0e0e0', borderRadius: '6px', overflow: 'hidden' }}>
+                        <div style={{ width: `${migrationState.globalProgress}%`, height: '100%', background: 'linear-gradient(90deg, #2196f3, #1976d2)', transition: 'width 0.5s ease' }} />
+                      </div>
+                    </div>
+
+                    {/* Steps timeline */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {migrationState.steps && migrationState.steps.map((step: any, idx: number) => {
+                        const statusColor = step.status === 'completed' ? '#10b981' : step.status === 'running' ? '#2196f3' : step.status === 'error' ? '#ef4444' : step.status === 'skipped' ? '#94a3b8' : '#d1d5db';
+                        const statusIcon = step.status === 'completed' ? faCheckCircle : step.status === 'running' ? faSpinner : step.status === 'error' ? faExclamationTriangle : step.status === 'skipped' ? faMinus : faClock;
+                        return (
+                          <div key={idx} style={{ background: step.status === 'running' ? '#eff6ff' : '#fff', border: `1px solid ${step.status === 'running' ? '#93c5fd' : '#e5e7eb'}`, borderRadius: '8px', padding: '0.75rem 1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <span style={{ color: statusColor, fontSize: '1.1rem', width: '24px', textAlign: 'center' }}>
+                                <FontAwesomeIcon icon={statusIcon} spin={step.status === 'running'} />
+                              </span>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>
+                                  {t('storageSettings.migrationSteps')} {idx + 1}/{migrationState.totalSteps}: {step.name}
+                                </div>
+                                {step.message && <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.2rem' }}>{step.message}</div>}
+                              </div>
+                              <span style={{ fontSize: '0.85rem', fontWeight: '600', color: statusColor }}>
+                                {step.status === 'completed' ? t('storageSettings.stepCompleted')
+                                  : step.status === 'running' ? `${step.progress}%`
+                                  : step.status === 'error' ? t('storageSettings.stepError')
+                                  : step.status === 'skipped' ? t('storageSettings.stepSkipped')
+                                  : t('storageSettings.stepPending')}
+                              </span>
+                            </div>
+                            {step.status === 'running' && step.progress > 0 && (
+                              <div style={{ marginTop: '0.5rem' }}>
+                                <div style={{ width: '100%', height: '6px', background: '#e0e0e0', borderRadius: '3px', overflow: 'hidden' }}>
+                                  <div style={{ width: `${step.progress}%`, height: '100%', background: '#2196f3', transition: 'width 0.5s ease' }} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Migration completed */}
+                {migrationState && migrationState.status === 'completed' && (
+                  <div style={{ background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#059669', fontWeight: '600' }}>
+                      <FontAwesomeIcon icon={faCheckCircle} /> {t('storageSettings.migrationComplete')}
+                    </div>
+                  </div>
+                )}
+
+                {/* Migration error */}
+                {migrationState && migrationState.status === 'error' && (
+                  <div className="alert-error" style={{ marginBottom: '1rem' }}>
+                    <FontAwesomeIcon icon={faExclamationTriangle} />
+                    <div>
+                      <strong>{t('storageSettings.migrationError')}</strong>
+                      {migrationState.error && <p style={{ margin: '0.3rem 0 0 0' }}>{migrationState.error}</p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* RAID level selector for migration (only when not migrating) */}
+                {(!migrationState || migrationState.status !== 'running') && (
+                  <>
+                    <h3 style={{ marginTop: '1rem', marginBottom: '0.5rem' }}>{t('storageSettings.targetRaidLevel')}</h3>
+                    <div className="raid-levels-grid">
+                      {RAID_LEVELS.filter(l => l.id !== 'raid0').map(level => {
+                        const isActive = migrateLevel === level.id;
+                        const totalDisks = migrateDisks.length;
+                        const enoughDisks = totalDisks >= level.minDisks && (!level.evenOnly || totalDisks % 2 === 0 || totalDisks === 0);
+
+                        return (
+                          <div
+                            key={level.id}
+                            className={`raid-level-card ${isActive ? 'active' : ''}`}
+                            onClick={() => setMigrateLevel(level.id)}
+                            style={isActive ? { borderColor: level.color, boxShadow: `0 0 20px ${level.color}33` } : {}}
+                          >
+                            <div className="raid-level-icon" style={{ background: level.color }}>
+                              <FontAwesomeIcon icon={level.icon} />
+                            </div>
+                            <div className="raid-level-info">
+                              <div className="raid-level-label">{level.label}</div>
+                              <div className="raid-level-subtitle">{level.subtitle}</div>
+                              <div className="raid-level-meta">
+                                <span>{t('storageSettings.minDisks')}: {level.minDisks}</span>
+                                <span>{t('storageSettings.faultTolerance')}: {level.faultTolerance} {level.faultTolerance === 1 ? t('storageSettings.disk') : t('storageSettings.disksLower')}</span>
+                              </div>
+                            </div>
+                            {isActive && <div className="raid-level-check"><FontAwesomeIcon icon={faCheck} /></div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Disk selection for migration */}
+                    <h3 style={{ marginTop: '1.5rem', marginBottom: '0.5rem' }}>{t('storageSettings.selectDisksToMigrate')}</h3>
+                    <p className="section-subtitle">{t('storageSettings.selectDisksToMigrateDesc')}</p>
+
+                    <div className="disks-grid">
+                      {disks.map(disk => {
+                        const isSelected = migrateDisks.includes(disk.path);
+                        const isDisabled = disk.isSystemDisk || (disk.isMounted && !raidMemberDisksMap[disk.path]);
+                        const health = diskHealth[disk.path] || {};
+                        const diskHasRaidPartition = !!raidMemberDisksMap[disk.path];
+
+                        return (
+                          <div
+                            key={disk.path}
+                            className={`disk-card-simple ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                            onClick={() => !isDisabled && handleMigrateDiskToggle(disk.path)}
+                          >
+                            {isSelected && <div className="disk-check"><FontAwesomeIcon icon={faCheckCircle} /></div>}
+                            <div className="storage-disk-icon"><FontAwesomeIcon icon={faHdd} /></div>
+                            <div className="disk-name">{disk.path}</div>
+                            <div className="disk-size">{disk.size}</div>
+                            {health.model && <div className="disk-model">{health.model}</div>}
+                            <div className="disk-status">
+                              {diskHasRaidPartition && <span className="storage-badge-raid-active">RAID</span>}
+                              {disk.isSystemDisk && <span className="storage-badge-system">{t('storageSettings.system')}</span>}
+                              {!diskHasRaidPartition && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">{t('storageSettings.available')}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Selection summary + capacity estimate */}
+                    {migrateDisks.length > 0 && (
+                      <div className="create-summary" style={{ marginTop: '1rem' }}>
+                        <div className="create-summary-row">
+                          <span><strong>{t('storageSettings.selectedDisks')}:</strong> {migrateDisks.length}</span>
+                          <span><strong>{t('storageSettings.raidLevelLabel')}:</strong> {migrateLevel.toUpperCase()}</span>
+                          {getMigrateCapacity() > 0 && (
+                            <span><strong>{t('storageSettings.usableCapacity')}:</strong> {formatBytes(getMigrateCapacity())}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Validation */}
+                    {migrateDisks.length > 0 && migrateDisks.length < getMigrateMinDisks() && (
+                      <div className="alert-error" style={{ marginTop: '0.5rem' }}>
+                        <FontAwesomeIcon icon={faExclamationTriangle} />
+                        <div>{t('storageSettings.notEnoughDisksForLevel', { level: migrateLevel.replace('raid', ''), min: getMigrateMinDisks() })}</div>
+                      </div>
+                    )}
+
+                    {/* Apply button */}
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
+                      <button
+                        className="btn-create-raid"
+                        style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+                        disabled={!canMigrate()}
+                        onClick={() => setShowMigrateModal(true)}
+                      >
+                        <FontAwesomeIcon icon={faPlay} /> {t('storageSettings.applyMigration')}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </>
           )}
 
@@ -1690,6 +1990,47 @@ const StorageSettings = () => {
               <button className="btn-secondary" onClick={() => setShowReshapeModal(false)}>{t('storageSettings.cancel')}</button>
               <button className="btn-danger" style={{ background: '#6366f1' }} onClick={executeReshape}>
                 <FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.convertTo')} {selectedReshapeLevel.toUpperCase()}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-migrate confirmation modal */}
+      {showMigrateModal && (
+        <div className="modal-overlay" onClick={() => setShowMigrateModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.confirmMigration')}</h2>
+            <div className="modal-section">
+              <h3>{t('storageSettings.migrationPlan')}</h3>
+              <div className="summary-grid">
+                <div className="summary-item"><strong>{t('storageSettings.targetLevel')}:</strong> {migrateLevel.toUpperCase()}</div>
+                <div className="summary-item"><strong>{t('storageSettings.selectedDisks')}:</strong> {migrateDisks.length}</div>
+                {getMigrateCapacity() > 0 && (
+                  <div className="summary-item"><strong>{t('storageSettings.usableCapacity')}:</strong> {formatBytes(getMigrateCapacity())}</div>
+                )}
+              </div>
+              <div style={{ marginTop: '0.75rem' }}>
+                <strong>{t('storageSettings.migrationSteps')}:</strong>
+                <ol style={{ margin: '0.5rem 0 0 1.2rem', fontSize: '0.9em', color: '#555' }}>
+                  <li>{t('storageSettings.stepRepairRaid')}</li>
+                  <li>{t('storageSettings.stepRemoveOld')}</li>
+                  <li>{t('storageSettings.stepGrow')}</li>
+                  {migrateDisks.length > 1 && <li>{t('storageSettings.stepAddDisks')}</li>}
+                  <li>{t('storageSettings.stepReshape')} → {migrateLevel.toUpperCase()}</li>
+                </ol>
+              </div>
+            </div>
+            <div className="modal-warning">
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              <div>
+                <strong>ATTENTION:</strong> {t('storageSettings.migrationWarning')}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowMigrateModal(false)}>{t('storageSettings.cancel')}</button>
+              <button className="btn-danger" style={{ background: '#6366f1' }} onClick={executeAutoMigrate}>
+                <FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.applyMigration')}
               </button>
             </div>
           </div>

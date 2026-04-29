@@ -4446,5 +4446,638 @@ router.post('/storage/mdraid-grow-size', authenticateTokenOrFirstTime, async (re
   }
 });
 
+// ============================
+// Auto-migrate state (in-memory, single migration at a time)
+// ============================
+interface MigrationStep {
+  name: string;
+  status: 'pending' | 'running' | 'completed' | 'error' | 'skipped';
+  progress: number;
+  message: string;
+}
+
+interface MigrationState {
+  id: string;
+  status: 'running' | 'completed' | 'error' | 'idle';
+  targetLevel: number;
+  disks: string[];
+  currentStep: number;
+  totalSteps: number;
+  steps: MigrationStep[];
+  globalProgress: number;
+  error: string | null;
+  startedAt: string;
+  completedAt: string | null;
+}
+
+let migrationState: MigrationState = {
+  id: '',
+  status: 'idle',
+  targetLevel: 1,
+  disks: [],
+  currentStep: 0,
+  totalSteps: 5,
+  steps: [],
+  globalProgress: 0,
+  error: null,
+  startedAt: '',
+  completedAt: null
+};
+
+/**
+ * GET /api/storage/mdraid-migration-status
+ * Returns current auto-migration state (for polling fallback)
+ */
+router.get('/storage/mdraid-migration-status', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  res.json({ success: true, migration: migrationState });
+});
+
+/**
+ * POST /api/storage/mdraid-auto-migrate
+ * Orchestrates the full RAID migration plan:
+ *   Step 1: Repair degraded RAID1 (create matching partition, add to md0, wait resync)
+ *   Step 2: Remove old small member
+ *   Step 3: Grow member partition to max, grow md0, grow btrfs
+ *   Step 4: Add remaining disks
+ *   Step 5: Convert to target RAID level
+ *
+ * Each step is idempotent. Progress is streamed via Socket.IO.
+ * Body: { level: 1|5|6|10, disks: string[] }
+ */
+router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  const { level, disks } = req.body;
+  const array = '/dev/md0';
+
+  if (migrationState.status === 'running') {
+    return res.status(409).json({ success: false, error: 'A migration is already in progress' });
+  }
+
+  // Validate inputs
+  const levelNum = parseInt(level);
+  if (![1, 5, 6, 10].includes(levelNum)) {
+    return res.status(400).json({ success: false, error: `Invalid RAID level: ${level}. Must be 1, 5, 6, or 10` });
+  }
+  if (!disks || !Array.isArray(disks) || disks.length === 0) {
+    return res.status(400).json({ success: false, error: 'No disks provided' });
+  }
+  for (const d of disks) {
+    if (!isValidDevicePath(d)) {
+      return res.status(400).json({ success: false, error: `Invalid device path: ${d}` });
+    }
+  }
+
+  const minDisksMap = { 1: 2, 5: 3, 6: 4, 10: 4 };
+  // Total disks = existing active members (non-removed) + new disks
+  // For a degraded RAID1 with 1 member, total = 1 + disks.length after step 1
+  // Validation: after full migration, total members = disks.length (old member removed)
+  // But if old member's parent disk is also in selected disks, it stays
+  const minRequired = minDisksMap[levelNum] || 2;
+
+  // Initialize migration state
+  const migrationId = `mig-${Date.now()}`;
+  migrationState = {
+    id: migrationId,
+    status: 'running',
+    targetLevel: levelNum,
+    disks,
+    currentStep: 0,
+    totalSteps: 5,
+    steps: [
+      { name: 'Réparer le RAID dégradé', status: 'pending', progress: 0, message: '' },
+      { name: 'Retirer l\'ancien membre', status: 'pending', progress: 0, message: '' },
+      { name: 'Agrandir au maximum', status: 'pending', progress: 0, message: '' },
+      { name: 'Ajouter les disques supplémentaires', status: 'pending', progress: 0, message: '' },
+      { name: 'Convertir au niveau RAID cible', status: 'pending', progress: 0, message: '' }
+    ],
+    globalProgress: 0,
+    error: null,
+    startedAt: new Date().toISOString(),
+    completedAt: null
+  };
+
+  const emitMigration = () => {
+    if (io) io.emit('mdraid-migration-progress', migrationState);
+  };
+
+  const setStep = (stepIdx: number, updates: Partial<MigrationStep>) => {
+    Object.assign(migrationState.steps[stepIdx], updates);
+    migrationState.currentStep = stepIdx;
+    // Compute global progress: completed steps + current step progress fraction
+    let completed = 0;
+    for (let i = 0; i < migrationState.totalSteps; i++) {
+      const s = migrationState.steps[i];
+      if (s.status === 'completed' || s.status === 'skipped') completed++;
+      else if (s.status === 'running') completed += s.progress / 100;
+    }
+    migrationState.globalProgress = Math.round((completed / migrationState.totalSteps) * 100);
+    emitMigration();
+  };
+
+  const log = (message: string, type = 'info') => {
+    const logEntry = { timestamp: new Date().toISOString(), type, message };
+    console.log(`[auto-migrate] [${type}] ${message}`);
+    if (io) io.emit('mdraid-log', logEntry);
+  };
+
+  // Send immediate response — migration runs async
+  res.json({ success: true, migrationId, message: 'Migration started' });
+
+  // === Run migration asynchronously ===
+  try {
+    // Gather current array state
+    log('=== Auto-migration started ===', 'step');
+    log(`Target: RAID${levelNum} with disks: ${disks.join(', ')}`, 'info');
+
+    const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+    const detailOutput = detailResult.stdout;
+
+    const currentLevelMatch = detailOutput.match(/Raid Level\s*:\s*raid(\d+)/i);
+    const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 1;
+    const stateMatch = detailOutput.match(/State\s*:\s*(.+)/i);
+    const arrayState = stateMatch ? stateMatch[1].trim() : '';
+    const activeMatch = detailOutput.match(/Active Devices\s*:\s*(\d+)/i);
+    const activeDevices = activeMatch ? parseInt(activeMatch[1]) : 0;
+    const raidDevicesMatch = detailOutput.match(/Raid Devices\s*:\s*(\d+)/i);
+    const raidDevices = raidDevicesMatch ? parseInt(raidDevicesMatch[1]) : 0;
+
+    // Find active members with their sizes
+    const memberRegex = /\s+\d+\s+\d+\s+\d+\s+\d+\s+(active|spare)\s+\w+\s+(\/dev\/\S+)/g;
+    const activeMembers: { device: string; size: number; state: string }[] = [];
+    let match;
+    while ((match = memberRegex.exec(detailOutput)) !== null) {
+      const memberDev = match[2];
+      const memberState = match[1];
+      let size = 0;
+      try {
+        const sz = await executeCommand('lsblk', ['-b', '-no', 'SIZE', memberDev]);
+        size = parseInt(sz.stdout.trim()) || 0;
+      } catch (e: any) {}
+      activeMembers.push({ device: memberDev, size, state: memberState });
+    }
+
+    // Identify which members are "old" (parent disk not in selected disks) vs "kept"
+    const oldMembers: typeof activeMembers = [];
+    const keptMembers: typeof activeMembers = [];
+    for (const member of activeMembers) {
+      const parentMatch = member.device.match(/^(\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+))/);
+      const parentDisk = parentMatch ? parentMatch[1] : null;
+      if (parentDisk && disks.includes(parentDisk)) {
+        keptMembers.push(member);
+      } else {
+        oldMembers.push(member);
+      }
+    }
+
+    const isDegraded = arrayState.includes('degraded') || activeDevices < raidDevices;
+    const hasOldMembers = oldMembers.length > 0;
+    const memberSize = await getUsedDevSize(array);
+
+    log(`Current: RAID${currentLevel}, state: ${arrayState}, active: ${activeDevices}/${raidDevices}`, 'info');
+    log(`Old members to remove: ${oldMembers.map(m => m.device).join(', ') || 'none'}`, 'info');
+    log(`Member dev size: ${Math.floor(memberSize / 1024 / 1024)} MiB`, 'info');
+
+    // Determine which disks are truly new (not already in array)
+    const existingParentDisks = activeMembers.map(m => {
+      const p = m.device.match(/^(\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+))/);
+      return p ? p[1] : null;
+    }).filter(Boolean);
+
+    const newDisks = disks.filter(d => !existingParentDisks.includes(d));
+    const firstNewDisk = newDisks[0] || null;
+    const remainingNewDisks = newDisks.slice(1);
+
+    log(`New disks: ${newDisks.join(', ') || 'none'}`, 'info');
+
+    // Helper: poll /proc/mdstat for resync/recovery/reshape progress
+    const waitForSync = async (stepIdx: number) => {
+      let lastPercent = -1;
+      const maxWaitMs = 72 * 60 * 60 * 1000; // 72h
+      const startTime = Date.now();
+
+      while (true) {
+        await executeCommand('sleep', ['3']);
+        if (Date.now() - startTime > maxWaitMs) {
+          log('Sync monitoring timeout (72h)', 'warning');
+          break;
+        }
+
+        const mdstat = await executeCommand('cat', ['/proc/mdstat']);
+        const progressMatch = mdstat.stdout.match(/(?:recovery|resync|reshape)\s*=\s*(\d+\.\d+)%/);
+
+        if (progressMatch) {
+          const pct = parseFloat(progressMatch[1]);
+          if (Math.abs(pct - lastPercent) >= 0.5 || lastPercent === -1) {
+            const etaMatch = mdstat.stdout.match(/finish\s*=\s*([\d.]+min)/);
+            const speedMatch = mdstat.stdout.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
+            let msg = `Sync: ${pct.toFixed(1)}%`;
+            if (etaMatch) msg += ` | ETA: ${etaMatch[1]}`;
+            if (speedMatch) msg += ` | Speed: ${speedMatch[1]}`;
+            log(msg, 'info');
+            setStep(stepIdx, { progress: Math.round(pct), message: msg });
+            if (io) {
+              io.emit('mdraid-resync-progress', {
+                percent: pct,
+                eta: etaMatch ? etaMatch[1] : null,
+                speed: speedMatch ? speedMatch[1] : null
+              });
+            }
+            lastPercent = pct;
+          }
+        } else if (
+          mdstat.stdout.includes('[UU') ||
+          (!mdstat.stdout.includes('recovery') && !mdstat.stdout.includes('resync') && !mdstat.stdout.includes('reshape'))
+        ) {
+          log('Sync complete', 'success');
+          if (io) io.emit('mdraid-resync-progress', { percent: 100, completed: true });
+          break;
+        }
+      }
+    };
+
+    // ============================================================
+    // STEP 1: Repair degraded RAID1
+    // ============================================================
+    setStep(0, { status: 'running', message: 'Analyse de l\'état du RAID...' });
+    log('=== Étape 1: Réparer le RAID dégradé ===', 'step');
+
+    if (isDegraded && firstNewDisk) {
+      // Create partition matching existing member size on first new disk
+      const matchSizeBytes = memberSize;
+      const matchSizeMiB = Math.floor(matchSizeBytes / 1024 / 1024);
+      const nextPartLabel = await getNextPartLabel(array);
+      const newPartPath = getPartitionPath(firstNewDisk, 1);
+
+      log(`Creating ${matchSizeMiB} MiB partition on ${firstNewDisk} (matching existing member)`, 'info');
+      setStep(0, { message: `Création partition ${matchSizeMiB} MiB sur ${firstNewDisk}` });
+
+      // Prepare disk
+      try { await executeCommand('sudo', ['-n', 'wipefs', '-a', firstNewDisk]); } catch (e: any) {}
+      try { await executeCommand('sudo', ['-n', 'sgdisk', '--zap-all', firstNewDisk]); } catch (e: any) {}
+      try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', firstNewDisk]); } catch (e: any) {}
+
+      await executeCommand('sudo', ['-n', 'parted', '-s', firstNewDisk, 'mklabel', 'gpt']);
+      await executeCommand('sudo', ['-n', 'parted', '-s', firstNewDisk, 'mkpart', 'primary', '1MiB', `${matchSizeMiB}MiB`]);
+      await executeCommand('sudo', ['-n', 'parted', '-s', firstNewDisk, 'name', '1', nextPartLabel]);
+      await executeCommand('sudo', ['-n', 'parted', '-s', firstNewDisk, 'set', '1', 'raid', 'on']);
+      await executeCommand('sudo', ['-n', 'partprobe', firstNewDisk]);
+      await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
+      await executeCommand('sleep', ['2']);
+
+      try { await executeCommand('sudo', ['-n', 'wipefs', '-a', newPartPath]); } catch (e: any) {}
+      try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', newPartPath]); } catch (e: any) {}
+      await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
+      await executeCommand('sleep', ['2']);
+
+      // Add to array
+      log(`Adding ${newPartPath} to ${array}...`, 'info');
+      setStep(0, { message: `Ajout de ${newPartPath} au RAID...` });
+      await executeCommand('sudo', ['-n', 'mdadm', '--add', array, newPartPath]);
+
+      // Verify
+      await executeCommand('sleep', ['3']);
+      const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      if (!verify.stdout.includes(newPartPath)) {
+        throw new Error(`${newPartPath} was NOT added to ${array}`);
+      }
+      log(`${newPartPath} added to RAID`, 'success');
+
+      // Wait for resync
+      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
+      if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync')) {
+        setStep(0, { message: 'Resynchronisation en cours...' });
+        await waitForSync(0);
+      }
+
+      setStep(0, { status: 'completed', progress: 100, message: 'RAID réparé' });
+    } else if (!isDegraded) {
+      log('RAID is not degraded, skipping step 1', 'info');
+      setStep(0, { status: 'skipped', progress: 100, message: 'RAID non dégradé — étape ignorée' });
+    } else {
+      log('No new disk to add for repair, skipping step 1', 'info');
+      setStep(0, { status: 'skipped', progress: 100, message: 'Pas de disque à ajouter — étape ignorée' });
+    }
+
+    // ============================================================
+    // STEP 2: Remove old member(s)
+    // ============================================================
+    setStep(1, { status: 'running', message: 'Analyse des membres à retirer...' });
+    log('=== Étape 2: Retirer l\'ancien membre ===', 'step');
+
+    if (hasOldMembers) {
+      for (const oldMember of oldMembers) {
+        log(`Removing ${oldMember.device} from ${array}...`, 'info');
+        setStep(1, { message: `Retrait de ${oldMember.device}...` });
+
+        // Fail + remove
+        try {
+          await executeCommand('sudo', ['-n', 'mdadm', '--fail', array, oldMember.device]);
+          log(`Marked ${oldMember.device} as failed`, 'success');
+        } catch (e: any) {
+          log(`Note: could not mark as failed: ${e.message}`, 'info');
+        }
+
+        try {
+          await executeCommand('sudo', ['-n', 'mdadm', '--remove', array, oldMember.device]);
+          log(`Removed ${oldMember.device} from array`, 'success');
+        } catch (e: any) {
+          log(`Warning removing: ${e.message}`, 'warning');
+        }
+
+        await executeCommand('sleep', ['2']);
+
+        // Zero superblock
+        try {
+          await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', oldMember.device]);
+        } catch (e: any) {}
+
+        // Delete partition (optional — free space on system disk)
+        try {
+          const partMatch = oldMember.device.match(/^(\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+))p?(\d+)$/);
+          if (partMatch) {
+            const parentDisk = partMatch[1];
+            const partNum = partMatch[2];
+            await executeCommand('sudo', ['-n', 'parted', '-s', parentDisk, 'rm', partNum]);
+            await executeCommand('sudo', ['-n', 'partprobe', parentDisk]);
+            log(`Deleted partition ${oldMember.device}`, 'success');
+          }
+        } catch (e: any) {
+          log(`Note: could not delete partition: ${e.message}`, 'info');
+        }
+      }
+
+      // Update mdadm.conf
+      try {
+        const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+        const fs = require('fs');
+        const tmpFile = '/tmp/mdadm.conf.new';
+        fs.writeFileSync(tmpFile, `HOMEHOST <ignore>\n${scanResult.stdout.trim()}\n`);
+        await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
+        fs.unlinkSync(tmpFile);
+      } catch (e: any) {}
+
+      setStep(1, { status: 'completed', progress: 100, message: `${oldMembers.length} membre(s) retiré(s)` });
+    } else {
+      log('No old members to remove', 'info');
+      setStep(1, { status: 'skipped', progress: 100, message: 'Aucun ancien membre à retirer' });
+    }
+
+    // ============================================================
+    // STEP 3: Grow member partition + RAID + filesystem
+    // ============================================================
+    setStep(2, { status: 'running', message: 'Analyse de l\'espace disponible...' });
+    log('=== Étape 3: Agrandir au maximum ===', 'step');
+
+    if (firstNewDisk && hasOldMembers) {
+      const firstPartPath = getPartitionPath(firstNewDisk, 1);
+
+      // Get full disk size
+      const diskSizeResult = await executeCommand('lsblk', ['-b', '-d', '-n', '-o', 'SIZE', firstNewDisk]);
+      const fullDiskBytes = parseInt(diskSizeResult.stdout.trim());
+      const fullEndMiB = Math.floor((fullDiskBytes - (2 * 1024 * 1024)) / 1024 / 1024);
+
+      // Get current partition size
+      let currentPartBytes = 0;
+      try {
+        const partSz = await executeCommand('lsblk', ['-b', '-no', 'SIZE', firstPartPath]);
+        currentPartBytes = parseInt(partSz.stdout.trim()) || 0;
+      } catch (e: any) {}
+
+      if (fullEndMiB > Math.floor(currentPartBytes / 1024 / 1024) + 100) {
+        log(`Resizing ${firstPartPath} to ${fullEndMiB} MiB...`, 'info');
+        setStep(2, { message: `Redimensionnement de ${firstPartPath} à ${fullEndMiB} MiB` });
+
+        await executeCommand('sudo', ['-n', 'parted', '-s', firstNewDisk, 'resizepart', '1', `${fullEndMiB}MiB`]);
+        await executeCommand('sudo', ['-n', 'partprobe', firstNewDisk]);
+        await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
+        await executeCommand('sleep', ['2']);
+        log('Partition resized', 'success');
+      } else {
+        log('Partition already at max size', 'info');
+      }
+
+      // Grow RAID
+      log('Growing RAID array to max...', 'info');
+      setStep(2, { message: 'Agrandissement du RAID...' });
+      try {
+        await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, '--size', 'max']);
+        log('RAID grown to max', 'success');
+      } catch (e: any) {
+        log(`Warning growing RAID: ${e.message}`, 'warning');
+      }
+
+      // Grow btrfs
+      log('Resizing btrfs filesystem...', 'info');
+      setStep(2, { message: 'Redimensionnement du filesystem...' });
+      try {
+        await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+        log('Filesystem resized', 'success');
+      } catch (e: any) {
+        log(`Warning btrfs resize: ${e.message}`, 'warning');
+      }
+
+      setStep(2, { status: 'completed', progress: 100, message: 'RAID et filesystem agrandis' });
+    } else {
+      log('No grow needed (no new disk or no old members removed)', 'info');
+      setStep(2, { status: 'skipped', progress: 100, message: 'Aucun agrandissement nécessaire' });
+    }
+
+    // ============================================================
+    // STEP 4: Add remaining disks
+    // ============================================================
+    setStep(3, { status: 'running', message: 'Préparation des disques supplémentaires...' });
+    log('=== Étape 4: Ajouter les disques supplémentaires ===', 'step');
+
+    if (remainingNewDisks.length > 0) {
+      for (let i = 0; i < remainingNewDisks.length; i++) {
+        const disk = remainingNewDisks[i];
+        const diskProgress = Math.round((i / remainingNewDisks.length) * 100);
+        setStep(3, { progress: diskProgress, message: `Ajout de ${disk} (${i + 1}/${remainingNewDisks.length})...` });
+        log(`--- Adding ${disk} (${i + 1}/${remainingNewDisks.length}) ---`, 'step');
+
+        const nextLabel = await getNextPartLabel(array);
+        const partPath = getPartitionPath(disk, 1);
+
+        // Get disk size for full partition
+        const sz = await executeCommand('lsblk', ['-b', '-d', '-n', '-o', 'SIZE', disk]);
+        const diskBytes = parseInt(sz.stdout.trim());
+        const endMiB = Math.floor((diskBytes - (2 * 1024 * 1024)) / 1024 / 1024);
+
+        // Prepare
+        try { await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]); } catch (e: any) {}
+        try { await executeCommand('sudo', ['-n', 'sgdisk', '--zap-all', disk]); } catch (e: any) {}
+        try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', disk]); } catch (e: any) {}
+
+        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mklabel', 'gpt']);
+        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mkpart', 'primary', '1MiB', `${endMiB}MiB`]);
+        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'name', '1', nextLabel]);
+        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'set', '1', 'raid', 'on']);
+        await executeCommand('sudo', ['-n', 'partprobe', disk]);
+        await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
+        await executeCommand('sleep', ['2']);
+
+        try { await executeCommand('sudo', ['-n', 'wipefs', '-a', partPath]); } catch (e: any) {}
+        try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partPath]); } catch (e: any) {}
+        await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
+        await executeCommand('sleep', ['2']);
+
+        // Add
+        log(`Adding ${partPath} to ${array}...`, 'info');
+        await executeCommand('sudo', ['-n', 'mdadm', '--add', array, partPath]);
+
+        // Verify
+        await executeCommand('sleep', ['3']);
+        const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+        if (!verify.stdout.includes(partPath)) {
+          throw new Error(`${partPath} was NOT added to ${array}`);
+        }
+        log(`${partPath} added`, 'success');
+
+        // Wait for resync before adding next disk
+        const mdstat = await executeCommand('cat', ['/proc/mdstat']);
+        if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync')) {
+          log(`Waiting for resync of ${disk}...`, 'info');
+          await waitForSync(3);
+        }
+      }
+
+      setStep(3, { status: 'completed', progress: 100, message: `${remainingNewDisks.length} disque(s) ajouté(s)` });
+    } else {
+      log('No additional disks to add', 'info');
+      setStep(3, { status: 'skipped', progress: 100, message: 'Aucun disque supplémentaire' });
+    }
+
+    // ============================================================
+    // STEP 5: Convert to target RAID level
+    // ============================================================
+    setStep(4, { status: 'running', message: 'Vérification du niveau RAID...' });
+    log('=== Étape 5: Convertir au niveau RAID cible ===', 'step');
+
+    // Re-read current level (may have changed after steps above)
+    const finalDetail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+    const finalLevelMatch = finalDetail.stdout.match(/Raid Level\s*:\s*raid(\d+)/i);
+    const finalCurrentLevel = finalLevelMatch ? parseInt(finalLevelMatch[1]) : currentLevel;
+    const finalActiveMatch = finalDetail.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+    const finalActiveDevices = finalActiveMatch ? parseInt(finalActiveMatch[1]) : 0;
+
+    if (finalCurrentLevel !== levelNum) {
+      // Validate conversion
+      const allowedConversions = {
+        1: [0, 5],
+        5: [0, 1, 6],
+        6: [5],
+        0: [5, 6],
+        10: [],
+        4: [5]
+      };
+      const allowed = allowedConversions[finalCurrentLevel] || [];
+
+      if (!allowed.includes(levelNum)) {
+        log(`Direct conversion RAID${finalCurrentLevel} → RAID${levelNum} not supported by mdadm`, 'error');
+        setStep(4, { status: 'error', message: `Conversion RAID${finalCurrentLevel} → RAID${levelNum} non supportée` });
+        migrationState.status = 'error';
+        migrationState.error = `Conversion RAID${finalCurrentLevel} → RAID${levelNum} non supportée par mdadm`;
+        migrationState.completedAt = new Date().toISOString();
+        emitMigration();
+        return;
+      }
+
+      if (finalActiveDevices < minRequired) {
+        log(`RAID${levelNum} requires ${minRequired} disks, only ${finalActiveDevices} active`, 'error');
+        setStep(4, { status: 'error', message: `RAID${levelNum} nécessite ${minRequired} disques (${finalActiveDevices} actifs)` });
+        migrationState.status = 'error';
+        migrationState.error = `RAID${levelNum} nécessite ${minRequired} disques`;
+        migrationState.completedAt = new Date().toISOString();
+        emitMigration();
+        return;
+      }
+
+      // Create backup file for reshape (required for RAID5/6)
+      const backupFile = '/tmp/md0-reshape.bak';
+      log(`Reshape: RAID${finalCurrentLevel} → RAID${levelNum} with ${finalActiveDevices} devices`, 'info');
+      setStep(4, { message: `Conversion RAID${finalCurrentLevel} → RAID${levelNum}...` });
+
+      const growArgs = [
+        '-n', 'mdadm', '--grow', array,
+        `--level=${levelNum}`,
+        `--raid-devices=${finalActiveDevices}`,
+        `--backup-file=${backupFile}`
+      ];
+
+      await executeCommand('sudo', growArgs);
+      log('Reshape initiated', 'success');
+
+      // Wait for reshape
+      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
+      if (mdstat.stdout.includes('reshape')) {
+        log('Waiting for reshape to complete...', 'info');
+        setStep(4, { message: 'Reshape en cours...' });
+        await waitForSync(4);
+      }
+
+      // Resize btrfs after reshape
+      try {
+        await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+        log('Filesystem resized after reshape', 'success');
+      } catch (e: any) {
+        log(`Warning btrfs resize: ${e.message}`, 'warning');
+      }
+
+      setStep(4, { status: 'completed', progress: 100, message: `Converti en RAID${levelNum}` });
+    } else {
+      log(`Already at RAID${levelNum}, skipping reshape`, 'info');
+      setStep(4, { status: 'skipped', progress: 100, message: `Déjà en RAID${levelNum}` });
+    }
+
+    // ============================================================
+    // FINALIZE
+    // ============================================================
+    log('=== Finalisation ===', 'step');
+
+    // Update mdadm.conf
+    try {
+      const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const fs = require('fs');
+      const tmpFile = '/tmp/mdadm.conf.new';
+      fs.writeFileSync(tmpFile, `HOMEHOST <ignore>\n${scanResult.stdout.trim()}\n`);
+      await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
+      fs.unlinkSync(tmpFile);
+      log('Updated /etc/mdadm/mdadm.conf', 'success');
+    } catch (e: any) {}
+
+    try {
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log('Updated initramfs', 'success');
+    } catch (e: any) {}
+
+    // Final status
+    try {
+      const detail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      log('Final RAID status:', 'info');
+      log(detail.stdout.trim(), 'info');
+      const df = await executeCommand('df', ['-h', '/data']);
+      log(df.stdout.trim(), 'info');
+    } catch (e: any) {}
+
+    log('Auto-migration completed successfully!', 'success');
+    migrationState.status = 'completed';
+    migrationState.globalProgress = 100;
+    migrationState.completedAt = new Date().toISOString();
+    emitMigration();
+
+  } catch (error: any) {
+    console.error('Error during auto-migration:', error);
+    log(`Fatal error: ${error.message}`, 'error');
+
+    const currentStepIdx = migrationState.currentStep;
+    if (currentStepIdx >= 0 && currentStepIdx < migrationState.steps.length) {
+      setStep(currentStepIdx, { status: 'error', message: error.message });
+    }
+    migrationState.status = 'error';
+    migrationState.error = error.message;
+    migrationState.completedAt = new Date().toISOString();
+    emitMigration();
+  }
+});
+
 export = router;
 module.exports.setSocketIO = setSocketIO;
