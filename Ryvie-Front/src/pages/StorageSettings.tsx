@@ -549,9 +549,11 @@ const StorageSettings = () => {
     );
   };
 
-  // Single disk select for manage mode (add to existing RAID)
+  // Multi disk select for manage mode (add to existing RAID)
   const handleDiskSelect = (devicePath) => {
-    setSelectedDisk(selectedDisk === devicePath ? '' : devicePath);
+    setSelectedDisks(prev =>
+      prev.includes(devicePath) ? prev.filter(d => d !== devicePath) : [...prev, devicePath]
+    );
   };
 
   // Add log
@@ -566,38 +568,54 @@ const StorageSettings = () => {
     addLog('Logs copied to clipboard', 'success');
   };
 
-  // Prechecks for adding a single disk to existing RAID
+  // Prechecks for adding disks to existing RAID (supports multiple disks)
   const performPrechecks = async () => {
     try {
       setValidationErrors([]);
       setValidationWarnings([]);
       setCanProceed(false);
-      if (!selectedDisk) { setValidationErrors(['No disk selected']); return; }
-      addLog('Running pre-checks...', 'info');
+      if (selectedDisks.length === 0) { setValidationErrors(['No disk selected']); return; }
+      addLog(`Running pre-checks for ${selectedDisks.length} disk(s)...`, 'info');
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
-      const response = await axios.post(`${serverUrl}/api/storage/mdraid-prechecks`, {
-        array: raidStatus?.array || '/dev/md0', disk: selectedDisk
-      }, { timeout: 60000 });
 
-      if (response.data.success) {
-        const { canProceed: cp, reasons, plan, smartOptimization: so } = response.data;
-        setSmartOptimization(so || null);
-        const errors = [], warnings = [];
-        reasons.forEach(reason => {
-          if (reason.startsWith('\u274C')) { errors.push(reason); addLog(reason, 'error'); }
-          else if (reason.startsWith('\u26A0')) { warnings.push(reason); addLog(reason, 'warning'); }
-          else addLog(reason, 'info');
-        });
-        setValidationErrors(errors);
-        setValidationWarnings(warnings);
-        setCommandsList(plan.map(cmd => ({ command: cmd, description: cmd })));
-        if (cp) { addLog('Pre-checks passed successfully', 'success'); setCanProceed(true); }
-        else setCanProceed(false);
-      } else {
-        setValidationErrors([response.data.error]);
-        addLog(`Pre-checks failed: ${response.data.error}`, 'error');
-      }
+      const results = await Promise.all(selectedDisks.map(disk =>
+        axios.post(`${serverUrl}/api/storage/mdraid-prechecks`, {
+          array: raidStatus?.array || '/dev/md0', disk
+        }, { timeout: 60000 })
+      ));
+
+      const allErrors = [];
+      const allWarnings = [];
+      const allPlans = [];
+      let allCanProceed = true;
+      let lastSmartOpt = null;
+
+      results.forEach((response, i) => {
+        const diskPath = selectedDisks[i];
+        if (response.data.success) {
+          const { canProceed: cp, reasons, plan, smartOptimization: so } = response.data;
+          if (so) lastSmartOpt = so;
+          reasons.forEach(reason => {
+            const prefixed = selectedDisks.length > 1 ? `[${diskPath}] ${reason}` : reason;
+            if (reason.startsWith('\u274C')) { allErrors.push(prefixed); addLog(prefixed, 'error'); }
+            else if (reason.startsWith('\u26A0')) { allWarnings.push(prefixed); addLog(prefixed, 'warning'); }
+            else addLog(prefixed, 'info');
+          });
+          plan.forEach(cmd => allPlans.push(selectedDisks.length > 1 ? `[${diskPath}] ${cmd}` : cmd));
+          if (!cp) allCanProceed = false;
+        } else {
+          allErrors.push(`[${diskPath}] ${response.data.error}`);
+          allCanProceed = false;
+        }
+      });
+
+      setSmartOptimization(selectedDisks.length === 1 ? lastSmartOpt : null);
+      setValidationErrors(allErrors);
+      setValidationWarnings(allWarnings);
+      setCommandsList(allPlans.map(cmd => ({ command: cmd, description: cmd })));
+      if (allCanProceed) { addLog('Pre-checks passed for all disks', 'success'); setCanProceed(true); }
+      else setCanProceed(false);
     } catch (error) {
       const errorMsg = error.response?.data?.error || error.message;
       setValidationErrors([errorMsg]);
@@ -660,12 +678,12 @@ const StorageSettings = () => {
 
   // Run prechecks when selection changes in manage mode
   useEffect(() => {
-    if (mode === 'manage' && selectedDisk) {
+    if (mode === 'manage' && selectedDisks.length > 0) {
       performPrechecks();
     } else if (mode === 'manage') {
       setCanProceed(false); setValidationErrors([]); setValidationWarnings([]);
     }
-  }, [selectedDisk, mode]);
+  }, [selectedDisks, mode]);
 
   // Run prechecks when selection/level changes in create mode
   useEffect(() => {
@@ -702,15 +720,25 @@ const StorageSettings = () => {
     }
   };
 
-  // Execute add single disk to existing RAID
+  // Execute add disk(s) to existing RAID
   const executeAddDisk = async () => {
     try {
       setShowConfirmModal(false); setExecutionStatus('running'); setLogs([]); setResyncProgress(null);
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
-      const response = await axios.post(`${serverUrl}/api/storage/mdraid-add-disk`, {
-        array: raidStatus?.array || '/dev/md0', disk: selectedDisk, dryRun
-      }, { timeout: 1800000 });
+      const arrayDevice = raidStatus?.array || '/dev/md0';
+
+      let response;
+      if (selectedDisks.length === 1) {
+        response = await axios.post(`${serverUrl}/api/storage/mdraid-add-disk`, {
+          array: arrayDevice, disk: selectedDisks[0], dryRun
+        }, { timeout: 1800000 });
+      } else {
+        response = await axios.post(`${serverUrl}/api/storage/mdraid-add-disks`, {
+          array: arrayDevice, disks: selectedDisks, dryRun
+        }, { timeout: 1800000 });
+      }
+
       if (response.data.success) {
         if (!resyncProgress) {
           setExecutionStatus('success');
@@ -1015,17 +1043,13 @@ const StorageSettings = () => {
       }, { timeout: 30000 });
       if (response.data.success) {
         addLog('Migration started', 'success');
-        // Garder le modal ouvert pour afficher les logs en temps réel
-        // Le modal se fermera automatiquement quand la migration sera terminée
       } else {
         addLog(`Failed: ${response.data.error}`, 'error');
-        setShowMigrateModal(false);
         setExecutionStatus('error');
       }
     } catch (error: any) {
       const msg = error.response?.data?.error || error.message;
       addLog(`Migration error: ${msg}`, 'error');
-      setShowMigrateModal(false);
       setExecutionStatus('error');
     }
   };
@@ -1607,7 +1631,7 @@ const StorageSettings = () => {
 
                 <div className="disks-grid">
                   {disks.map(disk => {
-                    const isSelected = selectedDisk === disk.path;
+                    const isSelected = selectedDisks.includes(disk.path);
                     const diskHasRaidPartition = !!raidMemberDisksMap[disk.path];
                     const isDisabled = disk.isSystemDisk || disk.isMounted || diskHasRaidPartition;
                     const health = diskHealth[disk.path] || {};
@@ -1848,8 +1872,8 @@ const StorageSettings = () => {
                       <button
                         className="btn-create-raid"
                         style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
-                        disabled={!canMigrate()}
-                        onClick={() => setShowMigrateModal(true)}
+                        disabled={!canMigrate() || executionStatus === 'running'}
+                        onClick={executeAutoMigrate}
                       >
                         <FontAwesomeIcon icon={faPlay} /> {t('storageSettings.applyMigration')}
                       </button>
@@ -1937,7 +1961,7 @@ const StorageSettings = () => {
         </div>
       )}
 
-      {/* Add disk to existing RAID modal */}
+      {/* Add disk(s) to existing RAID modal */}
       {showConfirmModal && !smartOptimization && mode === 'manage' && (
         <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1946,7 +1970,10 @@ const StorageSettings = () => {
               <h3>{t('storageSettings.configSummary')}</h3>
               <div className="summary-grid">
                 <div className="summary-item"><strong>Array:</strong> {raidStatus?.array || '/dev/md0'}</div>
-                <div className="summary-item"><strong>{t('storageSettings.diskToAdd')}:</strong> {selectedDisk}</div>
+                <div className="summary-item"><strong>{t('storageSettings.diskToAdd')}:</strong> {selectedDisks.join(', ')}</div>
+                {selectedDisks.length > 1 && (
+                  <div className="summary-item"><strong>Mode:</strong> Parallel preparation</div>
+                )}
               </div>
             </div>
             <div className="modal-section">
@@ -1959,7 +1986,7 @@ const StorageSettings = () => {
             </div>
             <div className="modal-warning">
               <FontAwesomeIcon icon={faExclamationTriangle} />
-              <strong>ATTENTION:</strong> {t('storageSettings.diskWillBeErasedWarning', { disk: selectedDisk })}
+              <strong>ATTENTION:</strong> {t('storageSettings.diskWillBeErasedWarning', { disk: selectedDisks.join(', ') })}
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowConfirmModal(false)}>{t('storageSettings.cancel')}</button>
@@ -2002,90 +2029,7 @@ const StorageSettings = () => {
         </div>
       )}
 
-      {/* Auto-migrate confirmation modal */}
-      {showMigrateModal && (
-        <div className="modal-overlay" onClick={() => executionStatus !== 'running' && setShowMigrateModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.confirmMigration')}</h2>
-
-            {/* Show logs if migration is running or has completed/errored */}
-            {executionStatus === 'running' || executionStatus === 'success' || executionStatus === 'error' ? (
-              <div className="modal-section">
-                <h3>Exécution en cours...</h3>
-                <div className="logs-container" style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '4px', padding: '0.5rem' }}>
-                  {logs.length === 0 ? (
-                    <p className="logs-placeholder">{t('storageSettings.noLogsYet')}</p>
-                  ) : (
-                    logs.map((log, index) => (
-                      <div key={index} className={`log-entry log-${log.type}`} style={{ marginBottom: '0.25rem', fontSize: '0.85em' }}>
-                        <span className="log-timestamp">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                        <span className="log-type">[{log.type.toUpperCase()}]</span>
-                        <span className="log-message">{log.message}</span>
-                      </div>
-                    ))
-                  )}
-                  <div ref={logsEndRef} />
-                </div>
-                {executionStatus === 'success' && (
-                  <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '4px', color: '#155724' }}>
-                    ✅ Migration complétée avec succès!
-                  </div>
-                )}
-                {executionStatus === 'error' && (
-                  <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px', color: '#721c24' }}>
-                    ❌ La migration a échoué. Vérifiez les logs ci-dessus.
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="modal-section">
-                  <h3>{t('storageSettings.migrationPlan')}</h3>
-                  <div className="summary-grid">
-                    <div className="summary-item"><strong>{t('storageSettings.targetLevel')}:</strong> {migrateLevel.toUpperCase()}</div>
-                    <div className="summary-item"><strong>{t('storageSettings.selectedDisks')}:</strong> {migrateDisks.length}</div>
-                    {getMigrateCapacity() > 0 && (
-                      <div className="summary-item"><strong>{t('storageSettings.usableCapacity')}:</strong> {formatBytes(getMigrateCapacity())}</div>
-                    )}
-                  </div>
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <strong>{t('storageSettings.migrationSteps')}:</strong>
-                    <ol style={{ margin: '0.5rem 0 0 1.2rem', fontSize: '0.9em', color: '#555' }}>
-                      <li>{t('storageSettings.stepRepairRaid')}</li>
-                      <li>{t('storageSettings.stepRemoveOld')}</li>
-                      <li>{t('storageSettings.stepGrow')}</li>
-                      {migrateDisks.length > 1 && <li>{t('storageSettings.stepAddDisks')}</li>}
-                      <li>{t('storageSettings.stepReshape')} → {migrateLevel.toUpperCase()}</li>
-                    </ol>
-                  </div>
-                </div>
-                <div className="modal-warning">
-                  <FontAwesomeIcon icon={faExclamationTriangle} />
-                  <div>
-                    <strong>ATTENTION:</strong> {t('storageSettings.migrationWarning')}
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="modal-actions">
-              {executionStatus !== 'running' && (
-                <button className="btn-secondary" onClick={() => setShowMigrateModal(false)}>{t('storageSettings.cancel')}</button>
-              )}
-              {executionStatus !== 'running' && (
-                <button className="btn-danger" style={{ background: '#6366f1' }} onClick={executeAutoMigrate}>
-                  <FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.applyMigration')}
-                </button>
-              )}
-              {(executionStatus === 'success' || executionStatus === 'error') && (
-                <button className="btn-secondary" onClick={() => { setShowMigrateModal(false); setExecutionStatus('idle'); }}>
-                  {t('storageSettings.close')}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Auto-migrate confirmation modal removed — migration starts directly */}
 
       {/* Setup mode: Continue to create account */}
       {isSetupMode && (

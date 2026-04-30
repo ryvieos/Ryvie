@@ -385,6 +385,136 @@ async function addPartitionToArrayRobust(
 }
 
 /**
+ * Libère un disque de toute appartenance RAID existante.
+ * Retire les partitions de TOUS les arrays (y compris l'array cible),
+ * arrête les arrays vides/dégradés, et efface les superblocs.
+ * DOIT être appelé AVANT prepareDiskForRaid pour éviter "Device or resource busy".
+ */
+async function cleanupDiskRaidMembership(
+  disk: string,
+  targetArray: string,
+  log: LogFn = noopLog
+): Promise<void> {
+  // Lister les partitions existantes du disque ET les md devices associés via lsblk
+  let existingPartitions: string[] = [];
+  let mdDevicesFromLsblk: string[] = [];
+  try {
+    const lsblkResult = await executeCommand('lsblk', ['-ln', '-o', 'NAME,TYPE', disk]);
+    for (const line of lsblkResult.stdout.trim().split('\n')) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        if (parts[1] === 'part') {
+          existingPartitions.push(`/dev/${parts[0]}`);
+        } else if (parts[1] === 'raid1' || parts[1] === 'raid5' || parts[1] === 'raid6' || parts[1] === 'raid0' || parts[1] === 'raid10') {
+          mdDevicesFromLsblk.push(`/dev/${parts[0]}`);
+        }
+      }
+    }
+  } catch (e: any) {}
+
+  if (existingPartitions.length === 0) {
+    log(`✓ No existing partitions on ${disk} — nothing to clean up`, 'success');
+    return;
+  }
+
+  log(`Found existing partitions on ${disk}: ${existingPartitions.join(', ')}`, 'info');
+  if (mdDevicesFromLsblk.length > 0) {
+    log(`Kernel md devices holding partitions: ${mdDevicesFromLsblk.join(', ')}`, 'info');
+  }
+
+  // Détecter les arrays RAID actifs via /proc/mdstat
+  let mdArrays: string[] = [];
+  try {
+    const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+    for (const line of mdstatResult.stdout.split('\n')) {
+      const match = line.match(/^(md\d+)\s*:/);
+      if (match) {
+        mdArrays.push('/dev/' + match[1]);
+      }
+    }
+  } catch (e: any) {}
+
+  // Ajouter les md devices détectés par lsblk qui ne sont pas dans mdstat
+  for (const md of mdDevicesFromLsblk) {
+    if (!mdArrays.includes(md)) {
+      mdArrays.push(md);
+    }
+  }
+
+  // Pour chaque partition, retirer de TOUS les arrays (y compris l'array cible)
+  for (const partPath of existingPartitions) {
+    for (const mdArray of mdArrays) {
+      try {
+        const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdArray]);
+        if (!detailResult.stdout.includes(partPath)) continue;
+
+        log(`Found ${partPath} in ${mdArray}, removing it...`, 'info');
+
+        try {
+          await executeCommand('sudo', ['-n', 'mdadm', '--fail', mdArray, partPath]);
+          log(`✓ Marked ${partPath} as failed in ${mdArray}`, 'success');
+        } catch (e: any) {
+          log(`Note: Could not mark as failed: ${e.message}`, 'info');
+        }
+
+        try {
+          await executeCommand('sudo', ['-n', 'mdadm', '--remove', mdArray, partPath]);
+          log(`✓ Removed ${partPath} from ${mdArray}`, 'success');
+        } catch (e: any) {
+          log(`Note: Could not remove: ${e.message}`, 'info');
+        }
+
+        // Arrêter les arrays non-cibles s'ils sont vides/dégradés
+        if (mdArray !== targetArray) {
+          try {
+            const checkDetail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdArray]);
+            const totalMatch = checkDetail.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+            const totalDevices = totalMatch ? parseInt(totalMatch[1]) : 99;
+            if (totalDevices <= 1) {
+              log(`Stopping empty/degraded array ${mdArray}...`, 'info');
+              await executeCommand('sudo', ['-n', 'mdadm', '--stop', mdArray]);
+              log(`✓ Stopped ${mdArray}`, 'success');
+              await executeCommand('sleep', ['2']);
+              await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
+            }
+          } catch (e: any) {}
+        }
+      } catch (e: any) {}
+    }
+
+    // Effacer le superblock
+    try {
+      await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partPath]);
+      log(`✓ Zeroed superblock on ${partPath}`, 'success');
+    } catch (e: any) {}
+  }
+
+  // Nettoyer les arrays orphelins/dégradés non-cibles
+  try {
+    const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+    for (const line of mdstatResult.stdout.split('\n')) {
+      const match = line.match(/^(md\d+)\s*:\s*active.*\[(\d+)\/(\d+)\]/);
+      if (match) {
+        const mdArray = '/dev/' + match[1];
+        const activeDevs = parseInt(match[3]);
+        if (mdArray !== targetArray && activeDevs <= 1) {
+          try {
+            log(`Stopping orphaned/degraded array ${mdArray}...`, 'info');
+            await executeCommand('sudo', ['-n', 'mdadm', '--stop', mdArray]);
+            log(`✓ Stopped ${mdArray}`, 'success');
+            await executeCommand('sleep', ['1']);
+          } catch (e: any) {}
+        }
+      }
+    }
+  } catch (e: any) {}
+
+  // Attendre que le kernel libère les devices
+  await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
+  await executeCommand('sleep', ['1']);
+}
+
+/**
  * Migration state persistence — survives backend restarts/reboots.
  */
 async function persistMigrationState(state: any): Promise<void> {
@@ -1108,9 +1238,17 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
       });
     }
 
-    // Étape 2-3: Préparer le disque (wipe + GPT + partition alignée)
-    log('=== Step 2: Preparing disk (wipe + sgdisk-aligned GPT partition) ===', 'step');
+    // Étape 2: Nettoyer les appartenances RAID existantes (AVANT la préparation du disque)
+    log('=== Step 2: Cleaning up existing RAID memberships ===', 'step');
+    try {
+      await cleanupDiskRaidMembership(disk, array, log);
+    } catch (error: any) {
+      log(`Error cleaning up RAID memberships on ${disk}: ${error.message}`, 'error');
+      throw error;
+    }
 
+    // Étape 3: Préparer le disque (wipe + GPT + partition alignée)
+    log('=== Step 3: Preparing disk (wipe + sgdisk-aligned GPT partition) ===', 'step');
     try {
       await prepareDiskForRaid(disk, nextPartLabel, log);
     } catch (error: any) {
@@ -1118,130 +1256,30 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
       throw error;
     }
 
-    // Étape 4: Assainir & ajouter au RAID
+    // Étape 4: Ajouter au RAID
     log('=== Step 4: Adding partition to RAID array ===', 'step');
-    
-    // Vérifier si la partition appartient déjà à un autre array RAID
-    try {
-      log(`Checking if ${newPartitionPath} belongs to an existing RAID array...`, 'info');
-      const examineResult = await executeCommand('sudo', ['-n', 'mdadm', '--examine', newPartitionPath]);
-      
-      if (examineResult.stdout.includes('Magic')) {
-        // Extraire le nom de l'array existant
-        const arrayMatch = examineResult.stdout.match(/Array\s+:\s+(\/dev\/md\d+)/);
-        const existingArray = arrayMatch ? arrayMatch[1] : null;
-        
-        log(`⚠️  Found existing RAID membership on ${newPartitionPath}`, 'warning');
-        if (existingArray) {
-          log(`Partition is member of ${existingArray}`, 'info');
-        }
-        
-        // Vérifier si l'array existe encore
-        try {
-          // Utiliser /proc/mdstat pour une détection fiable
-          const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
-          const mdArrays = [];
-          const mdstatLines = mdstatResult.stdout.split('\n');
-          
-          for (const line of mdstatLines) {
-            // Les lignes des arrays commencent par "md" suivi d'un nombre
-            const match = line.match(/^(md\d+)\s*:/);
-            if (match) {
-              mdArrays.push('/dev/' + match[1]);
-            }
-          }
-          
-          log(`Detected active RAID arrays: ${mdArrays.join(', ')}`, 'info');
-          
-          for (const mdArray of mdArrays) {
-            if (mdArray === array) continue; // Skip l'array cible
-            
-            try {
-              const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdArray]);
-              if (detailResult.stdout.includes(newPartitionPath)) {
-                log(`Found ${newPartitionPath} in ${mdArray}, removing it...`, 'info');
-                
-                // Essayer de fail puis remove
-                try {
-                  await executeCommand('sudo', ['-n', 'mdadm', '--fail', mdArray, newPartitionPath]);
-                  log(`✓ Marked ${newPartitionPath} as failed in ${mdArray}`, 'success');
-                } catch (e: any) {
-                  log(`Note: Could not mark as failed (may already be): ${e.message}`, 'info');
-                }
-                
-                await executeCommand('sudo', ['-n', 'mdadm', '--remove', mdArray, newPartitionPath]);
-                log(`✓ Removed ${newPartitionPath} from ${mdArray}`, 'success');
-                
-                // Arrêter l'array s'il est vide/dégradé
-                try {
-                  const checkDetail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', mdArray]);
-                  if (checkDetail.stdout.includes('Total Devices : 0') || 
-                      checkDetail.stdout.includes('Total Devices : 1')) {
-                    log(`Stopping empty/degraded array ${mdArray}...`, 'info');
-                    await executeCommand('sudo', ['-n', 'mdadm', '--stop', mdArray]);
-                    log(`✓ Stopped ${mdArray}`, 'success');
-                    
-                    // Attendre que le kernel libère complètement le device
-                    await executeCommand('sleep', ['2']);
-                    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']);
-                  }
-                } catch (e: any) {
-                  log(`Note: Could not stop ${mdArray}: ${e.message}`, 'info');
-                }
-              }
-            } catch (e: any) {
-              // Array n'existe pas ou erreur, continuer
-            }
-          }
-        } catch (e: any) {
-          log(`Warning checking existing arrays: ${e.message}`, 'warning');
-        }
-        
-        // Nettoyer tous les arrays vides/dégradés restants
-        try {
-          const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
-          const mdstatLines = mdstatResult.stdout.split('\n');
-          
-          for (const line of mdstatLines) {
-            const match = line.match(/^(md\d+)\s*:\s*active.*\[(\d+)\/(\d+)\]/);
-            if (match) {
-              const mdArray = '/dev/' + match[1];
-              const activeDevs = parseInt(match[3]);
-              
-              if (mdArray !== array && activeDevs <= 1) {
-                try {
-                  log(`Stopping orphaned/degraded array ${mdArray}...`, 'info');
-                  await executeCommand('sudo', ['-n', 'mdadm', '--stop', mdArray]);
-                  log(`✓ Stopped ${mdArray}`, 'success');
-                  await executeCommand('sleep', ['1']);
-                } catch (e: any) {
-                  log(`Note: Could not stop ${mdArray}: ${e.message}`, 'info');
-                }
-              }
-            }
-          }
-        } catch (e: any) {
-          log(`Warning cleaning orphaned arrays: ${e.message}`, 'warning');
-        }
-        
-        // Maintenant zéroter le superbloc
-        log(`Zeroing superblock on ${newPartitionPath}...`, 'info');
-        await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', newPartitionPath]);
-        log(`✓ Zeroed superblock`, 'success');
-      } else {
-        log(`✓ No existing RAID membership found`, 'success');
-      }
-    } catch (error: any) {
-      // Pas de superbloc existant, c'est OK
-      log(`✓ No existing superblock found (clean partition)`, 'success');
-    }
-    
-    // Add to RAID — robust helper handles "not large enough" auto-recovery and active-state verification
     try {
       await addPartitionToArrayRobust(array, newPartitionPath, log);
     } catch (error: any) {
       log(`Error adding partition to RAID: ${error.message}`, 'error');
       throw error;
+    }
+
+    // Étape 4b: Promouvoir le spare en membre actif (grow --raid-devices)
+    try {
+      const detailAfterAdd = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      const raidDevicesMatch = detailAfterAdd.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+      const totalDevicesMatch = detailAfterAdd.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+      const currentRaidDevices = raidDevicesMatch ? parseInt(raidDevicesMatch[1]) : 0;
+      const totalDevices = totalDevicesMatch ? parseInt(totalDevicesMatch[1]) : 0;
+
+      if (totalDevices > currentRaidDevices) {
+        log(`Growing raid-devices from ${currentRaidDevices} to ${totalDevices} to promote spare(s)...`, 'info');
+        await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, `--raid-devices=${totalDevices}`]);
+        log(`✓ raid-devices grown to ${totalDevices}`, 'success');
+      }
+    } catch (error: any) {
+      log(`Warning: Could not grow raid-devices: ${error.message}`, 'warning');
     }
 
     // Étape 5: Persister la configuration
@@ -1402,6 +1440,251 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
       error: 'Failed to add disk to RAID',
       details: error.message,
       logs: logs
+    });
+  }
+});
+
+/**
+ * POST /api/storage/mdraid-add-disks
+ * Ajoute plusieurs disques au RAID mdadm en parallélisant la préparation.
+ * Body: { array: string, disks: string[], dryRun: boolean }
+ */
+router.post('/storage/mdraid-add-disks', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  const { array, disks: disksList, dryRun = false } = req.body;
+
+  const logs = [];
+  const log = (message, type = 'info') => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      type,
+      message
+    };
+    logs.push(logEntry);
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    if (io) {
+      io.emit('mdraid-log', logEntry);
+    }
+  };
+
+  try {
+    if (!array || !isValidDevicePath(array.replace('/dev/md', '/dev/sda'))) {
+      return res.status(400).json({ success: false, error: 'Invalid array device path' });
+    }
+
+    if (!Array.isArray(disksList) || disksList.length === 0) {
+      return res.status(400).json({ success: false, error: 'No disks provided' });
+    }
+
+    for (const d of disksList) {
+      if (!isValidDevicePath(d)) {
+        return res.status(400).json({ success: false, error: `Invalid disk device path: ${d}` });
+      }
+    }
+
+    log(`🚀 Starting multi-disk RAID addition (${disksList.length} disks)`, 'info');
+    log(`Array: ${array}`, 'info');
+    log(`Disks: ${disksList.join(', ')}`, 'info');
+    log(`Dry Run: ${dryRun}`, 'info');
+
+    // Étape 1: Sanity checks
+    log('=== Step 1: Sanity checks ===', 'step');
+
+    const findmntResult = await executeCommand('findmnt', ['-no', 'FSTYPE,SOURCE', '/data']);
+    const [fstype, source] = findmntResult.stdout.trim().split(/\s+/);
+    if (fstype !== 'btrfs' || source !== array) {
+      log(`❌ /data must be mounted as btrfs on ${array} (current: ${fstype} on ${source})`, 'error');
+      return res.status(400).json({ success: false, error: `/data is not mounted correctly`, logs });
+    }
+    log(`✓ /data is mounted on ${array} (btrfs)`, 'success');
+
+    for (const d of disksList) {
+      const mountCheck = await isDeviceMounted(d);
+      if (mountCheck.mounted) {
+        log(`❌ Disk ${d} is mounted on ${mountCheck.mountpoint}`, 'error');
+        return res.status(400).json({ success: false, error: `Disk ${d} is mounted`, logs });
+      }
+      log(`✓ Disk ${d} is not mounted`, 'success');
+    }
+
+    if (dryRun) {
+      log('🔍 DRY RUN MODE - No changes will be made', 'warning');
+      for (const d of disksList) {
+        const partPath = getPartitionPath(d, 1);
+        log(`--- ${d} ---`, 'info');
+        log(`cleanupDiskRaidMembership(${d})`, 'info');
+        log(`sgdisk -n 1:2048:0 -t 1:fd00 ${d}`, 'info');
+        log(`mdadm --add ${array} ${partPath}`, 'info');
+      }
+      log('✓ Dry run completed', 'success');
+      return res.json({ success: true, dryRun: true, logs, message: 'Dry run completed' });
+    }
+
+    // Étape 2: Nettoyage RAID en parallèle
+    log('=== Step 2: Cleaning up existing RAID memberships (parallel) ===', 'step');
+    await Promise.all(disksList.map(d =>
+      cleanupDiskRaidMembership(d, array, (msg, type) => log(`[${d}] ${msg}`, type))
+    ));
+
+    // Étape 3: Préparation des disques en parallèle
+    log('=== Step 3: Preparing all disks (parallel) ===', 'step');
+
+    const diskInfos: { disk: string; partPath: string; partLabel: string }[] = [];
+
+    // Déterminer les labels de partition
+    let baseLabel = await getNextPartLabel(array);
+    const baseLetter = baseLabel.charAt(baseLabel.length - 1);
+
+    for (let i = 0; i < disksList.length; i++) {
+      const letter = String.fromCharCode(baseLetter.charCodeAt(0) + i);
+      const label = `md0_${letter}`;
+      const partPath = getPartitionPath(disksList[i], 1);
+      diskInfos.push({ disk: disksList[i], partPath, partLabel: label });
+    }
+
+    await Promise.all(diskInfos.map(({ disk: d, partLabel }) =>
+      prepareDiskForRaid(d, partLabel, (msg, type) => log(`[${d}] ${msg}`, type))
+    ));
+
+    // Étape 4: Ajouter les disques au RAID
+    log('=== Step 4: Adding all disks to RAID array ===', 'step');
+    const addedPartitions: string[] = [];
+
+    for (const { disk: d, partPath } of diskInfos) {
+      try {
+        await addPartitionToArrayRobust(array, partPath, (msg, type) => log(`[${d}] ${msg}`, type));
+        addedPartitions.push(partPath);
+      } catch (error: any) {
+        log(`Error adding ${partPath} to RAID: ${error.message}`, 'error');
+        throw error;
+      }
+    }
+
+    // Étape 4b: Promouvoir les spares en membres actifs
+    try {
+      const detailAfterAdd = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      const raidDevicesMatch = detailAfterAdd.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+      const totalDevicesMatch = detailAfterAdd.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+      const currentRaidDevices = raidDevicesMatch ? parseInt(raidDevicesMatch[1]) : 0;
+      const totalDevices = totalDevicesMatch ? parseInt(totalDevicesMatch[1]) : 0;
+
+      if (totalDevices > currentRaidDevices) {
+        log(`Growing raid-devices from ${currentRaidDevices} to ${totalDevices} to promote spare(s)...`, 'info');
+        await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, `--raid-devices=${totalDevices}`]);
+        log(`✓ raid-devices grown to ${totalDevices}`, 'success');
+      }
+    } catch (error: any) {
+      log(`Warning: Could not grow raid-devices: ${error.message}`, 'warning');
+    }
+
+    // Étape 5: Persister la configuration
+    log('=== Step 5: Persisting mdadm configuration ===', 'step');
+    try {
+      const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+      const fs = require('fs');
+      const tmpFile = '/tmp/mdadm.conf.new';
+      fs.writeFileSync(tmpFile, scanResult.stdout);
+      await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
+      fs.unlinkSync(tmpFile);
+      log(`✓ Updated /etc/mdadm/mdadm.conf`, 'success');
+    } catch (error: any) {
+      log(`Error updating mdadm.conf: ${error.message}`, 'error');
+      throw error;
+    }
+
+    try {
+      await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
+      log(`✓ Updated initramfs`, 'success');
+    } catch (error: any) {
+      log(`Error updating initramfs: ${error.message}`, 'error');
+      throw error;
+    }
+
+    // Étape 6: Surveiller la resynchronisation
+    log('=== Step 6: Monitoring resync progress ===', 'step');
+    try {
+      const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
+      log('📊 Initial /proc/mdstat:', 'info');
+      log(mdstatResult.stdout.trim(), 'info');
+
+      if (mdstatResult.stdout.includes('recovery') || mdstatResult.stdout.includes('resync')) {
+        log('🔄 Resynchronization started, monitoring progress...', 'info');
+
+        let lastProgress = -1;
+        let resyncComplete = false;
+        const maxWaitMinutes = 120;
+        const startTime = Date.now();
+
+        while (!resyncComplete) {
+          await executeCommand('sleep', ['2']);
+          const elapsedMinutes = (Date.now() - startTime) / 1000 / 60;
+          if (elapsedMinutes > maxWaitMinutes) {
+            log(`⚠ Resync monitoring timeout after ${maxWaitMinutes} minutes`, 'warning');
+            break;
+          }
+
+          const currentMdstat = await executeCommand('cat', ['/proc/mdstat']);
+          const mdstatOutput = currentMdstat.stdout;
+          const progressMatch = mdstatOutput.match(/recovery\s*=\s*(\d+\.\d+)%/);
+          if (progressMatch) {
+            const progress = parseFloat(progressMatch[1]);
+            if (Math.abs(progress - lastProgress) >= 0.5 || lastProgress === -1) {
+              const finishMatch = mdstatOutput.match(/finish\s*=\s*([\d.]+min)/);
+              const speedMatch = mdstatOutput.match(/speed\s*=\s*([\d.]+[KMG]\/sec)/);
+              let progressMsg = `🔄 Resync progress: ${progress.toFixed(1)}%`;
+              if (finishMatch) progressMsg += ` | ETA: ${finishMatch[1]}`;
+              if (speedMatch) progressMsg += ` | Speed: ${speedMatch[1]}`;
+              log(progressMsg, 'info');
+              if (io) {
+                io.emit('mdraid-resync-progress', {
+                  percent: progress,
+                  eta: finishMatch ? finishMatch[1] : null,
+                  speed: speedMatch ? speedMatch[1] : null
+                });
+              }
+              lastProgress = progress;
+            }
+          } else if (mdstatOutput.includes('[UU]') || (!mdstatOutput.includes('recovery') && !mdstatOutput.includes('resync'))) {
+            log('✅ Resynchronization completed!', 'success');
+            if (io) {
+              io.emit('mdraid-resync-progress', { percent: 100, eta: null, speed: null, completed: true });
+            }
+            resyncComplete = true;
+          }
+        }
+      } else {
+        log('ℹ️ No resync detected (array may already be synchronized)', 'info');
+      }
+    } catch (error: any) {
+      log(`Could not monitor resync: ${error.message}`, 'warning');
+    }
+
+    // Étape 7: État final
+    log('=== Step 7: Final status ===', 'step');
+    try {
+      const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      log(`📊 mdadm --detail ${array}:`, 'info');
+      log(detailResult.stdout.trim(), 'info');
+    } catch (error: any) {
+      log(`Could not get mdadm details: ${error.message}`, 'warning');
+    }
+
+    log(`✅ ${addedPartitions.length} disks added to RAID successfully!`, 'success');
+
+    res.json({
+      success: true,
+      dryRun: false,
+      logs,
+      message: `${addedPartitions.length} disks added to RAID successfully`,
+      addedPartitions
+    });
+  } catch (error: any) {
+    console.error('Error adding disks to mdraid:', error);
+    log(`Fatal error: ${error.message}`, 'error');
+    res.status(500).json({
+      success: false,
+      error: 'Failed to add disks to RAID',
+      details: error.message,
+      logs
     });
   }
 });
@@ -5000,30 +5283,73 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
 
     // ============================================================
     // STEP 4: Add remaining disks
+    // When step 1 was skipped (RAID not degraded), firstNewDisk was never added — include it here.
     // ============================================================
     setStep(3, { status: 'running', message: 'Préparation des disques supplémentaires...' });
     log('=== Étape 4: Ajouter les disques supplémentaires ===', 'step');
 
-    if (remainingNewDisks.length > 0) {
-      for (let i = 0; i < remainingNewDisks.length; i++) {
-        const disk = remainingNewDisks[i];
-        const diskProgress = Math.round((i / remainingNewDisks.length) * 100);
-        setStep(3, { progress: diskProgress, message: `Ajout de ${disk} (${i + 1}/${remainingNewDisks.length})...` });
-        log(`--- Adding ${disk} (${i + 1}/${remainingNewDisks.length}) ---`, 'step');
+    const step1Skipped = migrationState.steps[0].status === 'skipped';
+    const disksToAdd = step1Skipped && firstNewDisk
+      ? [firstNewDisk, ...remainingNewDisks]
+      : remainingNewDisks;
 
-        const nextLabel = await getNextPartLabel(array);
-        const partPath = await prepareDiskForRaid(disk, nextLabel, log);
-        await addPartitionToArrayRobust(array, partPath, log);
+    if (disksToAdd.length > 0) {
+      // Nettoyage RAID en parallèle
+      log(`Cleaning up RAID memberships for ${disksToAdd.length} disk(s) in parallel...`, 'info');
+      await Promise.all(disksToAdd.map(d =>
+        cleanupDiskRaidMembership(d, array, (msg, type) => log(`[${d}] ${msg}`, type))
+      ));
 
-        // Wait for resync before adding next disk
-        const mdstat = await executeCommand('cat', ['/proc/mdstat']);
-        if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync')) {
-          log(`Waiting for resync of ${disk}...`, 'info');
-          await waitForSync(3);
-        }
+      // Préparation en parallèle
+      log(`Preparing ${disksToAdd.length} disk(s) in parallel...`, 'info');
+      setStep(3, { progress: 10, message: `Préparation de ${disksToAdd.length} disque(s) en parallèle...` });
+
+      const diskInfos: { disk: string; partPath: string; label: string }[] = [];
+      let baseLabel = await getNextPartLabel(array);
+      const baseLetter = baseLabel.charAt(baseLabel.length - 1);
+
+      for (let i = 0; i < disksToAdd.length; i++) {
+        const letter = String.fromCharCode(baseLetter.charCodeAt(0) + i);
+        const label = `md0_${letter}`;
+        diskInfos.push({ disk: disksToAdd[i], partPath: getPartitionPath(disksToAdd[i], 1), label });
       }
 
-      setStep(3, { status: 'completed', progress: 100, message: `${remainingNewDisks.length} disque(s) ajouté(s)` });
+      await Promise.all(diskInfos.map(({ disk: d, label }) =>
+        prepareDiskForRaid(d, label, (msg, type) => log(`[${d}] ${msg}`, type))
+      ));
+
+      // Ajouter au RAID
+      setStep(3, { progress: 50, message: `Ajout de ${disksToAdd.length} disque(s) au RAID...` });
+      for (const { disk: d, partPath } of diskInfos) {
+        log(`Adding ${partPath} to ${array}...`, 'info');
+        await addPartitionToArrayRobust(array, partPath, log);
+      }
+
+      // Promouvoir les spares en membres actifs
+      try {
+        const detailAfterAdd = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+        const rdMatch = detailAfterAdd.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+        const tdMatch = detailAfterAdd.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+        const rd = rdMatch ? parseInt(rdMatch[1]) : 0;
+        const td = tdMatch ? parseInt(tdMatch[1]) : 0;
+        if (td > rd) {
+          log(`Growing raid-devices from ${rd} to ${td} to promote spare(s)...`, 'info');
+          await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, `--raid-devices=${td}`]);
+          log(`✓ raid-devices grown to ${td}`, 'success');
+        }
+      } catch (e: any) {
+        log(`Warning growing raid-devices: ${e.message}`, 'warning');
+      }
+
+      // Attendre le resync
+      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
+      if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync')) {
+        log('Waiting for resync...', 'info');
+        setStep(3, { progress: 60, message: 'Resynchronisation en cours...' });
+        await waitForSync(3);
+      }
+
+      setStep(3, { status: 'completed', progress: 100, message: `${disksToAdd.length} disque(s) ajouté(s)` });
     } else {
       log('No additional disks to add', 'info');
       setStep(3, { status: 'skipped', progress: 100, message: 'Aucun disque supplémentaire' });
@@ -5041,6 +5367,10 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
     const finalCurrentLevel = finalLevelMatch ? parseInt(finalLevelMatch[1]) : currentLevel;
     const finalActiveMatch = finalDetail.stdout.match(/Active Devices\s*:\s*(\d+)/i);
     const finalActiveDevices = finalActiveMatch ? parseInt(finalActiveMatch[1]) : 0;
+    const finalTotalMatch = finalDetail.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+    const finalTotalDevices = finalTotalMatch ? parseInt(finalTotalMatch[1]) : finalActiveDevices;
+    // Use total devices (active + spare) — spares were promoted in step 4 but may still be rebuilding
+    const finalDeviceCount = Math.max(finalActiveDevices, finalTotalDevices);
 
     if (finalCurrentLevel !== levelNum) {
       // Validate conversion
@@ -5064,9 +5394,9 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
         return;
       }
 
-      if (finalActiveDevices < minRequired) {
-        log(`RAID${levelNum} requires ${minRequired} disks, only ${finalActiveDevices} active`, 'error');
-        setStep(4, { status: 'error', message: `RAID${levelNum} nécessite ${minRequired} disques (${finalActiveDevices} actifs)` });
+      if (finalDeviceCount < minRequired) {
+        log(`RAID${levelNum} requires ${minRequired} disks, only ${finalDeviceCount} available (${finalActiveDevices} active, ${finalTotalDevices - finalActiveDevices} spare)`, 'error');
+        setStep(4, { status: 'error', message: `RAID${levelNum} nécessite ${minRequired} disques (${finalDeviceCount} disponibles)` });
         migrationState.status = 'error';
         migrationState.error = `RAID${levelNum} nécessite ${minRequired} disques`;
         migrationState.completedAt = new Date().toISOString();
@@ -5078,14 +5408,14 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
       // Persist it under /var/lib/mdadm — NOT /tmp which is wiped on reboot.
       await ensureDirExists(RESHAPE_BACKUP_DIR);
       const backupFile = getReshapeBackupFile(array);
-      log(`Reshape: RAID${finalCurrentLevel} → RAID${levelNum} with ${finalActiveDevices} devices`, 'info');
+      log(`Reshape: RAID${finalCurrentLevel} → RAID${levelNum} with ${finalDeviceCount} devices`, 'info');
       log(`Backup file (critical for crash recovery): ${backupFile}`, 'info');
       setStep(4, { message: `Conversion RAID${finalCurrentLevel} → RAID${levelNum}...` });
 
       const growArgs = [
         '-n', 'mdadm', '--grow', array,
         `--level=${levelNum}`,
-        `--raid-devices=${finalActiveDevices}`,
+        `--raid-devices=${finalDeviceCount}`,
         `--backup-file=${backupFile}`
       ];
 
