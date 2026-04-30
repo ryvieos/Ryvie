@@ -1003,8 +1003,8 @@ const StorageSettings = () => {
 
   // Start auto-migration
   const executeAutoMigrate = async () => {
-    setShowMigrateModal(false);
     setLogs([]);
+    setExecutionStatus('running');
     try {
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
@@ -1015,12 +1015,18 @@ const StorageSettings = () => {
       }, { timeout: 30000 });
       if (response.data.success) {
         addLog('Migration started', 'success');
+        // Garder le modal ouvert pour afficher les logs en temps réel
+        // Le modal se fermera automatiquement quand la migration sera terminée
       } else {
         addLog(`Failed: ${response.data.error}`, 'error');
+        setShowMigrateModal(false);
+        setExecutionStatus('error');
       }
     } catch (error: any) {
       const msg = error.response?.data?.error || error.message;
       addLog(`Migration error: ${msg}`, 'error');
+      setShowMigrateModal(false);
+      setExecutionStatus('error');
     }
   };
 
@@ -1998,40 +2004,84 @@ const StorageSettings = () => {
 
       {/* Auto-migrate confirmation modal */}
       {showMigrateModal && (
-        <div className="modal-overlay" onClick={() => setShowMigrateModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => executionStatus !== 'running' && setShowMigrateModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.confirmMigration')}</h2>
-            <div className="modal-section">
-              <h3>{t('storageSettings.migrationPlan')}</h3>
-              <div className="summary-grid">
-                <div className="summary-item"><strong>{t('storageSettings.targetLevel')}:</strong> {migrateLevel.toUpperCase()}</div>
-                <div className="summary-item"><strong>{t('storageSettings.selectedDisks')}:</strong> {migrateDisks.length}</div>
-                {getMigrateCapacity() > 0 && (
-                  <div className="summary-item"><strong>{t('storageSettings.usableCapacity')}:</strong> {formatBytes(getMigrateCapacity())}</div>
+
+            {/* Show logs if migration is running or has completed/errored */}
+            {executionStatus === 'running' || executionStatus === 'success' || executionStatus === 'error' ? (
+              <div className="modal-section">
+                <h3>Exécution en cours...</h3>
+                <div className="logs-container" style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '4px', padding: '0.5rem' }}>
+                  {logs.length === 0 ? (
+                    <p className="logs-placeholder">{t('storageSettings.noLogsYet')}</p>
+                  ) : (
+                    logs.map((log, index) => (
+                      <div key={index} className={`log-entry log-${log.type}`} style={{ marginBottom: '0.25rem', fontSize: '0.85em' }}>
+                        <span className="log-timestamp">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                        <span className="log-type">[{log.type.toUpperCase()}]</span>
+                        <span className="log-message">{log.message}</span>
+                      </div>
+                    ))
+                  )}
+                  <div ref={logsEndRef} />
+                </div>
+                {executionStatus === 'success' && (
+                  <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '4px', color: '#155724' }}>
+                    ✅ Migration complétée avec succès!
+                  </div>
+                )}
+                {executionStatus === 'error' && (
+                  <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px', color: '#721c24' }}>
+                    ❌ La migration a échoué. Vérifiez les logs ci-dessus.
+                  </div>
                 )}
               </div>
-              <div style={{ marginTop: '0.75rem' }}>
-                <strong>{t('storageSettings.migrationSteps')}:</strong>
-                <ol style={{ margin: '0.5rem 0 0 1.2rem', fontSize: '0.9em', color: '#555' }}>
-                  <li>{t('storageSettings.stepRepairRaid')}</li>
-                  <li>{t('storageSettings.stepRemoveOld')}</li>
-                  <li>{t('storageSettings.stepGrow')}</li>
-                  {migrateDisks.length > 1 && <li>{t('storageSettings.stepAddDisks')}</li>}
-                  <li>{t('storageSettings.stepReshape')} → {migrateLevel.toUpperCase()}</li>
-                </ol>
-              </div>
-            </div>
-            <div className="modal-warning">
-              <FontAwesomeIcon icon={faExclamationTriangle} />
-              <div>
-                <strong>ATTENTION:</strong> {t('storageSettings.migrationWarning')}
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="modal-section">
+                  <h3>{t('storageSettings.migrationPlan')}</h3>
+                  <div className="summary-grid">
+                    <div className="summary-item"><strong>{t('storageSettings.targetLevel')}:</strong> {migrateLevel.toUpperCase()}</div>
+                    <div className="summary-item"><strong>{t('storageSettings.selectedDisks')}:</strong> {migrateDisks.length}</div>
+                    {getMigrateCapacity() > 0 && (
+                      <div className="summary-item"><strong>{t('storageSettings.usableCapacity')}:</strong> {formatBytes(getMigrateCapacity())}</div>
+                    )}
+                  </div>
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <strong>{t('storageSettings.migrationSteps')}:</strong>
+                    <ol style={{ margin: '0.5rem 0 0 1.2rem', fontSize: '0.9em', color: '#555' }}>
+                      <li>{t('storageSettings.stepRepairRaid')}</li>
+                      <li>{t('storageSettings.stepRemoveOld')}</li>
+                      <li>{t('storageSettings.stepGrow')}</li>
+                      {migrateDisks.length > 1 && <li>{t('storageSettings.stepAddDisks')}</li>}
+                      <li>{t('storageSettings.stepReshape')} → {migrateLevel.toUpperCase()}</li>
+                    </ol>
+                  </div>
+                </div>
+                <div className="modal-warning">
+                  <FontAwesomeIcon icon={faExclamationTriangle} />
+                  <div>
+                    <strong>ATTENTION:</strong> {t('storageSettings.migrationWarning')}
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setShowMigrateModal(false)}>{t('storageSettings.cancel')}</button>
-              <button className="btn-danger" style={{ background: '#6366f1' }} onClick={executeAutoMigrate}>
-                <FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.applyMigration')}
-              </button>
+              {executionStatus !== 'running' && (
+                <button className="btn-secondary" onClick={() => setShowMigrateModal(false)}>{t('storageSettings.cancel')}</button>
+              )}
+              {executionStatus !== 'running' && (
+                <button className="btn-danger" style={{ background: '#6366f1' }} onClick={executeAutoMigrate}>
+                  <FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.applyMigration')}
+                </button>
+              )}
+              {(executionStatus === 'success' || executionStatus === 'error') && (
+                <button className="btn-secondary" onClick={() => { setShowMigrateModal(false); setExecutionStatus('idle'); }}>
+                  {t('storageSettings.close')}
+                </button>
+              )}
             </div>
           </div>
         </div>
