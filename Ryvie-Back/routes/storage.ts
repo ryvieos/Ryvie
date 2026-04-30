@@ -179,6 +179,239 @@ function getPartitionPath(diskPath, partNum) {
   return `${diskPath}${partNum}`;
 }
 
+type LogFn = (message: string, type?: string) => void;
+const noopLog: LogFn = () => {};
+
+const RYVIE_STATE_DIR = '/var/lib/ryvie';
+const MIGRATION_STATE_FILE = `${RYVIE_STATE_DIR}/migration-state.json`;
+const RESHAPE_BACKUP_DIR = '/var/lib/mdadm';
+
+async function ensureDirExists(path: string): Promise<void> {
+  try {
+    await executeCommand('sudo', ['-n', 'mkdir', '-p', path]);
+  } catch (e: any) {
+    // Best effort
+  }
+}
+
+function getReshapeBackupFile(array: string): string {
+  const name = array.replace(/^\/dev\//, '').replace(/\W/g, '_');
+  return `${RESHAPE_BACKUP_DIR}/reshape-${name}.bak`;
+}
+
+/**
+ * Prépare un disque pour l'ajout au RAID en utilisant sgdisk pour un alignement précis.
+ * Utilise `sgdisk -n 1:2048:0` qui prend explicitement le dernier secteur disponible,
+ * évitant le bug "not large enough" causé par parted qui peut laisser des secteurs inutilisés.
+ *
+ * @param disk - Le disque cible (ex: /dev/sdb)
+ * @param partLabel - Le label de la partition (ex: md0_b)
+ * @param log - Fonction de log
+ * @param sizeBytes - Optionnel: taille exacte de la partition en bytes (pour matcher un membre existant).
+ *                   Si omis, utilise tout l'espace disponible.
+ * @returns Le chemin de la partition créée (ex: /dev/sdb1)
+ */
+async function prepareDiskForRaid(
+  disk: string,
+  partLabel: string,
+  log: LogFn = noopLog,
+  sizeBytes?: number
+): Promise<string> {
+  if (!isValidDevicePath(disk)) {
+    throw new Error(`Invalid disk path: ${disk}`);
+  }
+
+  const partPath = getPartitionPath(disk, 1);
+
+  log(`Wiping signatures on ${disk}...`, 'info');
+  try { await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]); } catch (e: any) {}
+  try { await executeCommand('sudo', ['-n', 'sgdisk', '--zap-all', disk]); } catch (e: any) {}
+  try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', disk]); } catch (e: any) {}
+
+  // Build sgdisk arguments
+  // -n 1:2048:0 → partition 1, start sector 2048 (1 MiB aligned), end = last usable sector
+  // -n 1:2048:+SIZE → fixed size partition (used when matching existing member size)
+  // -t 1:fd00 → Linux RAID partition type
+  // -c 1:LABEL → partition label
+  const sgdiskArgs: string[] = ['-n', 'sgdisk'];
+
+  if (sizeBytes && sizeBytes > 0) {
+    // Use fixed size partition (round down to MiB for safety, then convert to sectors)
+    const sizeMiB = Math.floor(sizeBytes / 1024 / 1024);
+    sgdiskArgs.push('-n', `1:2048:+${sizeMiB}MiB`);
+    log(`Creating ${sizeMiB} MiB partition on ${disk} (matching existing member)...`, 'info');
+  } else {
+    // Use all available space, ending at last usable sector
+    sgdiskArgs.push('-n', '1:2048:0');
+    log(`Creating max-size partition on ${disk} (sector 2048 → last)...`, 'info');
+  }
+
+  sgdiskArgs.push('-t', '1:fd00', '-c', `1:${partLabel}`, disk);
+
+  await executeCommandStrict('sudo', sgdiskArgs, `sgdisk on ${disk}`);
+  log(`✓ Partition created on ${disk} with label ${partLabel}`, 'success');
+
+  // Refresh kernel partition table
+  try { await executeCommand('sudo', ['-n', 'partprobe', disk]); } catch (e: any) {}
+  try { await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']); } catch (e: any) {}
+  await executeCommand('sleep', ['2']);
+
+  // Wipe partition-level signatures and any leftover md superblock
+  try { await executeCommand('sudo', ['-n', 'wipefs', '-a', partPath]); } catch (e: any) {}
+  try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partPath]); } catch (e: any) {}
+  try { await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']); } catch (e: any) {}
+  await executeCommand('sleep', ['1']);
+
+  return partPath;
+}
+
+/**
+ * Étend la partition au dernier secteur via sgdisk. Utilisé en récupération si
+ * mdadm rejette une partition pour cause de "not large enough".
+ */
+async function extendPartitionToLastSector(disk: string, log: LogFn = noopLog): Promise<void> {
+  log(`Extending partition 1 of ${disk} to last sector via sgdisk...`, 'info');
+  // -d 1: delete partition 1, then recreate it to span 2048 → last sector
+  // We preserve the partition type and label by reading them first
+  let partLabel = 'md0_x';
+  let partType = 'fd00';
+  try {
+    const info = await executeCommand('sudo', ['-n', 'sgdisk', '-i', '1', disk]);
+    const labelMatch = info.stdout.match(/Partition name:\s*'?([^'\n]+?)'?\s*$/m);
+    if (labelMatch) partLabel = labelMatch[1].trim();
+    const typeMatch = info.stdout.match(/Partition GUID code:\s*([0-9A-Fa-f-]+)/);
+    if (typeMatch) {
+      // sgdisk takes 4-char hex codes; fd00 = Linux RAID is the safe default
+      partType = 'fd00';
+    }
+  } catch (e: any) {}
+
+  await executeCommandStrict('sudo', ['-n', 'sgdisk', '-d', '1', disk], `sgdisk delete partition 1 on ${disk}`);
+  await executeCommandStrict(
+    'sudo',
+    ['-n', 'sgdisk', '-n', '1:2048:0', '-t', `1:${partType}`, '-c', `1:${partLabel}`, disk],
+    `sgdisk recreate partition 1 on ${disk}`
+  );
+  try { await executeCommand('sudo', ['-n', 'partprobe', disk]); } catch (e: any) {}
+  try { await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']); } catch (e: any) {}
+  await executeCommand('sleep', ['1']);
+  log(`✓ Partition extended to last sector on ${disk}`, 'success');
+}
+
+/**
+ * Ajoute une partition au RAID array de manière robuste.
+ * - Tente `mdadm --add`
+ * - Si échec avec "not large enough", étend la partition au dernier secteur et réessaie
+ * - Vérifie que la partition apparaît bien dans `mdadm --detail`
+ * - Vérifie que le membre passe à l'état `active sync` ou `spare rebuilding`
+ */
+async function addPartitionToArrayRobust(
+  array: string,
+  partPath: string,
+  log: LogFn = noopLog
+): Promise<void> {
+  // Extract parent disk from partition path
+  const parentMatch = partPath.match(/^(\/dev\/(?:sd[a-z]+|vd[a-z]+|nvme\d+n\d+))p?\d+$/);
+  const parentDisk = parentMatch ? parentMatch[1] : null;
+
+  const tryAdd = async (): Promise<{ ok: boolean; stderr: string }> => {
+    const result = await executeCommand('sudo', ['-n', 'mdadm', '--add', array, partPath]);
+    if (result.exitCode === 0) {
+      return { ok: true, stderr: result.stderr };
+    }
+    return { ok: false, stderr: result.stderr };
+  };
+
+  log(`Adding ${partPath} to ${array}...`, 'info');
+  let result = await tryAdd();
+
+  // Auto-recovery on "not large enough"
+  if (!result.ok && /not large enough/i.test(result.stderr)) {
+    log(`⚠ ${partPath} not large enough — extending partition to last sector and retrying`, 'warning');
+    if (!parentDisk) {
+      throw new Error(`Cannot determine parent disk for ${partPath} to extend partition`);
+    }
+    await extendPartitionToLastSector(parentDisk, log);
+    // Re-wipe partition signatures (safe; we never wrote data on it)
+    try { await executeCommand('sudo', ['-n', 'wipefs', '-a', partPath]); } catch (e: any) {}
+    try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partPath]); } catch (e: any) {}
+    await executeCommand('sleep', ['1']);
+    result = await tryAdd();
+  }
+
+  if (!result.ok) {
+    throw new Error(`mdadm --add ${array} ${partPath} failed: ${result.stderr.trim() || 'unknown error'}`);
+  }
+
+  if (result.stderr.trim()) log(result.stderr.trim(), 'info');
+
+  // Verify partition appears in mdadm --detail
+  let appears = false;
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    await executeCommand('sleep', ['2']);
+    const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+    if (verify.stdout.includes(partPath)) {
+      appears = true;
+      break;
+    }
+  }
+  if (!appears) {
+    throw new Error(`${partPath} did not appear in ${array} after add (kernel may have rejected it)`);
+  }
+
+  // Verify member transitions to a healthy state (active, spare, or rebuilding)
+  // Acceptable states: "active sync", "spare", "spare rebuilding"
+  let healthy = false;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+    const lines = verify.stdout.split('\n');
+    for (const line of lines) {
+      if (line.includes(partPath)) {
+        if (/active sync|spare|rebuilding/i.test(line) && !/faulty/i.test(line)) {
+          healthy = true;
+        }
+        break;
+      }
+    }
+    if (healthy) break;
+    await executeCommand('sleep', ['2']);
+  }
+
+  if (!healthy) {
+    log(`⚠ ${partPath} added but not yet in active/spare state — kernel may still be initializing`, 'warning');
+  } else {
+    log(`✓ ${partPath} is now active in ${array}`, 'success');
+  }
+}
+
+/**
+ * Migration state persistence — survives backend restarts/reboots.
+ */
+async function persistMigrationState(state: any): Promise<void> {
+  try {
+    const fs = require('fs');
+    await ensureDirExists(RYVIE_STATE_DIR);
+    // Use sudo write because dir is owned by root
+    const tmpFile = `/tmp/migration-state-${Date.now()}.json`;
+    fs.writeFileSync(tmpFile, JSON.stringify(state, null, 2));
+    await executeCommand('sudo', ['-n', 'cp', tmpFile, MIGRATION_STATE_FILE]);
+    fs.unlinkSync(tmpFile);
+  } catch (e: any) {
+    console.error('Failed to persist migration state:', e.message);
+  }
+}
+
+function loadMigrationStateSync(): any | null {
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(MIGRATION_STATE_FILE)) return null;
+    const raw = fs.readFileSync(MIGRATION_STATE_FILE, 'utf8');
+    return JSON.parse(raw);
+  } catch (e: any) {
+    return null;
+  }
+}
+
 /**
  * GET /api/storage/inventory
  * Récupère l'inventaire complet des devices et points de montage
@@ -855,19 +1088,18 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
       log('🔍 DRY RUN MODE - No changes will be made', 'warning');
       log('=== Commands that would be executed ===', 'step');
       log(`wipefs -a ${disk}`, 'info');
-      log(`parted -s ${disk} mklabel gpt`, 'info');
-      log(`parted -s ${disk} mkpart primary 1MiB ${endMiB}MiB`, 'info');
-      log(`parted -s ${disk} name 1 ${nextPartLabel}`, 'info');
-      log(`parted -s ${disk} set 1 raid on`, 'info');
+      log(`sgdisk --zap-all ${disk}`, 'info');
+      log(`mdadm --zero-superblock ${disk}`, 'info');
+      log(`sgdisk -n 1:2048:0 -t 1:fd00 -c 1:${nextPartLabel} ${disk}`, 'info');
       log(`partprobe ${disk} && udevadm settle`, 'info');
       log(`wipefs -a ${newPartitionPath}`, 'info');
-      log(`udevadm settle --timeout=10 && sleep 2`, 'info');
       log(`mdadm --zero-superblock ${newPartitionPath}`, 'info');
       log(`mdadm --add ${array} ${newPartitionPath}`, 'info');
+      log(`(retry once with extended partition if "not large enough")`, 'info');
       log(`mdadm --detail --scan > /etc/mdadm/mdadm.conf`, 'info');
       log(`update-initramfs -u`, 'info');
       log('✓ Dry run completed', 'success');
-      
+
       return res.json({
         success: true,
         dryRun: true,
@@ -876,65 +1108,14 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
       });
     }
 
-    // Étape 2: Wipe signatures & table
-    log('=== Step 2: Wiping disk and creating GPT table ===', 'step');
-    
-    try {
-      log(`Wiping signatures on ${disk}...`, 'info');
-      const wipeResult = await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]);
-      log(`✓ Wiped ${disk}`, 'success');
-      if (wipeResult.stdout) log(wipeResult.stdout.trim(), 'info');
-    } catch (error: any) {
-      log(`Error wiping ${disk}: ${error.message}`, 'error');
-      throw error;
-    }
+    // Étape 2-3: Préparer le disque (wipe + GPT + partition alignée)
+    log('=== Step 2: Preparing disk (wipe + sgdisk-aligned GPT partition) ===', 'step');
 
     try {
-      log(`Creating GPT partition table on ${disk}...`, 'info');
-      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mklabel', 'gpt']);
-      log(`✓ Created GPT table on ${disk}`, 'success');
+      await prepareDiskForRaid(disk, nextPartLabel, log);
     } catch (error: any) {
-      log(`Error creating GPT table: ${error.message}`, 'error');
+      log(`Error preparing disk ${disk}: ${error.message}`, 'error');
       throw error;
-    }
-
-    // Étape 3: Créer la partition nommée
-    log('=== Step 3: Creating RAID partition ===', 'step');
-    
-    try {
-      log(`Creating partition from 1MiB to ${endMiB}MiB...`, 'info');
-      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mkpart', 'primary', '1MiB', `${endMiB}MiB`]);
-      log(`✓ Created partition`, 'success');
-    } catch (error: any) {
-      log(`Error creating partition: ${error.message}`, 'error');
-      throw error;
-    }
-
-    try {
-      log(`Setting partition label to ${nextPartLabel}...`, 'info');
-      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'name', '1', nextPartLabel]);
-      log(`✓ Set partition label`, 'success');
-    } catch (error: any) {
-      log(`Error setting partition label: ${error.message}`, 'error');
-      throw error;
-    }
-
-    try {
-      log(`Setting RAID flag on partition...`, 'info');
-      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'set', '1', 'raid', 'on']);
-      log(`✓ Set RAID flag`, 'success');
-    } catch (error: any) {
-      log(`Error setting RAID flag: ${error.message}`, 'error');
-      throw error;
-    }
-
-    try {
-      log(`Running partprobe and udevadm settle...`, 'info');
-      await executeCommand('sudo', ['-n', 'partprobe', disk]);
-      await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
-      log(`✓ Partition table updated`, 'success');
-    } catch (error: any) {
-      log(`Warning: partprobe/udevadm: ${error.message}`, 'warning');
     }
 
     // Étape 4: Assainir & ajouter au RAID
@@ -1055,46 +1236,9 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
       log(`✓ No existing superblock found (clean partition)`, 'success');
     }
     
-    // Wiper toutes les signatures de la partition (filesystem, etc.)
+    // Add to RAID — robust helper handles "not large enough" auto-recovery and active-state verification
     try {
-      log(`Wiping all signatures from ${newPartitionPath}...`, 'info');
-      await executeCommand('sudo', ['-n', 'wipefs', '-a', newPartitionPath]);
-      log(`✓ Wiped partition signatures`, 'success');
-    } catch (error: any) {
-      log(`Warning: wipefs on partition: ${error.message}`, 'warning');
-    }
-    
-    // Attendre que udev se stabilise après le wipe
-    try {
-      log(`Waiting for udev to settle after cleanup...`, 'info');
-      await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
-      await executeCommand('sleep', ['2']);
-      log(`✓ Device settled`, 'success');
-    } catch (error: any) {
-      log(`Warning: udev settle: ${error.message}`, 'warning');
-    }
-
-    try {
-      log(`Adding ${newPartitionPath} to ${array}...`, 'info');
-      const addResult = await executeCommand('sudo', ['-n', 'mdadm', '--add', array, newPartitionPath]);
-      log(`✓ Command executed: mdadm --add`, 'success');
-      if (addResult.stdout) log(addResult.stdout.trim(), 'info');
-      if (addResult.stderr) log(addResult.stderr.trim(), 'warning');
-      
-      // Attendre que le device soit reconnu
-      log(`Waiting for device to be recognized...`, 'info');
-      await executeCommand('sleep', ['3']);
-      
-      // Vérifier que le disque a bien été ajouté
-      const verifyResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
-      if (!verifyResult.stdout.includes(newPartitionPath)) {
-        log(`❌ ERROR: ${newPartitionPath} was NOT added to the array!`, 'error');
-        log(`This may indicate a problem with the partition or mdadm configuration`, 'error');
-        log(`Try manually: sudo mdadm --add ${array} ${newPartitionPath}`, 'warning');
-        throw new Error(`Failed to add ${newPartitionPath} to ${array}`);
-      } else {
-        log(`✓ Verified: ${newPartitionPath} is now part of the array`, 'success');
-      }
+      await addPartitionToArrayRobust(array, newPartitionPath, log);
     } catch (error: any) {
       log(`Error adding partition to RAID: ${error.message}`, 'error');
       throw error;
@@ -3456,31 +3600,39 @@ router.post('/storage/mdraid-reshape', authenticateTokenOrFirstTime, async (req:
       log(`Estimated new capacity: ${newCapacityEstimate}`, 'info');
     }
 
+    // Reshape backup file is REQUIRED for RAID level changes (e.g., 1→5).
+    // Without it, an unexpected power loss during reshape can corrupt data.
+    // We persist it under /var/lib/mdadm (NOT /tmp which is volatile).
+    await ensureDirExists(RESHAPE_BACKUP_DIR);
+    const backupFile = getReshapeBackupFile(array);
+
     // Dry run mode
     if (dryRun) {
-      log(`[DRY RUN] Would execute: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices}`, 'info');
+      log(`[DRY RUN] Would execute: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices} --backup-file=${backupFile}`, 'info');
       log('✓ Dry run completed — no changes made', 'success');
-      return res.json({ 
-        success: true, 
-        dryRun: true, 
+      return res.json({
+        success: true,
+        dryRun: true,
         logs,
         currentLevel: currentLevel,
         targetLevel: `raid${normalizedLevel}`,
         activeDevices,
         newCapacityEstimate,
-        command: `mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices}`
+        command: `mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices} --backup-file=${backupFile}`
       });
     }
 
     // Step 6: Execute reshape
     log('Step 6: Starting RAID reshape...', 'step');
-    log(`Executing: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices}`, 'info');
+    log(`Executing: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices} --backup-file=${backupFile}`, 'info');
+    log(`Backup file (critical for crash recovery): ${backupFile}`, 'info');
 
     try {
       const reshapeResult = await executeCommand('sudo', [
-        '-n', 'mdadm', '--grow', array, 
+        '-n', 'mdadm', '--grow', array,
         `--level=${normalizedLevel}`,
-        `--raid-devices=${activeDevices}`
+        `--raid-devices=${activeDevices}`,
+        `--backup-file=${backupFile}`
       ]);
       
       if (reshapeResult.stderr && reshapeResult.stderr.trim()) {
@@ -3931,48 +4083,12 @@ router.post('/storage/mdraid-smart-setup', authenticateTokenOrFirstTime, async (
       }
     };
 
-    // Helper: add a single disk to existing array
+    // Helper: add a single disk to existing array (uses sgdisk-aligned partition + robust add)
     const addDiskToArray = async (arrayDev, disk) => {
       log(`--- Adding ${disk} to ${arrayDev} ---`, 'step');
-
-      // Get next partition label
       const nextPartLabel = await getNextPartLabel(arrayDev);
-      const newPartPath = getPartitionPath(disk, 1);
-
-      // Get disk size for partition
-      const lsblkResult = await executeCommand('lsblk', ['-b', '-d', '-n', '-o', 'SIZE', disk]);
-      const deviceSizeBytes = parseInt(lsblkResult.stdout.trim());
-      const endMiB = Math.floor((deviceSizeBytes - (2 * 1024 * 1024)) / 1024 / 1024);
-
-      // Prepare disk
-      log(`Wiping ${disk}...`, 'info');
-      try { await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]); } catch (e: any) {}
-      try { await executeCommand('sudo', ['-n', 'sgdisk', '--zap-all', disk]); } catch (e: any) {}
-      try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', disk]); } catch (e: any) {}
-
-      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mklabel', 'gpt']);
-      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mkpart', 'primary', '1MiB', `${endMiB}MiB`]);
-      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'name', '1', nextPartLabel]);
-      await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'set', '1', 'raid', 'on']);
-      await executeCommand('sudo', ['-n', 'partprobe', disk]);
-      await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
-      await executeCommand('sleep', ['2']);
-
-      try { await executeCommand('sudo', ['-n', 'wipefs', '-a', newPartPath]); } catch (e: any) {}
-      try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', newPartPath]); } catch (e: any) {}
-      await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
-      await executeCommand('sleep', ['2']);
-
-      // Add to array
-      log(`Adding ${newPartPath} to ${arrayDev}...`, 'info');
-      await executeCommand('sudo', ['-n', 'mdadm', '--add', arrayDev, newPartPath]);
-
-      // Verify
-      await executeCommand('sleep', ['3']);
-      const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', arrayDev]);
-      if (!verify.stdout.includes(newPartPath)) {
-        throw new Error(`${newPartPath} was NOT added to ${arrayDev}`);
-      }
+      const newPartPath = await prepareDiskForRaid(disk, nextPartLabel, log);
+      await addPartitionToArrayRobust(arrayDev, newPartPath, log);
       log(`✓ ${disk} added to array`, 'success');
     };
 
@@ -4493,6 +4609,26 @@ let migrationState: MigrationState = {
   completedAt: null
 };
 
+// Restore prior migration state from disk on startup so a backend restart
+// during a long resync/reshape doesn't lose visible progress.
+// Note: we don't restart the orchestration itself — mdadm continues in the
+// kernel autonomously — but we expose the last known status to the frontend.
+(() => {
+  const restored = loadMigrationStateSync();
+  if (restored && restored.id) {
+    // If restored status was 'running' but the backend is just starting,
+    // we cannot resume the orchestration loop. Mark as 'interrupted' so the
+    // frontend shows the last known state rather than a phantom in-progress.
+    if (restored.status === 'running') {
+      restored.status = 'error';
+      restored.error = restored.error || 'Backend restarted during migration — kernel reshape may still be running. Check mdadm --detail.';
+      restored.completedAt = restored.completedAt || new Date().toISOString();
+    }
+    migrationState = restored;
+    console.log(`[migration] Restored prior migration state: ${restored.id} (${restored.status})`);
+  }
+})();
+
 /**
  * GET /api/storage/mdraid-migration-status
  * Returns current auto-migration state (for polling fallback)
@@ -4566,6 +4702,8 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
 
   const emitMigration = () => {
     if (io) io.emit('mdraid-migration-progress', migrationState);
+    // Fire-and-forget persistence so a backend restart preserves last known state
+    persistMigrationState(migrationState).catch(() => {});
   };
 
   const setStep = (stepIdx: number, updates: Partial<MigrationStep>) => {
@@ -4711,54 +4849,14 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
 
     if (isDegraded && firstNewDisk) {
       // Create partition matching existing member size on first new disk
-      const matchSizeBytes = memberSize;
-      const matchSizeMiB = Math.floor(matchSizeBytes / 1024 / 1024);
+      const matchSizeMiB = Math.floor(memberSize / 1024 / 1024);
       const nextPartLabel = await getNextPartLabel(array);
-      const newPartPath = getPartitionPath(firstNewDisk, 1);
 
-      log(`Creating ${matchSizeMiB} MiB partition on ${firstNewDisk} (matching existing member)`, 'info');
       setStep(0, { message: `Création partition ${matchSizeMiB} MiB sur ${firstNewDisk}` });
+      const newPartPath = await prepareDiskForRaid(firstNewDisk, nextPartLabel, log, memberSize);
 
-      // Prepare disk
-      try { await executeCommand('sudo', ['-n', 'wipefs', '-a', firstNewDisk]); } catch (e: any) {}
-      try { await executeCommand('sudo', ['-n', 'sgdisk', '--zap-all', firstNewDisk]); } catch (e: any) {}
-      try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', firstNewDisk]); } catch (e: any) {}
-
-      await executeCommand('sudo', ['-n', 'parted', '-s', firstNewDisk, 'mklabel', 'gpt']);
-      await executeCommand('sudo', ['-n', 'parted', '-s', firstNewDisk, 'mkpart', 'primary', '1MiB', `${matchSizeMiB}MiB`]);
-      await executeCommand('sudo', ['-n', 'parted', '-s', firstNewDisk, 'name', '1', nextPartLabel]);
-      await executeCommand('sudo', ['-n', 'parted', '-s', firstNewDisk, 'set', '1', 'raid', 'on']);
-      await executeCommand('sudo', ['-n', 'partprobe', firstNewDisk]);
-      await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
-      await executeCommand('sleep', ['2']);
-
-      try { await executeCommand('sudo', ['-n', 'wipefs', '-a', newPartPath]); } catch (e: any) {}
-      try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', newPartPath]); } catch (e: any) {}
-      await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
-      await executeCommand('sleep', ['2']);
-
-      // Add to array
-      log(`Adding ${newPartPath} to ${array}...`, 'info');
       setStep(0, { message: `Ajout de ${newPartPath} au RAID...` });
-      const addResult = await executeCommandStrict('sudo', ['-n', 'mdadm', '--add', array, newPartPath], `mdadm --add ${array} ${newPartPath}`);
-      if (addResult.stderr.trim()) {
-        log(addResult.stderr.trim(), 'warning');
-      }
-
-      // Verify
-      let added = false;
-      for (let attempt = 1; attempt <= 5; attempt++) {
-        await executeCommand('sleep', ['2']);
-        const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
-        if (verify.stdout.includes(newPartPath)) {
-          added = true;
-          break;
-        }
-      }
-      if (!added) {
-        throw new Error(`${newPartPath} was NOT added to ${array}`);
-      }
-      log(`${newPartPath} added to RAID`, 'success');
+      await addPartitionToArrayRobust(array, newPartPath, log);
 
       // Wait for resync
       const mdstat = await executeCommand('cat', ['/proc/mdstat']);
@@ -4914,52 +5012,8 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
         log(`--- Adding ${disk} (${i + 1}/${remainingNewDisks.length}) ---`, 'step');
 
         const nextLabel = await getNextPartLabel(array);
-        const partPath = getPartitionPath(disk, 1);
-
-        // Get disk size for full partition
-        const sz = await executeCommand('lsblk', ['-b', '-d', '-n', '-o', 'SIZE', disk]);
-        const diskBytes = parseInt(sz.stdout.trim());
-        const endMiB = Math.floor((diskBytes - (2 * 1024 * 1024)) / 1024 / 1024);
-
-        // Prepare
-        try { await executeCommand('sudo', ['-n', 'wipefs', '-a', disk]); } catch (e: any) {}
-        try { await executeCommand('sudo', ['-n', 'sgdisk', '--zap-all', disk]); } catch (e: any) {}
-        try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', disk]); } catch (e: any) {}
-
-        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mklabel', 'gpt']);
-        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'mkpart', 'primary', '1MiB', `${endMiB}MiB`]);
-        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'name', '1', nextLabel]);
-        await executeCommand('sudo', ['-n', 'parted', '-s', disk, 'set', '1', 'raid', 'on']);
-        await executeCommand('sudo', ['-n', 'partprobe', disk]);
-        await executeCommand('sudo', ['-n', 'udevadm', 'settle']);
-        await executeCommand('sleep', ['2']);
-
-        try { await executeCommand('sudo', ['-n', 'wipefs', '-a', partPath]); } catch (e: any) {}
-        try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partPath]); } catch (e: any) {}
-        await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
-        await executeCommand('sleep', ['2']);
-
-        // Add
-        log(`Adding ${partPath} to ${array}...`, 'info');
-        const addResult = await executeCommandStrict('sudo', ['-n', 'mdadm', '--add', array, partPath], `mdadm --add ${array} ${partPath}`);
-        if (addResult.stderr.trim()) {
-          log(addResult.stderr.trim(), 'warning');
-        }
-
-        // Verify
-        let added = false;
-        for (let attempt = 1; attempt <= 5; attempt++) {
-          await executeCommand('sleep', ['2']);
-          const verify = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
-          if (verify.stdout.includes(partPath)) {
-            added = true;
-            break;
-          }
-        }
-        if (!added) {
-          throw new Error(`${partPath} was NOT added to ${array}`);
-        }
-        log(`${partPath} added`, 'success');
+        const partPath = await prepareDiskForRaid(disk, nextLabel, log);
+        await addPartitionToArrayRobust(array, partPath, log);
 
         // Wait for resync before adding next disk
         const mdstat = await executeCommand('cat', ['/proc/mdstat']);
@@ -5020,9 +5074,12 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
         return;
       }
 
-      // Create backup file for reshape (required for RAID5/6)
-      const backupFile = '/tmp/md0-reshape.bak';
+      // Create backup file for reshape (required for RAID5/6).
+      // Persist it under /var/lib/mdadm — NOT /tmp which is wiped on reboot.
+      await ensureDirExists(RESHAPE_BACKUP_DIR);
+      const backupFile = getReshapeBackupFile(array);
       log(`Reshape: RAID${finalCurrentLevel} → RAID${levelNum} with ${finalActiveDevices} devices`, 'info');
+      log(`Backup file (critical for crash recovery): ${backupFile}`, 'info');
       setStep(4, { message: `Conversion RAID${finalCurrentLevel} → RAID${levelNum}...` });
 
       const growArgs = [
