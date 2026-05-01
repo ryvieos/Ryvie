@@ -3889,9 +3889,39 @@ router.post('/storage/mdraid-reshape', authenticateTokenOrFirstTime, async (req:
     await ensureDirExists(RESHAPE_BACKUP_DIR);
     const backupFile = getReshapeBackupFile(array);
 
+    // Extract member devices from mdadm --detail output
+    const memberRegex = /\s+\d+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+(\/dev\/\S+)/g;
+    const memberDevices: string[] = [];
+    let memberMatch;
+    while ((memberMatch = memberRegex.exec(detailResult.stdout)) !== null) {
+      memberDevices.push(memberMatch[1]);
+    }
+
+    // RAID1 with >2 devices → RAID5 requires: remove extras, convert with 2, re-add
+    const needsMultiStepConversion = currentLevelNum === '1' && normalizedLevel === '5' && activeDevices > 2;
+    const devicesToRemove = needsMultiStepConversion ? memberDevices.slice(2) : [];
+
+    const chunkSizeKB = 64;
+
     // Dry run mode
     if (dryRun) {
-      log(`[DRY RUN] Would execute: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices} --backup-file=${backupFile}`, 'info');
+      if (usedDevSizeKB > 0 && usedDevSizeKB % chunkSizeKB !== 0) {
+        const alignedSizeKB = usedDevSizeKB - (usedDevSizeKB % chunkSizeKB);
+        log(`[DRY RUN] Would align size: mdadm --grow ${array} --size=${alignedSizeKB} (current: ${usedDevSizeKB} KiB, aligned to ${chunkSizeKB}K chunk, loss: ${usedDevSizeKB - alignedSizeKB} KiB)`, 'info');
+      }
+      if (needsMultiStepConversion) {
+        log(`[DRY RUN] RAID1 has ${activeDevices} devices — mdadm requires exactly 2 for RAID1→RAID5 conversion`, 'info');
+        for (const dev of devicesToRemove) {
+          log(`[DRY RUN] Would temporarily remove: mdadm ${array} --fail ${dev} && mdadm ${array} --remove ${dev}`, 'info');
+        }
+        log(`[DRY RUN] Would reduce: mdadm --grow ${array} --raid-devices=2`, 'info');
+      }
+      log(`[DRY RUN] Would execute: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=2 --backup-file=${backupFile}`, 'info');
+      if (needsMultiStepConversion) {
+        for (const dev of devicesToRemove) {
+          log(`[DRY RUN] Would re-add: mdadm --grow ${array} --raid-devices=${activeDevices} && mdadm ${array} --add ${dev}`, 'info');
+        }
+      }
       log('✓ Dry run completed — no changes made', 'success');
       return res.json({
         success: true,
@@ -3901,39 +3931,132 @@ router.post('/storage/mdraid-reshape', authenticateTokenOrFirstTime, async (req:
         targetLevel: `raid${normalizedLevel}`,
         activeDevices,
         newCapacityEstimate,
-        command: `mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices} --backup-file=${backupFile}`
+        needsMultiStepConversion,
+        command: `mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${needsMultiStepConversion ? 2 : activeDevices} --backup-file=${backupFile}`
       });
     }
 
-    // Step 6: Execute reshape
-    log('Step 6: Starting RAID reshape...', 'step');
-    log(`Executing: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${activeDevices} --backup-file=${backupFile}`, 'info');
+    let stepNum = 6;
+
+    // Align component size to chunk size (required for RAID1→RAID5)
+    if (usedDevSizeKB > 0 && usedDevSizeKB % chunkSizeKB !== 0) {
+      log(`Step ${stepNum}: Aligning array component size to ${chunkSizeKB}K boundary...`, 'step');
+      const alignedSizeKB = usedDevSizeKB - (usedDevSizeKB % chunkSizeKB);
+      log(`Current Used Dev Size: ${usedDevSizeKB} KiB → aligned to ${alignedSizeKB} KiB (loss: ${usedDevSizeKB - alignedSizeKB} KiB)`, 'info');
+
+      const alignResult = await executeCommand('sudo', [
+        '-n', 'mdadm', '--grow', array, `--size=${alignedSizeKB}`
+      ]);
+
+      if (alignResult.exitCode !== 0) {
+        const errMsg = (alignResult.stderr || alignResult.stdout || '').trim();
+        log(`❌ Failed to align array size: ${errMsg}`, 'error');
+        return res.status(500).json({ success: false, error: `Failed to align array size: ${errMsg}`, logs });
+      }
+      log(`✓ Array component size aligned to ${alignedSizeKB} KiB`, 'success');
+      stepNum++;
+    }
+
+    // For RAID1 >2 devices → RAID5: temporarily remove extra devices
+    if (needsMultiStepConversion) {
+      log(`Step ${stepNum}: Removing extra devices for RAID1→RAID5 conversion (mdadm requires exactly 2)...`, 'step');
+      for (const dev of devicesToRemove) {
+        log(`Failing ${dev}...`, 'info');
+        const failResult = await executeCommand('sudo', ['-n', 'mdadm', array, '--fail', dev]);
+        if (failResult.exitCode !== 0) {
+          const errMsg = (failResult.stderr || '').trim();
+          log(`❌ Failed to fail device ${dev}: ${errMsg}`, 'error');
+          return res.status(500).json({ success: false, error: `Failed to fail device ${dev}: ${errMsg}`, logs });
+        }
+        log(`Removing ${dev}...`, 'info');
+        const removeResult = await executeCommand('sudo', ['-n', 'mdadm', array, '--remove', dev]);
+        if (removeResult.exitCode !== 0) {
+          const errMsg = (removeResult.stderr || '').trim();
+          log(`❌ Failed to remove device ${dev}: ${errMsg}`, 'error');
+          return res.status(500).json({ success: false, error: `Failed to remove device ${dev}: ${errMsg}`, logs });
+        }
+        log(`✓ Removed ${dev} from array`, 'success');
+      }
+
+      log(`Reducing raid-devices count to 2...`, 'info');
+      const reduceResult = await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, '--raid-devices=2']);
+      if (reduceResult.exitCode !== 0) {
+        const errMsg = (reduceResult.stderr || '').trim();
+        log(`❌ Failed to reduce raid-devices: ${errMsg}`, 'error');
+        return res.status(500).json({ success: false, error: `Failed to reduce raid-devices to 2: ${errMsg}`, logs });
+      }
+      log(`✓ Array reduced to 2 raid-devices`, 'success');
+      stepNum++;
+    }
+
+    // Execute reshape
+    log(`Step ${stepNum}: Starting RAID reshape...`, 'step');
+    const reshapeRaidDevices = needsMultiStepConversion ? 2 : activeDevices;
+    const reshapeArgs = [
+      '-n', 'mdadm', '--grow', array,
+      `--level=${normalizedLevel}`,
+      `--raid-devices=${reshapeRaidDevices}`,
+      `--chunk=${chunkSizeKB}`,
+      `--backup-file=${backupFile}`
+    ];
+    log(`Executing: mdadm --grow ${array} --level=${normalizedLevel} --raid-devices=${reshapeRaidDevices} --chunk=${chunkSizeKB} --backup-file=${backupFile}`, 'info');
     log(`Backup file (critical for crash recovery): ${backupFile}`, 'info');
 
     try {
-      const reshapeResult = await executeCommand('sudo', [
-        '-n', 'mdadm', '--grow', array,
-        `--level=${normalizedLevel}`,
-        `--raid-devices=${activeDevices}`,
-        `--backup-file=${backupFile}`
-      ]);
-      
+      const reshapeResult = await executeCommand('sudo', reshapeArgs);
+
       if (reshapeResult.stderr && reshapeResult.stderr.trim()) {
-        log(`mdadm output: ${reshapeResult.stderr.trim()}`, 'info');
+        log(`mdadm output: ${reshapeResult.stderr.trim()}`, reshapeResult.exitCode !== 0 ? 'error' : 'info');
       }
       if (reshapeResult.stdout && reshapeResult.stdout.trim()) {
-        log(`mdadm output: ${reshapeResult.stdout.trim()}`, 'info');
+        log(`mdadm output: ${reshapeResult.stdout.trim()}`, reshapeResult.exitCode !== 0 ? 'error' : 'info');
       }
-      
+
+      if (reshapeResult.exitCode !== 0) {
+        const errMsg = (reshapeResult.stderr || reshapeResult.stdout || '').trim();
+        log(`❌ Reshape failed (exit code ${reshapeResult.exitCode}): ${errMsg}`, 'error');
+        return res.status(500).json({ success: false, error: `Reshape failed: ${errMsg}`, logs });
+      }
+
       log(`✓ Reshape initiated: ${currentLevel} → RAID ${normalizedLevel}`, 'success');
     } catch (reshapeErr: any) {
       log(`❌ Reshape failed: ${reshapeErr.message}`, 'error');
       if (reshapeErr.stderr) log(`stderr: ${reshapeErr.stderr}`, 'error');
       return res.status(500).json({ success: false, error: `Reshape failed: ${reshapeErr.message}`, logs });
     }
+    stepNum++;
 
-    // Step 7: Update mdadm.conf
-    log('Step 7: Updating configuration...', 'step');
+    // Re-add removed devices after successful reshape initiation
+    if (needsMultiStepConversion && devicesToRemove.length > 0) {
+      log(`Step ${stepNum}: Re-adding devices to RAID5 array...`, 'step');
+      const targetRaidDevices = 2 + devicesToRemove.length;
+
+      for (const dev of devicesToRemove) {
+        log(`Adding ${dev} as spare...`, 'info');
+        const addResult = await executeCommand('sudo', ['-n', 'mdadm', array, '--add', dev]);
+        if (addResult.exitCode !== 0) {
+          log(`Warning: Could not re-add ${dev}: ${(addResult.stderr || '').trim()}`, 'warning');
+          log(`You may need to manually run: mdadm ${array} --add ${dev}`, 'warning');
+        } else {
+          log(`✓ Added ${dev} as spare`, 'success');
+        }
+      }
+
+      log(`Growing raid-devices to ${targetRaidDevices}...`, 'info');
+      const growDevsResult = await executeCommand('sudo', [
+        '-n', 'mdadm', '--grow', array, `--raid-devices=${targetRaidDevices}`
+      ]);
+      if (growDevsResult.exitCode !== 0) {
+        log(`Warning: Could not grow raid-devices to ${targetRaidDevices}: ${(growDevsResult.stderr || '').trim()}`, 'warning');
+        log(`You may need to manually run: mdadm --grow ${array} --raid-devices=${targetRaidDevices}`, 'warning');
+      } else {
+        log(`✓ Array expanded to ${targetRaidDevices} raid-devices`, 'success');
+      }
+      stepNum++;
+    }
+
+    // Update mdadm.conf
+    log(`Step ${stepNum}: Updating configuration...`, 'step');
     try {
       await executeCommand('sudo', ['-n', 'bash', '-c', 'mdadm --detail --scan > /etc/mdadm/mdadm.conf']);
       log('✓ Updated /etc/mdadm/mdadm.conf', 'success');
@@ -3947,27 +4070,29 @@ router.post('/storage/mdraid-reshape', authenticateTokenOrFirstTime, async (req:
     } catch (e: any) {
       log(`Warning: Could not update initramfs: ${e.message}`, 'warning');
     }
+    stepNum++;
 
-    // Step 8: Check if reshape is in progress
-    log('Step 8: Checking reshape progress...', 'step');
+    // Check if reshape is in progress
+    log(`Step ${stepNum}: Checking reshape progress...`, 'step');
     try {
       const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
       const mdName = array.replace('/dev/', '');
       const mdstatSections = mdstatResult.stdout.split(/^(?=md\d+\s*:)/m);
       const targetSection = mdstatSections.find(s => s.startsWith(mdName)) || '';
-      
-      const reshapeMatch = targetSection.match(/reshape\s*=\s*(\d+\.\d+)%/);
-      if (reshapeMatch) {
-        log(`Reshape in progress: ${reshapeMatch[1]}%`, 'info');
+
+      const reshapeMatch2 = targetSection.match(/reshape\s*=\s*(\d+\.\d+)%/);
+      if (reshapeMatch2) {
+        log(`Reshape in progress: ${reshapeMatch2[1]}%`, 'info');
       } else {
         log('Reshape completed immediately or is pending', 'info');
       }
     } catch (e: any) {
       // Not critical
     }
+    stepNum++;
 
-    // Step 9: If filesystem is btrfs, resize after reshape completes
-    log('Step 9: Filesystem resize will be needed after reshape completes', 'info');
+    // Filesystem resize note
+    log(`Step ${stepNum}: Filesystem resize will be needed after reshape completes`, 'info');
     log('Run: btrfs filesystem resize max /data', 'info');
 
     log(`✅ RAID reshape initiated: ${currentLevel} → RAID ${normalizedLevel}`, 'success');
@@ -3979,6 +4104,8 @@ router.post('/storage/mdraid-reshape', authenticateTokenOrFirstTime, async (req:
       targetLevel: `raid${normalizedLevel}`,
       activeDevices,
       newCapacityEstimate,
+      needsMultiStepConversion,
+      devicesReAdded: devicesToRemove,
       message: `Reshape started: ${currentLevel} → RAID ${normalizedLevel}`
     });
   } catch (error: any) {
@@ -4786,7 +4913,14 @@ router.post('/storage/mdraid-grow-size', authenticateTokenOrFirstTime, async (re
     log('Step 3: Growing RAID array to max size...', 'step');
     try {
       const growResult = await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, '--size', 'max']);
-      if (growResult.stderr && growResult.stderr.trim()) log(`mdadm: ${growResult.stderr.trim()}`, 'info');
+      if (growResult.stderr && growResult.stderr.trim()) {
+        log(`mdadm: ${growResult.stderr.trim()}`, growResult.exitCode !== 0 ? 'error' : 'info');
+      }
+      if (growResult.exitCode !== 0) {
+        const errMsg = (growResult.stderr || growResult.stdout || '').trim();
+        log(`❌ Failed to grow RAID: ${errMsg}`, 'error');
+        return res.status(500).json({ success: false, error: `Failed to grow: ${errMsg}`, logs });
+      }
       log('✓ RAID array grown to maximum size', 'success');
     } catch (growErr: any) {
       log(`❌ Failed to grow RAID: ${growErr.message}`, 'error');
