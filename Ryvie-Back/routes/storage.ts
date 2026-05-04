@@ -1282,9 +1282,17 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
       log(`Warning: Could not grow raid-devices: ${error.message}`, 'warning');
     }
 
+    // Étape 4c: Nettoyer les membres faulty/missing
+    try {
+      await executeCommand('sudo', ['-n', 'mdadm', '--remove', array, 'failed']);
+      log('✓ Removed faulty/missing members from array', 'success');
+    } catch (error: any) {
+      // No faulty members to remove — this is fine
+    }
+
     // Étape 5: Persister la configuration
     log('=== Step 5: Persisting mdadm configuration ===', 'step');
-    
+
     try {
       log(`Updating /etc/mdadm/mdadm.conf...`, 'info');
       const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
@@ -1583,6 +1591,14 @@ router.post('/storage/mdraid-add-disks', authenticateTokenOrFirstTime, async (re
       }
     } catch (error: any) {
       log(`Warning: Could not grow raid-devices: ${error.message}`, 'warning');
+    }
+
+    // Étape 4c: Nettoyer les membres faulty/missing
+    try {
+      await executeCommand('sudo', ['-n', 'mdadm', '--remove', array, 'failed']);
+      log('✓ Removed faulty/missing members from array', 'success');
+    } catch (error: any) {
+      // No faulty members to remove — this is fine
     }
 
     // Étape 5: Persister la configuration

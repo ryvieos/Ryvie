@@ -995,7 +995,8 @@ const StorageSettings = () => {
       setMigrateLevel(raidStatus.level.toLowerCase());
     }
     if (raidStatus.members && raidStatus.members.length > 0) {
-      const memberParentDisks = raidStatus.members.map((m: any) => m.device.replace(/p?\d+$/, ''));
+      const activeMembers = raidStatus.members.filter((m: any) => m.state !== 'faulty');
+      const memberParentDisks = activeMembers.map((m: any) => m.device.replace(/p?\d+$/, ''));
       const uniqueDisks = [...new Set(memberParentDisks)] as string[];
       setMigrateDisks(prev => {
         const combined = new Set([...prev, ...uniqueDisks]);
