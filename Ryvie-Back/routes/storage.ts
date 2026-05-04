@@ -1392,9 +1392,18 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
       log(`Could not monitor resync: ${error.message}`, 'warning');
     }
 
-    // Étape 7: Afficher l'état final
-    log('=== Step 7: Final status ===', 'step');
-    
+    // Étape 7: Redimensionner le filesystem btrfs
+    log('=== Step 7: Resizing btrfs filesystem ===', 'step');
+    try {
+      await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+      log('✓ Filesystem resized to use full RAID capacity', 'success');
+    } catch (error: any) {
+      log(`Warning: Could not resize btrfs filesystem: ${error.message}`, 'warning');
+    }
+
+    // Étape 8: Afficher l'état final
+    log('=== Step 8: Final status ===', 'step');
+
     try {
       const mdstatResult = await executeCommand('cat', ['/proc/mdstat']);
       log('📊 Final /proc/mdstat:', 'info');
@@ -1658,8 +1667,17 @@ router.post('/storage/mdraid-add-disks', authenticateTokenOrFirstTime, async (re
       log(`Could not monitor resync: ${error.message}`, 'warning');
     }
 
-    // Étape 7: État final
-    log('=== Step 7: Final status ===', 'step');
+    // Étape 7: Redimensionner le filesystem btrfs
+    log('=== Step 7: Resizing btrfs filesystem ===', 'step');
+    try {
+      await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+      log('✓ Filesystem resized to use full RAID capacity', 'success');
+    } catch (error: any) {
+      log(`Warning: Could not resize btrfs filesystem: ${error.message}`, 'warning');
+    }
+
+    // Étape 8: État final
+    log('=== Step 8: Final status ===', 'step');
     try {
       const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
       log(`📊 mdadm --detail ${array}:`, 'info');
@@ -2238,20 +2256,31 @@ router.get('/storage/disk-health', authenticateTokenOrFirstTime, async (req: any
           diskInfo.temperature = smart.temperature.current;
         }
         
-        // SMART attributes
+        // Power-on hours (use parsed value, not raw which may contain packed data)
+        if (smart.power_on_time && smart.power_on_time.hours !== undefined) {
+          diskInfo.powerOnHours = smart.power_on_time.hours;
+        }
+
+        // SMART attributes (fallback for fields not yet set)
         if (smart.ata_smart_attributes && smart.ata_smart_attributes.table) {
           for (const attr of smart.ata_smart_attributes.table) {
-            if (attr.id === 9) diskInfo.powerOnHours = attr.raw.value;
+            if (attr.id === 9 && diskInfo.powerOnHours === null) {
+              const parsed = parseInt(attr.raw.string);
+              diskInfo.powerOnHours = !isNaN(parsed) ? parsed : attr.raw.value;
+            }
             if (attr.id === 5) diskInfo.reallocatedSectors = attr.raw.value;
-            if (attr.id === 194 && diskInfo.temperature === null) diskInfo.temperature = attr.raw.value;
+            if (attr.id === 194 && diskInfo.temperature === null) {
+              const parsed = parseInt(attr.raw.string);
+              diskInfo.temperature = !isNaN(parsed) ? parsed : attr.raw.value;
+            }
           }
         }
-        
+
         // NVMe temperature fallback
         if (diskInfo.temperature === null && smart.nvme_smart_health_information_log) {
           diskInfo.temperature = smart.nvme_smart_health_information_log.temperature;
         }
-        
+
         // NVMe power on hours fallback
         if (diskInfo.powerOnHours === null && smart.nvme_smart_health_information_log) {
           diskInfo.powerOnHours = smart.nvme_smart_health_information_log.power_on_hours;
@@ -4091,9 +4120,14 @@ router.post('/storage/mdraid-reshape', authenticateTokenOrFirstTime, async (req:
     }
     stepNum++;
 
-    // Filesystem resize note
-    log(`Step ${stepNum}: Filesystem resize will be needed after reshape completes`, 'info');
-    log('Run: btrfs filesystem resize max /data', 'info');
+    // Filesystem resize
+    log(`Step ${stepNum}: Resizing btrfs filesystem`, 'info');
+    try {
+      await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+      log('✓ Filesystem resized to use full RAID capacity', 'success');
+    } catch (error: any) {
+      log(`Warning: Could not resize btrfs filesystem (may need to retry after reshape completes): ${error.message}`, 'warning');
+    }
 
     log(`✅ RAID reshape initiated: ${currentLevel} → RAID ${normalizedLevel}`, 'success');
 
@@ -4321,8 +4355,8 @@ router.post('/storage/mdraid-smart-setup', authenticateTokenOrFirstTime, async (
     const totalSteps = strategy === 'fresh' ? 1 :
       (newDisks.length > 0 ? 1 : 0) + // add first disk
       (oldMembers.length > 0 ? 1 : 0) + // remove old + grow
-      Math.max(0, newDisks.length - 1) + // add remaining disks
-      (currentLevel !== `raid${raidConfig.mdLevel}` ? 1 : 0); // reshape
+      (currentLevel !== `raid${raidConfig.mdLevel}` ? 1 : 0) + // reshape (before adding remaining)
+      Math.max(0, newDisks.length - 1); // add remaining disks
 
     if (dryRun) {
       const plan = [];
@@ -4340,12 +4374,13 @@ router.post('/storage/mdraid-smart-setup', authenticateTokenOrFirstTime, async (
           plan.push(`${stepNum}. Remove old members: ${oldMembers.join(', ')} → grow array to max size`);
           stepNum++;
         }
-        for (let i = 1; i < newDisks.length; i++) {
-          plan.push(`${stepNum}. Add ${newDisks[i]} to array → resync`);
+        if (currentLevel !== `raid${raidConfig.mdLevel}`) {
+          plan.push(`${stepNum}. Convert ${currentLevel} → RAID ${raidConfig.mdLevel} (with current devices)`);
           stepNum++;
         }
-        if (currentLevel !== `raid${raidConfig.mdLevel}`) {
-          plan.push(`${stepNum}. Reshape ${currentLevel} → RAID ${raidConfig.mdLevel}`);
+        for (let i = 1; i < newDisks.length; i++) {
+          plan.push(`${stepNum}. Add ${newDisks[i]} to RAID ${raidConfig.mdLevel} array → reshape`);
+          stepNum++;
         }
       }
 
@@ -4555,7 +4590,72 @@ router.post('/storage/mdraid-smart-setup', authenticateTokenOrFirstTime, async (
       }
     }
 
-    // === STEP C: Add remaining new disks one by one ===
+    // === STEP C: Convert to target level BEFORE adding remaining disks ===
+    // mdadm only supports RAID1→RAID5 with exactly 2 devices, so convert first, then add.
+    const targetLevelStr = `raid${raidConfig.mdLevel}`;
+    if (currentLevel && currentLevel !== targetLevelStr) {
+      currentStep++;
+      emitProgress('reshape', currentStep, totalSteps, `Converting ${currentLevel} → ${targetLevelStr}`);
+      log(`=== Step ${currentStep}: Reshaping ${currentLevel} → ${targetLevelStr} ===`, 'step');
+
+      const currentNum = currentLevel.replace('raid', '');
+      const targetNum = raidConfig.mdLevel;
+      const allowedConv = { '1': ['0','5'], '5': ['0','1','6'], '6': ['5'], '0': ['5','6'], '4': ['5'] };
+      if (!(allowedConv[currentNum] || []).includes(targetNum)) {
+        log(`❌ Direct conversion ${currentLevel} → RAID ${targetNum} not supported by mdadm`, 'error');
+        log(`Array is healthy with all disks added. Convert manually or via the Reshape button.`, 'info');
+      } else {
+        // Re-read current state
+        const reshapeDetail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', existingArray]);
+        const reshapeActiveMatch = reshapeDetail.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+        const reshapeActiveDevices = reshapeActiveMatch ? parseInt(reshapeActiveMatch[1]) : 0;
+        const reshapeUsedDevMatch = reshapeDetail.stdout.match(/Used Dev Size\s*:\s*(\d+)/i);
+        const reshapeUsedDevSizeKB = reshapeUsedDevMatch ? parseInt(reshapeUsedDevMatch[1]) : 0;
+
+        // Align to chunk size (64K) before conversion
+        const smartChunkSizeKB = 64;
+        if (reshapeUsedDevSizeKB > 0 && reshapeUsedDevSizeKB % smartChunkSizeKB !== 0) {
+          const alignedSizeKB = reshapeUsedDevSizeKB - (reshapeUsedDevSizeKB % smartChunkSizeKB);
+          log(`Aligning array size to ${smartChunkSizeKB}K chunk: ${reshapeUsedDevSizeKB} → ${alignedSizeKB} KiB`, 'info');
+          const alignRes = await executeCommand('sudo', ['-n', 'mdadm', '--grow', existingArray, `--size=${alignedSizeKB}`]);
+          if (alignRes.exitCode !== 0) {
+            log(`Warning: size alignment failed: ${(alignRes.stderr || '').trim()}`, 'warning');
+          }
+        }
+
+        await ensureDirExists(RESHAPE_BACKUP_DIR);
+        const backupFile = getReshapeBackupFile(existingArray);
+
+        log(`Converting with ${reshapeActiveDevices} devices: mdadm --grow ${existingArray} --level=${targetNum} --chunk=${smartChunkSizeKB} --backup-file=${backupFile}`, 'info');
+        const reshapeResult = await executeCommand('sudo', [
+          '-n', 'mdadm', '--grow', existingArray,
+          `--level=${targetNum}`,
+          `--raid-devices=${reshapeActiveDevices}`,
+          `--chunk=${smartChunkSizeKB}`,
+          `--backup-file=${backupFile}`
+        ]);
+
+        if (reshapeResult.exitCode !== 0) {
+          const errMsg = (reshapeResult.stderr || reshapeResult.stdout || '').trim();
+          log(`❌ Reshape failed: ${errMsg}`, 'error');
+        } else {
+          log(`✓ Reshape started: ${currentLevel} → RAID ${targetNum}`, 'success');
+
+          const mdstat = await executeCommand('cat', ['/proc/mdstat']);
+          if (mdstat.stdout.includes('reshape')) {
+            log('Waiting for reshape to complete...', 'info');
+            await waitForResync(existingArray);
+          }
+
+          try {
+            await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+            log('✓ Filesystem resized after reshape', 'success');
+          } catch (e: any) {}
+        }
+      }
+    }
+
+    // === STEP D: Add remaining new disks (after conversion) ===
     for (let i = 1; i < newDisks.length; i++) {
       currentStep++;
       emitProgress('add-disk', currentStep, totalSteps, `Adding ${newDisks[i]}`);
@@ -4563,50 +4663,26 @@ router.post('/storage/mdraid-smart-setup', authenticateTokenOrFirstTime, async (
 
       await addDiskToArray(existingArray, newDisks[i]);
 
-      // Wait for resync
-      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
-      if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync')) {
-        log(`Waiting for resync of ${newDisks[i]}...`, 'info');
-        await waitForResync(existingArray);
-      }
-    }
-
-    // === STEP D: Reshape to target level if different ===
-    const targetLevelStr = `raid${raidConfig.mdLevel}`;
-    if (currentLevel && currentLevel !== targetLevelStr) {
-      currentStep++;
-      emitProgress('reshape', currentStep, totalSteps, `Converting ${currentLevel} → ${targetLevelStr}`);
-      log(`=== Step ${currentStep}: Reshaping ${currentLevel} → ${targetLevelStr} ===`, 'step');
-
-      // Check allowed conversions
-      const currentNum = currentLevel.replace('raid', '');
-      const targetNum = raidConfig.mdLevel;
-      const allowed = { '1': ['0','5'], '5': ['0','1','6'], '6': ['5'], '0': ['5','6'], '4': ['5'] };
-      if (!(allowed[currentNum] || []).includes(targetNum)) {
-        log(`❌ Direct conversion ${currentLevel} → RAID ${targetNum} not supported by mdadm`, 'error');
-        log(`Array is healthy with all disks added. Convert manually or via the Reshape button.`, 'info');
-      } else {
-        // Get active device count
-        const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', existingArray]);
-        const activeMatch = detailResult.stdout.match(/Active Devices\s*:\s*(\d+)/i);
-        const activeDevices = disks.length;
-
-        log(`Executing: mdadm --grow ${existingArray} --level=${targetNum} --raid-devices=${activeDevices}`, 'info');
-        await executeCommand('sudo', ['-n', 'mdadm', '--grow', existingArray, `--level=${targetNum}`, `--raid-devices=${activeDevices}`]);
-        log(`✓ Reshape started: ${currentLevel} → RAID ${targetNum}`, 'success');
-
-        // Wait for reshape
-        const mdstat = await executeCommand('cat', ['/proc/mdstat']);
-        if (mdstat.stdout.includes('reshape')) {
-          log('Waiting for reshape to complete...', 'info');
-          await waitForResync(existingArray);
+      // Promote spare to active
+      try {
+        const detAfterAdd = await executeCommand('sudo', ['-n', 'mdadm', '--detail', existingArray]);
+        const rdM = detAfterAdd.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+        const tdM = detAfterAdd.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+        const rdV = rdM ? parseInt(rdM[1]) : 0;
+        const tdV = tdM ? parseInt(tdM[1]) : 0;
+        if (tdV > rdV) {
+          await executeCommand('sudo', ['-n', 'mdadm', '--grow', existingArray, `--raid-devices=${tdV}`]);
+          log(`✓ raid-devices grown to ${tdV}`, 'success');
         }
+      } catch (e: any) {
+        log(`Warning promoting spare: ${e.message}`, 'warning');
+      }
 
-        // Resize btrfs after reshape (RAID5 has more capacity than RAID1)
-        try {
-          await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
-          log('✓ Filesystem resized after reshape', 'success');
-        } catch (e: any) {}
+      // Wait for resync/reshape
+      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
+      if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync') || mdstat.stdout.includes('reshape')) {
+        log(`Waiting for resync/reshape of ${newDisks[i]}...`, 'info');
+        await waitForResync(existingArray);
       }
     }
 
@@ -4626,6 +4702,14 @@ router.post('/storage/mdraid-smart-setup', authenticateTokenOrFirstTime, async (
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('✓ Updated initramfs', 'success');
     } catch (e: any) {}
+
+    // Resize btrfs to use full capacity after all operations
+    try {
+      await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+      log('✓ Filesystem resized to use full RAID capacity', 'success');
+    } catch (e: any) {
+      log(`Warning: Could not resize btrfs filesystem: ${e.message}`, 'warning');
+    }
 
     // Final status
     try {
@@ -5000,7 +5084,7 @@ interface MigrationStep {
 
 interface MigrationState {
   id: string;
-  status: 'running' | 'completed' | 'error' | 'idle';
+  status: 'running' | 'completed' | 'error' | 'idle' | 'stopped';
   targetLevel: number;
   disks: string[];
   currentStep: number;
@@ -5010,6 +5094,7 @@ interface MigrationState {
   error: string | null;
   startedAt: string;
   completedAt: string | null;
+  stopRequested?: boolean;
 }
 
 let migrationState: MigrationState = {
@@ -5023,7 +5108,8 @@ let migrationState: MigrationState = {
   globalProgress: 0,
   error: null,
   startedAt: '',
-  completedAt: null
+  completedAt: null,
+  stopRequested: false
 };
 
 // Restore prior migration state from disk on startup so a backend restart
@@ -5052,6 +5138,25 @@ let migrationState: MigrationState = {
  */
 router.get('/storage/mdraid-migration-status', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   res.json({ success: true, migration: migrationState });
+});
+
+/**
+ * POST /api/storage/mdraid-migration-stop
+ * Request graceful stop of the running migration.
+ * Sets a flag that the migration loop checks between steps.
+ * Note: kernel-level reshapes (mdadm) cannot be stopped — only the orchestration pauses.
+ */
+router.post('/storage/mdraid-migration-stop', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  if (migrationState.status !== 'running') {
+    return res.status(400).json({ success: false, error: 'No migration is currently running' });
+  }
+  migrationState.stopRequested = true;
+  const log = (message: string, type = 'info') => {
+    console.log(`[auto-migrate] [${type}] ${message}`);
+    if (io) io.emit('mdraid-log', { timestamp: new Date().toISOString(), type, message });
+  };
+  log('Stop requested by user — migration will halt after current step completes', 'warning');
+  res.json({ success: true, message: 'Stop requested — migration will halt after current step' });
 });
 
 /**
@@ -5108,13 +5213,26 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
       { name: 'Réparer le RAID dégradé', status: 'pending', progress: 0, message: '' },
       { name: 'Retirer l\'ancien membre', status: 'pending', progress: 0, message: '' },
       { name: 'Agrandir au maximum', status: 'pending', progress: 0, message: '' },
-      { name: 'Ajouter les disques supplémentaires', status: 'pending', progress: 0, message: '' },
-      { name: 'Convertir au niveau RAID cible', status: 'pending', progress: 0, message: '' }
+      { name: 'Convertir au niveau RAID cible', status: 'pending', progress: 0, message: '' },
+      { name: 'Ajouter les disques supplémentaires', status: 'pending', progress: 0, message: '' }
     ],
     globalProgress: 0,
     error: null,
     startedAt: new Date().toISOString(),
-    completedAt: null
+    completedAt: null,
+    stopRequested: false
+  };
+
+  const checkStopRequested = () => {
+    if (migrationState.stopRequested) {
+      log('Migration stopped by user', 'warning');
+      migrationState.status = 'stopped';
+      migrationState.error = 'Migration arrêtée par l\'utilisateur';
+      migrationState.completedAt = new Date().toISOString();
+      emitMigration();
+      return true;
+    }
+    return false;
   };
 
   const emitMigration = () => {
@@ -5291,6 +5409,8 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
       setStep(0, { status: 'skipped', progress: 100, message: 'Pas de disque à ajouter — étape ignorée' });
     }
 
+    if (checkStopRequested()) return;
+
     // ============================================================
     // STEP 2: Remove old member(s)
     // ============================================================
@@ -5355,6 +5475,8 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
       setStep(1, { status: 'skipped', progress: 100, message: 'Aucun ancien membre à retirer' });
     }
 
+    if (checkStopRequested()) return;
+
     // ============================================================
     // STEP 3: Grow member partition + RAID + filesystem
     // ============================================================
@@ -5415,99 +5537,32 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
       setStep(2, { status: 'skipped', progress: 100, message: 'Aucun agrandissement nécessaire' });
     }
 
-    // ============================================================
-    // STEP 4: Add remaining disks
-    // When step 1 was skipped (RAID not degraded), firstNewDisk was never added — include it here.
-    // ============================================================
-    setStep(3, { status: 'running', message: 'Préparation des disques supplémentaires...' });
-    log('=== Étape 4: Ajouter les disques supplémentaires ===', 'step');
+    if (checkStopRequested()) return;
 
+    // ============================================================
+    // STEP 4: Convert to target RAID level
+    // Done BEFORE adding extra disks — mdadm only converts RAID1→RAID5 with exactly 2 devices.
+    // Converting first (fast, mostly metadata) then adding disks to the target level is more robust.
+    // ============================================================
+    setStep(3, { status: 'running', message: 'Vérification du niveau RAID...' });
+    log('=== Étape 4: Convertir au niveau RAID cible ===', 'step');
+
+    // Track which new disks are still available for Step 5
     const step1Skipped = migrationState.steps[0].status === 'skipped';
-    const disksToAdd = step1Skipped && firstNewDisk
+    const disksAvailable = step1Skipped && firstNewDisk
       ? [firstNewDisk, ...remainingNewDisks]
-      : remainingNewDisks;
+      : [...remainingNewDisks];
 
-    if (disksToAdd.length > 0) {
-      // Nettoyage RAID en parallèle
-      log(`Cleaning up RAID memberships for ${disksToAdd.length} disk(s) in parallel...`, 'info');
-      await Promise.all(disksToAdd.map(d =>
-        cleanupDiskRaidMembership(d, array, (msg, type) => log(`[${d}] ${msg}`, type))
-      ));
+    // Re-read current level after steps 1-3
+    const preConvertDetail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+    const preConvertLevelMatch = preConvertDetail.stdout.match(/Raid Level\s*:\s*raid(\d+)/i);
+    const preConvertLevel = preConvertLevelMatch ? parseInt(preConvertLevelMatch[1]) : currentLevel;
+    const preConvertActiveMatch = preConvertDetail.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+    const preConvertActiveDevices = preConvertActiveMatch ? parseInt(preConvertActiveMatch[1]) : 0;
+    const preConvertRDMatch = preConvertDetail.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+    const preConvertRaidDevices = preConvertRDMatch ? parseInt(preConvertRDMatch[1]) : preConvertActiveDevices;
 
-      // Préparation en parallèle
-      log(`Preparing ${disksToAdd.length} disk(s) in parallel...`, 'info');
-      setStep(3, { progress: 10, message: `Préparation de ${disksToAdd.length} disque(s) en parallèle...` });
-
-      const diskInfos: { disk: string; partPath: string; label: string }[] = [];
-      let baseLabel = await getNextPartLabel(array);
-      const baseLetter = baseLabel.charAt(baseLabel.length - 1);
-
-      for (let i = 0; i < disksToAdd.length; i++) {
-        const letter = String.fromCharCode(baseLetter.charCodeAt(0) + i);
-        const label = `md0_${letter}`;
-        diskInfos.push({ disk: disksToAdd[i], partPath: getPartitionPath(disksToAdd[i], 1), label });
-      }
-
-      await Promise.all(diskInfos.map(({ disk: d, label }) =>
-        prepareDiskForRaid(d, label, (msg, type) => log(`[${d}] ${msg}`, type))
-      ));
-
-      // Ajouter au RAID
-      setStep(3, { progress: 50, message: `Ajout de ${disksToAdd.length} disque(s) au RAID...` });
-      for (const { disk: d, partPath } of diskInfos) {
-        log(`Adding ${partPath} to ${array}...`, 'info');
-        await addPartitionToArrayRobust(array, partPath, log);
-      }
-
-      // Promouvoir les spares en membres actifs
-      try {
-        const detailAfterAdd = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
-        const rdMatch = detailAfterAdd.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
-        const tdMatch = detailAfterAdd.stdout.match(/Total Devices\s*:\s*(\d+)/i);
-        const rd = rdMatch ? parseInt(rdMatch[1]) : 0;
-        const td = tdMatch ? parseInt(tdMatch[1]) : 0;
-        if (td > rd) {
-          log(`Growing raid-devices from ${rd} to ${td} to promote spare(s)...`, 'info');
-          await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, `--raid-devices=${td}`]);
-          log(`✓ raid-devices grown to ${td}`, 'success');
-        }
-      } catch (e: any) {
-        log(`Warning growing raid-devices: ${e.message}`, 'warning');
-      }
-
-      // Attendre le resync
-      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
-      if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync')) {
-        log('Waiting for resync...', 'info');
-        setStep(3, { progress: 60, message: 'Resynchronisation en cours...' });
-        await waitForSync(3);
-      }
-
-      setStep(3, { status: 'completed', progress: 100, message: `${disksToAdd.length} disque(s) ajouté(s)` });
-    } else {
-      log('No additional disks to add', 'info');
-      setStep(3, { status: 'skipped', progress: 100, message: 'Aucun disque supplémentaire' });
-    }
-
-    // ============================================================
-    // STEP 5: Convert to target RAID level
-    // ============================================================
-    setStep(4, { status: 'running', message: 'Vérification du niveau RAID...' });
-    log('=== Étape 5: Convertir au niveau RAID cible ===', 'step');
-
-    // Re-read current level (may have changed after steps above)
-    const finalDetail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
-    const finalLevelMatch = finalDetail.stdout.match(/Raid Level\s*:\s*raid(\d+)/i);
-    const finalCurrentLevel = finalLevelMatch ? parseInt(finalLevelMatch[1]) : currentLevel;
-    const finalActiveMatch = finalDetail.stdout.match(/Active Devices\s*:\s*(\d+)/i);
-    const finalActiveDevices = finalActiveMatch ? parseInt(finalActiveMatch[1]) : 0;
-    const finalTotalMatch = finalDetail.stdout.match(/Total Devices\s*:\s*(\d+)/i);
-    const finalTotalDevices = finalTotalMatch ? parseInt(finalTotalMatch[1]) : finalActiveDevices;
-    // Use total devices (active + spare) — spares were promoted in step 4 but may still be rebuilding
-    const finalDeviceCount = Math.max(finalActiveDevices, finalTotalDevices);
-
-    if (finalCurrentLevel !== levelNum) {
-      // Validate conversion
+    if (preConvertLevel !== levelNum) {
       const allowedConversions = {
         1: [0, 5],
         5: [0, 1, 6],
@@ -5516,55 +5571,112 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
         10: [],
         4: [5]
       };
-      const allowed = allowedConversions[finalCurrentLevel] || [];
+      const allowed = allowedConversions[preConvertLevel] || [];
 
       if (!allowed.includes(levelNum)) {
-        log(`Direct conversion RAID${finalCurrentLevel} → RAID${levelNum} not supported by mdadm`, 'error');
-        setStep(4, { status: 'error', message: `Conversion RAID${finalCurrentLevel} → RAID${levelNum} non supportée` });
+        log(`Direct conversion RAID${preConvertLevel} → RAID${levelNum} not supported by mdadm`, 'error');
+        setStep(3, { status: 'error', message: `Conversion RAID${preConvertLevel} → RAID${levelNum} non supportée` });
         migrationState.status = 'error';
-        migrationState.error = `Conversion RAID${finalCurrentLevel} → RAID${levelNum} non supportée par mdadm`;
+        migrationState.error = `Conversion RAID${preConvertLevel} → RAID${levelNum} non supportée par mdadm`;
         migrationState.completedAt = new Date().toISOString();
         emitMigration();
         return;
       }
 
-      if (finalDeviceCount < minRequired) {
-        log(`RAID${levelNum} requires ${minRequired} disks, only ${finalDeviceCount} available (${finalActiveDevices} active, ${finalTotalDevices - finalActiveDevices} spare)`, 'error');
-        setStep(4, { status: 'error', message: `RAID${levelNum} nécessite ${minRequired} disques (${finalDeviceCount} disponibles)` });
+      // If RAID1→RAID5 and array is degraded (1 device), add one disk first to reach 2
+      if (preConvertLevel === 1 && levelNum === 5 && preConvertActiveDevices < 2 && disksAvailable.length > 0) {
+        log(`Array has only ${preConvertActiveDevices} device — adding one disk to reach 2 before conversion`, 'info');
+        setStep(3, { message: 'Ajout d\'un disque pour permettre la conversion...' });
+
+        const prepDisk = disksAvailable.shift()!;
+        const nextLabel = await getNextPartLabel(array);
+        await cleanupDiskRaidMembership(prepDisk, array, (msg, type) => log(`[${prepDisk}] ${msg}`, type));
+        const prepPartPath = await prepareDiskForRaid(prepDisk, nextLabel, log);
+        await addPartitionToArrayRobust(array, prepPartPath, log);
+
+        // Promote spare
+        const detailAfterPrep = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+        const tdMatchPrep = detailAfterPrep.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+        const rdMatchPrep = detailAfterPrep.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+        const tdPrep = tdMatchPrep ? parseInt(tdMatchPrep[1]) : 0;
+        const rdPrep = rdMatchPrep ? parseInt(rdMatchPrep[1]) : 0;
+        if (tdPrep > rdPrep) {
+          await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, `--raid-devices=${tdPrep}`]);
+        }
+
+        // Wait for resync
+        const mdstatPrep = await executeCommand('cat', ['/proc/mdstat']);
+        if (mdstatPrep.stdout.includes('recovery') || mdstatPrep.stdout.includes('resync')) {
+          setStep(3, { message: 'Resynchronisation avant conversion...' });
+          await waitForSync(3);
+        }
+        log(`✓ Disk ${prepDisk} added, array now has 2 devices`, 'success');
+      }
+
+      // Re-read state after possible disk addition
+      const convDetail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+      const convActiveMatch = convDetail.stdout.match(/Active Devices\s*:\s*(\d+)/i);
+      const convActiveDevices = convActiveMatch ? parseInt(convActiveMatch[1]) : 0;
+      const convUsedDevMatch = convDetail.stdout.match(/Used Dev Size\s*:\s*(\d+)/i);
+      const convUsedDevSizeKB = convUsedDevMatch ? parseInt(convUsedDevMatch[1]) : 0;
+
+      if (convActiveDevices < 2) {
+        log(`❌ Need at least 2 active devices for conversion, only ${convActiveDevices}`, 'error');
+        setStep(3, { status: 'error', message: `Conversion impossible: ${convActiveDevices} disque(s) actif(s), minimum 2` });
         migrationState.status = 'error';
-        migrationState.error = `RAID${levelNum} nécessite ${minRequired} disques`;
+        migrationState.error = `Conversion impossible: pas assez de disques actifs`;
         migrationState.completedAt = new Date().toISOString();
         emitMigration();
         return;
       }
 
-      // Create backup file for reshape (required for RAID5/6).
-      // Persist it under /var/lib/mdadm — NOT /tmp which is wiped on reboot.
+      // Align component size to chunk boundary (64K) — required for RAID1→RAID5
+      const migChunkSizeKB = 64;
+      if (convUsedDevSizeKB > 0 && convUsedDevSizeKB % migChunkSizeKB !== 0) {
+        const alignedSizeKB = convUsedDevSizeKB - (convUsedDevSizeKB % migChunkSizeKB);
+        log(`Aligning array size to ${migChunkSizeKB}K chunk boundary: ${convUsedDevSizeKB} → ${alignedSizeKB} KiB`, 'info');
+        const alignResult = await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, `--size=${alignedSizeKB}`]);
+        if (alignResult.exitCode !== 0) {
+          log(`Warning: size alignment failed: ${(alignResult.stderr || '').trim()}`, 'warning');
+        } else {
+          log('✓ Array size aligned', 'success');
+        }
+      }
+
       await ensureDirExists(RESHAPE_BACKUP_DIR);
       const backupFile = getReshapeBackupFile(array);
-      log(`Reshape: RAID${finalCurrentLevel} → RAID${levelNum} with ${finalDeviceCount} devices`, 'info');
-      log(`Backup file (critical for crash recovery): ${backupFile}`, 'info');
-      setStep(4, { message: `Conversion RAID${finalCurrentLevel} → RAID${levelNum}...` });
+      log(`Converting RAID${preConvertLevel} → RAID${levelNum} with ${convActiveDevices} devices`, 'info');
+      setStep(3, { message: `Conversion RAID${preConvertLevel} → RAID${levelNum}...` });
 
-      const growArgs = [
+      const convertResult = await executeCommand('sudo', [
         '-n', 'mdadm', '--grow', array,
         `--level=${levelNum}`,
-        `--raid-devices=${finalDeviceCount}`,
+        `--raid-devices=${convActiveDevices}`,
+        `--chunk=${migChunkSizeKB}`,
         `--backup-file=${backupFile}`
-      ];
+      ]);
 
-      await executeCommand('sudo', growArgs);
-      log('Reshape initiated', 'success');
+      if (convertResult.exitCode !== 0) {
+        const errMsg = (convertResult.stderr || convertResult.stdout || '').trim();
+        log(`❌ Reshape failed: ${errMsg}`, 'error');
+        setStep(3, { status: 'error', message: `Échec conversion: ${errMsg}` });
+        migrationState.status = 'error';
+        migrationState.error = `Reshape failed: ${errMsg}`;
+        migrationState.completedAt = new Date().toISOString();
+        emitMigration();
+        return;
+      }
+      log('✓ Reshape initiated', 'success');
 
-      // Wait for reshape
-      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
-      if (mdstat.stdout.includes('reshape')) {
+      // Wait for reshape if in progress
+      const mdstatConv = await executeCommand('cat', ['/proc/mdstat']);
+      if (mdstatConv.stdout.includes('reshape')) {
         log('Waiting for reshape to complete...', 'info');
-        setStep(4, { message: 'Reshape en cours...' });
-        await waitForSync(4);
+        setStep(3, { message: 'Reshape en cours...' });
+        await waitForSync(3);
       }
 
-      // Resize btrfs after reshape
+      // Resize btrfs after reshape (capacity may have increased)
       try {
         await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
         log('Filesystem resized after reshape', 'success');
@@ -5572,10 +5684,91 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
         log(`Warning btrfs resize: ${e.message}`, 'warning');
       }
 
-      setStep(4, { status: 'completed', progress: 100, message: `Converti en RAID${levelNum}` });
+      setStep(3, { status: 'completed', progress: 100, message: `Converti en RAID${levelNum}` });
     } else {
-      log(`Already at RAID${levelNum}, skipping reshape`, 'info');
-      setStep(4, { status: 'skipped', progress: 100, message: `Déjà en RAID${levelNum}` });
+      log(`Already at RAID${levelNum}, skipping conversion`, 'info');
+      setStep(3, { status: 'skipped', progress: 100, message: `Déjà en RAID${levelNum}` });
+    }
+
+    if (checkStopRequested()) return;
+
+    // ============================================================
+    // STEP 5: Add remaining disks (after RAID level conversion)
+    // Disks are added to the already-converted array (e.g., RAID5).
+    // ============================================================
+    setStep(4, { status: 'running', message: 'Préparation des disques supplémentaires...' });
+    log('=== Étape 5: Ajouter les disques supplémentaires ===', 'step');
+
+    if (disksAvailable.length > 0) {
+      log(`Cleaning up RAID memberships for ${disksAvailable.length} disk(s) in parallel...`, 'info');
+      await Promise.all(disksAvailable.map(d =>
+        cleanupDiskRaidMembership(d, array, (msg, type) => log(`[${d}] ${msg}`, type))
+      ));
+
+      log(`Preparing ${disksAvailable.length} disk(s) in parallel...`, 'info');
+      setStep(4, { progress: 10, message: `Préparation de ${disksAvailable.length} disque(s) en parallèle...` });
+
+      const diskInfos: { disk: string; partPath: string; label: string }[] = [];
+      let baseLabel = await getNextPartLabel(array);
+      const baseLetter = baseLabel.charAt(baseLabel.length - 1);
+
+      for (let i = 0; i < disksAvailable.length; i++) {
+        const letter = String.fromCharCode(baseLetter.charCodeAt(0) + i);
+        const label = `md0_${letter}`;
+        diskInfos.push({ disk: disksAvailable[i], partPath: getPartitionPath(disksAvailable[i], 1), label });
+      }
+
+      await Promise.all(diskInfos.map(({ disk: d, label }) =>
+        prepareDiskForRaid(d, label, (msg, type) => log(`[${d}] ${msg}`, type))
+      ));
+
+      // Add to RAID sequentially
+      setStep(4, { progress: 50, message: `Ajout de ${disksAvailable.length} disque(s) au RAID...` });
+      for (const { partPath } of diskInfos) {
+        log(`Adding ${partPath} to ${array}...`, 'info');
+        await addPartitionToArrayRobust(array, partPath, log);
+      }
+
+      // Promote spares to active members
+      try {
+        const detailAfterAdd = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+        const rdMatch = detailAfterAdd.stdout.match(/Raid Devices\s*:\s*(\d+)/i);
+        const tdMatch = detailAfterAdd.stdout.match(/Total Devices\s*:\s*(\d+)/i);
+        const rd = rdMatch ? parseInt(rdMatch[1]) : 0;
+        const td = tdMatch ? parseInt(tdMatch[1]) : 0;
+        if (td > rd) {
+          log(`Growing raid-devices from ${rd} to ${td} to promote spare(s)...`, 'info');
+          const growResult = await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, `--raid-devices=${td}`]);
+          if (growResult.exitCode !== 0) {
+            log(`Warning growing raid-devices: ${(growResult.stderr || '').trim()}`, 'warning');
+          } else {
+            log(`✓ raid-devices grown to ${td}`, 'success');
+          }
+        }
+      } catch (e: any) {
+        log(`Warning growing raid-devices: ${e.message}`, 'warning');
+      }
+
+      // Wait for resync/reshape
+      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
+      if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync') || mdstat.stdout.includes('reshape')) {
+        log('Waiting for resync/reshape...', 'info');
+        setStep(4, { progress: 60, message: 'Resynchronisation en cours...' });
+        await waitForSync(4);
+      }
+
+      // Resize btrfs after adding disks (capacity increased)
+      try {
+        await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+        log('Filesystem resized after disk addition', 'success');
+      } catch (e: any) {
+        log(`Warning btrfs resize: ${e.message}`, 'warning');
+      }
+
+      setStep(4, { status: 'completed', progress: 100, message: `${disksAvailable.length} disque(s) ajouté(s)` });
+    } else {
+      log('No additional disks to add', 'info');
+      setStep(4, { status: 'skipped', progress: 100, message: 'Aucun disque supplémentaire' });
     }
 
     // ============================================================

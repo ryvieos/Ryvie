@@ -168,6 +168,7 @@ const StorageSettings = () => {
   const [migrateDisks, setMigrateDisks] = useState<string[]>([]);
   const [showMigrateModal, setShowMigrateModal] = useState(false);
   const [migrationState, setMigrationState] = useState<any>(null);
+  const [stoppingMigration, setStoppingMigration] = useState(false);
 
   // Helper: strip emojis from strings for consistent UI DA
   const stripEmojis = (str) => {
@@ -987,6 +988,22 @@ const StorageSettings = () => {
     }
   }, [raidStatus]);
 
+  // Pre-select current RAID level and member disks when entering manage mode
+  useEffect(() => {
+    if (mode !== 'manage' || !raidStatus || raidStatus.type !== 'mdadm') return;
+    if (raidStatus.level) {
+      setMigrateLevel(raidStatus.level.toLowerCase());
+    }
+    if (raidStatus.members && raidStatus.members.length > 0) {
+      const memberParentDisks = raidStatus.members.map((m: any) => m.device.replace(/p?\d+$/, ''));
+      const uniqueDisks = [...new Set(memberParentDisks)] as string[];
+      setMigrateDisks(prev => {
+        const combined = new Set([...prev, ...uniqueDisks]);
+        return [...combined];
+      });
+    }
+  }, [mode, raidStatus]);
+
   // Toggle migrate disk selection
   const handleMigrateDiskToggle = (devicePath: string) => {
     setMigrateDisks(prev =>
@@ -1051,6 +1068,26 @@ const StorageSettings = () => {
       const msg = error.response?.data?.error || error.message;
       addLog(`Migration error: ${msg}`, 'error');
       setExecutionStatus('error');
+    }
+  };
+
+  // Stop running migration
+  const stopMigration = async () => {
+    setStoppingMigration(true);
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const response = await axios.post(`${serverUrl}/api/storage/mdraid-migration-stop`, {}, { timeout: 15000 });
+      if (response.data.success) {
+        addLog('Migration stop requested', 'warning');
+      } else {
+        addLog(`Stop failed: ${response.data.error}`, 'error');
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.error || error.message;
+      addLog(`Stop error: ${msg}`, 'error');
+    } finally {
+      setStoppingMigration(false);
     }
   };
 
@@ -1166,9 +1203,11 @@ const StorageSettings = () => {
             <button className={`mode-tab ${mode === 'overview' ? 'active' : ''}`} onClick={() => { setMode('overview'); setSelectedDisks([]); setSelectedDisk(''); }}>
               <FontAwesomeIcon icon={faHeartbeat} /> {t('storageSettings.diskOverview')}
             </button>
-            <button className={`mode-tab ${mode === 'create' ? 'active' : ''}`} onClick={() => { setMode('create'); setSelectedDisks([]); setSelectedDisk(''); setCanProceed(false); setValidationErrors([]); }}>
-              <FontAwesomeIcon icon={faPlus} /> {t('storageSettings.createRaid')}
-            </button>
+            {!(raidStatus && raidStatus.type === 'mdadm') && (
+              <button className={`mode-tab ${mode === 'create' ? 'active' : ''}`} onClick={() => { setMode('create'); setSelectedDisks([]); setSelectedDisk(''); setCanProceed(false); setValidationErrors([]); }}>
+                <FontAwesomeIcon icon={faPlus} /> {t('storageSettings.createRaid')}
+              </button>
+            )}
             {raidStatus && raidStatus.type === 'mdadm' && (
               <button className={`mode-tab ${mode === 'manage' ? 'active' : ''}`} onClick={() => { setMode('manage'); setSelectedDisks([]); setSelectedDisk(''); setCanProceed(false); setValidationErrors([]); loadReshapeOptions(); checkCanGrow(); }}>
                 <FontAwesomeIcon icon={faHdd} /> {t('storageSettings.manageRaid')}
@@ -1507,37 +1546,57 @@ const StorageSettings = () => {
                 </div>
               )}
 
-              {/* RAID Members — show current members with remove button */}
+              {/* RAID Members — show current members with health info */}
               {raidStatus.members && raidStatus.members.length > 0 && (
                 <div className="targets-section">
                   <h2><FontAwesomeIcon icon={faHdd} /> {t('storageSettings.raidMembers')}</h2>
                   <p className="section-subtitle">{t('storageSettings.raidMembersDesc')}</p>
 
                   <div className="disks-grid">
-                    {raidStatus.members.map((member: any) => (
-                      <div key={member.device} className="disk-card-simple in-raid">
-                        <div className="storage-disk-icon" style={{ background: member.state === 'active' ? 'linear-gradient(135deg, #10b981, #059669)' : member.state === 'spare' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #ef4444, #dc2626)' }}>
-                          <FontAwesomeIcon icon={faHdd} />
+                    {raidStatus.members.map((member: any) => {
+                      const parentDisk = member.device.replace(/p?\d+$/, '');
+                      const health = diskHealth[parentDisk] || {};
+                      const healthColor = getHealthColor(health.health);
+
+                      return (
+                        <div key={member.device} className="disk-card-simple in-raid">
+                          <div className="storage-disk-icon" style={{ background: member.state === 'active' ? 'linear-gradient(135deg, #10b981, #059669)' : member.state === 'spare' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #ef4444, #dc2626)' }}>
+                            <FontAwesomeIcon icon={faHdd} />
+                          </div>
+                          <div className="disk-name">{member.device}</div>
+                          <div className="disk-size">{member.size ? formatBytes(member.size) : 'N/A'}</div>
+                          {health.model && <div className="disk-model">{health.model}</div>}
+                          <div className="disk-health-row">
+                            <span className="health-indicator" style={{ color: member.state === 'active' ? '#10b981' : member.state === 'spare' ? '#f59e0b' : '#ef4444' }}>
+                              <FontAwesomeIcon icon={faCheckCircle} /> {member.state}
+                            </span>
+                          </div>
+                          <div className="disk-health-details">
+                            {health.temperature !== null && health.temperature !== undefined && (
+                              <span className="health-detail"><FontAwesomeIcon icon={faThermometerHalf} /> {health.temperature}°C</span>
+                            )}
+                            {health.powerOnHours !== null && health.powerOnHours !== undefined && (
+                              <span className="health-detail"><FontAwesomeIcon icon={faClock} /> {formatHours(health.powerOnHours)}</span>
+                            )}
+                            {health.health && (
+                              <span className="health-detail" style={{ color: healthColor }}>
+                                <FontAwesomeIcon icon={faHeartbeat} /> {health.health === 'good' ? t('storageSettings.healthGood') : health.health === 'warning' ? t('storageSettings.healthWarning') : health.health === 'failing' ? t('storageSettings.healthFailing') : t('storageSettings.healthUnknown')}
+                              </span>
+                            )}
+                          </div>
+                          {raidStatus.deviceCount > 1 && !resyncProgress && (
+                            <button
+                              className="btn-remove-member"
+                              style={{ marginTop: '0.5rem', background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem', width: '100%', justifyContent: 'center' }}
+                              disabled={removeStatus === 'running' || executionStatus === 'running'}
+                              onClick={(e) => { e.stopPropagation(); setPartitionToRemove(member.device); setShowRemoveModal(true); }}
+                            >
+                              <FontAwesomeIcon icon={faMinus} /> {t('storageSettings.removeMember')}
+                            </button>
+                          )}
                         </div>
-                        <div className="disk-name">{member.device}</div>
-                        <div className="disk-size">{member.size ? formatBytes(member.size) : 'N/A'}</div>
-                        <div className="disk-health-row">
-                          <span className="health-indicator" style={{ color: member.state === 'active' ? '#10b981' : member.state === 'spare' ? '#f59e0b' : '#ef4444' }}>
-                            <FontAwesomeIcon icon={faCheckCircle} /> {member.state}
-                          </span>
-                        </div>
-                        {raidStatus.deviceCount > 1 && !resyncProgress && (
-                          <button
-                            className="btn-remove-member"
-                            style={{ marginTop: '0.5rem', background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem', width: '100%', justifyContent: 'center' }}
-                            disabled={removeStatus === 'running' || executionStatus === 'running'}
-                            onClick={(e) => { e.stopPropagation(); setPartitionToRemove(member.device); setShowRemoveModal(true); }}
-                          >
-                            <FontAwesomeIcon icon={faMinus} /> {t('storageSettings.removeMember')}
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Grow array button */}
@@ -1560,150 +1619,8 @@ const StorageSettings = () => {
                 </div>
               )}
 
-              {/* RAID Level Conversion (Reshape) */}
-              {reshapeOptions && reshapeOptions.options && reshapeOptions.options.length > 0 && (
-                <div className="targets-section">
-                  <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.reshapeTitle')}</h2>
-                  <p className="section-subtitle">
-                    {t('storageSettings.reshapeDesc', { currentLevel: reshapeOptions.currentLevel?.toUpperCase(), disks: reshapeOptions.activeDevices })}
-                  </p>
-
-                  {!reshapeOptions.canReshape && reshapeOptions.busyReason && (
-                    <div className="alert-warning" style={{ marginBottom: '1rem' }}>
-                      <FontAwesomeIcon icon={faExclamationTriangle} />
-                      <div>{reshapeOptions.busyReason}</div>
-                    </div>
-                  )}
-
-                  <div className="raid-levels-grid">
-                    {reshapeOptions.options.map((opt: any) => {
-                      const isSelected = selectedReshapeLevel === opt.level;
-                      const isDisabled = !opt.available || !reshapeOptions.canReshape;
-                      return (
-                        <div
-                          key={opt.level}
-                          className={`raid-level-card ${isSelected ? 'active' : ''} ${isDisabled ? 'unavailable' : ''}`}
-                          onClick={() => !isDisabled && setSelectedReshapeLevel(isSelected ? '' : opt.level)}
-                          style={isSelected ? { borderColor: '#6366f1', boxShadow: '0 0 20px rgba(99,102,241,0.2)' } : {}}
-                        >
-                          <div className="raid-level-icon" style={{ background: isDisabled ? '#94a3b8' : '#6366f1' }}>
-                            <FontAwesomeIcon icon={faExchangeAlt} />
-                          </div>
-                          <div className="raid-level-info">
-                            <div className="raid-level-label">{opt.level.toUpperCase()}</div>
-                            {opt.capacityEstimate && (
-                              <div className="raid-level-subtitle">{t('storageSettings.estimatedCapacity')}: {opt.capacityEstimate}</div>
-                            )}
-                            <div className="raid-level-meta">
-                              <span>{t('storageSettings.minDisks')}: {opt.minDisks}</span>
-                            </div>
-                            {opt.reason && <div className="raid-level-desc" style={{ color: '#ef4444' }}>{opt.reason}</div>}
-                          </div>
-                          {isSelected && <div className="raid-level-check"><FontAwesomeIcon icon={faCheck} /></div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {selectedReshapeLevel && (
-                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
-                      <button
-                        className="btn-create-raid"
-                        style={{ background: '#6366f1' }}
-                        disabled={reshapeStatus === 'running'}
-                        onClick={() => setShowReshapeModal(true)}
-                      >
-                        {reshapeStatus === 'running' ? (
-                          <><FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.reshapeInProgress')}...</>
-                        ) : (
-                          <><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.convertTo')} {selectedReshapeLevel.toUpperCase()}</>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Disk selection to add */}
+              {/* ==================== MIGRATION / CONFIGURATION SECTION ==================== */}
               <div className="targets-section">
-                <h2>{t('storageSettings.selectDiskToAdd')}</h2>
-                <p className="section-subtitle">{t('storageSettings.diskWillBeErased')} {raidStatus?.array || ''}</p>
-
-                <div className="disks-grid">
-                  {disks.map(disk => {
-                    const isSelected = selectedDisks.includes(disk.path);
-                    const diskHasRaidPartition = !!raidMemberDisksMap[disk.path];
-                    const isDisabled = disk.isSystemDisk || disk.isMounted || diskHasRaidPartition;
-                    const health = diskHealth[disk.path] || {};
-
-                    let displaySizeBytes = parseSizeToBytes(disk.size);
-                    if (diskHasRaidPartition && Array.isArray(disk.children) && disk.children.length > 0) {
-                      const raidPart = raidMemberDisksMap[disk.path];
-                      let sum = 0; let counted = 0;
-                      disk.children.forEach(ch => {
-                        const chPath = ch.path || (ch.name ? `/dev/${ch.name}` : null);
-                        if (chPath && chPath !== raidPart) { const v = parseSizeToBytes(ch.size); if (!isNaN(v)) { sum += v; counted++; } }
-                      });
-                      if (counted > 0) displaySizeBytes = sum;
-                      else {
-                        const total = parseSizeToBytes(disk.size);
-                        const raidSize = (() => { const child = (disk.children || []).find(ch => (ch.path || (ch.name ? `/dev/${ch.name}` : null)) === raidPart); return child ? parseSizeToBytes(child.size) : NaN; })();
-                        displaySizeBytes = (!isNaN(total) && !isNaN(raidSize) && total >= raidSize) ? total - raidSize : 0;
-                      }
-                    }
-
-                    return (
-                      <div key={disk.path} className={`disk-card-simple ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
-                        onClick={() => !isDisabled && handleDiskSelect(disk.path)}>
-                        {isSelected && <div className="disk-check"><FontAwesomeIcon icon={faCheckCircle} /></div>}
-                        <div className="storage-disk-icon"><FontAwesomeIcon icon={faHdd} /></div>
-                        <div className="disk-name">{disk.path}</div>
-                        <div className="disk-size">{formatBytes(displaySizeBytes)}</div>
-                        {health.health && (
-                          <div className="disk-health-row">
-                            <span className="health-indicator" style={{ color: getHealthColor(health.health) }}>
-                              <FontAwesomeIcon icon={faHeartbeat} /> {health.health}
-                            </span>
-                          </div>
-                        )}
-                        <div className="disk-status">
-                          {diskHasRaidPartition && <span className="storage-badge-raid-active">RAID</span>}
-                          {disk.isSystemDisk && <span className="storage-badge-system">{t('storageSettings.system')}</span>}
-                          {!diskHasRaidPartition && disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-mounted">{t('storageSettings.mounted')}</span>}
-                          {!diskHasRaidPartition && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">{t('storageSettings.available')}</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {validationErrors.length > 0 && (
-                <div className="alert-error"><FontAwesomeIcon icon={faExclamationTriangle} /><div>{validationErrors.map((e, i) => <div key={i}>{e}</div>)}</div></div>
-              )}
-              {validationWarnings.length > 0 && (
-                <div className="alert-warning"><FontAwesomeIcon icon={faExclamationTriangle} /><div>{validationWarnings.map((w, i) => <div key={i}>{w}</div>)}</div></div>
-              )}
-
-              <div className="action-section">
-                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                  <button className="btn-create-raid" disabled={!canProceed || executionStatus === 'running'} onClick={openConfirmModal}>
-                    {executionStatus === 'running' ? (
-                      <><FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.addingInProgress')}...</>
-                    ) : (
-                      <><FontAwesomeIcon icon={faPlay} /> {t('storageSettings.addToRaid')}</>
-                    )}
-                  </button>
-                  {resyncProgress && (
-                    <button className="btn-stop-resync" onClick={handleStopResync} style={{ background: '#f44336', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <FontAwesomeIcon icon={faStop} /> {t('storageSettings.stop')}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* ==================== AUTO-MIGRATE SECTION ==================== */}
-              <div className="targets-section" style={{ marginTop: '2rem', borderTop: '2px solid #e0e0e0', paddingTop: '2rem' }}>
                 <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.autoMigrate')}</h2>
                 <p className="section-subtitle">{t('storageSettings.autoMigrateDesc')}</p>
 
@@ -1757,6 +1674,22 @@ const StorageSettings = () => {
                         );
                       })}
                     </div>
+
+                    {/* Stop button */}
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
+                      <button
+                        className="btn-create-raid"
+                        style={{ background: '#ef4444' }}
+                        disabled={stoppingMigration}
+                        onClick={stopMigration}
+                      >
+                        {stoppingMigration ? (
+                          <><FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.stopping')}...</>
+                        ) : (
+                          <><FontAwesomeIcon icon={faStop} /> {t('storageSettings.stopMigration')}</>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1769,8 +1702,18 @@ const StorageSettings = () => {
                   </div>
                 )}
 
+                {/* Migration stopped */}
+                {migrationState && migrationState.status === 'stopped' && (
+                  <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#d97706', fontWeight: '600' }}>
+                      <FontAwesomeIcon icon={faStop} /> {t('storageSettings.migrationStopped')}
+                    </div>
+                    {migrationState.error && <p style={{ margin: '0.3rem 0 0 0', color: '#92400e' }}>{migrationState.error}</p>}
+                  </div>
+                )}
+
                 {/* Migration error */}
-                {migrationState && migrationState.status === 'error' && (
+                {migrationState && (migrationState.status === 'error') && (
                   <div className="alert-error" style={{ marginBottom: '1rem' }}>
                     <FontAwesomeIcon icon={faExclamationTriangle} />
                     <div>
@@ -1780,8 +1723,19 @@ const StorageSettings = () => {
                   </div>
                 )}
 
-                {/* RAID level selector for migration (only when not migrating) */}
-                {(!migrationState || migrationState.status !== 'running') && (
+                {/* Resync in progress — block migration controls */}
+                {resyncProgress && (!migrationState || migrationState.status !== 'running') && (
+                  <div className="alert-warning" style={{ marginTop: '1rem' }}>
+                    <FontAwesomeIcon icon={faSpinner} spin />
+                    <div>
+                      <strong>{t('storageSettings.resyncInProgress')}</strong>
+                      <p style={{ margin: '0.3rem 0 0 0' }}>{t('storageSettings.resyncBlocksMigration')}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* RAID level selector for migration (only when not migrating and no resync) */}
+                {(!migrationState || migrationState.status !== 'running') && !resyncProgress && (
                   <>
                     <h3 style={{ marginTop: '1rem', marginBottom: '0.5rem' }}>{t('storageSettings.targetRaidLevel')}</h3>
                     <div className="raid-levels-grid">
@@ -1896,9 +1850,18 @@ const StorageSettings = () => {
                   {resyncProgress.percent > 10 && `${resyncProgress.percent.toFixed(1)}%`}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: '#666' }}>
-                {resyncProgress.eta && <span><FontAwesomeIcon icon={faClock} /> {t('storageSettings.timeRemaining')}: <strong>{resyncProgress.eta}</strong></span>}
-                {resyncProgress.speed && <span><FontAwesomeIcon icon={faBolt} /> {t('storageSettings.speed')}: <strong>{resyncProgress.speed}</strong></span>}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: '#666' }}>
+                  {resyncProgress.eta && <span><FontAwesomeIcon icon={faClock} /> {t('storageSettings.timeRemaining')}: <strong>{resyncProgress.eta}</strong></span>}
+                  {resyncProgress.speed && <span><FontAwesomeIcon icon={faBolt} /> {t('storageSettings.speed')}: <strong>{resyncProgress.speed}</strong></span>}
+                </div>
+                <button
+                  className="btn-create-raid"
+                  style={{ background: '#ef4444', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
+                  onClick={handleStopResync}
+                >
+                  <FontAwesomeIcon icon={faStop} /> {t('storageSettings.stopResync')}
+                </button>
               </div>
             </div>
           )}
