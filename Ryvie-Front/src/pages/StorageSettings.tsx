@@ -988,9 +988,17 @@ const StorageSettings = () => {
     }
   }, [raidStatus]);
 
-  // Pre-select current RAID level and member disks when entering manage mode
+  // Pre-select current RAID level and member disks ONCE when entering manage mode
+  const manageInitDone = useRef(false);
   useEffect(() => {
-    if (mode !== 'manage' || !raidStatus || raidStatus.type !== 'mdadm') return;
+    if (mode !== 'manage') {
+      manageInitDone.current = false;
+      return;
+    }
+    if (manageInitDone.current) return;
+    if (!raidStatus || raidStatus.type !== 'mdadm' || disks.length === 0) return;
+    manageInitDone.current = true;
+
     if (raidStatus.level) {
       setMigrateLevel(raidStatus.level.toLowerCase());
     }
@@ -998,12 +1006,17 @@ const StorageSettings = () => {
       const activeMembers = raidStatus.members.filter((m: any) => m.state !== 'faulty');
       const memberParentDisks = activeMembers.map((m: any) => m.device.replace(/p?\d+$/, ''));
       const uniqueDisks = [...new Set(memberParentDisks)] as string[];
+      // Don't auto-select system disks — they are disabled in the UI and can't be unchecked
+      const nonSystemDisks = uniqueDisks.filter(dp => {
+        const diskInfo = disks.find(d => d.path === dp);
+        return diskInfo && !diskInfo.isSystemDisk;
+      });
       setMigrateDisks(prev => {
-        const combined = new Set([...prev, ...uniqueDisks]);
+        const combined = new Set([...prev, ...nonSystemDisks]);
         return [...combined];
       });
     }
-  }, [mode, raidStatus]);
+  }, [mode, raidStatus, disks]);
 
   // Toggle migrate disk selection
   const handleMigrateDiskToggle = (devicePath: string) => {
@@ -1061,6 +1074,13 @@ const StorageSettings = () => {
       }, { timeout: 30000 });
       if (response.data.success) {
         addLog('Migration started', 'success');
+        // Immediately fetch migration state so the timeline UI appears
+        try {
+          const statusResp = await axios.get(`${serverUrl}/api/storage/mdraid-migration-status`, { timeout: 10000 });
+          if (statusResp.data.success && statusResp.data.migration) {
+            setMigrationState(statusResp.data.migration);
+          }
+        } catch (e) {}
       } else {
         addLog(`Failed: ${response.data.error}`, 'error');
         setExecutionStatus('error');
@@ -1121,7 +1141,7 @@ const StorageSettings = () => {
         const accessMode = getCurrentAccessMode() || 'private';
         const serverUrl = getServerUrl(accessMode);
         const response = await axios.get(`${serverUrl}/api/storage/mdraid-migration-status`, { timeout: 10000 });
-        if (response.data.success && response.data.migration && response.data.migration.status === 'running') {
+        if (response.data.success && response.data.migration && response.data.migration.id) {
           setMigrationState(response.data.migration);
         }
       } catch (e) {}
@@ -1626,12 +1646,95 @@ const StorageSettings = () => {
                 <p className="section-subtitle">{t('storageSettings.autoMigrateDesc')}</p>
 
                 {/* Migration in progress — show timeline */}
-                {migrationState && migrationState.status === 'running' && (
+                {migrationState && migrationState.status === 'running' && (() => {
+                  // Parse resync speed to KB/s for time estimation
+                  const parseSpeedKBs = (speedStr?: string): number => {
+                    if (!speedStr) return 0;
+                    const m = speedStr.match(/([\d.]+)\s*([KMG])\/sec/i);
+                    if (!m) return 0;
+                    const val = parseFloat(m[1]);
+                    const unit = m[2].toUpperCase();
+                    if (unit === 'G') return val * 1024 * 1024;
+                    if (unit === 'M') return val * 1024;
+                    return val; // K
+                  };
+
+                  const speedKBs = parseSpeedKBs(resyncProgress?.speed);
+
+                  // Get member size from migrationState disks — find smallest selected disk
+                  let memberSizeKB = 0;
+                  if (migrationState.disks && migrationState.disks.length > 0) {
+                    let smallest = Infinity;
+                    for (const dp of migrationState.disks) {
+                      const d = disks.find(dd => dd.path === dp);
+                      if (d) {
+                        const bytes = parseSizeToBytes(d.size);
+                        if (!isNaN(bytes) && bytes < smallest) smallest = bytes;
+                      }
+                    }
+                    if (smallest !== Infinity) memberSizeKB = smallest / 1024;
+                  }
+
+                  // Estimate time per step (in seconds)
+                  // Steps 0 (repair/resync), 3 (reshape), 4 (add disks) are sync-heavy
+                  // Steps 1 (remove member), 2 (grow) are instant
+                  const estimateStepSec = (idx: number, step: any): number | null => {
+                    if (step.status === 'completed' || step.status === 'skipped') return 0;
+                    if (speedKBs === 0 || memberSizeKB === 0) return null;
+
+                    if (step.status === 'running' && step.progress > 0) {
+                      // For running step with progress, use resync ETA if available
+                      if (resyncProgress?.eta) {
+                        const etaM = resyncProgress.eta.match(/([\d.]+)\s*min/);
+                        if (etaM) return Math.round(parseFloat(etaM[1]) * 60);
+                      }
+                      // Fallback: estimate from progress and speed
+                      const remainPct = 100 - step.progress;
+                      return Math.round((memberSizeKB * remainPct / 100) / speedKBs);
+                    }
+
+                    // Pending steps
+                    if (idx === 1 || idx === 2) return 30; // instant steps ~30s
+                    if (idx === 0 || idx === 3) return Math.round(memberSizeKB / speedKBs); // full sync
+                    if (idx === 4) {
+                      // Add remaining disks — each needs a full sync
+                      const extraDisks = Math.max(0, (migrationState.disks?.length || 0) - 2);
+                      return Math.round(memberSizeKB * extraDisks / speedKBs);
+                    }
+                    return null;
+                  };
+
+                  const fmtEta = (sec: number | null): string => {
+                    if (sec === null) return '';
+                    if (sec === 0) return '';
+                    if (sec < 60) return '< 1min';
+                    if (sec < 3600) return `~${Math.round(sec / 60)}min`;
+                    return `~${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}min`;
+                  };
+
+                  // Compute global remaining time = sum of remaining for all non-completed steps
+                  let globalRemainingSec = 0;
+                  let hasEstimate = false;
+                  if (migrationState.steps) {
+                    for (let i = 0; i < migrationState.steps.length; i++) {
+                      const est = estimateStepSec(i, migrationState.steps[i]);
+                      if (est !== null && est > 0) { globalRemainingSec += est; hasEstimate = true; }
+                    }
+                  }
+
+                  return (
                   <div style={{ marginBottom: '1.5rem' }}>
                     {/* Global progress bar */}
                     <div style={{ marginBottom: '1rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                        <strong>{t('storageSettings.globalProgress')}</strong>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <strong>{t('storageSettings.globalProgress')}</strong>
+                          {hasEstimate && (
+                            <span style={{ fontSize: '0.85rem', color: '#2196f3', fontWeight: '600' }}>
+                              <FontAwesomeIcon icon={faClock} /> {fmtEta(globalRemainingSec)} restant
+                            </span>
+                          )}
+                        </div>
                         <span style={{ fontWeight: 'bold', color: '#2196f3' }}>{migrationState.globalProgress}%</span>
                       </div>
                       <div style={{ width: '100%', height: '12px', background: '#e0e0e0', borderRadius: '6px', overflow: 'hidden' }}>
@@ -1644,6 +1747,8 @@ const StorageSettings = () => {
                       {migrationState.steps && migrationState.steps.map((step: any, idx: number) => {
                         const statusColor = step.status === 'completed' ? '#10b981' : step.status === 'running' ? '#2196f3' : step.status === 'error' ? '#ef4444' : step.status === 'skipped' ? '#94a3b8' : '#d1d5db';
                         const statusIcon = step.status === 'completed' ? faCheckCircle : step.status === 'running' ? faSpinner : step.status === 'error' ? faExclamationTriangle : step.status === 'skipped' ? faMinus : faClock;
+                        const stepEta = estimateStepSec(idx, step);
+                        const stepEtaStr = fmtEta(stepEta);
                         return (
                           <div key={idx} style={{ background: step.status === 'running' ? '#eff6ff' : '#fff', border: `1px solid ${step.status === 'running' ? '#93c5fd' : '#e5e7eb'}`, borderRadius: '8px', padding: '0.75rem 1rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -1656,19 +1761,30 @@ const StorageSettings = () => {
                                 </div>
                                 {step.message && <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.2rem' }}>{step.message}</div>}
                               </div>
-                              <span style={{ fontSize: '0.85rem', fontWeight: '600', color: statusColor }}>
-                                {step.status === 'completed' ? t('storageSettings.stepCompleted')
-                                  : step.status === 'running' ? `${step.progress}%`
-                                  : step.status === 'error' ? t('storageSettings.stepError')
-                                  : step.status === 'skipped' ? t('storageSettings.stepSkipped')
-                                  : t('storageSettings.stepPending')}
-                              </span>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.1rem' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: '600', color: statusColor }}>
+                                  {step.status === 'completed' ? t('storageSettings.stepCompleted')
+                                    : step.status === 'running' ? `${step.progress}%`
+                                    : step.status === 'error' ? t('storageSettings.stepError')
+                                    : step.status === 'skipped' ? t('storageSettings.stepSkipped')
+                                    : t('storageSettings.stepPending')}
+                                </span>
+                                {stepEtaStr && step.status !== 'completed' && step.status !== 'skipped' && (
+                                  <span style={{ fontSize: '0.75rem', color: '#999' }}>{stepEtaStr}</span>
+                                )}
+                              </div>
                             </div>
                             {step.status === 'running' && step.progress > 0 && (
                               <div style={{ marginTop: '0.5rem' }}>
                                 <div style={{ width: '100%', height: '6px', background: '#e0e0e0', borderRadius: '3px', overflow: 'hidden' }}>
                                   <div style={{ width: `${step.progress}%`, height: '100%', background: '#2196f3', transition: 'width 0.5s ease' }} />
                                 </div>
+                                {resyncProgress && (
+                                  <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: '#666', marginTop: '0.3rem' }}>
+                                    {resyncProgress.eta && <span><FontAwesomeIcon icon={faClock} /> {t('storageSettings.timeRemaining')}: <strong>{resyncProgress.eta}</strong></span>}
+                                    {resyncProgress.speed && <span><FontAwesomeIcon icon={faBolt} /> {t('storageSettings.speed')}: <strong>{resyncProgress.speed}</strong></span>}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1692,7 +1808,8 @@ const StorageSettings = () => {
                       </button>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* Migration completed */}
                 {migrationState && migrationState.status === 'completed' && (
@@ -1839,8 +1956,8 @@ const StorageSettings = () => {
             </>
           )}
 
-          {/* ==================== RESYNC PROGRESS (shared) ==================== */}
-          {resyncProgress && (
+          {/* ==================== RESYNC PROGRESS (shared) — hidden when migration timeline is visible ==================== */}
+          {resyncProgress && !(migrationState && migrationState.status === 'running') && (
             <div className="resync-progress-section" style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '8px', padding: '1.5rem', marginBottom: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>{t('storageSettings.resyncInProgress')}</h3>
