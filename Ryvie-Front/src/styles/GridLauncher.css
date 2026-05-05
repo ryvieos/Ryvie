@@ -207,6 +207,16 @@
   box-sizing: border-box;
 }
 
+.widget-tile:active {
+  cursor: grabbing;
+}
+
+.widget-tile.dragging {
+  opacity: 1;
+  z-index: 1000;
+  pointer-events: none;
+}
+
 
 /**/
 /* Le composant Icon à l'intérieur */
