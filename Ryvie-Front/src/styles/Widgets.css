@@ -4,15 +4,13 @@
 /* Styles pour les widgets */
 
 .base-widget {
-  width: 252px;
-  height: 252px;
-  max-width: 252px;
-  max-height: 252px;
-  box-sizing: border-box; /* IMPORTANT: avoid padding causing overflow of 2x2 area */
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   background: #f8fafc;
   backdrop-filter: blur(20px);
   border: none;
-  border-radius: 16px;
+  border-radius: 15px;
   padding: 12px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   display: flex;
@@ -100,22 +98,30 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* widget-inner doit remplir base-widget dans tous les cas */
+.widget-inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Gradient variant: header + content in a single rounded gradient card */
-.base-widget.gradient { 
-  background: transparent; 
-  padding: 0; 
+.base-widget.gradient {
+  background: transparent;
+  padding: 0;
   box-shadow: none;
 }
 .base-widget.gradient .widget-inner {
-  height: 100%;
   display: flex;
   flex-direction: column;
   background: linear-gradient(135deg, rgba(17, 24, 39, 0.36), rgba(17, 24, 39, 0.26));
   color: #eef3ff;
-  border-radius: 18px;
+  border-radius: 15px;
   padding: 12px 14px;
   box-shadow: 0 10px 24px rgba(2, 6, 23, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.18);

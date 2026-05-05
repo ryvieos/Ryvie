@@ -58,25 +58,6 @@
   pointer-events: none; /* ne pas capturer le hover: évite l'effet verre sous les apps */
 }
 
-/* Widgets dans la grille */
-.widget-tile {
-  pointer-events: auto;
-  cursor: grab;
-  user-select: none;
-  /* Taille fixe pour 2×2: (120px * 2) + (12px * 1) = 252px */
-  width: 252px !important;
-  height: 252px !important;
-  background: transparent;
-}
-
-.widget-tile:active {
-  cursor: grabbing;
-}
-
-.widget-tile.dragging {
-  opacity: 0.5;
-}
-
 .grid-slot:hover {
   background: transparent;
 }
@@ -206,7 +187,6 @@
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  padding-top: 12px;
   cursor: grab;
   transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), 
               opacity 0.35s ease;
@@ -215,6 +195,20 @@
   user-select: none;
 }
 
+.app-tile {
+  padding-top: 12px;
+}
+
+/* Widgets 2×2 - taille fixe */
+.widget-tile {
+  width: 254px;
+  height: 254px;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+
+/**/
 /* Le composant Icon à l'intérieur */
 .grid-tile .icon {
   margin: 0 !important;
@@ -257,6 +251,10 @@
   opacity: 0;
 }
 
+/* Widgets toujours visibles (animation gérée inline) */
+.widget-tile {
+  opacity: 1;
+}
 
 /* Appliquer aussi aux widgets météo */
 .weather-widget { opacity: 0; }

@@ -455,7 +455,7 @@ const GridLauncher = ({
             <div
               key={appId}
               id={`tile-${appId}`}
-              className={`grid-tile ${isDragging && draggedItem?.itemId === appId ? 'dragging' : ''}`}
+              className={`grid-tile app-tile ${isDragging && draggedItem?.itemId === appId ? 'dragging' : ''}`}
               style={{
                 gridColumn: layout[appId].col + 1,
                 gridRow: layout[appId].row + 1,
