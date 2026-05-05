@@ -4,6 +4,13 @@
 echo "🏭 Démarrage de Ryvie en mode PRODUCTION..."
 echo ""
 
+# Vérification critique de sécurité: /data doit être en ligne
+if ! findmnt -f /data > /dev/null 2>&1; then
+  echo "❌ ERREUR CRITIQUE: Le répertoire /data n'est pas monté."
+  echo "⚠️ Démarrage de Ryvie annulé pour éviter de corrompre les configurations."
+  exit 1
+fi
+
 # Arrêter les processus dev s'ils tournent
 pm2 stop ryvie-backend-dev ryvie-frontend-dev 2>/dev/null || true
 pm2 delete ryvie-backend-dev ryvie-frontend-dev 2>/dev/null || true

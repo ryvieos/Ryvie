@@ -96,6 +96,7 @@ const App = () => {
               <StorageSettings />
             </ProtectedRoute>
           } />
+          <Route path="/setup/storage" element={<StorageSettings />} />
           <Route path="/welcome" element={
             <ProtectedRoute>
               <Welcome />

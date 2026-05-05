@@ -276,6 +276,7 @@ try {
 async function startServer() {
   try {
     // Enregistrer tous les services de démarrage
+    startupTracker.registerService('architecture');
     startupTracker.registerService('redis');
     startupTracker.registerService('network');
     startupTracker.registerService('caddy');
@@ -286,6 +287,17 @@ async function startServer() {
     startupTracker.registerService('appstore');
     startupTracker.registerService('backgrounds');
     startupTracker.registerService('netbird');
+
+    // Mettre à niveau et auto-corriger l'architecture localement
+    const { enforceArchitectureBase } = require('./services/architectureService');
+    try {
+      await enforceArchitectureBase();
+      startupTracker.markDone('architecture');
+    } catch (archError: any) {
+      console.error('Erreur non bloquante lors de la vérification de l\'architecture:', archError);
+      startupTracker.markError('architecture', archError.message);
+      // On ne throw pas, l'erreur n'empêche pas la suite (ou du moins on essaie de continuer)
+    }
 
     // Vérifier et redémarrer Redis si nécessaire
     const { ensureRedisRunning } = require('./utils/redisHealthCheck');
@@ -367,6 +379,7 @@ async function startServer() {
     // Initialize realtime service
     try {
       realtime = setupRealtime(io, docker, getLocalIP, getAppStatus);
+      (global as any).realtimeService = realtime;
       await realtime.initializeActiveContainers();
       startupTracker.markDone('realtime');
     } catch (realtimeError: any) {
@@ -463,4 +476,15 @@ process.on('SIGINT', () => {
     console.log('Serveur HTTP fermé');
     process.exit(0);
   });
+});
+
+// Safety net: prevent unhandled errors from crashing the process
+// (e.g. LDAP reconnect failures when Docker is stopped during RAID operations)
+process.on('uncaughtException', (err: any) => {
+  console.error('[UNCAUGHT EXCEPTION] (process kept alive):', err.code || err.message);
+  if (err.stack) console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[UNHANDLED REJECTION] (process kept alive):', reason?.code || reason?.message || reason);
 });

@@ -1055,74 +1055,119 @@ LOCAL_IP=${localIP}
         console.log(`[Update] ✅ Fichier .env créé avec LOCAL_IP=${localIP}`);
       }
       
-      // Nettoyer les containers existants avant de lancer (évite les conflits de noms)
-      console.log('[Update] 🧹 Nettoyage des anciens containers...');
-      try {
-        // Lister tous les containers de cette app (en cours ou arrêtés)
-        const containersOutput = execSync(`docker ps -a --filter "name=app-${appId}" --format "{{.Names}}"`, { 
-          encoding: 'utf8',
-          stdio: 'pipe'
-        }).trim();
-        
-        if (containersOutput) {
-          const containers = containersOutput.split('\n').filter(name => name.trim());
-          console.log(`[Update] 🗑️ Suppression de ${containers.length} container(s) existant(s)...`);
-          
-          for (const containerName of containers) {
-            try {
-              execSync(`docker rm -f ${containerName}`, { stdio: 'pipe' });
-              console.log(`[Update] ✅ Container ${containerName} supprimé`);
-            } catch (rmError: any) {
-              console.warn(`[Update] ⚠️ Impossible de supprimer ${containerName}:`, rmError.message);
-            }
-          }
-        } else {
-          console.log('[Update] ℹ️ Aucun container existant à nettoyer');
-        }
-      } catch (cleanupError: any) {
-        // Non bloquant - l'app n'existe peut-être pas encore
-        console.log('[Update] ℹ️ Aucun container existant à nettoyer');
-      }
-      
-      // Lancer docker compose avec rebuild si c'est une mise à jour
-      const buildFlag = isUpdate ? '--build' : '';
-      
-      if (isUpdate) {
-        console.log('[Update]   Rebuild et lancement des containers (mise à jour)...');
-        sendProgressUpdate(appId, 76, 'Reconstruction des images Docker...', 'build');
-      } else {
-        console.log('[Update]    Lancement des containers (nouvelle installation)...');
-      }
-      
-      // Déterminer le dossier de travail : si le docker-compose est dans un sous-dossier,
-      // utiliser ce sous-dossier comme cwd pour que ${PWD} fonctionne correctement
+      // Déterminer le dossier de travail et le fichier compose
       const workingDir = composeFile.includes('/') 
         ? path.join(appDir, path.dirname(composeFile))
         : appDir;
       const composeFileName = path.basename(composeFile);
-      
-      console.log(`[Update] 📂 Dossier de travail: ${workingDir}`);
-      console.log(`[Update] 📄 Fichier compose: ${composeFileName}`);
-      console.log(`[Update] 🔧 Commande: docker compose -f ${composeFileName} up -d ${buildFlag}`);
-      
+
+      // --- FIABILISATION: Pause du monitoring realtime pendant les opérations Docker ---
+      // Empêche les événements Docker de déclencher des requêtes concurrentes
+      // qui interfèrent avec docker compose up (race conditions, "No such container")
+      const realtimeService = (global as any).realtimeService;
+      if (realtimeService?.pauseBroadcast) {
+        realtimeService.pauseBroadcast();
+      }
+
       try {
-        // Ne pas utiliser -p car les container_name sont fixes dans le docker-compose.yml
-        // Ajouter --build pour forcer le rebuild lors des mises à jour
-        execSync(`docker compose -f ${composeFileName} up -d ${buildFlag}`, { 
-          cwd: workingDir, 
-          stdio: 'inherit'
-        });
-        console.log('[Update] ✅ Containers lancés avec succès');
-      } catch (composeError: any) {
-        console.error('[Update] ❌ Erreur lors du lancement docker compose:', composeError.message);
-        console.error('[Update] 📋 Vérification du fichier docker-compose.yml...');
-        
-        // Afficher le contenu du fichier modifié pour debug
-        const modifiedContent = await fs.readFile(path.join(appDir, composeFile), 'utf8');
-        console.error('[Update] 📄 Contenu du docker-compose.yml modifié:');
-        console.error(modifiedContent.substring(0, 1000)); // Premiers 1000 caractères
-        
-        throw new Error(`Échec du lancement docker compose: ${composeError.message}`);
+        // ÉTAPE 1: Nettoyer les containers existants via docker compose down
+        // IMPORTANT: Ne PAS utiliser docker rm -f car cela bypasse l'état interne de Compose
+        // et provoque des erreurs "No such container" lors du docker compose up suivant
+        console.log('[Update] 🧹 Nettoyage des anciens containers via docker compose down...');
+        try {
+          execSync(`docker compose -f ${composeFileName} down --remove-orphans`, { 
+            cwd: workingDir,
+            stdio: 'pipe',
+            timeout: 120000 // 2 minutes max
+          });
+          console.log('[Update] ✅ Anciens containers arrêtés et supprimés proprement');
+        } catch (cleanupError: any) {
+          console.log('[Update] ℹ️ Nettoyage compose down échoué ou première installation:', cleanupError.message?.substring(0, 200));
+          // Fallback: nettoyer les containers orphelins manuellement si compose down échoue
+          try {
+            const orphans = execSync(`docker ps -a --filter "name=app-${appId}" --format "{{.ID}}"`, { encoding: 'utf8', stdio: 'pipe' }).trim();
+            if (orphans) {
+              console.log('[Update] 🔧 Nettoyage des containers orphelins...');
+              for (const cid of orphans.split('\n').filter(Boolean)) {
+                try { execSync(`docker rm -f ${cid}`, { stdio: 'pipe' }); } catch (e) {}
+              }
+              console.log('[Update] ✅ Containers orphelins nettoyés');
+            }
+          } catch (e) {}
+        }
+
+        // Petit délai pour laisser Docker stabiliser son état interne
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // ÉTAPE 2: Lancer docker compose up avec retry
+        const buildFlag = isUpdate ? '--build' : '';
+        if (isUpdate) {
+          console.log('[Update] 🔨 Rebuild et lancement des containers (mise à jour)...');
+          sendProgressUpdate(appId, 76, 'Reconstruction des images Docker...', 'build');
+        } else {
+          console.log('[Update] 🚀 Lancement des containers (nouvelle installation)...');
+        }
+
+        console.log(`[Update] 📂 Dossier de travail: ${workingDir}`);
+        console.log(`[Update] 📄 Fichier compose: ${composeFileName}`);
+        console.log(`[Update] 🔧 Commande: docker compose -f ${composeFileName} up -d ${buildFlag}`);
+
+        const MAX_RETRIES = 2;
+        let lastError = null;
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            execSync(`docker compose -f ${composeFileName} up -d ${buildFlag}`, { 
+              cwd: workingDir, 
+              stdio: 'inherit',
+              timeout: 300000 // 5 minutes max
+            });
+            console.log('[Update] ✅ Containers lancés avec succès');
+            lastError = null;
+            break;
+          } catch (composeError: any) {
+            lastError = composeError;
+            console.error(`[Update] ⚠️ Tentative ${attempt}/${MAX_RETRIES} échouée:`, composeError.message?.substring(0, 300));
+            
+            if (attempt < MAX_RETRIES) {
+              // Avant de réessayer: cleanup complet pour purger l'état corrompu
+              console.log('[Update] 🔄 Nettoyage avant nouvelle tentative...');
+              try {
+                execSync(`docker compose -f ${composeFileName} down --remove-orphans`, { 
+                  cwd: workingDir, stdio: 'pipe', timeout: 60000
+                });
+              } catch (e) {}
+              // Nettoyer les containers zombies/créés qui n'ont pas démarré
+              try {
+                const staleContainers = execSync(
+                  `docker ps -a --filter "name=app-${appId}" --filter "status=created" --format "{{.ID}}"`,
+                  { encoding: 'utf8', stdio: 'pipe' }
+                ).trim();
+                if (staleContainers) {
+                  for (const cid of staleContainers.split('\n').filter(Boolean)) {
+                    try { execSync(`docker rm -f ${cid}`, { stdio: 'pipe' }); } catch (e) {}
+                  }
+                  console.log('[Update] 🗑️ Containers stale nettoyés');
+                }
+              } catch (e) {}
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              console.log(`[Update] 🔄 Nouvelle tentative (${attempt + 1}/${MAX_RETRIES})...`);
+            }
+          }
+        }
+
+        if (lastError) {
+          console.error('[Update] ❌ Toutes les tentatives ont échoué');
+          try {
+            const modifiedContent = await fs.readFile(path.join(appDir, composeFile), 'utf8');
+            console.error('[Update] 📄 docker-compose.yml (500 premiers chars):', modifiedContent.substring(0, 500));
+          } catch (e) {}
+          throw new Error(`Échec du lancement docker compose après ${MAX_RETRIES} tentatives: ${lastError.message}`);
+        }
+      } finally {
+        // --- FIABILISATION: Toujours reprendre le monitoring realtime ---
+        if (realtimeService?.resumeBroadcast) {
+          realtimeService.resumeBroadcast();
+        }
       }
     }
     

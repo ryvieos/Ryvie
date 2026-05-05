@@ -212,7 +212,7 @@ const Settings = () => {
   const [showStorageOverlay, setShowStorageOverlay] = useState(false);
   // Stockage (lecture seule) - état live
   const [storageInventory, setStorageInventory] = useState(null);
-  const [mdraidStatus, setMdraidStatus] = useState(null);
+  const [mdraidStatus, setMdraidStatus] = useState<{arrays?: any[]; members?: any[]} | null>(null);
   const [storageLoading, setStorageLoading] = useState(true);
   const [storageError, setStorageError] = useState(null);
   // État pour les adresses publiques
@@ -595,7 +595,7 @@ const Settings = () => {
           axios.get(`${baseUrl}/api/storage/mdraid-status`, { timeout: 30000 })
         ]);
         setStorageInventory(inv.data?.data || null);
-        setMdraidStatus(md.data?.status || null);
+        setMdraidStatus(md.data || null);
       } catch (e) {
         console.error('[Settings] Erreur récupération stockage:', e);
         setStorageError(e?.response?.data?.error || e.message);
@@ -3037,9 +3037,23 @@ const Settings = () => {
                   const items = [];
                   const block = storageInventory?.devices?.blockdevices || [];
                   const inRaidPaths = new Set();
-                  // calculer les chemins des membres RAID pour badge
+                  // calculer les chemins des membres RAID pour badge (from ALL arrays)
+                  if (mdraidStatus?.arrays && Array.isArray(mdraidStatus.arrays)) {
+                    mdraidStatus.arrays.forEach((array: any) => {
+                      if (array.members && Array.isArray(array.members)) {
+                        array.members.forEach((m: any) => {
+                          const d = m.device;
+                          if (d) {
+                            const match = d.match(/\/dev\/(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)/);
+                            if (match) inRaidPaths.add(`/dev/${match[1]}`);
+                          }
+                        });
+                      }
+                    });
+                  }
+                  // Also check old format for backward compatibility
                   if (mdraidStatus?.members && Array.isArray(mdraidStatus.members)) {
-                    mdraidStatus.members.forEach(m => {
+                    mdraidStatus.members.forEach((m: any) => {
                       const d = m.device;
                       if (d) {
                         const match = d.match(/\/dev\/(sd[a-z]+|nvme\d+n\d+|vd[a-z]+)/);
