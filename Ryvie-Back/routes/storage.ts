@@ -200,6 +200,26 @@ function getReshapeBackupFile(array: string): string {
 }
 
 /**
+ * Écrit un /etc/mdadm/mdadm.conf propre à partir de `mdadm --detail --scan`.
+ * Filtre les lignes INACTIVE-ARRAY qui causent "Unknown keyword" lors des appels mdadm.
+ */
+async function writeCleanMdadmConf(log: LogFn = noopLog): Promise<void> {
+  const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
+  const cleanLines = scanResult.stdout
+    .split('\n')
+    .filter(line => !line.startsWith('INACTIVE-ARRAY'))
+    .join('\n')
+    .trim();
+  const cleanConf = `HOMEHOST <ignore>\n${cleanLines}\n`;
+  const fs = require('fs');
+  const tmpFile = '/tmp/mdadm.conf.new';
+  fs.writeFileSync(tmpFile, cleanConf);
+  await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
+  fs.unlinkSync(tmpFile);
+  log('✓ Updated /etc/mdadm/mdadm.conf', 'success');
+}
+
+/**
  * Prépare un disque pour l'ajout au RAID en utilisant sgdisk pour un alignement précis.
  * Utilise `sgdisk -n 1:2048:0` qui prend explicitement le dernier secteur disponible,
  * évitant le bug "not large enough" causé par parted qui peut laisser des secteurs inutilisés.
@@ -255,6 +275,21 @@ async function prepareDiskForRaid(
   try { await executeCommand('sudo', ['-n', 'partprobe', disk]); } catch (e: any) {}
   try { await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']); } catch (e: any) {}
   await executeCommand('sleep', ['2']);
+
+  // Stop any ghost RAID arrays that udev/mdadm may have auto-assembled on this partition
+  try {
+    const lsblkCheck = await executeCommand('lsblk', ['-ln', '-o', 'NAME,TYPE', partPath]);
+    for (const line of lsblkCheck.stdout.trim().split('\n')) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 2 && /^raid/.test(parts[1])) {
+        const ghostArray = `/dev/${parts[0]}`;
+        log(`Stopping ghost array ${ghostArray} auto-assembled on ${partPath}...`, 'warning');
+        try { await executeCommand('sudo', ['-n', 'mdadm', '--stop', ghostArray]); } catch (e: any) {}
+        await executeCommand('sleep', ['1']);
+        try { await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']); } catch (e: any) {}
+      }
+    }
+  } catch (e: any) {}
 
   // Wipe partition-level signatures and any leftover md superblock
   try { await executeCommand('sudo', ['-n', 'wipefs', '-a', partPath]); } catch (e: any) {}
@@ -324,6 +359,31 @@ async function addPartitionToArrayRobust(
 
   log(`Adding ${partPath} to ${array}...`, 'info');
   let result = await tryAdd();
+
+  // Auto-recovery on "INACTIVE-ARRAY" or "Device or resource busy"
+  if (!result.ok && (/INACTIVE.ARRAY/i.test(result.stderr) || /resource busy/i.test(result.stderr))) {
+    log(`⚠ mdadm error: ${result.stderr.trim()} — cleaning mdadm.conf and ghost arrays, retrying...`, 'warning');
+    // Fix mdadm.conf (remove INACTIVE-ARRAY lines)
+    try { await writeCleanMdadmConf(log); } catch (e: any) {}
+    // Stop any ghost array holding the partition
+    try {
+      const lsblkCheck = await executeCommand('lsblk', ['-ln', '-o', 'NAME,TYPE', partPath]);
+      for (const line of lsblkCheck.stdout.trim().split('\n')) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 2 && /^raid/.test(parts[1])) {
+          const ghostArray = `/dev/${parts[0]}`;
+          log(`Stopping ghost array ${ghostArray} holding ${partPath}...`, 'warning');
+          try { await executeCommand('sudo', ['-n', 'mdadm', '--stop', ghostArray]); } catch (e: any) {}
+        }
+      }
+    } catch (e: any) {}
+    await executeCommand('sleep', ['2']);
+    try { await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=5']); } catch (e: any) {}
+    // Wipe superblock again after stopping ghost array
+    try { await executeCommand('sudo', ['-n', 'mdadm', '--zero-superblock', partPath]); } catch (e: any) {}
+    await executeCommand('sleep', ['1']);
+    result = await tryAdd();
+  }
 
   // Auto-recovery on "not large enough"
   if (!result.ok && /not large enough/i.test(result.stderr)) {
@@ -5403,15 +5463,24 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
       const matchSizeMiB = Math.floor(memberSize / 1024 / 1024);
       const nextPartLabel = await getNextPartLabel(array);
 
+      // Clean up any existing RAID memberships / ghost arrays on this disk BEFORE partitioning
+      setStep(0, { message: `Nettoyage des appartenances RAID sur ${firstNewDisk}...` });
+      await cleanupDiskRaidMembership(firstNewDisk, array, log);
+
       setStep(0, { message: `Création partition ${matchSizeMiB} MiB sur ${firstNewDisk}` });
       const newPartPath = await prepareDiskForRaid(firstNewDisk, nextPartLabel, log, memberSize);
 
       setStep(0, { message: `Ajout de ${newPartPath} au RAID...` });
       await addPartitionToArrayRobust(array, newPartPath, log);
 
-      // Wait for resync
-      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
-      if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync')) {
+      // Wait for resync — give kernel time to start recovery
+      await executeCommand('sleep', ['5']);
+      let mdstatStep1 = await executeCommand('cat', ['/proc/mdstat']);
+      if (!mdstatStep1.stdout.includes('recovery') && !mdstatStep1.stdout.includes('resync')) {
+        await executeCommand('sleep', ['10']);
+        mdstatStep1 = await executeCommand('cat', ['/proc/mdstat']);
+      }
+      if (mdstatStep1.stdout.includes('recovery') || mdstatStep1.stdout.includes('resync')) {
         setStep(0, { message: 'Resynchronisation en cours...' });
         await waitForSync(0);
       }
@@ -5477,12 +5546,7 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
 
       // Update mdadm.conf
       try {
-        const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
-        const fs = require('fs');
-        const tmpFile = '/tmp/mdadm.conf.new';
-        fs.writeFileSync(tmpFile, `HOMEHOST <ignore>\n${scanResult.stdout.trim()}\n`);
-        await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
-        fs.unlinkSync(tmpFile);
+        await writeCleanMdadmConf(log);
       } catch (e: any) {}
 
       setStep(1, { status: 'completed', progress: 100, message: `${oldMembers.length} membre(s) retiré(s)` });
@@ -5620,8 +5684,13 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
           await executeCommand('sudo', ['-n', 'mdadm', '--grow', array, `--raid-devices=${tdPrep}`]);
         }
 
-        // Wait for resync
-        const mdstatPrep = await executeCommand('cat', ['/proc/mdstat']);
+        // Wait for resync — give kernel time to start
+        await executeCommand('sleep', ['5']);
+        let mdstatPrep = await executeCommand('cat', ['/proc/mdstat']);
+        if (!mdstatPrep.stdout.includes('recovery') && !mdstatPrep.stdout.includes('resync')) {
+          await executeCommand('sleep', ['10']);
+          mdstatPrep = await executeCommand('cat', ['/proc/mdstat']);
+        }
         if (mdstatPrep.stdout.includes('recovery') || mdstatPrep.stdout.includes('resync')) {
           setStep(3, { message: 'Resynchronisation avant conversion...' });
           await waitForSync(3);
@@ -5664,16 +5733,16 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
       log(`Converting RAID${preConvertLevel} → RAID${levelNum} with ${convActiveDevices} devices`, 'info');
       setStep(3, { message: `Conversion RAID${preConvertLevel} → RAID${levelNum}...` });
 
-      const convertResult = await executeCommand('sudo', [
+      // Step A: Change RAID level first (without chunk size change — mdadm forbids both at once)
+      const levelResult = await executeCommand('sudo', [
         '-n', 'mdadm', '--grow', array,
         `--level=${levelNum}`,
         `--raid-devices=${convActiveDevices}`,
-        `--chunk=${migChunkSizeKB}`,
         `--backup-file=${backupFile}`
       ]);
 
-      if (convertResult.exitCode !== 0) {
-        const errMsg = (convertResult.stderr || convertResult.stdout || '').trim();
+      if (levelResult.exitCode !== 0) {
+        const errMsg = (levelResult.stderr || levelResult.stdout || '').trim();
         log(`❌ Reshape failed: ${errMsg}`, 'error');
         setStep(3, { status: 'error', message: `Échec conversion: ${errMsg}` });
         migrationState.status = 'error';
@@ -5682,14 +5751,49 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
         emitMigration();
         return;
       }
-      log('✓ Reshape initiated', 'success');
+      log('✓ Level change initiated', 'success');
 
-      // Wait for reshape if in progress
-      const mdstatConv = await executeCommand('cat', ['/proc/mdstat']);
-      if (mdstatConv.stdout.includes('reshape')) {
-        log('Waiting for reshape to complete...', 'info');
-        setStep(3, { message: 'Reshape en cours...' });
+      // Wait for reshape if in progress — give kernel time to start
+      await executeCommand('sleep', ['5']);
+      let mdstatConv = await executeCommand('cat', ['/proc/mdstat']);
+      if (!mdstatConv.stdout.includes('reshape') && !mdstatConv.stdout.includes('resync') && !mdstatConv.stdout.includes('recovery')) {
+        log('Waiting for reshape to appear in mdstat...', 'info');
+        await executeCommand('sleep', ['10']);
+        mdstatConv = await executeCommand('cat', ['/proc/mdstat']);
+      }
+      if (mdstatConv.stdout.includes('reshape') || mdstatConv.stdout.includes('resync') || mdstatConv.stdout.includes('recovery')) {
+        log('Waiting for level conversion to complete...', 'info');
+        setStep(3, { message: 'Conversion du niveau RAID en cours...' });
         await waitForSync(3);
+      } else {
+        log('No reshape detected — level change was instant', 'info');
+      }
+
+      // Step B: Set chunk size separately (only if needed and array supports it)
+      try {
+        const postLevelDetail = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+        const postChunkMatch = postLevelDetail.stdout.match(/Chunk Size\s*:\s*(\d+)/i);
+        const currentChunkKB = postChunkMatch ? parseInt(postChunkMatch[1]) : 0;
+        if (currentChunkKB !== migChunkSizeKB && levelNum >= 4) {
+          log(`Setting chunk size to ${migChunkSizeKB}K...`, 'info');
+          const chunkResult = await executeCommand('sudo', [
+            '-n', 'mdadm', '--grow', array,
+            `--chunk=${migChunkSizeKB}`,
+            `--backup-file=${backupFile}`
+          ]);
+          if (chunkResult.exitCode !== 0) {
+            log(`Warning: Could not set chunk size: ${(chunkResult.stderr || '').trim()}`, 'warning');
+          } else {
+            log(`✓ Chunk size set to ${migChunkSizeKB}K`, 'success');
+            const mdstatChunk = await executeCommand('cat', ['/proc/mdstat']);
+            if (mdstatChunk.stdout.includes('reshape')) {
+              setStep(3, { message: 'Reshape chunk en cours...' });
+              await waitForSync(3);
+            }
+          }
+        }
+      } catch (e: any) {
+        log(`Warning: chunk size adjustment: ${e.message}`, 'warning');
       }
 
       // Resize btrfs after reshape (capacity may have increased)
@@ -5765,12 +5869,21 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
         log(`Warning growing raid-devices: ${e.message}`, 'warning');
       }
 
-      // Wait for resync/reshape
-      const mdstat = await executeCommand('cat', ['/proc/mdstat']);
+      // Wait for resync/reshape — give kernel time to start the operation
+      await executeCommand('sleep', ['5']);
+      let mdstat = await executeCommand('cat', ['/proc/mdstat']);
+      if (!mdstat.stdout.includes('recovery') && !mdstat.stdout.includes('resync') && !mdstat.stdout.includes('reshape')) {
+        // Sometimes the reshape/recovery takes a few seconds to appear in mdstat
+        log('Waiting for resync to appear in mdstat...', 'info');
+        await executeCommand('sleep', ['10']);
+        mdstat = await executeCommand('cat', ['/proc/mdstat']);
+      }
       if (mdstat.stdout.includes('recovery') || mdstat.stdout.includes('resync') || mdstat.stdout.includes('reshape')) {
-        log('Waiting for resync/reshape...', 'info');
+        log('Waiting for resync/reshape to complete...', 'info');
         setStep(4, { progress: 60, message: 'Resynchronisation en cours...' });
         await waitForSync(4);
+      } else {
+        log('No resync detected after adding disks — array may already be in sync', 'info');
       }
 
       // Resize btrfs after adding disks (capacity increased)
@@ -5792,15 +5905,21 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
     // ============================================================
     log('=== Finalisation ===', 'step');
 
+    // Final btrfs resize — ensure filesystem uses full array capacity
+    // (earlier resizes may fail if reshape was still settling)
+    try {
+      await executeCommand('sleep', ['2']);
+      const resizeResult = await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', '/data']);
+      if (resizeResult.exitCode === 0) {
+        log('✓ Filesystem resized to full array capacity', 'success');
+      }
+    } catch (e: any) {
+      log(`Warning: final btrfs resize: ${e.message}`, 'warning');
+    }
+
     // Update mdadm.conf
     try {
-      const scanResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', '--scan']);
-      const fs = require('fs');
-      const tmpFile = '/tmp/mdadm.conf.new';
-      fs.writeFileSync(tmpFile, `HOMEHOST <ignore>\n${scanResult.stdout.trim()}\n`);
-      await executeCommand('sudo', ['-n', 'cp', tmpFile, '/etc/mdadm/mdadm.conf']);
-      fs.unlinkSync(tmpFile);
-      log('Updated /etc/mdadm/mdadm.conf', 'success');
+      await writeCleanMdadmConf(log);
     } catch (e: any) {}
 
     try {
