@@ -1711,10 +1711,15 @@ const StorageSettings = () => {
                       return Math.round((memberSizeKB * remainPct / 100) / speedKBs);
                     }
 
-                    // Pending steps
-                    if (idx === 1 || idx === 2) return 30; // instant steps ~30s
-                    if (idx === 0 || idx === 3) return Math.round(memberSizeKB / speedKBs); // full sync
-                    if (idx === 4) {
+                    // Pending steps — match by step name since step list is dynamic
+                    const name = (step.name || '').toLowerCase();
+                    const isInstant = name.includes('retirer') || name.includes('agrandir') || name.includes('vérification');
+                    const isFullSync = name.includes('réparer') || name.includes('convertir');
+                    const isAddDisks = name.includes('ajouter');
+
+                    if (isInstant) return 30; // instant steps ~30s
+                    if (isFullSync) return Math.round(memberSizeKB / speedKBs); // full sync
+                    if (isAddDisks) {
                       // Add remaining disks — each needs a full sync
                       const extraDisks = Math.max(0, (migrationState.disks?.length || 0) - 2);
                       return Math.round(memberSizeKB * extraDisks / speedKBs);

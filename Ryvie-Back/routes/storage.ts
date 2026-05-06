@@ -5338,7 +5338,107 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
   // But if old member's parent disk is also in selected disks, it stays
   const minRequired = minDisksMap[levelNum] || 2;
 
-  // Initialize migration state
+  const log = (message: string, type = 'info') => {
+    const logEntry = { timestamp: new Date().toISOString(), type, message };
+    console.log(`[auto-migrate] [${type}] ${message}`);
+    if (io) io.emit('mdraid-log', logEntry);
+  };
+
+  // === Pre-analyze situation to build dynamic step list ===
+  log('=== Auto-migration started ===', 'step');
+  log(`Target: RAID${levelNum} with disks: ${disks.join(', ')}`, 'info');
+
+  const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
+  const detailOutput = detailResult.stdout;
+
+  const currentLevelMatch = detailOutput.match(/Raid Level\s*:\s*raid(\d+)/i);
+  const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 1;
+  const stateMatch = detailOutput.match(/State\s*:\s*(.+)/i);
+  const arrayState = stateMatch ? stateMatch[1].trim() : '';
+  const activeMatch = detailOutput.match(/Active Devices\s*:\s*(\d+)/i);
+  const activeDevices = activeMatch ? parseInt(activeMatch[1]) : 0;
+  const raidDevicesMatch = detailOutput.match(/Raid Devices\s*:\s*(\d+)/i);
+  const raidDevices = raidDevicesMatch ? parseInt(raidDevicesMatch[1]) : 0;
+
+  // Find active members with their sizes
+  const memberRegex = /\s+\d+\s+\d+\s+\d+\s+\d+\s+(active|spare)\s+\w+\s+(\/dev\/\S+)/g;
+  const activeMembers: { device: string; size: number; state: string }[] = [];
+  let match;
+  while ((match = memberRegex.exec(detailOutput)) !== null) {
+    const memberDev = match[2];
+    const memberState = match[1];
+    let size = 0;
+    try {
+      const sz = await executeCommand('lsblk', ['-b', '-no', 'SIZE', memberDev]);
+      size = parseInt(sz.stdout.trim()) || 0;
+    } catch (e: any) {}
+    activeMembers.push({ device: memberDev, size, state: memberState });
+  }
+
+  // Identify which members are "old" (parent disk not in selected disks) vs "kept"
+  const oldMembers: typeof activeMembers = [];
+  const keptMembers: typeof activeMembers = [];
+  for (const member of activeMembers) {
+    const parentMatch = member.device.match(/^(\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+))/);
+    const parentDisk = parentMatch ? parentMatch[1] : null;
+    if (parentDisk && disks.includes(parentDisk)) {
+      keptMembers.push(member);
+    } else {
+      oldMembers.push(member);
+    }
+  }
+
+  const isDegraded = arrayState.includes('degraded') || activeDevices < raidDevices;
+  const hasOldMembers = oldMembers.length > 0;
+  const memberSize = await getUsedDevSize(array);
+
+  log(`Current: RAID${currentLevel}, state: ${arrayState}, active: ${activeDevices}/${raidDevices}`, 'info');
+  log(`Old members to remove: ${oldMembers.map(m => m.device).join(', ') || 'none'}`, 'info');
+  log(`Member dev size: ${Math.floor(memberSize / 1024 / 1024)} MiB`, 'info');
+
+  // Determine which disks are truly new (not already in array)
+  const existingParentDisks = activeMembers.map(m => {
+    const p = m.device.match(/^(\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+))/);
+    return p ? p[1] : null;
+  }).filter(Boolean);
+
+  const newDisks = disks.filter(d => !existingParentDisks.includes(d));
+  const firstNewDisk = newDisks[0] || null;
+  const remainingNewDisks = newDisks.slice(1);
+
+  log(`New disks: ${newDisks.join(', ') || 'none'}`, 'info');
+
+  // Track which new disks are available for step 5 (after step 1 may consume one)
+  const needsRepair = isDegraded && !!firstNewDisk;
+  const needsRemoveOld = hasOldMembers;
+  const needsGrow = !!firstNewDisk && hasOldMembers;
+  const needsConvert = currentLevel !== levelNum;
+  // For step 5 disks: if step 1 uses firstNewDisk, only remainingNewDisks are left
+  const step5Disks = needsRepair ? [...remainingNewDisks] : [...newDisks];
+  // If step 1 is skipped but step 4 consumes a disk, adjust
+  const needsAddDisks = step5Disks.length > 0 || (!needsRepair && newDisks.length > 0);
+
+  // Build dynamic steps — only include steps that will actually do work
+  // Internal step IDs: 0=repair, 1=remove, 2=grow, 3=convert, 4=add
+  const dynamicSteps: { internalId: number; name: string }[] = [];
+  if (needsRepair) dynamicSteps.push({ internalId: 0, name: 'Réparer le RAID dégradé' });
+  if (needsRemoveOld) dynamicSteps.push({ internalId: 1, name: 'Retirer l\'ancien membre' });
+  if (needsGrow) dynamicSteps.push({ internalId: 2, name: 'Agrandir au maximum' });
+  if (needsConvert) dynamicSteps.push({ internalId: 3, name: 'Convertir au niveau RAID cible' });
+  if (needsAddDisks) dynamicSteps.push({ internalId: 4, name: 'Ajouter les disques supplémentaires' });
+
+  // Fallback: if no steps detected, the RAID is already in the target config — just add a finalization step
+  if (dynamicSteps.length === 0) {
+    dynamicSteps.push({ internalId: 4, name: 'Vérification et finalisation' });
+  }
+
+  // Map internal step ID → dynamic index
+  const stepMap: Record<number, number> = {};
+  for (let i = 0; i < dynamicSteps.length; i++) {
+    stepMap[dynamicSteps[i].internalId] = i;
+  }
+
+  // Initialize migration state with only relevant steps
   const migrationId = `mig-${Date.now()}`;
   migrationState = {
     id: migrationId,
@@ -5346,14 +5446,8 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
     targetLevel: levelNum,
     disks,
     currentStep: 0,
-    totalSteps: 5,
-    steps: [
-      { name: 'Réparer le RAID dégradé', status: 'pending', progress: 0, message: '' },
-      { name: 'Retirer l\'ancien membre', status: 'pending', progress: 0, message: '' },
-      { name: 'Agrandir au maximum', status: 'pending', progress: 0, message: '' },
-      { name: 'Convertir au niveau RAID cible', status: 'pending', progress: 0, message: '' },
-      { name: 'Ajouter les disques supplémentaires', status: 'pending', progress: 0, message: '' }
-    ],
+    totalSteps: dynamicSteps.length,
+    steps: dynamicSteps.map(s => ({ name: s.name, status: 'pending', progress: 0, message: '' })),
     globalProgress: 0,
     error: null,
     startedAt: new Date().toISOString(),
@@ -5379,9 +5473,12 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
     persistMigrationState(migrationState).catch(() => {});
   };
 
-  const setStep = (stepIdx: number, updates: Partial<MigrationStep>) => {
-    Object.assign(migrationState.steps[stepIdx], updates);
-    migrationState.currentStep = stepIdx;
+  // setStep now uses internal step IDs; skips silently if step not in plan
+  const setStep = (internalStepId: number, updates: Partial<MigrationStep>) => {
+    const idx = stepMap[internalStepId];
+    if (idx === undefined) return; // step not in plan, skip
+    Object.assign(migrationState.steps[idx], updates);
+    migrationState.currentStep = idx;
     // Compute global progress: completed steps + current step progress fraction
     let completed = 0;
     for (let i = 0; i < migrationState.totalSteps; i++) {
@@ -5393,80 +5490,11 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
     emitMigration();
   };
 
-  const log = (message: string, type = 'info') => {
-    const logEntry = { timestamp: new Date().toISOString(), type, message };
-    console.log(`[auto-migrate] [${type}] ${message}`);
-    if (io) io.emit('mdraid-log', logEntry);
-  };
-
   // Send immediate response — migration runs async
   res.json({ success: true, migrationId, message: 'Migration started' });
 
   // === Run migration asynchronously ===
   try {
-    // Gather current array state
-    log('=== Auto-migration started ===', 'step');
-    log(`Target: RAID${levelNum} with disks: ${disks.join(', ')}`, 'info');
-
-    const detailResult = await executeCommand('sudo', ['-n', 'mdadm', '--detail', array]);
-    const detailOutput = detailResult.stdout;
-
-    const currentLevelMatch = detailOutput.match(/Raid Level\s*:\s*raid(\d+)/i);
-    const currentLevel = currentLevelMatch ? parseInt(currentLevelMatch[1]) : 1;
-    const stateMatch = detailOutput.match(/State\s*:\s*(.+)/i);
-    const arrayState = stateMatch ? stateMatch[1].trim() : '';
-    const activeMatch = detailOutput.match(/Active Devices\s*:\s*(\d+)/i);
-    const activeDevices = activeMatch ? parseInt(activeMatch[1]) : 0;
-    const raidDevicesMatch = detailOutput.match(/Raid Devices\s*:\s*(\d+)/i);
-    const raidDevices = raidDevicesMatch ? parseInt(raidDevicesMatch[1]) : 0;
-
-    // Find active members with their sizes
-    const memberRegex = /\s+\d+\s+\d+\s+\d+\s+\d+\s+(active|spare)\s+\w+\s+(\/dev\/\S+)/g;
-    const activeMembers: { device: string; size: number; state: string }[] = [];
-    let match;
-    while ((match = memberRegex.exec(detailOutput)) !== null) {
-      const memberDev = match[2];
-      const memberState = match[1];
-      let size = 0;
-      try {
-        const sz = await executeCommand('lsblk', ['-b', '-no', 'SIZE', memberDev]);
-        size = parseInt(sz.stdout.trim()) || 0;
-      } catch (e: any) {}
-      activeMembers.push({ device: memberDev, size, state: memberState });
-    }
-
-    // Identify which members are "old" (parent disk not in selected disks) vs "kept"
-    const oldMembers: typeof activeMembers = [];
-    const keptMembers: typeof activeMembers = [];
-    for (const member of activeMembers) {
-      const parentMatch = member.device.match(/^(\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+))/);
-      const parentDisk = parentMatch ? parentMatch[1] : null;
-      if (parentDisk && disks.includes(parentDisk)) {
-        keptMembers.push(member);
-      } else {
-        oldMembers.push(member);
-      }
-    }
-
-    const isDegraded = arrayState.includes('degraded') || activeDevices < raidDevices;
-    const hasOldMembers = oldMembers.length > 0;
-    const memberSize = await getUsedDevSize(array);
-
-    log(`Current: RAID${currentLevel}, state: ${arrayState}, active: ${activeDevices}/${raidDevices}`, 'info');
-    log(`Old members to remove: ${oldMembers.map(m => m.device).join(', ') || 'none'}`, 'info');
-    log(`Member dev size: ${Math.floor(memberSize / 1024 / 1024)} MiB`, 'info');
-
-    // Determine which disks are truly new (not already in array)
-    const existingParentDisks = activeMembers.map(m => {
-      const p = m.device.match(/^(\/dev\/(?:sd[a-z]+|nvme\d+n\d+|vd[a-z]+))/);
-      return p ? p[1] : null;
-    }).filter(Boolean);
-
-    const newDisks = disks.filter(d => !existingParentDisks.includes(d));
-    const firstNewDisk = newDisks[0] || null;
-    const remainingNewDisks = newDisks.slice(1);
-
-    log(`New disks: ${newDisks.join(', ') || 'none'}`, 'info');
 
     // Helper: poll /proc/mdstat for resync/recovery/reshape progress
     const waitForSync = async (stepIdx: number) => {
@@ -5690,8 +5718,8 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
     log('=== Étape 4: Convertir au niveau RAID cible ===', 'step');
 
     // Track which new disks are still available for Step 5
-    const step1Skipped = migrationState.steps[0].status === 'skipped';
-    const disksAvailable = step1Skipped && firstNewDisk
+    // If step 1 (repair) didn't consume firstNewDisk, it's still available
+    const disksAvailable = !needsRepair && firstNewDisk
       ? [firstNewDisk, ...remainingNewDisks]
       : [...remainingNewDisks];
 
@@ -6011,7 +6039,7 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
 
     const currentStepIdx = migrationState.currentStep;
     if (currentStepIdx >= 0 && currentStepIdx < migrationState.steps.length) {
-      setStep(currentStepIdx, { status: 'error', message: error.message });
+      Object.assign(migrationState.steps[currentStepIdx], { status: 'error', message: error.message });
     }
     migrationState.status = 'error';
     migrationState.error = error.message;
