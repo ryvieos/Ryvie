@@ -97,34 +97,48 @@ while read -r DEV; do
   mdadm --examine "$DEV" 2>/dev/null | grep -q "UUID : .*${MD_UUID}" && CANDIDATES+=("$DEV")
 done < <(lsblk -rno PATH,TYPE | grep " disk$" | cut -d" " -f1)
 
-if [ "${#CANDIDATES[@]}" -eq 0 ]; then
-  log "Aucun membre trouvé — assemble --scan --run"
-  mdadm --assemble --scan --run || true
-else
-  mapfile -t CANDIDATES < <(printf "%s\n" "${CANDIDATES[@]}" | sort -u)
-  log "Membres trouvés: ${CANDIDATES[*]}"
+  if [ "${#CANDIDATES[@]}" -eq 0 ]; then
+    log "Aucun membre trouvé — assemble --scan --run"
+    mdadm --assemble --scan --run || true
+  else
+    mapfile -t CANDIDATES < <(printf "%s\n" "${CANDIDATES[@]}" | sort -u)
+    log "Membres trouvés: ${CANDIDATES[*]}"
 
-  # Stopper md0 et bloquer udev pour éviter le réassemblage automatique
-  if [ -b /dev/md0 ]; then
-    udevadm control --stop-exec-queue 2>/dev/null || true
-    mdadm --stop /dev/md0 2>/dev/null || true
-    sleep 1
+    # Stopper md0 et bloquer udev pour éviter le réassemblage automatique
+    if [ -b /dev/md0 ]; then
+      # Masquer les règles udev mdadm temporairement
+      UDEV_RULE="/lib/udev/rules.d/63-md-raid-arrays.rules"
+      UDEV_RULE_BAK="${UDEV_RULE}.raid-setup-bak"
+      if [ -f "$UDEV_RULE" ]; then
+        mv -f "$UDEV_RULE" "$UDEV_RULE_BAK" 2>/dev/null || true
+        udevadm control --reload-rules 2>/dev/null || true
+      fi
+
+      mdadm --stop /dev/md0 2>/dev/null || true
+      sleep 2
+    fi
+
+    if ! mdadm --assemble --run /dev/md0 "${CANDIDATES[@]}" 2>&1; then
+      log "Assemblage normal échoué, tentative --force"
+      mdadm --assemble --force --run /dev/md0 "${CANDIDATES[@]}" 2>&1 || true
+    fi
+
+    # Restaurer les règles udev
+    if [ -f "$UDEV_RULE_BAK" ]; then
+      mv -f "$UDEV_RULE_BAK" "$UDEV_RULE" 2>/dev/null || true
+      udevadm control --reload-rules 2>/dev/null || true
+    fi
   fi
-
-  if ! mdadm --assemble --run /dev/md0 "${CANDIDATES[@]}" 2>&1; then
-    log "Assemblage normal échoué, tentative --force"
-    mdadm --assemble --force --run /dev/md0 "${CANDIDATES[@]}" 2>&1 || true
-  fi
-
-  udevadm control --start-exec-queue 2>/dev/null || true
-fi
 
 mdadm --readwrite /dev/md0 2>/dev/null || true
 
 # Mettre à jour mdadm.conf si le FS racine est inscriptible
 if touch /etc/mdadm/.write-test 2>/dev/null; then
   rm -f /etc/mdadm/.write-test
-  mdadm --detail --scan > /etc/mdadm/mdadm.conf 2>/dev/null || true
+  {
+    echo "HOMEHOST <ignore>"
+    mdadm --detail --scan 2>/dev/null | grep -v "^INACTIVE-ARRAY"
+  } > /etc/mdadm/mdadm.conf 2>/dev/null || true
   update-initramfs -u >/dev/null 2>&1 || true
 fi
 
