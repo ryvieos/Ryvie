@@ -278,11 +278,10 @@ function ensureLdapOnNetwork(): void {
  */
 function startKeycloak(): void {
   console.log('[keycloak] 🚀 Démarrage de Keycloak...');
+  const { composeUpWithRecovery } = require('./dockerService');
+  const cmd = `docker compose -f "${DOCKER_COMPOSE_FILE}" --env-file "${KEYCLOAK_ENV_CODE}" up -d`;
   try {
-    execSync(
-      `docker compose -f "${DOCKER_COMPOSE_FILE}" --env-file "${KEYCLOAK_ENV_CODE}" up -d`,
-      { stdio: 'pipe', timeout: 120000, cwd: KEYCLOAK_CODE_DIR }
-    );
+    composeUpWithRecovery(cmd, { cwd: KEYCLOAK_CODE_DIR, timeout: 120000, label: 'keycloak' });
     console.log('[keycloak] ✅ Keycloak démarré');
   } catch (err: any) {
     console.error('[keycloak] ❌ Erreur lors du démarrage de Keycloak:', err.message);

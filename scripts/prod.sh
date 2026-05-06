@@ -4,6 +4,9 @@
 echo "🏭 Démarrage de Ryvie en mode PRODUCTION..."
 echo ""
 
+# Installer/mettre à jour les scripts RAID système et s'assurer que /data est monté
+bash /opt/Ryvie/scripts/raid-setup.sh
+
 # Vérification critique de sécurité: /data doit être en ligne
 if ! findmnt -f /data > /dev/null 2>&1; then
   echo "❌ ERREUR CRITIQUE: Le répertoire /data n'est pas monté."

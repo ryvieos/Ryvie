@@ -1149,6 +1149,24 @@ const StorageSettings = () => {
     loadMigrationState();
   }, []);
 
+  // Auto-dismiss completed/stopped/error migration state after 10 seconds
+  useEffect(() => {
+    if (!migrationState) return;
+    if (migrationState.status === 'completed' || migrationState.status === 'stopped' || migrationState.status === 'error') {
+      const timer = setTimeout(async () => {
+        try {
+          const accessMode = getCurrentAccessMode() || 'private';
+          const serverUrl = getServerUrl(accessMode);
+          await axios.post(`${serverUrl}/api/storage/mdraid-migration-reset`, {}, { timeout: 10000 });
+          setMigrationState(null);
+        } catch (e) {
+          console.error('Failed to auto-reset migration state:', e);
+        }
+      }, 10000); // 10 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [migrationState?.status]);
+
   // Format bytes
   const formatBytes = (bytes) => {
     if (bytes === null || bytes === undefined || isNaN(bytes)) return 'N/A';
@@ -1814,8 +1832,34 @@ const StorageSettings = () => {
                 {/* Migration completed */}
                 {migrationState && migrationState.status === 'completed' && (
                   <div style={{ background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#059669', fontWeight: '600' }}>
-                      <FontAwesomeIcon icon={faCheckCircle} /> {t('storageSettings.migrationComplete')}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#059669', fontWeight: '600' }}>
+                        <FontAwesomeIcon icon={faCheckCircle} /> {t('storageSettings.migrationComplete')}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const accessMode = getCurrentAccessMode() || 'private';
+                            const serverUrl = getServerUrl(accessMode);
+                            await axios.post(`${serverUrl}/api/storage/mdraid-migration-reset`, {}, { timeout: 10000 });
+                            setMigrationState(null);
+                          } catch (e) {
+                            console.error('Failed to reset migration state:', e);
+                          }
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid #059669',
+                          color: '#059669',
+                          padding: '0.4rem 0.8rem',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: '500'
+                        }}
+                      >
+                        ✕ {t('common.dismiss') || 'Fermer'}
+                      </button>
                     </div>
                   </div>
                 )}

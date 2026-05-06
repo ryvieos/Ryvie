@@ -220,6 +220,26 @@ async function writeCleanMdadmConf(log: LogFn = noopLog): Promise<void> {
 }
 
 /**
+ * S'assure que BOOT_DEGRADED=true est configuré dans l'initramfs.
+ * Sans ça, le boot bloque en mode urgence si un disque RAID est absent.
+ */
+async function ensureBootDegraded(log: LogFn = noopLog): Promise<void> {
+  const confPath = '/etc/initramfs-tools/conf.d/mdadm';
+  try {
+    const { stdout } = await executeCommand('cat', [confPath]);
+    if (stdout.includes('BOOT_DEGRADED=true')) {
+      return;
+    }
+  } catch (e: any) {}
+  const fs = require('fs');
+  const tmpFile = '/tmp/boot-degraded.conf';
+  fs.writeFileSync(tmpFile, 'BOOT_DEGRADED=true\n');
+  await executeCommand('sudo', ['-n', 'cp', tmpFile, confPath]);
+  fs.unlinkSync(tmpFile);
+  log('✓ Configured BOOT_DEGRADED=true (RAID will boot even if degraded)', 'success');
+}
+
+/**
  * Prépare un disque pour l'ajout au RAID en utilisant sgdisk pour un alignement précis.
  * Utilise `sgdisk -n 1:2048:0` qui prend explicitement le dernier secteur disponible,
  * évitant le bug "not large enough" causé par parted qui peut laisser des secteurs inutilisés.
@@ -1073,6 +1093,7 @@ router.post('/storage/mdraid-optimize-and-add', authenticateTokenOrFirstTime, as
       fs.unlinkSync(tmpFile);
       log(`✓ Updated /etc/mdadm/mdadm.conf`, 'success');
       
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log(`✓ Updated initramfs`, 'success');
     } catch (error: any) {
@@ -1369,6 +1390,7 @@ router.post('/storage/mdraid-add-disk', authenticateTokenOrFirstTime, async (req
 
     try {
       log(`Updating initramfs...`, 'info');
+      await ensureBootDegraded(log);
       const initramfsResult = await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log(`✓ Updated initramfs`, 'success');
       if (initramfsResult.stdout) log(initramfsResult.stdout.trim(), 'info');
@@ -1677,6 +1699,7 @@ router.post('/storage/mdraid-add-disks', authenticateTokenOrFirstTime, async (re
     }
 
     try {
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log(`✓ Updated initramfs`, 'success');
     } catch (error: any) {
@@ -2225,6 +2248,7 @@ router.post('/storage/mdraid-remove-disk', authenticateTokenOrFirstTime, async (
 
     try {
       log(`Updating initramfs...`, 'info');
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log(`✓ Updated initramfs`, 'success');
     } catch (error: any) {
@@ -2923,6 +2947,7 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
     }
     
     try {
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('✓ Updated initramfs', 'success');
     } catch (e: any) {
@@ -3117,6 +3142,7 @@ router.post('/storage/mdraid-create', authenticateTokenOrFirstTime, async (req: 
     }
     
     try {
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('✓ Updated initramfs', 'success');
     } catch (e: any) {}
@@ -3828,6 +3854,7 @@ router.post('/storage/mdraid-destroy', authenticateTokenOrFirstTime, async (req:
     }
 
     try {
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('✓ Updated initramfs', 'success');
     } catch (e: any) {}
@@ -4170,6 +4197,7 @@ router.post('/storage/mdraid-reshape', authenticateTokenOrFirstTime, async (req:
     }
 
     try {
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('✓ Updated initramfs', 'success');
     } catch (e: any) {
@@ -4554,6 +4582,7 @@ router.post('/storage/mdraid-smart-setup', authenticateTokenOrFirstTime, async (
         fsModule.unlinkSync('/tmp/fstab.new');
       } catch (e: any) {}
 
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
 
       log('✅ Fresh RAID created and mounted on /data', 'success');
@@ -4775,6 +4804,7 @@ router.post('/storage/mdraid-smart-setup', authenticateTokenOrFirstTime, async (
     } catch (e: any) {}
 
     try {
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('✓ Updated initramfs', 'success');
     } catch (e: any) {}
@@ -5111,6 +5141,7 @@ router.post('/storage/mdraid-grow-size', authenticateTokenOrFirstTime, async (re
     }
 
     try {
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('✓ Updated initramfs', 'success');
     } catch (e: any) {
@@ -5214,6 +5245,37 @@ let migrationState: MigrationState = {
  */
 router.get('/storage/mdraid-migration-status', authenticateTokenOrFirstTime, async (req: any, res: any) => {
   res.json({ success: true, migration: migrationState });
+});
+
+/**
+ * POST /api/storage/mdraid-migration-reset
+ * Clear/reset migration state (removes completed/error state from UI)
+ */
+router.post('/storage/mdraid-migration-reset', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  try {
+    const fs = require('fs');
+    if (fs.existsSync(MIGRATION_STATE_FILE)) {
+      await executeCommand('sudo', ['-n', 'rm', '-f', MIGRATION_STATE_FILE]);
+    }
+    migrationState = {
+      id: null,
+      status: 'idle',
+      targetLevel: null,
+      disks: [],
+      currentStep: -1,
+      totalSteps: 0,
+      steps: [],
+      globalProgress: 0,
+      error: null,
+      startedAt: null,
+      completedAt: null,
+      stopRequested: false
+    };
+    if (io) io.emit('mdraid-migration-update', migrationState);
+    res.json({ success: true, message: 'Migration state reset' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 /**
@@ -5923,6 +5985,7 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
     } catch (e: any) {}
 
     try {
+      await ensureBootDegraded(log);
       await executeCommand('sudo', ['-n', 'update-initramfs', '-u']);
       log('Updated initramfs', 'success');
     } catch (e: any) {}
