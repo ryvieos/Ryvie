@@ -162,7 +162,7 @@ const GridLauncher = ({
     ...widgets.map(widget => ({ id: widget.id, type: 'widget', widgetType: widget.type, w: widget.w || 2, h: widget.h || 2 }))
   ];
 
-  const { layout, moveItem, swapItems, pixelToGrid, getAnchors } = useGridLayout(items, cols, initialLayout, initialAnchors);
+  const { layout, moveItem, swapItems, pixelToGrid, findFreePosition, getAnchors } = useGridLayout(items, cols, initialLayout, initialAnchors);
 
   // NE PLUS notifier automatiquement le parent à chaque changement de layout
   // car cela déclenchait des sauvegardes backend lors des réorganisations automatiques (responsive).
