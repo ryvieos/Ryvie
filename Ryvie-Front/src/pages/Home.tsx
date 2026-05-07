@@ -24,6 +24,13 @@ import InstallIndicator from '../components/InstallIndicator';
 import OnboardingOverlay from '../components/OnboardingOverlay';
  
 
+// Configuration uniforme de tous les widgets (taille, ID fixe, etc.) — constante statique
+const WIDGET_CONFIGS = {
+  'cpu-ram': { w: 2, h: 2 },
+  'storage': { w: 2, h: 2 },
+  'weather': { w: 3, h: 2, fixedId: 'weather' }
+};
+
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
   let images = {};
@@ -673,6 +680,20 @@ const Home = () => {
   const [launcherAnchors, setLauncherAnchors] = useState(null); // Ancres chargées depuis le backend
   const [launcherLoadedFromBackend, setLauncherLoadedFromBackend] = useState(false); // Indique si les données ont été chargées
   const launcherInitialLoadDone = React.useRef(false); // Flag pour savoir si le chargement initial est terminé
+  // Normaliser les widgets : s'assurer que chaque widget a w et h selon son type
+  const normalizeWidgets = React.useCallback((rawWidgets) => {
+    if (!Array.isArray(rawWidgets)) return [];
+    return rawWidgets.map(w => {
+      const config = WIDGET_CONFIGS[w.type];
+      if (!config) return w;
+      return {
+        ...w,
+        w: w.w ?? config.w,
+        h: w.h ?? config.h
+      };
+    });
+  }, []);
+
   const [widgets, setWidgets] = useState(() => {
     // Charger depuis le cache localStorage au montage
     try {
@@ -681,7 +702,7 @@ const Home = () => {
         const cached = localStorage.getItem(`launcher_${currentUser}`);
         if (cached) {
           const launcher = JSON.parse(cached);
-          return launcher.widgets || [];
+          return normalizeWidgets(launcher.widgets || []);
         }
       }
     } catch {}
@@ -696,12 +717,9 @@ const Home = () => {
   }), []);
   // Générer dynamiquement un layout/apps/ancres par défaut à partir des apps disponibles
   const computeDefaults = React.useCallback((appIds = []) => {
-    // Layout par défaut avec widgets weather, cpu-ram et storage
-    const layout = {
-      weather: { col: 3, row: 0, w: 3, h: 2 },
-      'widget-cpu-ram-0': { col: 6, row: 0, w: 2, h: 2 },
-      'widget-storage-1': { col: 6, row: 2, w: 2, h: 2 }
-    };
+    // Layout par défaut pour les apps uniquement
+    // Les widgets (weather, cpu-ram, storage) sont gérés par l'état `widgets` séparément
+    const layout = {};
     const anchors = { ...DEFAULT_ANCHORS };
     // Placer les apps dans la zone à gauche du widget Storage (évite les collisions)
     // Zone apps: cols 0..5 (6 colonnes), à partir de row=2, avec wrap sur les lignes suivantes
@@ -1556,11 +1574,19 @@ const Home = () => {
       }
       
       console.log('[Home] ✅ Ajout du widget:', widgetType);
-      const newWidget = {
-        id: `widget-${widgetType}-${widgetIdCounter.current++}`,
-        type: widgetType
-      };
       
+      const config = WIDGET_CONFIGS[widgetType];
+      if (!config) {
+        console.warn('[Home] ⚠️ Type de widget inconnu:', widgetType);
+        return prev;
+      }
+      const newWidget = {
+        id: config.fixedId || `widget-${widgetType}-${widgetIdCounter.current++}`,
+        type: widgetType,
+        w: config.w,
+        h: config.h
+      };
+
       return [...prev, newWidget];
     });
   }, []);
@@ -2212,11 +2238,22 @@ const Home = () => {
             setLauncherLayout(layout || {});
             setLauncherAnchors(anchors || {});
             
-            // Charger les widgets sauvegardés
-            if (savedWidgets && Array.isArray(savedWidgets)) {
+            // Charger les widgets sauvegardés ou initialiser avec les widgets par défaut
+            if (savedWidgets && Array.isArray(savedWidgets) && savedWidgets.length > 0) {
               console.log('[Home] 📊 Widgets chargés:', savedWidgets);
-              setWidgets(savedWidgets);
+              setWidgets(normalizeWidgets(savedWidgets));
               widgetIdCounter.current = savedWidgets.length; // Initialiser le compteur
+            } else {
+              // Initialiser avec les widgets par défaut pour les nouveaux utilisateurs
+              const rawDefaultWidgets = [
+                { id: 'weather', type: 'weather' },
+                { id: 'widget-cpu-ram-0', type: 'cpu-ram' },
+                { id: 'widget-storage-1', type: 'storage' }
+              ];
+              const defaultWidgets = normalizeWidgets(rawDefaultWidgets);
+              console.log('[Home] 📊 Initialisation avec widgets par défaut:', defaultWidgets);
+              setWidgets(defaultWidgets);
+              widgetIdCounter.current = defaultWidgets.length;
             }
             
             // Mettre à jour le localStorage avec les données du backend (source de vérité)
@@ -2226,7 +2263,7 @@ const Home = () => {
                 localStorage.setItem(`launcher_${currentUser}`, JSON.stringify({
                   layout: layout || {},
                   anchors: anchors || {},
-                  widgets: savedWidgets || []
+                  widgets: normalizeWidgets(savedWidgets || [])
                 }));
                 console.log('[Home] 💾 Layout du backend sauvegardé dans localStorage');
               }

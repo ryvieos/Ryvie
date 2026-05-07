@@ -220,6 +220,10 @@
     "storage": {
       "name": "Storage",
       "description": "Available disk space"
+    },
+    "weather": {
+      "name": "Weather",
+      "description": "Local weather and forecasts"
     }
   },
   "onboarding": {
