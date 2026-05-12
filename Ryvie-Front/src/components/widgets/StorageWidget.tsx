@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import axios from '../../utils/setupAxios';
 import BaseWidget from './BaseWidget';
@@ -24,7 +24,29 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
   const [storageDetail, setStorageDetail] = useState<any>(null); // détail complet du stockage
   const [storageDetailLoading, setStorageDetailLoading] = useState(false);
   const navigate = useNavigate();
+  
+  const pointerDownTime = useRef<number>(0);
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
 
+  const handlePointerDown = (e: React.PointerEvent) => {
+    pointerDownTime.current = Date.now();
+    pointerDownPos.current = { x: e.clientX, y: e.clientY };
+
+    const onUp = (upEvent: PointerEvent) => {
+      const elapsed = Date.now() - pointerDownTime.current;
+      const dx = Math.abs(upEvent.clientX - (pointerDownPos.current?.x ?? 0));
+      const dy = Math.abs(upEvent.clientY - (pointerDownPos.current?.y ?? 0));
+
+      if (elapsed < 250 && dx < 8 && dy < 8) {
+        handleOpenModal();
+      }
+
+      document.removeEventListener('pointerup', onUp);
+    };
+
+    document.addEventListener('pointerup', onUp);
+  };
+  
   useEffect(() => {
     const fetchStorageStats = async () => {
       try {
@@ -103,13 +125,9 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
   };
 
   const handleOpenModal = async () => {
-    console.log('[StorageWidget] handleOpenModal called', { loading, dataLength: data.length });
-    if (loading) {
-      console.log('[StorageWidget] Click ignored: still loading');
-      return;
-    }
-    if (data.length === 0) {
-      console.log('[StorageWidget] Click ignored: no data');
+    console.log('[StorageWidget] handleOpenModal called', { loading, dataLength: data.length, storageDetailLoading, showModal });
+    if (loading || data.length === 0 || storageDetailLoading || showModal) {
+      console.log('[StorageWidget] Click ignored: already loading or modal open');
       return;
     }
     
@@ -148,33 +166,19 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
 
   return (
     <>
-      <BaseWidget
-        id={id}
-        title={t('storageWidget.title')}
-        icon="💾"
-        onRemove={onRemove}
-        w={2}
-        h={2}
-        className="gradient"
-        action={
-          <button
-            className="widget-chevron"
-            onPointerDown={(e) => {
-              // Empêcher le drag de démarrer via GridLauncher
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleOpenModal();
-            }}
-            title={t('storageWidget.viewDetails')}
-          >
-            ⌂
-          </button>
-        }
+      <div
+        onPointerDown={handlePointerDown}
+        style={{ cursor: 'pointer', height: '100%' }}
       >
+        <BaseWidget
+          id={id}
+          title={t('storageWidget.title')}
+          icon="💾"
+          onRemove={onRemove}
+          w={2}
+          h={2}
+          className="gradient"
+        >
         {loading ? (
           <div className="storage-content">
             <div className="storage-item storage-skeleton">
@@ -220,6 +224,7 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
           </div>
         )}
       </BaseWidget>
+      </div>
       
       {/* Fenêtre flottante d'aperçu stockage - rendue via Portal en dehors du widget */}
       {showModal && ReactDOM.createPortal(
