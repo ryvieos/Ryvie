@@ -6,6 +6,7 @@ const Docker = require('dockerode');
 const { getLocalIP, getPrivateIP } = require('../utils/network');
 const { REVERSE_PROXY_DIR } = require('../config/paths');
 const yaml = require('js-yaml');
+const { composeUpWithRecovery } = require('./dockerService');
 
 const execPromise = util.promisify(exec);
 const docker = new Docker();
@@ -117,28 +118,19 @@ async function writeRyvieDriveEnv(content: string) {
  * Redémarre le docker-compose de Ryvie-rDrive (non-bloquant)
  */
 async function restartRyvieDrive() {
-  try {
-    console.log('[reverseProxyService] 🔄 Redémarrage de Ryvie-rDrive en arrière-plan...');
-    
-    // Lancer la commande en arrière-plan sans attendre
-    exec(
-      'docker compose up -d',
-      { cwd: path.dirname(RYVIE_RDRIVE_COMPOSE_PATH) },
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error('[reverseProxyService] ❌ Erreur redémarrage Ryvie-rDrive:', error.message);
-        } else {
-          console.log('[reverseProxyService] ✅ Ryvie-rDrive redémarré');
-        }
-      }
-    );
-    
-    // Retourner immédiatement
-    return { success: true, async: true };
-  } catch (error: any) {
-    console.error('[reverseProxyService] ❌ Erreur redémarrage Ryvie-rDrive:', error.message);
-    return { success: false, error: error.message };
-  }
+  console.log('[reverseProxyService] 🔄 Redémarrage de Ryvie-rDrive en arrière-plan...');
+  const cwd = path.dirname(RYVIE_RDRIVE_COMPOSE_PATH);
+
+  setImmediate(() => {
+    try {
+      composeUpWithRecovery('docker compose up -d', { cwd, label: 'ryvie-rdrive' });
+      console.log('[reverseProxyService] ✅ Ryvie-rDrive redémarré');
+    } catch (err: any) {
+      console.error('[reverseProxyService] ❌ Erreur redémarrage Ryvie-rDrive:', err.message);
+    }
+  });
+
+  return { success: true, async: true };
 }
 
 /**
@@ -270,26 +262,19 @@ function parseEnvLocalIP(envContent: string) {
  * Redémarre une app (non-bloquant)
  */
 async function restartApp(appId) {
-  try {
-    console.log(`[reverseProxyService] 🔄 Redémarrage de ${appId} en arrière-plan...`);
-    
-    exec(
-      'docker compose up -d',
-      { cwd: `/data/apps/${appId}` },
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error(`[reverseProxyService] ❌ Erreur redémarrage ${appId}:`, error.message);
-        } else {
-          console.log(`[reverseProxyService] ✅ ${appId} redémarré`);
-        }
-      }
-    );
-    
-    return { success: true, async: true };
-  } catch (error: any) {
-    console.error(`[reverseProxyService] ❌ Erreur redémarrage ${appId}:`, error.message);
-    return { success: false, error: error.message };
-  }
+  console.log(`[reverseProxyService] 🔄 Redémarrage de ${appId} en arrière-plan...`);
+  const cwd = `/data/apps/${appId}`;
+
+  setImmediate(() => {
+    try {
+      composeUpWithRecovery('docker compose up -d', { cwd, label: appId });
+      console.log(`[reverseProxyService] ✅ ${appId} redémarré`);
+    } catch (err: any) {
+      console.error(`[reverseProxyService] ❌ Erreur redémarrage ${appId}:`, err.message);
+    }
+  });
+
+  return { success: true, async: true };
 }
 
 /**
@@ -806,17 +791,9 @@ async function startCaddy() {
       }
     }
     
-    const { stdout, stderr } = await execPromise(
-      'docker compose up -d',
-      { cwd: REVERSE_PROXY_DIR }
-    );
-    
-    if (stderr && !stderr.includes('Creating') && !stderr.includes('Starting')) {
-      console.warn('[reverseProxyService] Warnings:', stderr);
-    }
-    
+    composeUpWithRecovery('docker compose up -d', { cwd: REVERSE_PROXY_DIR, label: 'caddy' });
     console.log('[reverseProxyService] ✅ Caddy démarré avec succès');
-    return { success: true, output: stdout };
+    return { success: true };
   } catch (error: any) {
     console.error('[reverseProxyService] ❌ Erreur lors du démarrage de Caddy:', error.message);
     return { success: false, error: error.message };

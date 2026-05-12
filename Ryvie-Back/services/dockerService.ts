@@ -1,9 +1,105 @@
 export {};
 const Docker = require('dockerode');
 const os = require('os');
+const { execSync } = require('child_process');
 const appManager = require('./appManagerService');
 
 const docker = new Docker();
+
+function isRWLayerError(error: any): boolean {
+  const msg = error?.message || error?.stderr || String(error);
+  return msg.includes('RWLayer') && msg.includes('unexpectedly nil');
+}
+
+function extractCorruptedContainerIds(errorOutput: string): string[] {
+  const matches = errorOutput.match(/RWLayer of container ([a-f0-9]+)/g) || [];
+  return matches.map(m => {
+    const idMatch = m.match(/([a-f0-9]{12,})/);
+    return idMatch ? idMatch[1] : '';
+  }).filter(Boolean);
+}
+
+function removeCorruptedContainers(error: any): boolean {
+  const msg = error?.message || error?.stderr || String(error);
+  const ids = extractCorruptedContainerIds(msg);
+  if (ids.length === 0) return false;
+
+  for (const id of ids) {
+    try {
+      console.log(`[dockerService] 🗑️ Suppression du conteneur corrompu ${id.substring(0, 12)}...`);
+      execSync(`docker rm -f ${id}`, { stdio: 'pipe', timeout: 30000 });
+      console.log(`[dockerService] ✅ Conteneur ${id.substring(0, 12)} supprimé`);
+    } catch (rmErr: any) {
+      console.error(`[dockerService] ❌ Impossible de supprimer ${id.substring(0, 12)}:`, rmErr.message);
+      return false;
+    }
+  }
+  return true;
+}
+
+const MAX_COMPOSE_RETRIES = 3;
+const RETRY_DELAY_MS = 3000;
+
+function sleepSync(ms: number): void {
+  execSync(`sleep ${ms / 1000}`, { stdio: 'pipe' });
+}
+
+/**
+ * Lance un docker compose up -d avec récupération automatique des conteneurs corrompus.
+ * Gère le cas où plusieurs conteneurs du stack sont corrompus en cascade.
+ * Stratégie : détection RWLayer → down + nettoyage complet → retry (jusqu'à MAX_COMPOSE_RETRIES)
+ */
+function composeUpWithRecovery(
+  composeCmd: string,
+  opts: { cwd: string; timeout?: number; label?: string },
+): void {
+  const label = opts.label || 'service';
+  const execOpts = { stdio: 'pipe' as const, timeout: opts.timeout || 120000, cwd: opts.cwd };
+
+  for (let attempt = 1; attempt <= MAX_COMPOSE_RETRIES; attempt++) {
+    try {
+      execSync(composeCmd, execOpts);
+      if (attempt > 1) {
+        console.log(`[dockerService] ✅ ${label} démarré après ${attempt} tentative(s)`);
+      }
+      return;
+    } catch (err: any) {
+      if (!isRWLayerError(err)) {
+        throw err;
+      }
+
+      console.warn(`[dockerService] ⚠️ [${label}] Conteneur(s) corrompu(s) détecté(s) (tentative ${attempt}/${MAX_COMPOSE_RETRIES})`);
+      removeCorruptedContainers(err);
+
+      try {
+        execSync(`docker compose down --remove-orphans`, { stdio: 'pipe', timeout: 60000, cwd: opts.cwd });
+      } catch { /* le down peut échouer si déjà nettoyé */ }
+
+      try {
+        const staleContainers = execSync(
+          `docker ps -a --filter "status=created" --filter "status=dead" --format "{{.ID}}\t{{.Names}}"`,
+          { encoding: 'utf8', stdio: 'pipe', timeout: 10000, cwd: opts.cwd }
+        ).trim();
+        if (staleContainers) {
+          for (const line of staleContainers.split('\n').filter(Boolean)) {
+            const cid = line.split('\t')[0];
+            try {
+              execSync(`docker rm -f ${cid}`, { stdio: 'pipe', timeout: 15000 });
+              console.log(`[dockerService] 🗑️ Conteneur stale ${cid.substring(0, 12)} supprimé`);
+            } catch { /* best effort */ }
+          }
+        }
+      } catch { /* best effort */ }
+
+      if (attempt < MAX_COMPOSE_RETRIES) {
+        console.log(`[dockerService] 🔄 [${label}] Nouvelle tentative dans ${RETRY_DELAY_MS / 1000}s...`);
+        sleepSync(RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  throw new Error(`[${label}] Échec du démarrage après ${MAX_COMPOSE_RETRIES} tentatives (conteneurs corrompus persistants)`);
+}
 
 // Container name mapping for display
 const containerMapping: Record<string, string> = {
@@ -159,6 +255,15 @@ async function startApp(appId) {
         await docker.getContainer(c.Id).start();
         startedCount++;
       } catch (e: any) {
+        if (isRWLayerError(e)) {
+          console.warn(`[dockerService] ⚠️ Conteneur ${c.Names[0]} corrompu, suppression et recréation via compose...`);
+          try {
+            execSync(`docker rm -f ${c.Id}`, { stdio: 'pipe', timeout: 30000 });
+            execSync('docker compose up -d', { stdio: 'pipe', timeout: 120000, cwd: `/data/apps/${appId}` });
+            startedCount++;
+            continue;
+          } catch { /* fallthrough */ }
+        }
         failedCount++;
       }
     }
@@ -200,6 +305,15 @@ async function restartApp(appId) {
       else await cont.start();
       restartedCount++;
     } catch (e: any) {
+      if (isRWLayerError(e)) {
+        console.warn(`[dockerService] ⚠️ Conteneur ${c.Names[0]} corrompu, suppression et recréation via compose...`);
+        try {
+          execSync(`docker rm -f ${c.Id}`, { stdio: 'pipe', timeout: 30000 });
+          execSync('docker compose up -d', { stdio: 'pipe', timeout: 120000, cwd: `/data/apps/${appId}` });
+          restartedCount++;
+          continue;
+        } catch { /* fallthrough */ }
+      }
       failedCount++;
     }
   }
@@ -220,4 +334,7 @@ export = {
   stopApp,
   restartApp,
   clearAppStatusCache,
+  isRWLayerError,
+  removeCorruptedContainers,
+  composeUpWithRecovery,
 };

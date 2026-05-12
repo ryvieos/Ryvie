@@ -10,6 +10,9 @@ echo "  - Sourcemaps activés"
 echo "  - Logs détaillés"
 echo ""
 
+# Installer/mettre à jour les scripts RAID système et s'assurer que /data est monté
+bash /opt/Ryvie/scripts/raid-setup.sh
+
 # Arrêter les processus prod s'ils tournent
 pm2 stop ryvie-backend-prod ryvie-frontend-prod 2>/dev/null || true
 pm2 delete ryvie-backend-prod ryvie-frontend-prod 2>/dev/null || true

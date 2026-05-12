@@ -280,6 +280,7 @@ async function startServer() {
     startupTracker.registerService('redis');
     startupTracker.registerService('network');
     startupTracker.registerService('caddy');
+    startupTracker.registerService('ldap');
     startupTracker.registerService('keycloak');
     startupTracker.registerService('snapshots');
     startupTracker.registerService('realtime');
@@ -345,6 +346,28 @@ async function startServer() {
       startupTracker.markError('caddy', caddyError.message);
     }
     
+    // Vérifier et démarrer LDAP si nécessaire (avant Keycloak qui en dépend)
+    console.log('🔍 Vérification d\'OpenLDAP...');
+    try {
+      const { ensureLdapRunning } = require('./services/ldapService');
+      const ldapResult = await ensureLdapRunning();
+      if (ldapResult.success) {
+        if (ldapResult.alreadyRunning) {
+          console.log('✅ OpenLDAP est déjà en cours d\'exécution');
+        } else if (ldapResult.started) {
+          console.log('✅ OpenLDAP a été démarré avec succès');
+        }
+        startupTracker.markDone('ldap');
+      } else {
+        console.error('❌ Erreur lors de la vérification/démarrage d\'OpenLDAP:', ldapResult.error);
+        startupTracker.markError('ldap', ldapResult.error || 'LDAP startup failed');
+      }
+    } catch (ldapError: any) {
+      console.error('❌ Erreur critique lors de la vérification d\'OpenLDAP:', ldapError.message);
+      console.error('⚠️  Continuons le démarrage sans LDAP...');
+      startupTracker.markError('ldap', ldapError.message);
+    }
+
     // Vérifier et démarrer Keycloak si nécessaire
     console.log('🔍 Vérification de Keycloak...');
     try {

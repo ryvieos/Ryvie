@@ -191,6 +191,59 @@ async function listUsersPublic() {
   });
 }
 
+const LDAP_COMPOSE_DIR = '/data/config/ldap';
+
+function isLdapRunning(): boolean {
+  const { execSync } = require('child_process');
+  try {
+    const output = execSync(
+      'docker ps --filter "name=^openldap$" --filter "status=running" -q',
+      { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
+    ).trim();
+    return output.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function startLdap(): void {
+  const { execSync } = require('child_process');
+  const fs = require('fs');
+  const { composeUpWithRecovery } = require('./dockerService');
+  const composePath = `${LDAP_COMPOSE_DIR}/docker-compose.yml`;
+  if (!fs.existsSync(composePath)) {
+    console.log('[ldap] ⚠️ docker-compose.yml introuvable, impossible de démarrer LDAP');
+    return;
+  }
+  console.log('[ldap] 🚀 Démarrage d\'OpenLDAP...');
+  const cmd = `docker compose -f "${composePath}" up -d`;
+  try {
+    composeUpWithRecovery(cmd, { cwd: LDAP_COMPOSE_DIR, timeout: 120000, label: 'ldap' });
+    console.log('[ldap] ✅ OpenLDAP démarré');
+  } catch (err: any) {
+    console.error('[ldap] ❌ Erreur lors du démarrage d\'OpenLDAP:', err.message);
+  }
+}
+
+async function ensureLdapRunning(): Promise<{ success: boolean; alreadyRunning?: boolean; started?: boolean; error?: string }> {
+  try {
+    console.log('[ldap] 🔍 Vérification d\'OpenLDAP...');
+
+    let wasStarted = false;
+    if (!isLdapRunning()) {
+      startLdap();
+      wasStarted = true;
+    } else {
+      console.log('[ldap] ✅ OpenLDAP déjà en cours d\'exécution');
+    }
+
+    return { success: true, alreadyRunning: !wasStarted, started: wasStarted };
+  } catch (err: any) {
+    console.error('[ldap] ❌ Erreur lors du setup LDAP:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 export = {
   createSafeClient,
   escapeLdapFilterValue,
@@ -200,4 +253,5 @@ export = {
   getUserRole,
   listUsersWithRoles,
   listUsersPublic,
+  ensureLdapRunning,
 };
