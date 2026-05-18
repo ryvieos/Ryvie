@@ -166,10 +166,6 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
 
   return (
     <>
-      <div
-        onPointerDown={handlePointerDown}
-        style={{ cursor: 'pointer', height: '100%' }}
-      >
         <BaseWidget
           id={id}
           title={t('storageWidget.title')}
@@ -178,6 +174,8 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
           w={2}
           h={2}
           className="gradient"
+          onPointerDown={handlePointerDown}
+          style={{ cursor: 'pointer', height: '100%' }}
         >
         {loading ? (
           <div className="storage-content">
@@ -224,8 +222,7 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
           </div>
         )}
       </BaseWidget>
-      </div>
-      
+
       {/* Fenêtre flottante d'aperçu stockage - rendue via Portal en dehors du widget */}
       {showModal && ReactDOM.createPortal(
         <div 

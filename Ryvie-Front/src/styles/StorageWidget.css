@@ -2,12 +2,11 @@
 
 .storage-content {
   height: 100%;
+  flex: 1;              /* ← ajouter */
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  justify-content: center;
   align-items: center;
-  padding: 4px;
+  justify-content: center; /* ← ou space-between selon le rendu voulu */
 }
 
 .storage-clickable {
@@ -15,10 +14,11 @@
 }
 
 .storage-item {
-  position: relative;
+  flex: 1;              /* ← ajouter */
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center; /* ← centrer verticalement */
   width: 100%;
   gap: 10px;
 }
