@@ -174,8 +174,7 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
           w={2}
           h={2}
           className="gradient"
-          onPointerDown={handlePointerDown}
-          style={{ cursor: 'pointer', height: '100%' }}
+
         >
         {loading ? (
           <div className="storage-content">
@@ -195,7 +194,10 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
         ) : data.length === 0 ? (
           <div className="widget-empty">{t('storageWidget.noDisk')}</div>
         ) : (
-          <div className="storage-content storage-clickable">
+          <div className="storage-content storage-clickable"
+               onPointerDown={handlePointerDown}
+               style={{ cursor: 'pointer', height: '100%' }}
+          >
             {data.slice(0, 1).map((disk, index) => {
               const usedPercent = Math.round((disk.used / disk.total) * 100);
               const status = getStatus(usedPercent);
