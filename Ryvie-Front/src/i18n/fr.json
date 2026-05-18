@@ -227,6 +227,10 @@
     "storage": {
       "name": "Stockage",
       "description": "Espace disque disponible"
+    },
+    "weather": {
+      "name": "Météo",
+      "description": "Météo locale et prévisions"
     }
   },
   "onboarding": {

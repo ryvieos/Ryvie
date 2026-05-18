@@ -53,28 +53,8 @@
   border: 1px solid transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  box-shadow: none;
+  transition: background 0.2s ease, border-color 0.2s ease;
   pointer-events: none; /* ne pas capturer le hover: évite l'effet verre sous les apps */
-}
-
-/* Widgets dans la grille */
-.widget-tile {
-  pointer-events: auto;
-  cursor: grab;
-  user-select: none;
-  /* Taille fixe pour 2×2: (120px * 2) + (12px * 1) = 252px */
-  width: 252px !important;
-  height: 252px !important;
-  background: transparent;
-}
-
-.widget-tile:active {
-  cursor: grabbing;
-}
-
-.widget-tile.dragging {
-  opacity: 0.5;
 }
 
 .grid-slot:hover {
@@ -85,15 +65,13 @@
 .grid-slot.highlight {
   background: rgba(100, 180, 255, 0.3);
   border-color: rgba(100, 180, 255, 0.7);
-  box-shadow: 0 0 20px rgba(100, 180, 255, 0.5);
   transform: scale(1.02);
 }
 
 /* Slots visibles uniquement sous les apps/widgets */
 .grid-slot.occupied {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.28);
-  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.08);
+  background: transparent;
+  border-color: transparent;
 }
 
 /* Slot en collision */
@@ -109,83 +87,88 @@
   overflow: hidden;
   color: #fff;
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
 }
 
-.weather-widget .weather-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.35) 100%);
-  pointer-events: none;
-}
-
-.weather-widget .weather-content {
+.weather-widget-base .weather-content {
   position: relative;
   z-index: 1;
   width: 100%;
   height: 100%;
-  padding: 12px 16px;
+  padding: 20px;
   box-sizing: border-box;
   transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-.weather-widget .weather-city {
+.weather-widget-base .weather-city {
   position: absolute;
-  top: 35%;
-  transform: none;
-  transform: translate(-50%, -50%);
-  font-weight: 530;
-  font-size: 46px;
-  letter-spacing: 0.3px;
-  text-shadow: 0 2px 6px rgba(0,0,0,0.35);
-}
-
-.weather-widget .weather-temp {
-  position: absolute;
-  top: 66%; /* un peu en bas du centre */
+  top: 18%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 36px;
-  font-weight: 550;
-  line-height: 0.9;
-  letter-spacing: 0.5px;
-  text-shadow: 0 4px 18px rgba(0,0,0,0.35);
+  font-weight: 500;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-align: center;
+  width: 100%;
+  padding: 0 10px;
+  box-sizing: border-box;
 }
 
-.weather-widget .weather-details {
+.weather-widget-base .weather-temp {
   position: absolute;
-  bottom: 5%;
-  left: 15%;
-  right: 5%;
+  top: 48%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 42px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  color: #fff;
+  text-align: center;
+}
+
+.weather-widget-base .weather-details {
+  position: absolute;
+  bottom: 6%;
+  left: 6%;
+  right: 6%;
   display: flex;
   align-items: center;
-  justify-content: space-between; /* humidité à gauche, vent à droite */
-  font-size: 20px; /* taille du texte humidité/vent */
+  justify-content: space-between;
+  font-size: 18px;
   font-weight: 500;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+  color: #fff;
 }
 
-.weather-widget .weather-details > div {
+.weather-widget-base .weather-details > div {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   font-weight: 550;
+  padding: 6px 10px;
+  border-radius: 4px;
 }
 
-.weather-widget .weather-humidity {
-  position: static; /* suivez le flux en ligne */
+.weather-widget-base .weather-humidity,
+.weather-widget-base .weather-wind {
+  position: static !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: none !important;
 }
 
-.weather-widget .weather-wind {
-  position: static; /* suivez le flux en ligne */
-  margin-left: 0; /* géré par space-between */
+/* Pas de background pour le weather widget */
+.weather-widget-base .base-widget {
+  background: transparent;
+  padding: 0;
 }
 
-.weather-widget .weather-details img {
-  width: 36px;
-  height: 36px;
+.weather-widget-base .weather-details img {
+  width: 32px;
+  height: 32px;
   object-fit: contain;
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
@@ -206,15 +189,43 @@
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  padding-top: 12px;
   cursor: grab;
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), 
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
               opacity 0.35s ease;
   pointer-events: auto;
   touch-action: none;
   user-select: none;
 }
 
+.app-tile {
+  padding-top: 12px;
+}
+
+/* Widgets - laisser la grille CSS gérer la taille via gridColumn/gridRow */
+.widget-tile {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  box-sizing: border-box;
+  /* S'assurer que le widget remplit sa zone de grille */
+  align-self: stretch;
+  justify-self: stretch;
+}
+
+.widget-tile:active {
+  cursor: grabbing;
+}
+
+.widget-tile.dragging {
+  opacity: 1;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+
+/**/
 /* Le composant Icon à l'intérieur */
 .grid-tile .icon {
   margin: 0 !important;
@@ -229,7 +240,7 @@
   text-align: center;
   max-width: 110px;
   line-height: 1.2; /* éviter les lettres coupées (descenders) */
-  letter-spacing: 0.3px;
+  letter-spacing: 0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -257,6 +268,10 @@
   opacity: 0;
 }
 
+/* Widgets toujours visibles (animation gérée inline) */
+.widget-tile {
+  opacity: 1;
+}
 
 /* Appliquer aussi aux widgets météo */
 .weather-widget { opacity: 0; }
@@ -264,8 +279,6 @@
   animation: accordionReveal 200ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
-/* Désactiver l'effet verre au survol des tuiles */
-.grid-tile:hover { transform: none; box-shadow: none; }
 
 .grid-tile:active {
   cursor: grabbing;
@@ -288,15 +301,12 @@
 @keyframes tileUninstallPulse {
   0% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0);
   }
   50% {
     transform: scale(0.95);
-    box-shadow: 0 0 18px 4px rgba(239, 68, 68, 0.45);
   }
   100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0);
   }
 }
 
@@ -320,7 +330,6 @@
   margin: 12px auto 0;
   background-color: #ffffff;
   border-radius: 20px;
-  box-shadow: 0px 5px 5px rgba(0, 0, 0, 0.3);
   background-size: cover;
   background-position: center;
   cursor: grab;
@@ -342,9 +351,8 @@
 /* Widget Météo 2×2 */
 .weather-widget {
   width: 100%;
-  height: 75%;
+  height: 100%;
   border-radius: 20px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -364,20 +372,33 @@
 
 /* Carte interne pour animer l'ensemble (fond + contenu) */
 .weather-card {
-  width: 100%;
-  height: 100%;
+  width: 85%;
+  height: 55%;
+  margin: auto;
   border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-              box-shadow 0.25s ease;
+  transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   will-change: transform;
   transform-origin: center;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: relative;
+}
+
+.weather-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 1;
 }
 
 .weather-widget:hover .weather-card {
   transform: scale(0.96);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
 }
 
 .weather-widget:active {
@@ -443,7 +464,7 @@
     animation: none !important;
     transition-duration: 0.01ms !important;
   }
-  
+
   .weather-widget:hover .weather-card {
     transform: none;
   }
