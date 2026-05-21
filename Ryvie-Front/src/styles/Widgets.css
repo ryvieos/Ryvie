@@ -4,26 +4,21 @@
 /* Styles pour les widgets */
 
 .base-widget {
-  width: 252px;
-  height: 252px;
-  max-width: 252px;
-  max-height: 252px;
-  box-sizing: border-box; /* IMPORTANT: avoid padding causing overflow of 2x2 area */
-  background: #f8fafc;
-  backdrop-filter: blur(20px);
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   border: none;
-  border-radius: 16px;
+  border-radius: 15px;
   padding: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
 }
 
 .base-widget:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
 }
 
 /* Header du widget */
@@ -34,6 +29,12 @@
   margin-bottom: 8px;
   padding-bottom: 0;
   border-bottom: none;
+  min-height: 28px; /* Hauteur minimale pour le bouton ✕ */
+}
+
+/* Quand il n'y a pas de titre, pousser le bouton à droite */
+.widget-header:not(:has(.widget-title)) {
+  justify-content: flex-end;
 }
 
 .widget-title {
@@ -64,9 +65,9 @@
 }
 
 .widget-remove-btn {
-  background: rgba(0,0,0,0.04);
-  border: 1px solid rgba(0,0,0,0.06);
-  color: #6b7280;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -80,15 +81,19 @@
   align-items: center;
   justify-content: center;
   z-index: 10;
-  position: relative;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
 .widget-remove-btn:hover {
-  background: rgba(220, 53, 69, 0.12);
-  border-color: rgba(220,53,69,0.2);
-  color: #dc3545;
+  background: rgba(220, 53, 69, 0.9);
+  border-color: rgba(220, 53, 69, 1);
+  color: #fff;
   transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(220, 53, 69, 0.18);
+  box-shadow: 0 6px 14px rgba(220, 53, 69, 0.4);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
 .widget-remove-btn:active {
@@ -100,27 +105,33 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* widget-inner doit remplir base-widget dans tous les cas */
+.widget-inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Gradient variant: header + content in a single rounded gradient card */
-.base-widget.gradient { 
-  background: transparent; 
-  padding: 0; 
+.base-widget.gradient {
+  background: transparent;
+  padding: 0;
   box-shadow: none;
 }
 .base-widget.gradient .widget-inner {
-  height: 100%;
   display: flex;
   flex-direction: column;
   background: linear-gradient(135deg, rgba(17, 24, 39, 0.36), rgba(17, 24, 39, 0.26));
   color: #eef3ff;
-  border-radius: 18px;
+  border-radius: 15px;
   padding: 12px 14px;
   box-shadow: 0 10px 24px rgba(2, 6, 23, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: saturate(160%) blur(10px);
-  -webkit-backdrop-filter: saturate(160%) blur(10px);
 }
 .base-widget.gradient .widget-header {
   margin-bottom: 6px;
@@ -174,7 +185,6 @@
   font-size: 13px;
 }
 
-/* Les styles spécifiques CPU/RAM et Storage sont maintenant dans leurs propres fichiers CSS */
 
 /* Animations */
 @keyframes widgetAppear {
@@ -191,6 +201,73 @@
 .base-widget {
   animation: widgetAppear 0.3s ease-out;
 }
+
+
+/* Mode overlay: header flottant par-dessus le contenu full-bleed */
+.base-widget.overlay .widget-inner.overlay {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  position: relative;
+}
+
+.base-widget.overlay .widget-header.overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  left: 8px;
+  z-index: 10;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: none; /* Le header ne bloque pas les interactions */
+}
+
+
+
+.base-widget.overlay .widget-content.overlay {
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Weather Widget avec BaseWidget */
+.weather-widget-base .widget-content {
+  padding: 0;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+}
+
+.weather-widget-base .widget-inner {
+  padding: 0;
+}
+
+/* Supprimer le background gris du BaseWidget pour weather widget */
+.weather-widget-base {
+  background: transparent !important;
+  padding: 0 !important;  /* ← manquait */
+}
+
+/* Style spécifique pour la croix du weather widget */
+.weather-widget-remove {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+}
+
+.weather-widget-remove:hover {
+  background: rgba(220, 53, 69, 0.8);
+  border-color: rgba(220, 53, 69, 0.9);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+}
+
 
 /* Responsive */
 @media (max-width: 768px) {

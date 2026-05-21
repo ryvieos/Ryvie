@@ -7,6 +7,7 @@ import Icon from './Icon';
 import WidgetAddButton from './WidgetAddButton';
 import CpuRamWidget from './widgets/CpuRamWidget';
 import StorageWidget from './widgets/StorageWidget';
+import WeatherWidget from './widgets/WeatherWidget';
 import '../styles/GridLauncher.css';
 
 const GridLauncher = ({
@@ -39,6 +40,7 @@ const GridLauncher = ({
 }) => {
   const gridRef = useRef(null);
   const resizeTimeoutRef = useRef(null);
+  const [pendingWidgets, setPendingWidgets] = useState(new Set()); // Widgets en cours d'ajout
   const { SLOT_SIZE: slotSize, GAP: gap, BASE_COLS: baseCols, BASE_ROWS: baseRows, MIN_COLS: minCols, HORIZONTAL_PADDING: horizontalPadding } = GRID_CONFIG;
   const [cols, setCols] = useState(baseCols);
   const [rows, setRows] = useState(baseRows);
@@ -156,12 +158,11 @@ const GridLauncher = ({
 
   // Préparer les items pour le layout
   const items = [
-    { id: 'weather', type: 'weather', w: 3, h: 2 },
     ...apps.map(appId => ({ id: appId, type: 'app', w: 1, h: 1 })),
-    ...widgets.map(widget => ({ id: widget.id, type: 'widget', widgetType: widget.type, w: 2, h: 2 }))
+    ...widgets.map(widget => ({ id: widget.id, type: 'widget', widgetType: widget.type, w: widget.w || 2, h: widget.h || 2 }))
   ];
 
-  const { layout, moveItem, swapItems, pixelToGrid, getAnchors } = useGridLayout(items, cols, initialLayout, initialAnchors);
+  const { layout, moveItem, swapItems, pixelToGrid, findFreePosition, getAnchors } = useGridLayout(items, cols, initialLayout, initialAnchors);
 
   // NE PLUS notifier automatiquement le parent à chaque changement de layout
   // car cela déclenchait des sauvegardes backend lors des réorganisations automatiques (responsive).
@@ -225,6 +226,18 @@ const GridLauncher = ({
     }
   }, [apps.length, layout]);
 
+  // Suivre les widgets en attente de layout (pour affichage immédiat)
+  useEffect(() => {
+    const currentWidgetIds = new Set(widgets.map(w => w.id));
+    const layoutWidgetIds = new Set(Object.keys(layout));
+    
+    // Widgets qui existent mais n'ont pas encore de layout
+    const waitingForLayout = new Set([...currentWidgetIds].filter(id => !layoutWidgetIds.has(id)));
+    
+    setPendingWidgets(waitingForLayout);
+  }, [widgets, layout]);
+
+  
   // Sauvegarder après un changement manuel (drag & drop OU ajout/suppression widget)
   useEffect(() => {
     if (!pendingManualSaveRef.current || !onLayoutChange) return;
@@ -387,61 +400,6 @@ const GridLauncher = ({
         {/* Slots en arrière-plan */}
         {renderSlots()}
 
-        {/* Widget Météo */}
-        {layout['weather'] && (
-          <div
-            id="tile-weather"
-            className={`weather-widget ${isDragging && draggedItem?.itemId === 'weather' ? 'dragging' : ''}`}
-            style={{
-              gridColumn: `${layout['weather'].col + 1} / span 3`,
-              gridRow: `${layout['weather'].row + 1} / span 2`,
-              alignSelf: 'center',
-              animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${Math.max(0, (layout['weather'].col || 0)) * 180}ms forwards`
-            }}
-            onPointerDown={(e) => handlers.onPointerDown(e, 'weather', { w: 3, h: 2 })}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (hasDragged) {
-                return; // Ne pas ouvrir la modale si c'était un drag
-              }
-              setTempCity((weatherCity || weather.location || '').toString());
-              setClosingWeatherModal(false);
-              setShowWeatherModal(true);
-            }}
-            tabIndex={0}
-          >
-            <div
-              className="weather-card"
-              style={{
-                backgroundImage: weatherImages[`./${weather.icon}`] ? `url(${weatherImages[`./${weather.icon}`]})` : 'linear-gradient(135deg, rgba(100, 180, 255, 0.9), rgba(80, 150, 255, 0.9))',
-                backgroundSize: 'cover',
-                backgroundPosition: 'center'
-              }}
-            >
-              <div className="weather-overlay" />
-              <div className="weather-content">
-                <div className="weather-city">{weather.location || 'Localisation...'}</div>
-                <div className="weather-temp">
-                  {weather.temperature ? `${Math.round(weather.temperature)}°C` : '...'}
-                </div>
-                <div className="weather-details">
-                  <div className="weather-humidity">
-                    {weatherIcons['./humidity.png'] && (
-                      <img src={weatherIcons['./humidity.png']} alt="Humidité" />
-                    )}
-                    {weather.humidity ? `${weather.humidity}%` : '...'}
-                  </div>
-                  <div className="weather-wind">
-                    {weatherIcons['./wind.png'] && (
-                      <img src={weatherIcons['./wind.png']} alt="Vent" />
-                    )}
-                    {weather.wind ? `${Math.round(weather.wind)} km/h` : '...'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Apps */}
         {apps.map((appId, index) => {
@@ -455,7 +413,7 @@ const GridLauncher = ({
             <div
               key={appId}
               id={`tile-${appId}`}
-              className={`grid-tile ${isDragging && draggedItem?.itemId === appId ? 'dragging' : ''}`}
+              className={`grid-tile app-tile ${isDragging && draggedItem?.itemId === appId ? 'dragging' : ''}`}
               style={{
                 gridColumn: layout[appId].col + 1,
                 gridRow: layout[appId].row + 1,
@@ -509,18 +467,55 @@ const GridLauncher = ({
 
         {/* Widgets */}
         {widgets.map((widget) => {
-          if (!layout[widget.id]) return null;
+          const widgetLayout = layout[widget.id];
+          const widgetW = widget.w || 2;
+          const widgetH = widget.h || 2;
           
-          const colIndex = layout[widget.id].col || 0;
-          const animDelayMs = colIndex * 180;
+          let colIndex, rowIndex, animDelayMs;
+          
+          if (widgetLayout) {
+            // Layout calculé par useGridLayout
+            colIndex = widgetLayout.col || 0;
+            rowIndex = widgetLayout.row || 0;
+            animDelayMs = colIndex * 180;
+          } else if (pendingWidgets.has(widget.id)) {
+            // Widget en attente : trouver position libre immédiatement
+            const tempPos = findFreePosition(widgetW, widgetH);
+            colIndex = tempPos?.col ?? 0;
+            rowIndex = tempPos?.row ?? 0;
+            animDelayMs = 0;
+          } else {
+            // Widget sans layout et pas en attente (ne devrait pas arriver)
+            return null;
+          }
 
-          // Rendu du widget selon son type
+          // Rendu du widget selon son type — tous les widgets reçoivent les mêmes props de base
           const renderWidget = () => {
+            const commonProps = {
+              id: widget.id,
+              onRemove: () => onRemoveWidget(widget.id)
+            };
             switch (widget.type) {
               case 'cpu-ram':
-                return <CpuRamWidget id={widget.id} onRemove={onRemoveWidget} accessMode={accessMode} />;
+                return <CpuRamWidget {...commonProps} accessMode={accessMode} />;
               case 'storage':
-                return <StorageWidget id={widget.id} onRemove={onRemoveWidget} accessMode={accessMode} />;
+                return <StorageWidget {...commonProps} accessMode={accessMode} />;
+              case 'weather':
+                return (
+                  <WeatherWidget
+                    {...commonProps}
+                    weather={weather}
+                    weatherImages={weatherImages}
+                    weatherIcons={weatherIcons}
+                    weatherCity={weatherCity}
+                    onClick={() => {
+                      if (hasDragged) return;
+                      setTempCity((weatherCity || weather.location || '').toString());
+                      setClosingWeatherModal(false);
+                      setShowWeatherModal(true);
+                    }}
+                  />
+                );
               default:
                 return null;
             }
@@ -531,12 +526,14 @@ const GridLauncher = ({
               key={widget.id}
               className={`grid-tile widget-tile ${isDragging && draggedItem?.itemId === widget.id ? 'dragging' : ''}`}
               style={{
-                gridColumn: `${layout[widget.id].col + 1} / span 2`,
-                gridRow: `${layout[widget.id].row + 1} / span 2`,
-                animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards`,
+                gridColumn: `${colIndex + 1} / span ${widgetW}`,
+                gridRow: `${rowIndex + 1} / span ${widgetH}`,
+                animation: widgetLayout
+                  ? `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards`
+                  : 'none',
                 cursor: 'grab'
               }}
-              onPointerDown={(e) => handlers.onPointerDown(e, widget.id, { w: 2, h: 2 })}
+              onPointerDown={(e) => handlers.onPointerDown(e, widget.id, { w: widgetW, h: widgetH })}
             >
               {renderWidget()}
             </div>
