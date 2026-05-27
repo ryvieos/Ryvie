@@ -84,9 +84,9 @@ axios.interceptors.request.use(request => {
   
   if (!request.timeout) {
     if (accessMode === 'private') {
-      request.timeout = 10000;
+      request.timeout = 30000; // Prolongé de 10s à 30s pour éviter les timeouts lors du rush de requêtes initiales
     } else {
-      request.timeout = 5000;
+      request.timeout = 15000; // Prolongé de 5s à 15s pour le mode public
     }
   }
   

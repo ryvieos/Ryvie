@@ -220,6 +220,10 @@
   },
   "widgetAddButton": {
     "title": "Ajouter un widget",
+    "weather": {
+      "name": "Météo",
+      "description": "Température et conditions météo"
+    },
     "cpuRam": {
       "name": "CPU & RAM",
       "description": "Utilisation processeur et mémoire"

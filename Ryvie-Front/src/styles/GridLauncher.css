@@ -63,9 +63,8 @@
   pointer-events: auto;
   cursor: grab;
   user-select: none;
-  /* Taille fixe pour 2×2: (120px * 2) + (12px * 1) = 252px */
-  width: 252px !important;
-  height: 252px !important;
+  width: 100% !important;
+  height: 100% !important;
   background: transparent;
 }
 
@@ -134,7 +133,7 @@
 .weather-widget .weather-city {
   position: absolute;
   top: 35%;
-  transform: none;
+  left: 50%;
   transform: translate(-50%, -50%);
   font-weight: 530;
   font-size: 46px;

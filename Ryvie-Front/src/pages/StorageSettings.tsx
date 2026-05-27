@@ -106,23 +106,36 @@ const StorageSettings = () => {
   // Detect if we're in first-time setup mode (no user created yet)
   const isSetupMode = location.pathname === '/setup/storage';
 
+  // Cached snapshot of the overview (stale-while-revalidate) for instant display
+  const CACHE_KEY = 'ryvie_storage_overview_cache';
+  const cacheRef = useRef<any>(undefined);
+  if (cacheRef.current === undefined) {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      cacheRef.current = raw ? JSON.parse(raw) : null;
+    } catch {
+      cacheRef.current = null;
+    }
+  }
+  const cached = cacheRef.current;
+
   // Data states
-  const [loading, setLoading] = useState(true);
-  const [disks, setDisks] = useState([]);
-  const [diskHealth, setDiskHealth] = useState({});
-  const [dataSource, setDataSource] = useState(null);
-  const [raidStatus, setRaidStatus] = useState<any>(null);
-  const [raidMemberPartitions, setRaidMemberPartitions] = useState([]);
-  const [raidMemberDisksMap, setRaidMemberDisksMap] = useState({});
+  const [loading, setLoading] = useState(!cached);
+  const [disks, setDisks] = useState(() => cached?.disks || []);
+  const [diskHealth, setDiskHealth] = useState(() => cached?.diskHealth || {});
+  const [dataSource, setDataSource] = useState(() => cached?.dataSource || null);
+  const [raidStatus, setRaidStatus] = useState<any>(() => cached?.raidStatus || null);
+  const [raidMemberPartitions, setRaidMemberPartitions] = useState(() => cached?.raidMemberPartitions || []);
+  const [raidMemberDisksMap, setRaidMemberDisksMap] = useState(() => cached?.raidMemberDisksMap || {});
 
   // Mode: 'overview' (view disks + health), 'create' (new RAID), 'manage' (existing RAID)
   const [mode, setMode] = useState('overview');
 
   // Selection states
-  const [sourceDevice, setSourceDevice] = useState('');
+  const [sourceDevice, setSourceDevice] = useState(() => cached?.sourceDevice || '');
   const [selectedDisks, setSelectedDisks] = useState([]);
   const [selectedDisk, setSelectedDisk] = useState('');
-  const [raidType, setRaidType] = useState(null);
+  const [raidType, setRaidType] = useState(() => cached?.raidType || null);
 
   // RAID creation options
   const [raidLevel, setRaidLevel] = useState('raid1');
@@ -210,21 +223,30 @@ const StorageSettings = () => {
     }
   }, []);
 
-  // Load data on mount + polling
+  // Load data on mount + polling — fire all in parallel so the page renders
+  // as soon as the inventory returns instead of waiting on each call in turn.
   useEffect(() => {
-    const loadData = async () => {
-      await checkRaidStatus();
-      await loadInventory();
-      await loadDiskHealth();
-    };
-    loadData();
+    loadInventory(!!cached); // silent refresh when a cached snapshot is shown
+    checkRaidStatus();
+    loadDiskHealth();
 
     const intervalId = setInterval(() => {
       checkRaidStatus();
     }, 5000);
-    
+
     return () => clearInterval(intervalId);
   }, []);
+
+  // Persist the overview snapshot for instant display on the next visit
+  useEffect(() => {
+    if (loading) return;
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        disks, diskHealth, dataSource, sourceDevice,
+        raidStatus, raidMemberPartitions, raidMemberDisksMap, raidType
+      }));
+    } catch {}
+  }, [loading, disks, diskHealth, dataSource, sourceDevice, raidStatus, raidMemberPartitions, raidMemberDisksMap, raidType]);
 
   // Connexion Socket.IO pour les logs en temps réel
   useEffect(() => {
@@ -468,9 +490,9 @@ const StorageSettings = () => {
   };
 
   // Load device inventory
-  const loadInventory = async () => {
+  const loadInventory = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
       const response = await axios.get(`${serverUrl}/api/storage/inventory`, { timeout: 30000 });

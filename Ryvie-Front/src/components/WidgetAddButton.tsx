@@ -9,6 +9,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 const WidgetMenuPortal = ({ x, y, onSelect, onClose }: { x: number; y: number; onSelect: (id: string) => void; onClose: () => void }) => {
   const { t } = useLanguage();
   const widgets = [
+    { id: 'weather', name: t('widgetAddButton.weather.name'), icon: '🌤', description: t('widgetAddButton.weather.description') },
     { id: 'cpu-ram', name: t('widgetAddButton.cpuRam.name'), icon: '💻', description: t('widgetAddButton.cpuRam.description') },
     { id: 'storage', name: t('widgetAddButton.storage.name'), icon: '💾', description: t('widgetAddButton.storage.description') }
   ];

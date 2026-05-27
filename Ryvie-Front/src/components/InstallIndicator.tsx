@@ -5,7 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 /**
  * Indicateur d'installation individuel pour une app
  */
-const InstallIndicatorItem = ({ appName, progress, topPosition, isMinimized, onToggleMinimize }) => {
+const InstallIndicatorItem = ({ appName, progress, isMinimized, onToggleMinimize }) => {
   const { t } = useLanguage();
   // Calculer la largeur de la barre de progression
   const progressWidth = progress > 0 ? Math.min(progress, 100) : 5;
@@ -16,7 +16,6 @@ const InstallIndicatorItem = ({ appName, progress, topPosition, isMinimized, onT
         className="install-indicator-minimized"
         onClick={onToggleMinimize}
         title={t('installIndicator.showProgress', { appName })}
-        style={{ top: `${topPosition}px` }}
       >
         <div className="minimized-spinner"></div>
         <span className="minimized-app">{appName}</span>
@@ -26,7 +25,7 @@ const InstallIndicatorItem = ({ appName, progress, topPosition, isMinimized, onT
   }
   
   return (
-    <div className="install-indicator" style={{ top: `${topPosition}px` }}>
+    <div className="install-indicator">
       <div className="install-indicator-content">
         <div className="install-indicator-icon">
           <div className="install-spinner">
@@ -78,7 +77,7 @@ const InstallIndicatorItem = ({ appName, progress, topPosition, isMinimized, onT
  * Conteneur pour gérer plusieurs installations simultanées
  * installations: Map ou objet { appId: { appName, progress } }
  */
-const InstallIndicator = ({ installations }) => {
+const InstallIndicator = ({ installations, topOffset = 24 }) => {
   const [minimizedApps, setMinimizedApps] = useState(new Set());
   
   // Convertir les installations en tableau
@@ -102,20 +101,9 @@ const InstallIndicator = ({ installations }) => {
     });
   };
   
-  // Calculer les positions en tenant compte des éléments minimisés
-  const positions = [];
-  let currentOffset = 24; // Offset initial depuis le haut
-  
-  installList.forEach(([appId]) => {
-    const isMinimized = minimizedApps.has(appId);
-    positions.push(currentOffset);
-    // Hauteur de l'élément + gap (16px d'espacement)
-    currentOffset += (isMinimized ? 44 : 85) + 16;
-  });
-  
   return (
-    <div className="install-indicators-container">
-      {installList.map(([appId, data], idx) => {
+    <>
+      {installList.map(([appId, data]) => {
         const isMinimized = minimizedApps.has(appId);
         
         return (
@@ -123,13 +111,12 @@ const InstallIndicator = ({ installations }) => {
             key={appId}
             appName={data.appName}
             progress={data.progress}
-            topPosition={positions[idx]}
             isMinimized={isMinimized}
             onToggleMinimize={() => toggleMinimize(appId)}
           />
         );
       })}
-    </div>
+    </>
   );
 };
 

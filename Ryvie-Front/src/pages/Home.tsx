@@ -24,6 +24,12 @@ import InstallIndicator from '../components/InstallIndicator';
 import OnboardingOverlay from '../components/OnboardingOverlay';
  
 
+const WIDGET_CONFIGS = {
+  'cpu-ram': { w: 2, h: 2 },
+  'storage': { w: 2, h: 2 },
+  'weather': { w: 3, h: 2, fixedId: 'weather' }
+};
+
 // Fonction pour importer toutes les images du dossier weather_icons
 function importAll(r) {
   let images = {};
@@ -673,6 +679,15 @@ const Home = () => {
   const [launcherAnchors, setLauncherAnchors] = useState(null); // Ancres chargées depuis le backend
   const [launcherLoadedFromBackend, setLauncherLoadedFromBackend] = useState(false); // Indique si les données ont été chargées
   const launcherInitialLoadDone = React.useRef(false); // Flag pour savoir si le chargement initial est terminé
+  const normalizeWidgets = React.useCallback((rawWidgets) => {
+    if (!Array.isArray(rawWidgets)) return [];
+    return rawWidgets.map(w => {
+      const config = WIDGET_CONFIGS[w.type];
+      if (!config) return w;
+      return { ...w, w: w.w ?? config.w, h: w.h ?? config.h };
+    });
+  }, []);
+
   const [widgets, setWidgets] = useState(() => {
     // Charger depuis le cache localStorage au montage
     try {
@@ -681,7 +696,12 @@ const Home = () => {
         const cached = localStorage.getItem(`launcher_${currentUser}`);
         if (cached) {
           const launcher = JSON.parse(cached);
-          return launcher.widgets || [];
+          const raw = launcher.widgets || [];
+          return raw.map(w => {
+            const config = WIDGET_CONFIGS[w.type];
+            if (!config) return w;
+            return { ...w, w: w.w ?? config.w, h: w.h ?? config.h };
+          });
         }
       }
     } catch {}
@@ -696,12 +716,9 @@ const Home = () => {
   }), []);
   // Générer dynamiquement un layout/apps/ancres par défaut à partir des apps disponibles
   const computeDefaults = React.useCallback((appIds = []) => {
-    // Layout par défaut avec widgets weather, cpu-ram et storage
-    const layout = {
-      weather: { col: 3, row: 0, w: 3, h: 2 },
-      'widget-cpu-ram-0': { col: 6, row: 0, w: 2, h: 2 },
-      'widget-storage-1': { col: 6, row: 2, w: 2, h: 2 }
-    };
+    // Layout par défaut pour les apps uniquement
+    // Les widgets (weather, cpu-ram, storage) sont gérés par l'état `widgets` séparément
+    const layout = {};
     const anchors = { ...DEFAULT_ANCHORS };
     // Placer les apps dans la zone à gauche du widget Storage (évite les collisions)
     // Zone apps: cols 0..5 (6 colonnes), à partir de row=2, avec wrap sur les lignes suivantes
@@ -1545,22 +1562,29 @@ const Home = () => {
   // Handler: ajouter un widget (empêcher les doublons)
   const handleAddWidget = React.useCallback((widgetType) => {
     console.log('[Home] Tentative d\'ajout d\'un widget:', widgetType);
-    
-    // Vérifier si un widget de ce type existe déjà
+
     setWidgets(prev => {
       const alreadyExists = prev.some(w => w.type === widgetType);
-      
+
       if (alreadyExists) {
         console.log('[Home] ⚠️ Un widget de type', widgetType, 'existe déjà');
-        return prev; // Ne rien faire
+        return prev;
       }
-      
+
       console.log('[Home] ✅ Ajout du widget:', widgetType);
+
+      const config = WIDGET_CONFIGS[widgetType];
+      if (!config) {
+        console.warn('[Home] ⚠️ Type de widget inconnu:', widgetType);
+        return prev;
+      }
       const newWidget = {
-        id: `widget-${widgetType}-${widgetIdCounter.current++}`,
-        type: widgetType
+        id: config.fixedId || `widget-${widgetType}-${widgetIdCounter.current++}`,
+        type: widgetType,
+        w: config.w,
+        h: config.h
       };
-      
+
       return [...prev, newWidget];
     });
   }, []);
@@ -2212,13 +2236,23 @@ const Home = () => {
             setLauncherLayout(layout || {});
             setLauncherAnchors(anchors || {});
             
-            // Charger les widgets sauvegardés
-            if (savedWidgets && Array.isArray(savedWidgets)) {
+            // Charger les widgets sauvegardés ou initialiser avec les widgets par défaut
+            if (savedWidgets && Array.isArray(savedWidgets) && savedWidgets.length > 0) {
               console.log('[Home] 📊 Widgets chargés:', savedWidgets);
-              setWidgets(savedWidgets);
-              widgetIdCounter.current = savedWidgets.length; // Initialiser le compteur
+              setWidgets(normalizeWidgets(savedWidgets));
+              widgetIdCounter.current = savedWidgets.length;
+            } else {
+              const rawDefaultWidgets = [
+                { id: 'weather', type: 'weather' },
+                { id: 'widget-cpu-ram-0', type: 'cpu-ram' },
+                { id: 'widget-storage-1', type: 'storage' }
+              ];
+              const defaultWidgets = normalizeWidgets(rawDefaultWidgets);
+              console.log('[Home] 📊 Initialisation avec widgets par défaut:', defaultWidgets);
+              setWidgets(defaultWidgets);
+              widgetIdCounter.current = defaultWidgets.length;
             }
-            
+
             // Mettre à jour le localStorage avec les données du backend (source de vérité)
             try {
               const currentUser = getCurrentUser();
@@ -2226,7 +2260,7 @@ const Home = () => {
                 localStorage.setItem(`launcher_${currentUser}`, JSON.stringify({
                   layout: layout || {},
                   anchors: anchors || {},
-                  widgets: savedWidgets || []
+                  widgets: normalizeWidgets(savedWidgets || [])
                 }));
                 console.log('[Home] 💾 Layout du backend sauvegardé dans localStorage');
               }
@@ -2251,11 +2285,16 @@ const Home = () => {
             }, 1000);
           }
         } else {
-          // Pas de launcher sauvegardé, initialiser vide
+          // Pas de launcher sauvegardé, initialiser avec les widgets par défaut
           console.log('[Home] 🎮 Pas de launcher sauvegardé, initialisation vide');
           setLauncherLayout({});
           setLauncherAnchors({});
-          setWidgets([]);
+          const rawDefaultWidgets = [
+            { id: 'weather', type: 'weather' },
+            { id: 'widget-cpu-ram-0', type: 'cpu-ram' },
+            { id: 'widget-storage-1', type: 'storage' }
+          ];
+          setWidgets(normalizeWidgets(rawDefaultWidgets));
           setLauncherLoadedFromBackend(true); // Marquer comme chargé (vide = OK)
           setTimeout(() => {
             launcherInitialLoadDone.current = true;
@@ -2279,6 +2318,15 @@ const Home = () => {
 
     const checkForUpdates = async () => {
       try {
+        const lastDismissed = localStorage.getItem('ryvie_update_dismissed');
+        const hideUntil = lastDismissed ? parseInt(lastDismissed, 10) : 0;
+        
+        if (Date.now() < hideUntil) {
+          console.log('[Home] 🔔 Mise à jour disponible mais bannière masquée temporairement');
+          setUpdateNotificationShown(true);
+          return;
+        }
+
         const serverUrl = getServerUrl(accessMode);
         const res = await axios.get(`${serverUrl}/api/settings/updates`);
         
@@ -2552,136 +2600,7 @@ const Home = () => {
             </div>
           )}
           
-          {/* Bannière de notification de mise à jour */}
-          {showUpdateBanner && availableUpdate && (
-            <div
-              style={{
-                position: 'fixed',
-                top: '18px',
-                right: '18px',
-                zIndex: 9999,
-                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif",
-                background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-                backdropFilter: 'blur(20px)',
-                borderRadius: '14px',
-                padding: '14px 14px 12px',
-                boxShadow: '0 16px 32px rgba(0, 0, 0, 0.10), 0 3px 10px rgba(0, 0, 0, 0.06)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-                width: '320px',
-                animation: updateBannerClosing
-                  ? 'slideOutRight 0.32s cubic-bezier(0.4, 0, 1, 1) forwards'
-                  : 'slideInRight 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                border: '1px solid rgba(15, 23, 42, 0.08)'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                <div
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '10px',
-                    background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.08) 0%, rgba(15, 23, 42, 0.04) 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '18px',
-                    flexShrink: 0
-                  }}
-                >
-                  🔔
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      color: '#111827',
-                      marginBottom: '2px',
-                      letterSpacing: '-0.01em'
-                    }}
-                  >
-                    {t('home.updateAvailable')}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '12px',
-                      color: '#6b7280',
-                      lineHeight: '1.45',
-                      letterSpacing: '-0.005em'
-                    }}
-                  >
-                    {t('home.versionAvailable', { version: availableUpdate.latestVersion })}
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    if (updateBannerClosing) return;
-                    setUpdateBannerClosing(true);
-                    setTimeout(() => {
-                      setShowUpdateBanner(false);
-                      setUpdateBannerClosing(false);
-                    }, 320);
-                  }}
-                  style={{
-                    padding: '6px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: 'transparent',
-                    color: 'rgba(15, 23, 42, 0.4)',
-                    fontSize: '16px',
-                    cursor: 'pointer',
-                    lineHeight: 1,
-                    transition: 'all 0.2s',
-                    flexShrink: 0
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(15, 23, 42, 0.06)';
-                    e.currentTarget.style.color = 'rgba(15, 23, 42, 0.7)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = 'rgba(15, 23, 42, 0.4)';
-                  }}
-                  title={t('home.close')}
-                >
-                  ✕
-                </button>
-              </div>
-              <button
-                onClick={() => {
-                  if (updateBannerClosing) return;
-                  navigate('/settings#updates');
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                  color: '#ffffff',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.14)',
-                  letterSpacing: '-0.01em'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.25)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.15)';
-                }}
-              >
-                {t('home.updateNow')}
-              </button>
-            </div>
-          )}
-          
+        
           <div className="content">
             <GridLauncher
               apps={(function() {
@@ -2990,45 +2909,195 @@ const Home = () => {
         </div>
       )}
       
-      {/* Indicateur d'installation moderne - supporte plusieurs installations */}
-      {Object.keys(installingApps).length > 0 && (
-        <InstallIndicator installations={installingApps} />
-      )}
-
-      {/* Toast de notification */}
-      {notification.show && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '24px',
-            right: '24px',
-            background: 'white',
-            padding: '16px 24px',
-            borderRadius: '12px',
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            zIndex: 10000,
-            animation: 'slideInFromTop 0.3s',
-            maxWidth: '400px',
-            borderLeft: `4px solid ${
-              notification.type === 'success' ? '#4caf50' :
-              notification.type === 'error' ? '#f44336' :
-              notification.type === 'warning' ? '#ff9800' : '#2196f3'
-            }`
-          }}
-        >
-          <span style={{ fontSize: '20px' }}>
-            {notification.type === 'success' ? '✓' : 
-             notification.type === 'error' ? '✕' :
-             notification.type === 'warning' ? '⚠' : 'ℹ'}
-          </span>
-          <span style={{ fontSize: '14px', color: '#333' }}>
-            {notification.message}
-          </span>
+            {/* ===== CONTENEUR DE NOTIFICATIONS UNIFIÉ ===== */}
+      <div 
+        style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          zIndex: 10000,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          alignItems: 'flex-end',
+          pointerEvents: 'none'
+        }}
+      >
+        {/* Bannière de notification de mise à jour */}
+        {showUpdateBanner && availableUpdate && (
+          <div
+            style={{
+              pointerEvents: 'auto',
+              position: 'relative', /* important: pas fixed */
+              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif",
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+              backdropFilter: 'blur(20px)',
+              borderRadius: '14px',
+              padding: '14px 14px 12px',
+              boxShadow: '0 16px 32px rgba(0, 0, 0, 0.10), 0 3px 10px rgba(0, 0, 0, 0.06)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              width: '320px',
+              animation: updateBannerClosing
+                ? 'slideOutRight 0.32s cubic-bezier(0.4, 0, 1, 1) forwards'
+                : 'slideInRight 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              border: '1px solid rgba(15, 23, 42, 0.08)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div
+                style={{
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.08) 0%, rgba(15, 23, 42, 0.04) 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '18px',
+                  flexShrink: 0
+                }}
+              >
+                🔔
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: '#111827',
+                    marginBottom: '2px',
+                    letterSpacing: '-0.01em'
+                  }}
+                >
+                  {t('home.updateAvailable')}
+                </div>
+                <div
+                  style={{
+                    fontSize: '12px',
+                    color: '#6b7280',
+                    lineHeight: '1.45',
+                    letterSpacing: '-0.005em'
+                  }}
+                >
+                  {t('home.versionAvailable', { version: availableUpdate.latestVersion })}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (updateBannerClosing) return;
+                  setUpdateBannerClosing(true);
+                  
+                  const hideUntil = Date.now() + 24 * 60 * 60 * 1000;
+                  localStorage.setItem('ryvie_update_dismissed', hideUntil.toString());
+                  
+                  setTimeout(() => {
+                    setShowUpdateBanner(false);
+                    setUpdateBannerClosing(false);
+                  }, 320);
+                }}
+                style={{
+                  padding: '6px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'rgba(15, 23, 42, 0.4)',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  lineHeight: 1,
+                  transition: 'all 0.2s',
+                  flexShrink: 0
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(15, 23, 42, 0.06)';
+                  e.currentTarget.style.color = 'rgba(15, 23, 42, 0.7)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'rgba(15, 23, 42, 0.4)';
+                }}
+                title={t('home.close')}
+              >
+                ✕
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                if (updateBannerClosing) return;
+                navigate('/settings#updates');
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.14)',
+                letterSpacing: '-0.01em'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.25)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.15)';
+              }}
+            >
+              {t('home.updateNow')}
+            </button>
+          </div>
+        )}
+        
+        {/* Indicateur d'installation moderne - supporte plusieurs installations */}
+        <div style={{ pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'flex-end' }}>
+          {(() => {
+            const activeInstallsCount = Object.values(installingApps || {}).filter(a => a && a.appName).length;
+            return activeInstallsCount > 0 && (
+              <InstallIndicator installations={installingApps} />
+            );
+          })()}
         </div>
-      )}
+
+        {/* Toast de notification */}
+        {notification.show && (
+          <div
+            style={{
+              pointerEvents: 'auto',
+              position: 'relative', /* important: pas fixed */
+              background: 'white',
+              padding: '16px 24px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              animation: 'slideInRight 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              maxWidth: '400px',
+              borderLeft: `4px solid ${
+                notification.type === 'success' ? '#4caf50' :
+                notification.type === 'error' ? '#f44336' :
+                notification.type === 'warning' ? '#ff9800' : '#2196f3'
+              }`
+            }}
+          >
+            <span style={{ fontSize: '20px' }}>
+              {notification.type === 'success' ? '✓' : 
+               notification.type === 'error' ? '✕' :
+               notification.type === 'warning' ? '⚠' : 'ℹ'}
+            </span>
+            <span style={{ fontSize: '14px', color: '#333' }}>
+              {notification.message}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Overlay d'onboarding pour les nouveaux utilisateurs */}
       {showOnboarding && (

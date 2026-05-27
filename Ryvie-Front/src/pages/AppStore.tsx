@@ -103,7 +103,6 @@ const AppStore = () => {
   const previewRef = useRef<HTMLDivElement | null>(null);
   const [previewHovered, setPreviewHovered] = useState(false);
   const activeEventSources = useRef({}); // Stocke les EventSources actifs pour pouvoir les annuler
-  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [logs, setLogs] = useState([]);
   const [logsVisible, setLogsVisible] = useState(false);
   const [installProgress, setInstallProgress] = useState({});
@@ -229,11 +228,12 @@ const AppStore = () => {
     return `${r},${g},${b}`;
   };
 
-  // Charger les apps au montage
+  // Charger les apps au montage et vérifier les mises à jour
   useEffect(() => {
     (async () => {
       const minDelay = new Promise((r) => setTimeout(r, 1000));
-      await Promise.all([minDelay, fetchApps(), fetchCatalogHealth()]);
+      // Vérifier automatiquement les mises à jour du catalogue pendant le chargement
+      await Promise.all([minDelay, fetchApps(), fetchCatalogHealth(), updateCatalog()]);
       setInitialLoading(false);
     })();
   }, []);
@@ -243,7 +243,8 @@ const AppStore = () => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'APPSTORE_REFRESH') {
         console.log('[AppStore] Refresh demandé par Home');
-        fetchApps(true);
+        // Vérifier automatiquement les mises à jour du catalogue pendant le rechargement
+        Promise.all([fetchApps(true), updateCatalog()]);
       }
     };
     window.addEventListener('message', handleMessage);
@@ -525,15 +526,12 @@ const AppStore = () => {
       setIsUpdating(true);
       const accessMode = getCurrentAccessMode() || 'private';
       const serverUrl = getServerUrl(accessMode);
-      const response = await axios.post(`${serverUrl}/api/appstore/update`);
+      const { token } = getSessionInfo() || {};
+      const response = await axios.post(`${serverUrl}/api/appstore/update`, {}, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       
       if (response.data.success) {
-        showToast(
-          response.data.updated 
-            ? t('appStore.catalogUpdated') + ` vers ${response.data.version}` 
-            : t('appStore.catalogUpToDate'),
-          'success'
-        );
         
         const shouldReload = response.data.updated || (Array.isArray(response.data.updates) && response.data.updates.length > 0);
         if (shouldReload) {
@@ -947,8 +945,10 @@ try {
  * Affiche un toast temporaire pour informer l'utilisateur.
  */
   const showToast = (message, type = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
+    window.parent.postMessage({
+      type: 'SHOW_NOTIFICATION',
+      notification: { message, type }
+    }, '*');
   };
 
 /**
@@ -1620,14 +1620,14 @@ try {
       </button>
 
       {/* Logs d'installation */}
-      {logs.length > 0 && logsVisible && (
+      {logsVisible && (
         <div className="logs-panel">
           <div className="logs-header">
             <h3>{t('appStore.notifications.installationLogs')}</h3>
-            <button 
+            <button
               className="logs-clear-btn"
-              onClick={clearLogs}
-              title={t('appStore.notifications.clearLogs')}
+              onClick={toggleLogs}
+              title={t('appStore.notifications.hideLogs')}
             >
               <FontAwesomeIcon icon={faTimes} />
             </button>
@@ -1643,17 +1643,8 @@ try {
         </div>
       )}
 
-      {/* Toast notifications */}
-      {toast.show && (
-        <div className={`toast toast-${toast.type}`}>
-          <FontAwesomeIcon 
-            icon={toast.type === 'success' ? faCheckCircle : faExclamationTriangle} 
-          />
-          <span>{toast.message}</span>
-        </div>
-      )}
 
-      <style>{`
+<style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
@@ -1661,7 +1652,7 @@ try {
 
         .logs-panel {
           position: fixed;
-          bottom: 20px;
+          bottom: 104px;
           right: 20px;
           width: 400px;
           max-height: 300px;
