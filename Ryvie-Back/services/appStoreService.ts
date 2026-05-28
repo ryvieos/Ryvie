@@ -1136,10 +1136,10 @@ LOCAL_IP=${localIP}
                   cwd: workingDir, stdio: 'pipe', timeout: 60000
                 });
               } catch (e) {}
-              // Nettoyer les containers zombies/créés qui n'ont pas démarré
+              // Forcer la suppression de tous les containers app-<appId>-* quel que soit leur état
               try {
                 const staleContainers = execSync(
-                  `docker ps -a --filter "name=app-${appId}" --filter "status=created" --format "{{.ID}}"`,
+                  `docker ps -a --filter "name=app-${appId}" --format "{{.ID}}"`,
                   { encoding: 'utf8', stdio: 'pipe' }
                 ).trim();
                 if (staleContainers) {
@@ -1149,7 +1149,7 @@ LOCAL_IP=${localIP}
                   console.log('[Update] 🗑️ Containers stale nettoyés');
                 }
               } catch (e) {}
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              await new Promise(resolve => setTimeout(resolve, 5000));
               console.log(`[Update] 🔄 Nouvelle tentative (${attempt + 1}/${MAX_RETRIES})...`);
             }
           }

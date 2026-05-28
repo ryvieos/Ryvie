@@ -559,7 +559,7 @@ const AppStore = () => {
 /**
  * Installe ou met à jour une app depuis l'App Store
  */
-  const installApp = async (appId, appName) => {
+  const installApp = async (appId, appName, isUpdate = false) => {
   let eventSource; // Déclaré ici pour être accessible dans finally
   
   try {
@@ -610,12 +610,13 @@ const AppStore = () => {
     setInstallingApps(prev => new Set(prev).add(appId));
     
     // Notifier Home qu'une installation commence avec le nom de l'app
-    window.parent.postMessage({ 
-      type: 'APPSTORE_INSTALL_STATUS', 
-      installing: true, 
+    window.parent.postMessage({
+      type: 'APPSTORE_INSTALL_STATUS',
+      installing: true,
       appName: appName,
       appId: appId,
-      progress: 0
+      progress: 0,
+      isUpdate: isUpdate
     }, '*');
     setLogsVisible(false); // Masquer automatiquement les logs lors de l'installation
 
@@ -792,9 +793,9 @@ try {
         // Si l'installation est terminée (100%), afficher la notification de succès
         else if (data.progress >= 100) {
           console.log(`[AppStore] ✅ 100% atteint pour ${appId}, fermeture SSE et notification`);
-          addLog(t('appStore.notifications.completed').replace('{appName}', appName), 'success');
+          addLog(t(isUpdate ? 'appStore.notifications.completedUpdate' : 'appStore.notifications.completed').replace('{appName}', appName), 'success');
           addLog(`🏁 Processus terminé pour ${appName}`, 'info');
-          showToast(t('appStore.notifications.installed').replace('{appName}', appName), 'success');
+          showToast(t(isUpdate ? 'appStore.notifications.updated' : 'appStore.notifications.installed').replace('{appName}', appName), 'success');
           
           // Fermer la connexion SSE
           console.log(`[AppStore] 🔌 Fermeture de la connexion SSE pour ${appId}`);
@@ -907,9 +908,9 @@ try {
 
     if (response.data.success) {
       // Le serveur a lancé l'installation en arrière-plan
-      addLog(t('appStore.notifications.launchedInBackground').replace('{appName}', appName), 'info');
+      addLog(t(isUpdate ? 'appStore.notifications.launchedInBackgroundUpdate' : 'appStore.notifications.launchedInBackground').replace('{appName}', appName), 'info');
       addLog(`📊 Suivez la progression ci-dessous...`, 'info');
-      showToast(t('appStore.notifications.installing').replace('{appName}', appName), 'info');
+      showToast(t(isUpdate ? 'appStore.notifications.updating' : 'appStore.notifications.installing').replace('{appName}', appName), 'info');
       
       // Le backend ne crée le manifest qu'à la fin de l'installation
       // L'app apparaîtra sur le bureau quand l'installation sera terminée (progress >= 100)
@@ -1180,7 +1181,7 @@ try {
                       </div>
                     </div>
                     {(() => {
-                      const { label, disabled, isInstalling } = evaluateAppStatus(app);
+                      const { label, disabled, isInstalling, updateAvailable } = evaluateAppStatus(app);
                       const progress = (installProgress[app.id]?.progress || 0) / 100;
 
                       const handleClick = (event) => {
@@ -1192,7 +1193,7 @@ try {
 
                         setSelectedApp(app);
                         if (label === 'Installer' || label === 'Mettre à jour') {
-                          installApp(app.id, app.name);
+                          installApp(app.id, app.name, updateAvailable);
                         }
                       };
 
@@ -1329,7 +1330,7 @@ try {
                     )}
                   </div>
                   {(() => {
-                    const { label, disabled, isInstalling } = evaluateAppStatus(app);
+                    const { label, disabled, isInstalling, updateAvailable } = evaluateAppStatus(app);
                     const progress = (installProgress[app.id]?.progress || 0) / 100;
 
                     const handleClick = (event) => {
@@ -1341,7 +1342,7 @@ try {
 
                       // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                       if (label === t('appStore.install') || label === t('appStore.update')) {
-                        installApp(app.id, app.name);
+                        installApp(app.id, app.name, updateAvailable);
                       }
                     };
 
@@ -1416,7 +1417,7 @@ try {
                 {(() => {
                   if (!selectedApp) return null;
 
-                  const { label, disabled, isInstalling } = evaluateAppStatus(selectedApp);
+                  const { label, disabled, isInstalling, updateAvailable } = evaluateAppStatus(selectedApp);
                   const progress = (installProgress[selectedApp.id]?.progress || 0) / 100;
 
                   const handleClick = (event) => {
@@ -1429,7 +1430,7 @@ try {
                     // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                     if (label === t('appStore.install') || label === t('appStore.update')) {
                       if (selectedApp) {
-                        installApp(selectedApp.id, selectedApp.name);
+                        installApp(selectedApp.id, selectedApp.name, updateAvailable);
                       }
                     }
                   };

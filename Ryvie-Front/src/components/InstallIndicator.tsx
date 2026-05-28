@@ -5,7 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 /**
  * Indicateur d'installation individuel pour une app
  */
-const InstallIndicatorItem = ({ appName, progress, isMinimized, onToggleMinimize }) => {
+const InstallIndicatorItem = ({ appName, progress, isUpdate, isMinimized, onToggleMinimize }) => {
   const { t } = useLanguage();
   // Calculer la largeur de la barre de progression
   const progressWidth = progress > 0 ? Math.min(progress, 100) : 5;
@@ -43,7 +43,7 @@ const InstallIndicatorItem = ({ appName, progress, isMinimized, onToggleMinimize
         </div>
         
         <div className="install-indicator-info">
-          <span className="install-indicator-title">{t('installIndicator.installing')}</span>
+          <span className="install-indicator-title">{t(isUpdate ? 'installIndicator.updating' : 'installIndicator.installing')}</span>
           <span className="install-indicator-app">{appName || 'Application'}</span>
           <div className="install-indicator-progress-container">
             <div 
@@ -111,6 +111,7 @@ const InstallIndicator = ({ installations, topOffset = 24 }) => {
             key={appId}
             appName={data.appName}
             progress={data.progress}
+            isUpdate={data.isUpdate}
             isMinimized={isMinimized}
             onToggleMinimize={() => toggleMinimize(appId)}
           />

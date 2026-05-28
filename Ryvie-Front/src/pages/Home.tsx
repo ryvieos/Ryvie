@@ -1053,17 +1053,18 @@ const Home = () => {
           }, 4000);
         }
       } else if (event.data && event.data.type === 'APPSTORE_INSTALL_STATUS') {
-        const { installing, appName, appId, progress, error, cancelled } = event.data;
+        const { installing, appName, appId, progress, error, cancelled, isUpdate } = event.data;
         console.log('[Home] Réception du statut d\'installation:', installing, appName, appId, { progress, error, cancelled });
         setAppStoreInstalling(installing);
-        
+
         if (installing && appId && appName) {
           // Ajouter ou mettre à jour l'installation - TOUJOURS maintenir l'état
           setInstallingApps(prev => {
             const updated = {
               ...prev,
-              [appId]: { 
-                appName, 
+              [appId]: {
+                appName,
+                isUpdate: isUpdate || prev[appId]?.isUpdate || false,
                 progress: progress || prev[appId]?.progress || 0 // Conserver la progression existante si pas de nouvelle valeur
               }
             };
