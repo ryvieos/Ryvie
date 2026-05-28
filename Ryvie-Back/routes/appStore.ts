@@ -393,6 +393,9 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
       stdio: 'inherit'
     });
     
+    // Réinitialiser la progression (évite que l'état d'erreur d'une tentative précédente
+    // soit renvoyé immédiatement aux clients SSE qui se connectent pour cette nouvelle tentative)
+    lastProgressMap.set(appId, { progress: 0, message: 'Installation en cours...', stage: 'active' });
     // Stocker le worker actif pour pouvoir l'annuler plus tard
     activeWorkers.set(appId, worker);
     
