@@ -17,7 +17,7 @@ APP_PATH="$APPS_ROOT/$APP_ID"
 SNAP_ROOT="$DATA_ROOT/snapshot/apps"
 
 # Vérifier que Btrfs est utilisé
-if [[ "$(findmnt -no FSTYPE "$DATA_ROOT")" != "btrfs" ]]; then
+if [[ "$(findmnt -no FSTYPE "$DATA_ROOT" | head -1)" != "btrfs" ]]; then
   echo "❌ $DATA_ROOT n'est pas en Btrfs."
   exit 1
 fi
