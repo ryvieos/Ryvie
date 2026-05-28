@@ -213,6 +213,10 @@
   },
   "widgetAddButton": {
     "title": "Add a widget",
+    "weather": {
+      "name": "Weather",
+      "description": "Temperature and weather conditions"
+    },
     "cpuRam": {
       "name": "CPU & RAM",
       "description": "Processor and memory usage"
@@ -694,6 +698,8 @@
     "notifications": {
       "installing": "Installing {appName}...",
       "installed": "{appName} installed successfully!",
+      "updating": "Updating {appName}...",
+      "updated": "{appName} updated successfully!",
       "cancelled": "Installation of {appName} cancelled",
       "cancelledByUser": "⏹️ Installation of {appName} cancelled by user",
       "error": "Installation error",
@@ -709,7 +715,9 @@
       "installationConnectionError": "Installation connection error",
       "refreshingDesktop": "🔄 Refreshing desktop to remove {appName}",
       "launchedInBackground": "🚀 Installation of {appName} launched in background",
+      "launchedInBackgroundUpdate": "🚀 Update of {appName} launched in background",
       "completed": "✅ Installation of {appName} completed successfully!",
+      "completedUpdate": "✅ Update of {appName} completed successfully!",
       "installationLogs": "Installation logs",
       "cancelInstallation": "Cancel installation",
       "installLimitNearlyReached": "Installation limit nearly reached",

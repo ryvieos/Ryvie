@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import axios from '../../utils/setupAxios';
 import BaseWidget from './BaseWidget';
@@ -24,6 +24,28 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
   const [storageDetail, setStorageDetail] = useState<any>(null); // détail complet du stockage
   const [storageDetailLoading, setStorageDetailLoading] = useState(false);
   const navigate = useNavigate();
+
+  const pointerDownTime = useRef<number>(0);
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    pointerDownTime.current = Date.now();
+    pointerDownPos.current = { x: e.clientX, y: e.clientY };
+
+    const onUp = (upEvent: PointerEvent) => {
+      const elapsed = Date.now() - pointerDownTime.current;
+      const dx = Math.abs(upEvent.clientX - (pointerDownPos.current?.x ?? 0));
+      const dy = Math.abs(upEvent.clientY - (pointerDownPos.current?.y ?? 0));
+
+      if (elapsed < 250 && dx < 8 && dy < 8) {
+        handleOpenModal();
+      }
+
+      document.removeEventListener('pointerup', onUp);
+    };
+
+    document.addEventListener('pointerup', onUp);
+  };
 
   useEffect(() => {
     const fetchStorageStats = async () => {
@@ -156,24 +178,6 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
         w={2}
         h={2}
         className="gradient"
-        action={
-          <button
-            className="widget-chevron"
-            onPointerDown={(e) => {
-              // Empêcher le drag de démarrer via GridLauncher
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleOpenModal();
-            }}
-            title={t('storageWidget.viewDetails')}
-          >
-            ⌂
-          </button>
-        }
       >
         {loading ? (
           <div className="storage-content">
@@ -193,7 +197,7 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
         ) : data.length === 0 ? (
           <div className="widget-empty">{t('storageWidget.noDisk')}</div>
         ) : (
-          <div className="storage-content storage-clickable">
+          <div className="storage-content storage-clickable" onPointerDown={handlePointerDown} style={{ cursor: 'pointer', height: '100%' }}>
             {data.slice(0, 1).map((disk, index) => {
               const usedPercent = Math.round((disk.used / disk.total) * 100);
               const status = getStatus(usedPercent);

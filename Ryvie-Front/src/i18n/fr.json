@@ -161,6 +161,7 @@
   "installIndicator": {
     "showProgress": "Afficher la progression de {appName}",
     "installing": "Installation",
+    "updating": "Mise à jour",
     "updateError": "Erreur lors de l'installation/mise à jour",
     "mustBeConnected": "Vous devez être connecté pour installer des applications",
     "sessionExpired": "Votre session a expiré. Veuillez vous reconnecter.",
@@ -220,6 +221,10 @@
   },
   "widgetAddButton": {
     "title": "Ajouter un widget",
+    "weather": {
+      "name": "Météo",
+      "description": "Température et conditions météo"
+    },
     "cpuRam": {
       "name": "CPU & RAM",
       "description": "Utilisation processeur et mémoire"
@@ -714,6 +719,8 @@
     "notifications": {
       "installing": "Installation de {appName} en cours...",
       "installed": "{appName} installé avec succès !",
+      "updating": "Mise à jour de {appName} en cours...",
+      "updated": "{appName} mis à jour avec succès !",
       "cancelled": "Installation de {appName} annulée",
       "cancelledByUser": "⏹️ Installation de {appName} annulée par l'utilisateur",
       "error": "Erreur lors de l'installation",
@@ -729,7 +736,9 @@
       "updateError": "Erreur lors de l'installation/mise à jour",
       "refreshingDesktop": "🔄 Rafraîchissement du bureau pour supprimer {appName}",
       "launchedInBackground": "🚀 Installation de {appName} lancée en arrière-plan",
+      "launchedInBackgroundUpdate": "🚀 Mise à jour de {appName} lancée en arrière-plan",
       "completed": "✅ Installation de {appName} terminée avec succès !",
+      "completedUpdate": "✅ Mise à jour de {appName} terminée avec succès !",
       "installationLogs": "Logs d'installation",
       "cancelInstallation": "Annuler l'installation",
       "installLimitNearlyReached": "Limite d'installations presque atteinte",

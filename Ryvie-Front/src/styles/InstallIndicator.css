@@ -1,9 +1,9 @@
 /* Conteneur pour les indicateurs empilés */
 .install-indicators-container {
-  position: fixed;
-  top: 0;
-  right: 0;
-  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: flex-end;
   pointer-events: none;
 }
 
@@ -13,10 +13,8 @@
 
 /* Indicateur d'installation moderne - Style clair en haut à droite */
 .install-indicator {
-  position: fixed;
-  top: 24px;
-  right: 24px;
-  z-index: 9999;
+  position: relative;
+  z-index: 10;
   
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.98));
   backdrop-filter: blur(20px);
@@ -31,7 +29,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
   
   animation: slideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  transition: top 0.3s ease;
+  transition: all 0.3s ease;
 }
 
 @keyframes slideIn {
@@ -213,10 +211,8 @@
 
 /* État minimisé */
 .install-indicator-minimized {
-  position: fixed;
-  top: 24px;
-  right: 24px;
-  z-index: 9999;
+  position: relative;
+  z-index: 10;
   
   display: flex;
   align-items: center;
@@ -235,7 +231,7 @@
     0 0 0 1px rgba(0, 0, 0, 0.05);
   
   cursor: pointer;
-  transition: all 0.2s ease, top 0.3s ease;
+  transition: all 0.2s ease;
   animation: slideIn 0.3s ease forwards;
 }
 
@@ -313,9 +309,8 @@
 /* Responsive */
 @media (max-width: 480px) {
   .install-indicator {
-    top: 16px;
-    left: 16px;
-    right: 16px;
+    width: 100%;
+    max-width: calc(100vw - 32px);
   }
   
   .install-indicator-info {
@@ -326,4 +321,8 @@
   .install-indicator-app {
     max-width: none;
   }
+}
+
+.install-indicator, .install-indicator-minimized {
+  pointer-events: auto;
 }
