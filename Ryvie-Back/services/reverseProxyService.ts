@@ -22,7 +22,7 @@ const RYVIE_RDRIVE_COMPOSE_PATH = '/data/apps/Ryvie-rDrive/tdrive/docker-compose
 
 // Templates de configuration
 function generateDockerComposeTemplate(ports = []) {
-  const defaultPorts = ['80:80', '443:443', '3005:3005'];
+  const defaultPorts = ['80:80', '443:443'];
   const allPorts = [...defaultPorts, ...ports];
   
   let template = `services:
@@ -476,21 +476,18 @@ http://:80 {
     header_up X-Real-IP {remote_host}
   }
 
-  # 3) Tout le reste vers le frontend
-  reverse_proxy host.docker.internal:3000 {
-    header_up Host {host}
-    header_up X-Real-IP {remote_host}
-  }
-}
-
-# --- KEYCLOAK OIDC (toutes origines, HTTP pur) ---
-http://:3005 {
-  reverse_proxy keycloak:8080 {
+  # 3) Keycloak (SSO) — accessible via /auth/*
+  @auth path /auth /auth/*
+  reverse_proxy @auth keycloak:8080 {
     header_up Host {host}
     header_up X-Real-IP {remote_host}
     header_up X-Forwarded-Proto http
-    header_up X-Forwarded-Port 3005
-    header_up X-Forwarded-Host {host}
+  }
+
+  # 4) Tout le reste vers le frontend
+  reverse_proxy host.docker.internal:3000 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
   }
 }
 `;
@@ -612,7 +609,6 @@ async function checkComposeFile() {
       content.includes('host.docker.internal:host-gateway'),
       content.includes('80:80'),
       content.includes('443:443'),
-      content.includes('3005:3005'),
       content.includes('ryvie-network')
     ];
     
@@ -674,6 +670,7 @@ async function checkCaddyfile() {
       content.includes('reverse_proxy') && content.includes(':3000'),
       content.includes('@api') && content.includes(':3002'),
       content.includes('@socketio') && content.includes(':3002'),
+      content.includes('@auth') && content.includes('keycloak:8080'),
       content.includes('host.docker.internal')
     ];
     

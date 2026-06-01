@@ -309,7 +309,7 @@ async function waitForKeycloakReady(maxWaitMs = 120000, intervalMs = 2000): Prom
   console.log('[keycloak] ⏳ Attente que Keycloak soit prêt...');
   while (Date.now() - start < maxWaitMs) {
     try {
-      const res = await fetch('http://localhost:3005/realms/ryvie/.well-known/openid-configuration', {
+      const res = await fetch('http://localhost/auth/realms/ryvie/.well-known/openid-configuration', {
         signal: AbortSignal.timeout(3000),
       });
       if (res.ok) {
