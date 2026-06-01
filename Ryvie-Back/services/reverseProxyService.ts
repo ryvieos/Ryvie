@@ -490,6 +490,7 @@ http://:80 {
     header_up X-Real-IP {remote_host}
   }
 }
+
 `;
 }
 
