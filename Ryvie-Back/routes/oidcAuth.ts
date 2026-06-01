@@ -28,19 +28,8 @@ setInterval(() => {
 function getFrontendOrigin(backendOrigin: string): string {
   try {
     const url = new URL(backendOrigin);
-    
-    // Si c'est ryvie.local (Caddy), pas de port spécifique
-    if (url.hostname === 'ryvie.local' && (!url.port || url.port === '80')) {
-      return `http://ryvie.local`;
-    }
-    
-    // Si le port est 3002 (backend dev), utiliser 3000 pour le frontend
-    if (url.port === '3002') {
-      return `http://${url.hostname}:3000`;
-    }
-    
-    // Sinon, utiliser le même origin (prod derrière Caddy)
-    return backendOrigin;
+    const port = url.port ? `:${url.port}` : '';
+    return `${url.protocol}//${url.hostname}${port}`;
   } catch (e) {
     console.warn('[OIDC] Invalid backend origin:', backendOrigin);
     return backendOrigin;
@@ -73,16 +62,15 @@ function getOriginFromRequest(req: any): string {
   }
   
   console.warn('[OIDC] No valid origin found, using localhost fallback');
-  return 'http://localhost:3002';
+  return 'http://localhost';
 }
 
 router.get('/health', async (req: any, res: any) => {
   try {
-    // Live check: fetch Keycloak's well-known endpoint to confirm it's actually reachable
-    const issuer = process.env.OIDC_ISSUER || 'http://ryvie.local:3005/realms/ryvie';
+    // Live check: fetch Keycloak's well-known endpoint via Caddy
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
-    const response = await fetch(`${issuer}/.well-known/openid-configuration`, {
+    const response = await fetch(`http://localhost/auth/realms/ryvie/.well-known/openid-configuration`, {
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -218,7 +206,7 @@ router.get('/switch', async (req: any, res: any) => {
     console.log('[OIDC] Switch user - origin:', origin, 'login_hint:', loginHint || '(none)');
     
     const url = new URL(origin);
-    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
+    const issuer = `http://${url.hostname}${url.port ? ':' + url.port : ''}/auth/realms/ryvie`;
     
     // Redirect to KC logout with client_id (post.logout.redirect.uris=+ allows any redirect)
     // This destroys the KC session cookie in the browser
@@ -268,7 +256,7 @@ router.get('/logout', async (req: any, res: any) => {
     const frontendOrigin = getFrontendOrigin(origin);
     
     const url = new URL(origin);
-    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
+    const issuer = `http://${url.hostname}${url.port ? ':' + url.port : ''}/auth/realms/ryvie`;
     const logoutUrl = `${issuer}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(frontendOrigin)}${idToken ? `&id_token_hint=${idToken}` : ''}`;
 
     console.log('[OIDC] Logging out from backend origin:', origin);

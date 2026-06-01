@@ -91,6 +91,6 @@ fi
 
 echo ""
 echo "📋 Configuration pour votre application :"
-echo "   OIDC_ISSUER=http://ryvie.local:3005/realms/ryvie"
+echo "   OIDC_ISSUER=http://ryvie.local/auth/realms/ryvie"
 echo "   OIDC_CLIENT_ID=$CLIENT_ID"
 echo "   OIDC_CLIENT_SECRET=$CLIENT_SECRET"

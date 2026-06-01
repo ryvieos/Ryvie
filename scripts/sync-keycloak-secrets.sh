@@ -32,7 +32,7 @@ echo "🔄 [sync-keycloak-secrets] Attente de Keycloak..."
 MAX_WAIT=120
 ELAPSED=0
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-  if curl -sf --max-time 3 http://localhost:3005/realms/ryvie/.well-known/openid-configuration > /dev/null 2>&1; then
+  if curl -sf --max-time 3 http://localhost/auth/realms/ryvie/.well-known/openid-configuration > /dev/null 2>&1; then
     echo "✅ [sync-keycloak-secrets] Keycloak est prêt (${ELAPSED}s)"
     break
   fi

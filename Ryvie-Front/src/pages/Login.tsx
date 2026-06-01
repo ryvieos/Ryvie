@@ -21,27 +21,10 @@ const Login = () => {
   const [ssoRedirectUrl, setSsoRedirectUrl] = useState<string | null>(null);
   const [waitingForKeycloak, setWaitingForKeycloak] = useState(false);
 
-  // Construit la base URL du backend pour la redirection SSO
-  // Même logique que buildAppUrl() : si on est sur ryvie.local et qu'une IP locale
-  // est détectée, utiliser cette IP pour que le cookie Keycloak soit partagé avec les apps
+  // Construit la base URL pour la redirection SSO — tout passe par Caddy (même origin)
   const getSsoBase = (): string => {
-    const hostname = window.location.hostname;
-    const port = window.location.port;
-    const localIP = getLocalIP();
-
-    console.log('[Login] getSsoBase - hostname:', hostname, 'port:', port, 'localIP:', localIP);
-
-    if (hostname === 'ryvie.local') {
-      if (localIP) {
-        console.log('[Login] getSsoBase - using localIP:', `http://${localIP}:3002`);
-        return `http://${localIP}:3002`;
-      }
-      console.log('[Login] getSsoBase - no localIP, using ryvie.local');
-      return `http://ryvie.local`;
-    }
-
-    console.log('[Login] getSsoBase - using current hostname:', `http://${hostname}:3002`);
-    return `http://${hostname}:3002`;
+    const mode = getCurrentAccessMode() || 'private';
+    return getServerUrl(mode);
   };
 
   useEffect(() => {
