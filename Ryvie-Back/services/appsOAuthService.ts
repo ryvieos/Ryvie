@@ -39,7 +39,7 @@ function getAdminPassword(): string {
 function kcadmLogin(): void {
   const pw = getAdminPassword();
   execSync(
-    `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${pw}"`,
+    `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080/auth --realm master --user admin --password "${pw}"`,
     { stdio: 'pipe' }
   );
 }
@@ -56,7 +56,16 @@ async function loadAppsOAuth(): Promise<AppsOAuthData> {
 async function saveAppsOAuth(data: AppsOAuthData): Promise<void> {
   const dir = path.dirname(APPS_OAUTH_FILE);
   if (!fsSync.existsSync(dir)) await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(APPS_OAUTH_FILE, JSON.stringify(data, null, 2), 'utf8');
+  const content = JSON.stringify(data, null, 2);
+  try {
+    await fs.writeFile(APPS_OAUTH_FILE, content, 'utf8');
+  } catch (writeErr: any) {
+    if (writeErr.code === 'EACCES') {
+      const tmpFile = `/tmp/apps-oauth-${Date.now()}.json`;
+      await fs.writeFile(tmpFile, content, 'utf8');
+      execSync(`sudo cp "${tmpFile}" "${APPS_OAUTH_FILE}" && sudo chown ryvie:ryvie "${APPS_OAUTH_FILE}" && rm -f "${tmpFile}"`);
+    } else { throw writeErr; }
+  }
 }
 
 // ───────── Manifest helpers ─────────

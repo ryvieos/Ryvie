@@ -331,7 +331,7 @@ async function waitForKeycloakReady(maxWaitMs = 120000, intervalMs = 2000): Prom
 function kcadmAuth(): void {
   const adminPass = getAdminPassword();
   execSync(
-    `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password "${adminPass}"`,
+    `docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080/auth --realm master --user admin --password "${adminPass}"`,
     { stdio: 'pipe', timeout: 15000 }
   );
 }
