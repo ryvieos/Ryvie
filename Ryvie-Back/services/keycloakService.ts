@@ -614,14 +614,11 @@ async function ensureKeycloakRunning(): Promise<{ success: boolean; alreadyRunni
     // 4b. S'assurer que openldap est sur ryvie-network (requis pour l'import realm LDAP)
     ensureLdapOnNetwork();
 
-    // 5. Démarrer si pas déjà en cours
-    let wasStarted = false;
-    if (!isKeycloakRunning()) {
-      startKeycloak();
-      wasStarted = true;
-    } else {
-      console.log('[keycloak] ✅ Keycloak déjà en cours d\'exécution');
-    }
+    // 5. Toujours exécuter docker compose up -d pour détecter les changements de config
+    // (idempotent : ne recrée le container que si la config a changé)
+    const wasRunning = isKeycloakRunning();
+    startKeycloak();
+    const wasStarted = !wasRunning;
 
     // 6. Attendre que Keycloak soit prêt
     const ready = await waitForKeycloakReady();
