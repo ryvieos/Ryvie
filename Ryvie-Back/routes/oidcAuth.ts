@@ -36,31 +36,43 @@ function getFrontendOrigin(backendOrigin: string): string {
   }
 }
 
+// Keycloak (/auth/*) et /api/* ne sont servis QUE par Caddy (port 80 en HTTP, 443 en HTTPS).
+// Si la requête arrive sur un port direct (frontend 3000 ou backend 3002), il faut ramener
+// l'origine sur Caddy en supprimant le port, sinon l'URL Keycloak générée serait injoignable
+// (ex: http://<ip>:3002/auth/realms/ryvie n'existe pas, le backend ne proxie pas /auth).
+function normalizeOriginToCaddy(protocol: string, hostname: string, _port?: string): string {
+  // On ignore toujours le port : le flux SSO (Keycloak + /api) ne transite que par Caddy
+  // sur les ports par défaut (80 en HTTP, 443 en HTTPS).
+  return `${protocol}://${hostname}`;
+}
+
 // Fonction pour détecter l'origine de la requête
 function getOriginFromRequest(req: any): string {
   // Priorité 1: utiliser le host de la requête (l'URL réellement demandée)
   // Cela permet au frontend de contrôler l'origin en redirigeant vers l'IP
   const protocol = req.protocol || 'http';
   const host = req.get('host');
-  
+
   if (host) {
-    const origin = `${protocol}://${host}`;
-    console.log('[OIDC] Origin from request host:', origin);
+    const [hostname, port] = host.split(':');
+    const origin = normalizeOriginToCaddy(protocol, hostname, port);
+    console.log('[OIDC] Origin from request host:', origin, '(raw host:', host + ')');
     return origin;
   }
-  
+
   // Fallback sur referer/origin header
   const referer = req.get('referer') || req.get('origin');
   if (referer) {
     try {
       const url = new URL(referer);
-      console.log('[OIDC] Origin from referer:', `${url.protocol}//${url.host}`);
-      return `${url.protocol}//${url.host}`;
+      const origin = normalizeOriginToCaddy(url.protocol.replace(':', ''), url.hostname, url.port);
+      console.log('[OIDC] Origin from referer:', origin);
+      return origin;
     } catch (e) {
       console.warn('[OIDC] Invalid referer/origin:', referer);
     }
   }
-  
+
   console.warn('[OIDC] No valid origin found, using localhost fallback');
   return 'http://localhost';
 }
