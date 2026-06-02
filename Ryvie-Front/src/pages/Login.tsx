@@ -21,9 +21,32 @@ const Login = () => {
   const [ssoRedirectUrl, setSsoRedirectUrl] = useState<string | null>(null);
   const [waitingForKeycloak, setWaitingForKeycloak] = useState(false);
 
-  // Construit la base URL pour la redirection SSO — tout passe par Caddy (même origin)
-  const getSsoBase = (): string => {
+  // Construit la base URL pour la redirection SSO — tout passe par Caddy (port 80)
+  // Sur ryvie.local, redirige vers l'IP locale pour que le cookie Keycloak soit partagé avec les apps.
+  // Récupère l'IP à la volée si elle n'est pas encore en cache (cas du premier build où le backend
+  // démarre lentement et où check-first-time a échoué sans avoir mis l'IP en cache).
+  const getSsoBase = async (): Promise<string> => {
+    const hostname = window.location.hostname;
     const mode = getCurrentAccessMode() || 'private';
+
+    if (hostname === 'ryvie.local') {
+      let localIP = getLocalIP();
+      if (!localIP) {
+        try {
+          const statusRes = await axios.get(`${getServerUrl(mode)}/status`);
+          if (statusRes.data?.ip) {
+            setLocalIP(statusRes.data.ip);
+            localIP = statusRes.data.ip;
+          }
+        } catch (e) {
+          console.warn('[Login] getSsoBase: impossible de récupérer l\'IP locale:', e);
+        }
+      }
+      if (localIP) {
+        return `http://${localIP}`;
+      }
+    }
+
     return getServerUrl(mode);
   };
 
@@ -127,9 +150,9 @@ const Login = () => {
           if (res.data?.ready) {
             console.log('[Login] Keycloak est prêt, redirection SSO');
             if (!cancelled) {
-              const ssoUrl = `${getSsoBase()}/api/auth/login`;
+              const ssoUrl = `${await getSsoBase()}/api/auth/login`;
               console.log('[Login] URL SSO finale:', ssoUrl);
-              setSsoRedirectUrl(ssoUrl);
+              if (!cancelled) setSsoRedirectUrl(ssoUrl);
             }
             return;
           }
