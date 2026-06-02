@@ -27,7 +27,13 @@ const Login = () => {
   // démarre lentement et où check-first-time a échoué sans avoir mis l'IP en cache).
   const getSsoBase = async (): Promise<string> => {
     const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
     const mode = getCurrentAccessMode() || 'private';
+
+    // HTTPS distant (domaines Netbird) : conserver le routage par domaine
+    if (protocol === 'https:') {
+      return getServerUrl(mode);
+    }
 
     if (hostname === 'ryvie.local') {
       let localIP = getLocalIP();
@@ -47,7 +53,11 @@ const Login = () => {
       }
     }
 
-    return getServerUrl(mode);
+    // Accès par IP en HTTP (IP privée LAN ou IP tunnel Netbird) : tout le SSO doit passer
+    // par Caddy sur le port 80 (même origine), car Keycloak (/auth/*) et /api/* ne sont servis
+    // QUE par Caddy. Le port courant (3000 frontend / 3002 backend) ne sert pas /auth, ce qui
+    // cassait la redirection SSO (http://<ip>:3002/auth/... injoignable).
+    return `http://${hostname}`;
   };
 
   useEffect(() => {
@@ -217,9 +227,9 @@ const Login = () => {
     setMessageType('info');
 
     try {
-      const serverUrl = getServerUrl(accessMode);
-      console.log(`[Login] Redirection SSO en mode ${accessMode.toUpperCase()}: ${serverUrl}`);
-      window.location.href = `${serverUrl}/api/auth/login`;
+      const ssoBase = await getSsoBase();
+      console.log(`[Login] Redirection SSO en mode ${accessMode.toUpperCase()}: ${ssoBase}`);
+      window.location.href = `${ssoBase}/api/auth/login`;
     } catch (error: any) {
       console.error('Erreur de redirection SSO:', error);
       setMessage(t('login.ssoError') || 'Erreur SSO');
