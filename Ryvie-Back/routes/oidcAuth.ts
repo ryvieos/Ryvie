@@ -83,25 +83,42 @@ function getOriginFromRequest(req: any): string {
 }
 
 router.get('/health', async (req: any, res: any) => {
-  try {
-    // Live check: fetch Keycloak's well-known endpoint to confirm it's actually reachable
-    const origin = getOriginFromRequest(req);
-    const originUrl = new URL(origin);
-    const issuer = process.env.OIDC_ISSUER || `${originUrl.protocol}//${originUrl.hostname}:3005/realms/ryvie`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    const response = await fetch(`${issuer}/.well-known/openid-configuration`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (response.ok) {
-      res.json({ ready: true });
-    } else {
-      res.status(503).json({ ready: false, error: `Keycloak returned ${response.status}` });
-    }
-  } catch (error: any) {
-    res.status(503).json({ ready: false, error: error.message });
+  // Live check: joindre le well-known de Keycloak (servi par Caddy sous /auth sur le port 80).
+  // Keycloak n'est PAS exposé sur :3005 ; et selon le contexte réseau du backend "localhost"
+  // peut échouer (undici résout en ::1 alors que Caddy répond en IPv4). On essaie donc
+  // plusieurs bases et on réussit dès que l'une répond.
+  const wellKnownPath = '/auth/realms/ryvie/.well-known/openid-configuration';
+  const bases: string[] = [];
+  // 1) Issuer explicite si configuré
+  if (process.env.OIDC_ISSUER) {
+    try {
+      const u = new URL(process.env.OIDC_ISSUER);
+      bases.push(`${u.protocol}//${u.host}`);
+    } catch (_) {}
   }
+  // 2) Adresses fiables (IPv4 d'abord), puis l'origine de la requête en repli
+  bases.push('http://127.0.0.1', 'http://localhost');
+  try {
+    const origin = getOriginFromRequest(req);
+    if (origin && !bases.includes(origin)) bases.push(origin);
+  } catch (_) {}
+
+  let lastError = 'unknown';
+  for (const base of bases) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const response = await fetch(`${base}${wellKnownPath}`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (response.ok) {
+        return res.json({ ready: true });
+      }
+      lastError = `Keycloak returned ${response.status} (via ${base})`;
+    } catch (error: any) {
+      lastError = `${error.message} (via ${base})`;
+    }
+  }
+  res.status(503).json({ ready: false, error: lastError });
 });
 
 router.get('/login', async (req: any, res: any) => {
