@@ -1010,6 +1010,7 @@
 
 .detail-section {
   margin-bottom: 24px;
+  text-align: left; /* éviter l'héritage d'un text-align:center parent (description/fonctionnalités) */
 }
 
 .detail-section:last-child {
@@ -1031,6 +1032,16 @@
   color: #374151;
   line-height: 1.7;
   white-space: pre-wrap;
+}
+
+/* Forcer l'alignement à gauche de toute la description (et de la liste de
+   fonctionnalités), quel que soit un éventuel text-align:center hérité d'un parent. */
+.detail-section,
+.detail-section .description-content,
+.detail-section .description-content p,
+.detail-section .description-content h3,
+.detail-section .description-content li {
+  text-align: left !important;
 }
 
 /* Amélioration de l'affichage de la description */
