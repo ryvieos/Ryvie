@@ -559,7 +559,7 @@ const AppStore = () => {
 /**
  * Installe ou met à jour une app depuis l'App Store
  */
-  const installApp = async (appId, appName, isUpdate = false) => {
+  const installApp = async (appId, appName, isUpdate = false, appIcon = null) => {
   let eventSource; // Déclaré ici pour être accessible dans finally
   
   try {
@@ -615,6 +615,7 @@ const AppStore = () => {
       installing: true,
       appName: appName,
       appId: appId,
+      appIcon: appIcon,
       progress: 0,
       isUpdate: isUpdate
     }, '*');
@@ -733,6 +734,8 @@ try {
           
           state.installations[appId] = {
             appName: appName,
+            appIcon: appIcon,
+            isUpdate: isUpdate,
             progress: data.progress || 0,
             lastUpdate: Date.now()
           };
@@ -745,9 +748,11 @@ try {
         
         // Envoyer la progression à Home pour l'indicateur
         window.parent.postMessage({ 
-          type: 'APPSTORE_INSTALL_PROGRESS', 
+          type: 'APPSTORE_INSTALL_PROGRESS',
           appName: appName,
           appId: appId,
+          appIcon: appIcon,
+          isUpdate: isUpdate,
           progress: data.progress
         }, '*');
         
@@ -1193,7 +1198,7 @@ try {
 
                         setSelectedApp(app);
                         if (label === 'Installer' || label === 'Mettre à jour') {
-                          installApp(app.id, app.name, updateAvailable);
+                          installApp(app.id, app.name, updateAvailable, app.icon);
                         }
                       };
 
@@ -1342,7 +1347,7 @@ try {
 
                       // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                       if (label === t('appStore.install') || label === t('appStore.update')) {
-                        installApp(app.id, app.name, updateAvailable);
+                        installApp(app.id, app.name, updateAvailable, app.icon);
                       }
                     };
 
@@ -1430,7 +1435,7 @@ try {
                     // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                     if (label === t('appStore.install') || label === t('appStore.update')) {
                       if (selectedApp) {
-                        installApp(selectedApp.id, selectedApp.name, updateAvailable);
+                        installApp(selectedApp.id, selectedApp.name, updateAvailable, selectedApp.icon);
                       }
                     }
                   };

@@ -1053,7 +1053,7 @@ const Home = () => {
           }, 4000);
         }
       } else if (event.data && event.data.type === 'APPSTORE_INSTALL_STATUS') {
-        const { installing, appName, appId, progress, error, cancelled, isUpdate } = event.data;
+        const { installing, appName, appId, appIcon, progress, error, cancelled, isUpdate } = event.data;
         console.log('[Home] Réception du statut d\'installation:', installing, appName, appId, { progress, error, cancelled });
         setAppStoreInstalling(installing);
 
@@ -1064,6 +1064,7 @@ const Home = () => {
               ...prev,
               [appId]: {
                 appName,
+                appIcon: appIcon || prev[appId]?.appIcon || null,
                 isUpdate: isUpdate || prev[appId]?.isUpdate || false,
                 progress: progress || prev[appId]?.progress || 0 // Conserver la progression existante si pas de nouvelle valeur
               }
@@ -1108,7 +1109,7 @@ const Home = () => {
         }
       } else if (event.data && event.data.type === 'APPSTORE_INSTALL_PROGRESS') {
         // Mise à jour de la progression uniquement
-        const { appId, appName, progress } = event.data;
+        const { appId, appName, appIcon, isUpdate, progress } = event.data;
         if (appId) {
           setInstallingApps(prev => {
             // TOUJOURS maintenir l'entrée, même si la progression ne change pas
@@ -1117,8 +1118,9 @@ const Home = () => {
               // Mettre à jour la progression existante
               updated = {
                 ...prev,
-                [appId]: { 
-                  ...prev[appId], 
+                [appId]: {
+                  ...prev[appId],
+                  appIcon: prev[appId].appIcon || appIcon || null,
                   progress: typeof progress === 'number' ? progress : (prev[appId].progress || 0)
                 }
               };
@@ -1126,7 +1128,7 @@ const Home = () => {
               // Nouvelle app pas encore enregistrée - l'ajouter immédiatement
               updated = {
                 ...prev,
-                [appId]: { appName, progress: progress || 0 }
+                [appId]: { appName, appIcon: appIcon || null, isUpdate: !!isUpdate, progress: progress || 0 }
               };
             }
             // Toujours sauvegarder pour maintenir la persistance
@@ -2607,13 +2609,38 @@ const Home = () => {
               apps={(function() {
                 const hasLayout = launcherLayout && typeof launcherLayout === 'object' && Object.keys(launcherLayout).length > 0;
                 const allAppIds = Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-'));
-                if (!hasLayout) return allAppIds;
-                const orderedFromLayout = Object.entries(launcherLayout)
-                  .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
-                  .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
-                  .map(([id]) => id);
-                const missing = allAppIds.filter(id => !orderedFromLayout.includes(id));
-                return [...orderedFromLayout, ...missing];
+                let baseApps;
+                if (!hasLayout) {
+                  baseApps = allAppIds;
+                } else {
+                  const orderedFromLayout = Object.entries(launcherLayout)
+                    .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+                    .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
+                    .map(([id]) => id);
+                  const missing = allAppIds.filter(id => !orderedFromLayout.includes(id));
+                  baseApps = [...orderedFromLayout, ...missing];
+                }
+                // Ajouter les apps en cours d'installation (nouvelles installs uniquement,
+                // pas encore présentes dans appsConfig). Les mises à jour sont déjà dans la liste.
+                const installingTiles = Object.keys(installingApps || {})
+                  .filter(rawId => installingApps[rawId] && installingApps[rawId].appName && !installingApps[rawId].isUpdate)
+                  .map(rawId => `app-${rawId}`)
+                  .filter(gridId => !baseApps.includes(gridId) && !appsConfig[gridId]);
+                return [...baseApps, ...installingTiles];
+              })()}
+              installProgress={(function() {
+                const map = {};
+                Object.entries(installingApps || {}).forEach(([rawId, data]) => {
+                  if (data && data.appName) {
+                    map[`app-${rawId}`] = {
+                      progress: data.progress || 0,
+                      isUpdate: !!data.isUpdate,
+                      appName: data.appName,
+                      appIcon: data.appIcon || null
+                    };
+                  }
+                });
+                return map;
               })()}
               weather={weather}
               weatherImages={weatherImages}

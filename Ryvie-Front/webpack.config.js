@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
@@ -98,7 +99,7 @@ module.exports = {
   plugins: [
     isDevelopment && new ReactRefreshWebpackPlugin(), // React Refresh seulement en dev
     new HtmlWebpackPlugin({
-      template: './public/index.html', // Template HTML source
+      templateContent: () => fs.readFileSync(path.resolve(__dirname, 'public/index.html'), 'utf8'),
       filename: 'index.html', // Fichier de sortie
       inject: 'body', // Injecter les scripts dans le body
     }),

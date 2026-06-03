@@ -19,6 +19,7 @@ const GridLauncher = ({
   iconImages,
   appsConfig,
   appStatus,
+  installProgress = {},
   handleClick,
   setShowWeatherModal,
   setTempCity,
@@ -393,7 +394,9 @@ const GridLauncher = ({
           
           const colIndex = layout[appId].col || 0;
           const animDelayMs = colIndex * 180;
-          const isClickable = !appsConfig?.[appId]?.showStatus || (appStatus?.[appId]?.status === 'running');
+          const installInfo = installProgress?.[appId] || null;
+          // Une app en cours d'installation/màj n'est jamais cliquable
+          const isClickable = installInfo ? false : (!appsConfig?.[appId]?.showStatus || (appStatus?.[appId]?.status === 'running'));
 
           return (
             <div
@@ -429,7 +432,8 @@ const GridLauncher = ({
             >
               <Icon
                 id={appId}
-                src={iconImages[appId]}
+                src={iconImages[appId] || installInfo?.appIcon}
+                installInfo={installInfo}
                 zoneId="grid"
                 moveIcon={moveIcon || (() => {})}
                 handleClick={() => {
