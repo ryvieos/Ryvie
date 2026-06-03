@@ -28,61 +28,69 @@ setInterval(() => {
 function getFrontendOrigin(backendOrigin: string): string {
   try {
     const url = new URL(backendOrigin);
-    const port = url.port ? `:${url.port}` : '';
-    return `${url.protocol}//${url.hostname}${port}`;
+    const protocol = url.protocol || 'http:';
+    
+    // Si c'est ryvie.local (Caddy), pas de port spécifique
+    if (url.hostname === 'ryvie.local' && (!url.port || url.port === '80')) {
+      return `${protocol}//ryvie.local`;
+    }
+    
+    // Si le port est 3002 (backend dev), utiliser 3000 pour le frontend
+    if (url.port === '3002') {
+      return `${protocol}//${url.hostname}:3000`;
+    }
+    
+    // Sinon, utiliser le même origin (prod derrière Caddy)
+    if (url.port) {
+      return `${protocol}//${url.hostname}:${url.port}`;
+    }
+
+    return `${protocol}//${url.hostname}`;
   } catch (e) {
     console.warn('[OIDC] Invalid backend origin:', backendOrigin);
     return backendOrigin;
   }
 }
 
-// Keycloak (/auth/*) et /api/* ne sont servis QUE par Caddy (port 80 en HTTP, 443 en HTTPS).
-// Si la requête arrive sur un port direct (frontend 3000 ou backend 3002), il faut ramener
-// l'origine sur Caddy en supprimant le port, sinon l'URL Keycloak générée serait injoignable
-// (ex: http://<ip>:3002/auth/realms/ryvie n'existe pas, le backend ne proxie pas /auth).
-function normalizeOriginToCaddy(protocol: string, hostname: string, _port?: string): string {
-  // On ignore toujours le port : le flux SSO (Keycloak + /api) ne transite que par Caddy
-  // sur les ports par défaut (80 en HTTP, 443 en HTTPS).
-  return `${protocol}://${hostname}`;
-}
-
 // Fonction pour détecter l'origine de la requête
 function getOriginFromRequest(req: any): string {
   // Priorité 1: utiliser le host de la requête (l'URL réellement demandée)
   // Cela permet au frontend de contrôler l'origin en redirigeant vers l'IP
-  const protocol = req.protocol || 'http';
+  const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const protocol = forwardedProto || req.protocol || 'http';
   const host = req.get('host');
-
+  
   if (host) {
-    const [hostname, port] = host.split(':');
-    const origin = normalizeOriginToCaddy(protocol, hostname, port);
-    console.log('[OIDC] Origin from request host:', origin, '(raw host:', host + ')');
+    const origin = `${protocol}://${host}`;
+    console.log('[OIDC] Origin from request host:', origin);
     return origin;
   }
-
+  
   // Fallback sur referer/origin header
   const referer = req.get('referer') || req.get('origin');
   if (referer) {
     try {
       const url = new URL(referer);
-      const origin = normalizeOriginToCaddy(url.protocol.replace(':', ''), url.hostname, url.port);
-      console.log('[OIDC] Origin from referer:', origin);
-      return origin;
+      console.log('[OIDC] Origin from referer:', `${url.protocol}//${url.host}`);
+      return `${url.protocol}//${url.host}`;
     } catch (e) {
       console.warn('[OIDC] Invalid referer/origin:', referer);
     }
   }
-
+  
   console.warn('[OIDC] No valid origin found, using localhost fallback');
-  return 'http://localhost';
+  return 'http://localhost:3002';
 }
 
 router.get('/health', async (req: any, res: any) => {
   try {
-    // Live check: fetch Keycloak's well-known endpoint via Caddy
+    // Live check: fetch Keycloak's well-known endpoint to confirm it's actually reachable
+    const origin = getOriginFromRequest(req);
+    const originUrl = new URL(origin);
+    const issuer = process.env.OIDC_ISSUER || `${originUrl.protocol}//${originUrl.hostname}:3005/realms/ryvie`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
-    const response = await fetch(`http://localhost/auth/realms/ryvie/.well-known/openid-configuration`, {
+    const response = await fetch(`${issuer}/.well-known/openid-configuration`, {
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -100,8 +108,6 @@ router.get('/login', async (req: any, res: any) => {
   try {
     const origin = getOriginFromRequest(req);
     console.log('[OIDC] Detected origin:', origin);
-    
-    await getOIDCConfig();
 
     const state = generateState();
     const nonce = generateNonce();
@@ -218,7 +224,7 @@ router.get('/switch', async (req: any, res: any) => {
     console.log('[OIDC] Switch user - origin:', origin, 'login_hint:', loginHint || '(none)');
     
     const url = new URL(origin);
-    const issuer = `http://${url.hostname}${url.port ? ':' + url.port : ''}/auth/realms/ryvie`;
+    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
     
     // Redirect to KC logout with client_id (post.logout.redirect.uris=+ allows any redirect)
     // This destroys the KC session cookie in the browser
@@ -239,8 +245,6 @@ router.get('/switch-login', async (req: any, res: any) => {
     const origin = getOriginFromRequest(req);
     const loginHint = req.query.login_hint || '';
     console.log('[OIDC] Switch-login - origin:', origin, 'login_hint:', loginHint || '(none)');
-    
-    await getOIDCConfig();
 
     const state = generateState();
     const nonce = generateNonce();
@@ -268,7 +272,7 @@ router.get('/logout', async (req: any, res: any) => {
     const frontendOrigin = getFrontendOrigin(origin);
     
     const url = new URL(origin);
-    const issuer = `http://${url.hostname}${url.port ? ':' + url.port : ''}/auth/realms/ryvie`;
+    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
     const logoutUrl = `${issuer}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(frontendOrigin)}${idToken ? `&id_token_hint=${idToken}` : ''}`;
 
     console.log('[OIDC] Logging out from backend origin:', origin);
