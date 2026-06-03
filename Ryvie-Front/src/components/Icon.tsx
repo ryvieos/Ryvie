@@ -429,22 +429,20 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
         console.log('[Icon] Réponse:', response.data);
       }
 
-      // L'opération backend est terminée : l'app est réellement prête/arrêtée.
-      // On passe immédiatement au statut final (optimiste) au lieu d'attendre le
-      // prochain cycle de polling, pour ne pas laisser tourner le spinner alors
-      // que l'app est déjà accessible.
-      if (setAppStatus) {
-        const finalStatus = action === 'stop' ? 'stopped' : 'running';
-        setAppStatus(prevStatus => ({
-          ...prevStatus,
-          [appKey]: {
-            ...(prevStatus[appKey] || {}),
-            status: finalStatus,
-            progress: finalStatus === 'running' ? 100 : 0
-          }
-        }));
+      // IMPORTANT : le backend renvoie souvent AVANT que l'app soit réellement prête
+      // (start/restart lancent la commande mais n'attendent pas que les conteneurs soient
+      // sains). On NE force donc PAS le statut "running" ici (sinon le spinner s'arrête
+      // trop tôt). On garde pendingAction (= spinner) et on rafraîchit le statut en rafale :
+      // l'effet de reset (cf. useEffect plus haut) coupera le spinner quand le statut réel
+      // sera "running" (start/restart) ou "stopped" (stop) — donc quand l'app est accessible.
+      if (refreshDesktopIcons) {
+        [0, 2000, 5000, 10000, 20000, 35000, 55000].forEach(ms => setTimeout(() => {
+          try { refreshDesktopIcons(); } catch (_) {}
+        }, ms));
       }
-      setPendingAction(null);
+      // Filet de sécurité : ne pas laisser le spinner tourner indéfiniment si le statut
+      // "running" n'est jamais détecté.
+      setTimeout(() => setPendingAction(null), 90000);
 
     } catch (error) {
       console.error(`[Icon] ❌ Erreur lors de ${action} de ${appName}`);
