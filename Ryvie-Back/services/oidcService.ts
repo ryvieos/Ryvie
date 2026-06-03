@@ -9,7 +9,9 @@ interface OIDCConfig {
 }
 
 const config: OIDCConfig = {
-  issuer: process.env.OIDC_ISSUER || 'http://ryvie.local/auth/realms/ryvie',
+  // Keycloak est servi par Caddy sur le port 80/443 sous le préfixe /auth
+  // (plus sur le port 3005). Discovery côté backend via localhost (toujours joignable).
+  issuer: process.env.OIDC_ISSUER || 'http://localhost/auth/realms/ryvie',
   clientId: process.env.OIDC_CLIENT_ID || 'ryvie-dashboard',
   clientSecret: process.env.OIDC_CLIENT_SECRET || 'ryvie-dashboard-secret-change-me',
   redirectUri: process.env.OIDC_REDIRECT_URI || 'http://ryvie.local/api/auth/callback',
@@ -20,15 +22,34 @@ let discoveredConfig: oauth.Configuration | null = null;
 // Fonction pour construire l'issuer dynamiquement basé sur l'origine
 function getIssuerFromOrigin(origin: string): string {
   const url = new URL(origin);
-  const port = url.port ? `:${url.port}` : '';
-  return `${url.protocol}//${url.hostname}${port}/auth/realms/ryvie`;
+  const protocol = url.protocol || 'http:';
+  // Keycloak est servi par Caddy sur le port 80/443 sous le préfixe /auth et reflète
+  // dynamiquement le Host. On garde donc l'hôte demandé (joignable par le navigateur)
+  // sans port, avec le préfixe /auth. (Avant: ':3005/realms' n'existe plus.)
+  return `${protocol}//${url.hostname}/auth/realms/ryvie`;
 }
 
 // Fonction pour construire le redirect_uri vers le backend
 function getBackendRedirectUri(origin: string): string {
   const url = new URL(origin);
-  const port = url.port ? `:${url.port}` : '';
-  return `${url.protocol}//${url.hostname}${port}/api/auth/callback`;
+  const protocol = url.protocol || 'http:';
+  
+  // Si c'est ryvie.local (Caddy), pas de port spécifique
+  if (url.hostname === 'ryvie.local' && !url.port) {
+    return `${protocol}//ryvie.local/api/auth/callback`;
+  }
+  
+  // Si le port est 3000 (webpack-dev-server), utiliser 3002 pour le backend
+  if (url.port === '3000') {
+    return `${protocol}//${url.hostname}:3002/api/auth/callback`;
+  }
+  
+  // Sinon, utiliser le port de l'origine s'il existe, ou l'hôte nu pour 80/443
+  if (url.port) {
+    return `${protocol}//${url.hostname}:${url.port}/api/auth/callback`;
+  }
+
+  return `${protocol}//${url.hostname}/api/auth/callback`;
 }
 
 export async function getOIDCConfig(): Promise<oauth.Configuration> {

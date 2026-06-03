@@ -33,7 +33,7 @@ const ContextMenuPortal = ({ children, x, y }) => {
 };
 
 // Composant Icon avec React.memo pour éviter les re-renders inutiles
-const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons }) => {
+const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons }) => {
   const { t } = useLanguage();
   const appConfig = appsConfig[id] || {};
   const [imgSrc, setImgSrc] = React.useState(src);
@@ -73,68 +73,35 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
 
   drag(ref);
 
-  const getBadgeStyle = () => {
-    if (!appConfig.showStatus) {
-      return null;
-    }
+  // === État visuel de l'icône (remplace l'ancien système de pastilles) ===
+  const status = appStatusData?.status;
+  // Installation ou mise à jour en cours -> camembert de progression
+  const isInstalling = !!installInfo;
+  // Plafonné à 95% : le camembert n'est retiré que lorsque l'app est réellement
+  // "running" (cf. Home), donc on garde toujours une petite part grise tant que
+  // l'app n'est pas prête, même si le téléchargement est à 100%.
+  const installPercent = isInstalling
+    ? Math.max(0, Math.min(95, Math.round(installInfo.progress || 0)))
+    : 0;
 
-    let backgroundColor = '#dc3545';
-    let animation = 'none';
+  // États transitoires -> grise + spinner UNIQUEMENT pour une action explicite de
+  // l'utilisateur (start/stop/restart/désinstallation). On n'affiche PAS le spinner
+  // pour un statut "starting"/"partial" passif (ex: démarrage automatique après une
+  // installation), qui ressemblerait à tort à un redémarrage.
+  const isTransitioning = !isInstalling && appConfig.showStatus && (
+    isUninstalling ||
+    pendingAction === 'starting' || pendingAction === 'stopping'
+  );
 
-    // Désinstallation en cours: badge rouge avec pulsation
-    if (isUninstalling) {
-      backgroundColor = '#dc3545';
-      animation = 'pulse 1.5s ease-in-out infinite';
-    } else if (pendingAction === 'stopping') {
-      const currentStatus = appStatusData?.status;
-      if (currentStatus === 'stopped') {
-        backgroundColor = '#dc3545';
-      } else {
-        backgroundColor = '#fd7e14';
-        animation = 'pulse 1.5s ease-in-out infinite';
-      }
-    } else if (pendingAction === 'starting') {
-      const currentStatus = appStatusData?.status;
-      if (currentStatus === 'running') {
-        backgroundColor = '#28a745';
-      } else {
-        backgroundColor = '#ffc107';
-        animation = 'pulse 1.5s ease-in-out infinite';
-      }
-    } else {
-      if (appStatusData && appStatusData.status) {
-        const { status } = appStatusData;
-        
-        if (status === 'running') {
-          backgroundColor = '#28a745';
-        } else if (status === 'starting') {
-          backgroundColor = '#ffc107';
-          animation = 'pulse 1.5s ease-in-out infinite';
-        } else if (status === 'partial') {
-          backgroundColor = '#fd7e14';
-        }
-      }
-    }
+  // App arrêtée -> grise fixe
+  const isStopped = !isInstalling && !isTransitioning && appConfig.showStatus &&
+    (!status || status !== 'running');
 
-    return {
-      position: 'absolute',
-      top: '-5px',
-      right: '-5px',
-      width: '16px',
-      height: '16px',
-      borderRadius: '50%',
-      backgroundColor,
-      border: '2px solid white',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-      animation,
-      zIndex: 10
-    };
-  };
+  // L'icône doit-elle être assombrie/grisée ?
+  const isDimmed = isInstalling || isTransitioning || isStopped;
 
-  const badgeStyle = getBadgeStyle();
-  
-  // Vérifier si l'app est cliquable (seulement si running ou pas de statut à afficher)
-  const isClickable = !appConfig.showStatus || (appStatusData && appStatusData.status === 'running');
+  // Vérifier si l'app est cliquable (seulement si running, et jamais pendant une installation)
+  const isClickable = !isInstalling && (!appConfig.showStatus || status === 'running');
   
   const handleIconClick = () => {
     // Ne rien faire si l'app n'est pas running (rouge ou orange)
@@ -461,7 +428,22 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
         console.log(`[Icon] ✅ ${action} de ${appName} terminé avec succès`);
         console.log('[Icon] Réponse:', response.data);
       }
-      
+
+      // IMPORTANT : le backend renvoie souvent AVANT que l'app soit réellement prête
+      // (start/restart lancent la commande mais n'attendent pas que les conteneurs soient
+      // sains). On NE force donc PAS le statut "running" ici (sinon le spinner s'arrête
+      // trop tôt). On garde pendingAction (= spinner) et on rafraîchit le statut en rafale :
+      // l'effet de reset (cf. useEffect plus haut) coupera le spinner quand le statut réel
+      // sera "running" (start/restart) ou "stopped" (stop) — donc quand l'app est accessible.
+      if (refreshDesktopIcons) {
+        [0, 2000, 5000, 10000, 20000, 35000, 55000].forEach(ms => setTimeout(() => {
+          try { refreshDesktopIcons(); } catch (_) {}
+        }, ms));
+      }
+      // Filet de sécurité : ne pas laisser le spinner tourner indéfiniment si le statut
+      // "running" n'est jamais détecté.
+      setTimeout(() => setPendingAction(null), 90000);
+
     } catch (error) {
       console.error(`[Icon] ❌ Erreur lors de ${action} de ${appName}`);
       console.error('[Icon] Détails de l\'erreur:', error);
@@ -502,7 +484,7 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
         <div className="icon-container">
           <div
             ref={ref}
-            className={`icon ${isUninstalling ? 'icon-uninstalling' : ''}`}
+            className={`icon ${isUninstalling ? 'icon-uninstalling' : ''} ${isStopped ? 'icon--stopped' : ''} ${isTransitioning ? 'icon--busy' : ''} ${isInstalling ? 'icon--installing' : ''}`}
             style={{
               cursor: isClickable ? 'pointer' : 'not-allowed',
               position: 'relative',
@@ -510,15 +492,32 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
             onClick={handleIconClick}
             onContextMenu={handleContextMenu}
           >
+            {/* Image de base (grisée pendant installation / transition / arrêt via classes) */}
             <img
+              className="icon-img"
               src={imgSrc}
-              alt={appConfig.name || id}
+              alt={appConfig.name || installInfo?.appName || id}
               onError={handleImageError}
               style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '20px' }}
             />
-            {badgeStyle && <div className="status-badge" style={badgeStyle}></div>}
+            {/* Installation / mise à jour :
+                - l'icône garde ses vraies couleurs (pas de filtre)
+                - un calque gris recouvre tout SAUF un cercle au centre
+                - dans ce cercle, le camembert révèle la couleur (part faite = transparente) */}
+            {isInstalling && (
+              <>
+                <div className="icon-grey-overlay"></div>
+                <div className="icon-progress">
+                  <div className="icon-progress-disc" style={{ ['--icon-progress' as any]: `${installPercent}%` }}></div>
+                </div>
+              </>
+            )}
+            {/* Démarrage / arrêt / redémarrage en cours : spinner indéterminé centré */}
+            {isTransitioning && (
+              <div className="icon-progress"><div className="icon-spinner-ring"></div></div>
+            )}
           </div>
-          {showName && <p className="icon-name">{appConfig.name || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
+          {showName && <p className="icon-name">{appConfig.name || installInfo?.appName || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
         </div>
       )}
       
@@ -632,6 +631,7 @@ const Icon = React.memo(({ id, src, zoneId, moveIcon, handleClick, showName, app
     prevProps.isAdmin === nextProps.isAdmin &&
     prevProps.accessMode === nextProps.accessMode &&
     JSON.stringify(prevProps.appStatusData) === JSON.stringify(nextProps.appStatusData) &&
+    JSON.stringify(prevProps.installInfo) === JSON.stringify(nextProps.installInfo) &&
     prevProps.activeContextMenu === nextProps.activeContextMenu
   );
 });

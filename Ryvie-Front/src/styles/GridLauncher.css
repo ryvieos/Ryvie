@@ -338,6 +338,86 @@
   border-radius: 18px;
 }
 
+/* === Indicateurs d'état de l'icône (installation / màj / transition / arrêt) === */
+
+/* App arrêtée : icône grisée */
+.grid-tile .icon.icon--stopped img {
+  filter: grayscale(1) brightness(0.9);
+  opacity: 0.6;
+  transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+/* Icône grisée seulement pendant les transitions démarrage/arrêt/redémarrage.
+   Pour l'installation on ne touche PAS aux couleurs : on pose un calque gris par-dessus. */
+.grid-tile .icon.icon--busy .icon-img {
+  filter: grayscale(1) brightness(0.92);
+  transition: filter 0.3s ease;
+}
+
+/* Calque gris posé sur toute l'icône SAUF un cercle au centre (trou transparent).
+   -> "le reste de l'icône est gris", l'icône garde ses vraies couleurs dessous. */
+.grid-tile .icon .icon-grey-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  background: rgba(15, 15, 15, 0.78);
+  /* trou un peu plus grand que le disque (22px) -> anneau transparent de séparation */
+  -webkit-mask: radial-gradient(circle 26px at 50% 50%, transparent 0 25.5px, #000 26px);
+  mask: radial-gradient(circle 26px at 50% 50%, transparent 0 25.5px, #000 26px);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Couche de progression : couvre exactement l'image et centre le disque.
+   inset:0 = même boîte que l'icône -> centre du disque = centre de l'icône. */
+.grid-tile .icon .icon-progress {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* Variable animable pour fluidifier le remplissage du camembert (sinon un
+   conic-gradient saute d'un coup quand la progression bondit, ex: 10% -> 75%). */
+@property --icon-progress {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+/* Camembert dans le cercle central : la part DÉJÀ téléchargée est transparente
+   (on voit la vraie couleur de l'icône dessous), la part RESTANTE est grise. */
+.grid-tile .icon .icon-progress-disc {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from -90deg,
+    transparent 0 var(--icon-progress, 0%),
+    rgba(25, 25, 25, 0.65) var(--icon-progress, 0%) 100%
+  );
+  /* Anime la variable elle-même -> remplissage progressif et fluide */
+  transition: --icon-progress 0.5s ease;
+}
+
+/* Spinner indéterminé pour les transitions start/stop/restart (centré comme le disque) */
+.grid-tile .icon .icon-spinner-ring {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
+  animation: iconSpin 0.9s linear infinite;
+}
+
+@keyframes iconSpin {
+  to { transform: rotate(360deg); }
+}
+
 /* Widget Météo 2×2 */
 .weather-widget {
   width: 100%;

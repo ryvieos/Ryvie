@@ -1,15 +1,16 @@
-# Graph Report - /opt/Ryvie  (2026-06-01)
+# Graph Report - Ryvie  (2026-06-03)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 163 files · ~814,393 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2053 nodes · 3144 edges · 124 communities (105 shown, 19 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 63 edges (avg confidence: 0.81)
+- 3374 nodes · 4884 edges · 187 communities (161 shown, 26 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 62 edges (avg confidence: 0.82)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `09d68edb`
+- Built from commit: `4dcaecd8`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -130,21 +131,87 @@
 - [[_COMMUNITY_Community 113|Community 113]]
 - [[_COMMUNITY_Community 114|Community 114]]
 - [[_COMMUNITY_Community 115|Community 115]]
+- [[_COMMUNITY_Community 118|Community 118]]
+- [[_COMMUNITY_Community 119|Community 119]]
+- [[_COMMUNITY_Community 120|Community 120]]
 - [[_COMMUNITY_Community 121|Community 121]]
 - [[_COMMUNITY_Community 122|Community 122]]
 - [[_COMMUNITY_Community 123|Community 123]]
+- [[_COMMUNITY_Community 124|Community 124]]
+- [[_COMMUNITY_Community 125|Community 125]]
+- [[_COMMUNITY_Community 126|Community 126]]
+- [[_COMMUNITY_Community 127|Community 127]]
+- [[_COMMUNITY_Community 128|Community 128]]
+- [[_COMMUNITY_Community 129|Community 129]]
+- [[_COMMUNITY_Community 130|Community 130]]
+- [[_COMMUNITY_Community 131|Community 131]]
+- [[_COMMUNITY_Community 132|Community 132]]
+- [[_COMMUNITY_Community 133|Community 133]]
+- [[_COMMUNITY_Community 134|Community 134]]
+- [[_COMMUNITY_Community 135|Community 135]]
+- [[_COMMUNITY_Community 136|Community 136]]
+- [[_COMMUNITY_Community 137|Community 137]]
+- [[_COMMUNITY_Community 138|Community 138]]
+- [[_COMMUNITY_Community 139|Community 139]]
+- [[_COMMUNITY_Community 140|Community 140]]
+- [[_COMMUNITY_Community 141|Community 141]]
+- [[_COMMUNITY_Community 142|Community 142]]
+- [[_COMMUNITY_Community 143|Community 143]]
+- [[_COMMUNITY_Community 144|Community 144]]
+- [[_COMMUNITY_Community 145|Community 145]]
+- [[_COMMUNITY_Community 146|Community 146]]
+- [[_COMMUNITY_Community 147|Community 147]]
+- [[_COMMUNITY_Community 148|Community 148]]
+- [[_COMMUNITY_Community 149|Community 149]]
+- [[_COMMUNITY_Community 150|Community 150]]
+- [[_COMMUNITY_Community 151|Community 151]]
+- [[_COMMUNITY_Community 152|Community 152]]
+- [[_COMMUNITY_Community 153|Community 153]]
+- [[_COMMUNITY_Community 154|Community 154]]
+- [[_COMMUNITY_Community 155|Community 155]]
+- [[_COMMUNITY_Community 156|Community 156]]
+- [[_COMMUNITY_Community 157|Community 157]]
+- [[_COMMUNITY_Community 158|Community 158]]
+- [[_COMMUNITY_Community 159|Community 159]]
+- [[_COMMUNITY_Community 160|Community 160]]
+- [[_COMMUNITY_Community 161|Community 161]]
+- [[_COMMUNITY_Community 162|Community 162]]
+- [[_COMMUNITY_Community 163|Community 163]]
+- [[_COMMUNITY_Community 164|Community 164]]
+- [[_COMMUNITY_Community 165|Community 165]]
+- [[_COMMUNITY_Community 166|Community 166]]
+- [[_COMMUNITY_Community 167|Community 167]]
+- [[_COMMUNITY_Community 168|Community 168]]
+- [[_COMMUNITY_Community 169|Community 169]]
+- [[_COMMUNITY_Community 170|Community 170]]
+- [[_COMMUNITY_Community 171|Community 171]]
+- [[_COMMUNITY_Community 172|Community 172]]
+- [[_COMMUNITY_Community 173|Community 173]]
+- [[_COMMUNITY_Community 174|Community 174]]
+- [[_COMMUNITY_Community 175|Community 175]]
+- [[_COMMUNITY_Community 176|Community 176]]
+- [[_COMMUNITY_Community 177|Community 177]]
+- [[_COMMUNITY_Community 178|Community 178]]
+- [[_COMMUNITY_Community 179|Community 179]]
+- [[_COMMUNITY_Community 180|Community 180]]
+- [[_COMMUNITY_Community 181|Community 181]]
+- [[_COMMUNITY_Community 182|Community 182]]
+- [[_COMMUNITY_Community 183|Community 183]]
+- [[_COMMUNITY_Community 184|Community 184]]
+- [[_COMMUNITY_Community 185|Community 185]]
+- [[_COMMUNITY_Community 186|Community 186]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `settings` - 147 edges
-2. `settings` - 138 edges
+1. `settings` - 160 edges
+2. `settings` - 160 edges
 3. `App Store Service` - 58 edges
-4. `Reverse Proxy Service` - 48 edges
-5. `Keycloak Service` - 48 edges
-6. `storageSettings` - 46 edges
-7. `home` - 39 edges
-8. `home` - 39 edges
-9. `Detect Access Mode Utility` - 37 edges
-10. `Update Check Service` - 36 edges
+4. `storageSettings` - 54 edges
+5. `storageSettings` - 51 edges
+6. `Reverse Proxy Service` - 48 edges
+7. `Keycloak Service` - 47 edges
+8. `useLanguage()` - 40 edges
+9. `home` - 40 edges
+10. `home` - 39 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Keycloak Environment Variables` --shares_data_with--> `OIDC Service`  [INFERRED]
@@ -153,79 +220,79 @@
   Ryvie-Back/services/appStoreService.ts → docs/appStore.md
 - `Storage JSON Contracts` --references--> `Storage Route`  [INFERRED]
   docs/storage-contracts.md → Ryvie-Back/routes/storage.ts
-- `i18n Implementation Summary` --references--> `First Time Setup Page`  [EXTRACTED]
-  I18N_SUMMARY.md → Ryvie-Front/src/pages/FirstTimeSetup.tsx
-- `i18n Implementation Summary` --references--> `Login Page`  [EXTRACTED]
-  I18N_SUMMARY.md → Ryvie-Front/src/pages/Login.tsx
+- `Keycloak SSO Documentation` --references--> `Auth Callback Page`  [EXTRACTED]
+  KEYCLOAK_SSO_DOCUMENTATION.md → Ryvie-Front/src/pages/AuthCallback.tsx
+- `Keycloak SSO Documentation` --references--> `LDAP Service`  [EXTRACTED]
+  KEYCLOAK_SSO_DOCUMENTATION.md → Ryvie-Back/services/ldapService.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (124 total, 19 thin omitted)
+## Communities (187 total, 26 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.02
-Nodes (128): settings, accessModeDescription, activeUsers, addBackground, addressCopied, addressesFound, analyzingStorage, appActionInProgress (+120 more)
+Cohesion: 0.01
+Nodes (141): settings, accessMode, accessModeDescription, activeUsers, addBackground, addressCopied, addressesFound, analyzingStorage (+133 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.02
-Nodes (117): settings, accessModeDescription, activeUsers, addBackground, addressCopied, addressesFound, analyzingStorage, appActionInProgress (+109 more)
+Cohesion: 0.01
+Nodes (139): settings, accessMode, accessModeDescription, activeUsers, addBackground, addressCopied, addressesFound, analyzingStorage (+131 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.02
-Nodes (108): accessCodeLifespan, accessCodeLifespanUserAction, accessTokenLifespan, accessTokenLifespanForImplicitFlow, accountTheme, actionTokenGeneratedByAdminLifespan, actionTokenGeneratedByUserLifespan, adminEventsDetailsEnabled (+100 more)
+Nodes (110): accessCodeLifespan, accessCodeLifespanLogin, accessCodeLifespanUserAction, accessTokenLifespan, accessTokenLifespanForImplicitFlow, accountTheme, actionTokenGeneratedByAdminLifespan, actionTokenGeneratedByUserLifespan (+102 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.09
-Nodes (39): App Store Service, uninstall, APPS_FILE, APPS_VERSIONS_FILE, axios, compareAppVersions(), { compareVersions }, downloadAppFromRepoArchive() (+31 more)
+Cohesion: 0.06
+Nodes (72): App Store Service, uninstall, Install Worker, authenticateTokenOrFirstTime(), checkIsFirstTime(), { createClient }, dotenv, hasPermission() (+64 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.04
-Nodes (48): mounted, noDiskDetected, openRaidAssistant, addDisksToRaid, addingInProgress, arrayMd0, cannotStopResync, chooseRaidLevel (+40 more)
+Cohesion: 0.06
+Nodes (59): mounted, noDiskDetected, openRaidAssistant, storageSettings, addDisksToRaid, addingInProgress, arrayMd0, available (+51 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.05
-Nodes (43): First Time Setup Page, errors, networkError, tryAgain, unknownError, checking, confirmPassword, confirmPasswordPlaceholder (+35 more)
+Cohesion: 0.10
+Nodes (29): First Time Setup Page, firstTimeSetup, allFieldsRequired, checking, confirmPassword, confirmPasswordPlaceholder, createButton, creating (+21 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.05
-Nodes (43): errors, networkError, tryAgain, unknownError, firstTimeSetup, checking, confirmPassword, confirmPasswordPlaceholder (+35 more)
+Cohesion: 0.09
+Nodes (22): login, accessMode, accessModeError, allFieldsRequired, authError, connecting, invalidCredentials, or (+14 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.05
-Nodes (43): mounted, noDiskDetected, storageSettings, addDisksToRaid, addingInProgress, arrayMd0, cannotStopResync, confirmStopResync (+35 more)
+Cohesion: 0.04
+Nodes (48): mounted, noDiskDetected, storageSettings, addDisksToRaid, addingInProgress, arrayMd0, available, cannotStopResync (+40 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.10
-Nodes (40): Reverse Proxy Service, checkCaddyContainer(), checkCaddyfile(), checkComposeFile(), { composeUpWithRecovery }, Docker, ensureCaddyRunning(), ensureConfigFiles() (+32 more)
+Cohesion: 0.14
+Nodes (41): Reverse Proxy Service, checkCaddyContainer(), checkCaddyfile(), checkCaddyfileHost(), checkComposeFile(), { composeUpWithRecovery }, Docker, ensureCaddyRunning() (+33 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.08
-Nodes (37): Keycloak Service, addClientToRealmJson(), createDashboardClient(), crypto, dashboardClientExists(), DOCKER_COMPOSE_FILE, ensureDashboardClient(), ensureEnvFile() (+29 more)
+Cohesion: 0.06
+Nodes (85): Add Client OAuth Script, Caddy Reverse Proxy Container, Keycloak Docker Compose, Keycloak Environment Variables, Keycloak SSO Container, Keycloak PostgreSQL Container, Keycloak Service, Keycloak SSO Migration Guide (+77 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.05
 Nodes (37): dependencies, axios, bcrypt, cors, diskusage, dockerode, dotenv, express (+29 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.06
-Nodes (34): installIndicator, hide, installationConnectionError, installationError, installationFailed, installing, maxInstallationsReached, mustBeConnected (+26 more)
+Cohesion: 0.08
+Nodes (24): success, updateModal, applyingUpdate, autoReload, building, catalogLoadError, catalogUpdated, catalogUpToDate (+16 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.09
-Nodes (26): Icon, ItemTypes, uninstallInProgress, OnboardingOverlay(), OnboardingPage, LanguageContextType, LanguageProvider(), Translations (+18 more)
+Nodes (29): Icon, ItemTypes, uninstallInProgress, InstallIndicatorItem(), OnboardingOverlay(), OnboardingOverlayProps, OnboardingPage, UpdateModal() (+21 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.07
-Nodes (30): Realtime Service, adminRouter, apiLimiter, app, appsRouter, authRouter, cors, crypto (+22 more)
+Cohesion: 0.05
+Nodes (38): Realtime Service, adminRouter, apiLimiter, app, appsRouter, appStoreRouter, authRouter, cors (+30 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.09
-Nodes (21): appHttpsRequired, appPorts, appPortsCallbacks, BASE_URLS, buildAppUrl(), getAppUrl(), getAutoUrl(), getCurrentLocation() (+13 more)
+Cohesion: 0.04
+Nodes (45): appHttpsRequired, appPorts, appPortsCallbacks, BASE_URLS, buildAppUrl(), getAppUrl(), getAutoUrl(), getCurrentLocation() (+37 more)
 
 ### Community 15 - "Community 15"
 Cohesion: 0.07
-Nodes (28): disconnected, local, remote, web, home, chooseWeatherCity, city, cityPlaceholder (+20 more)
+Nodes (31): connected, disconnected, local, remote, web, home, appStore, chooseWeatherCity (+23 more)
 
 ### Community 16 - "Community 16"
 Cohesion: 0.07
@@ -233,274 +300,270 @@ Nodes (27): compilerOptions, allowJs, allowSyntheticDefaultImports, alwaysStrict
 
 ### Community 17 - "Community 17"
 Cohesion: 0.12
-Nodes (22): addPartitionToArrayRobust(), { authenticateToken, authenticateTokenOrFirstTime }, cleanupDiskRaidMembership(), CommandResult, ensureBootDegraded(), ensureDirExists(), executeCommand(), express (+14 more)
+Nodes (23): addPartitionToArrayRobust(), { authenticateToken, authenticateTokenOrFirstTime }, cleanupDiskRaidMembership(), CommandResult, ensureBootDegraded(), ensureDirExists(), executeCommand(), executeCommandStrict() (+15 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.13
-Nodes (24): AppOAuthEntry, AppsOAuthData, crypto, ensureKeycloakClient(), envAlreadySynced(), { execSync }, fsSync, generateSecret() (+16 more)
+Cohesion: 0.12
+Nodes (25): appsOAuthService, AppOAuthEntry, AppsOAuthData, crypto, ensureKeycloakClient(), envAlreadySynced(), { execSync }, fsSync (+17 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.21
-Nodes (15): AuthListener(), Userlogin(), getCurrentUser(), Session Manager, isElectron(), endSession(), getCurrentUser(), getSessionInfo() (+7 more)
+Cohesion: 0.10
+Nodes (27): AuthListener(), CachedRoutes(), SocketContext, SocketContextValue, SocketProvider(), SocketProviderProps, getCurrentUser(), root (+19 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.11
-Nodes (23): appManager, express, fs, { getAppStatus, startApp, stopApp, restartApp }, path, router, { verifyToken, hasPermission }, appManager (+15 more)
+Cohesion: 0.12
+Nodes (22): appManager, express, fs, { getAppStatus, startApp, stopApp, restartApp }, path, router, { verifyToken, hasPermission }, appManager (+14 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.08
-Nodes (24): home, chooseWeatherCity, city, cityPlaceholder, confirmUninstall, connectedUser, dragToReorganize, geolocationUnavailable (+16 more)
+Nodes (25): home, cancel, chooseWeatherCity, city, cityPlaceholder, confirmUninstall, connectedUser, dragToReorganize (+17 more)
 
 ### Community 22 - "Community 22"
-Cohesion: 0.15
-Nodes (20): App Store Update Flow, App Store Page, App Store Routes, { APPS_DIR, RYVIE_DIR }, axios, checkAllUpdates(), checkAppsUpdates(), checkRyvieUpdate() (+12 more)
+Cohesion: 0.21
+Nodes (22): { APPS_DIR, RYVIE_DIR }, axios, checkAllUpdates(), checkAppsUpdates(), checkRyvieUpdate(), compareVersions(), { detectMode }, { execSync } (+14 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.10
-Nodes (23): common, add, back, confirm, delete, edit, filter, install (+15 more)
+Cohesion: 0.07
+Nodes (27): common, add, back, cancel, close, confirm, delete, edit (+19 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.15
-Nodes (23): BTRFS Filesystem, UpdateProvider(), Development Start Script, Global Update Modal Component, Health Route, Home Page, Frontend Entry HTML, Backend Entry Point (index.ts) (+15 more)
+Cohesion: 0.22
+Nodes (13): Dev/Prod Mode Guide, Development Start Script, PM2 Ecosystem Config, Global Update Modal Component, Health Route, Backend Entry Point (index.ts), PM2 Process Manager, Production Build Script (+5 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.16
-Nodes (16): getAccessMode(), Connection Login Page, CORS Setup Documentation, Detect Access Mode Utility, Electron to Web Migration Guide, OnboardingPage, Platform Utilities, AccessMode (+8 more)
+Cohesion: 0.19
+Nodes (14): getAccessMode(), OnboardingPage, AccessMode, ConnectRyvieSocketParams, detectAccessMode(), detectModeFromUrl(), ensureLoadedFromStorage(), getCurrentAccessMode() (+6 more)
 
 ### Community 26 - "Community 26"
 Cohesion: 0.18
-Nodes (17): btrfs Snapshots, Dev/Prod Mode Guide, PM2 Ecosystem Config, GitHub Releases, PM2 Process Manager, Production Build Script, btrfs Rollback Script, updateProgressEmitter (+9 more)
+Nodes (19): App Store Catalog (apps.json), App Store Documentation, App Store Update Flow, App Store Page, App Store Routes, Auth Route, btrfs Snapshots, GitHub Releases (+11 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.10
-Nodes (21): success, updateSuccess, updating, updateModal, applyingUpdate, autoReload, building, catalogLoadError (+13 more)
+Cohesion: 0.08
+Nodes (25): updateSuccess, updating, updateModal, applyingUpdate, autoReload, building, catalogLoadError, catalogUpdated (+17 more)
 
 ### Community 28 - "Community 28"
-Cohesion: 0.12
-Nodes (20): configure, open, next, previous, cpuRamWidget, cpu, ram, actionError (+12 more)
+Cohesion: 0.10
+Nodes (22): configure, restart, start, stop, uninstall, actionError, errorMissingAppId, restart (+14 more)
 
 ### Community 29 - "Community 29"
-Cohesion: 0.10
-Nodes (21): devDependencies, @babel/core, babel-loader, @babel/preset-env, @babel/preset-react, @babel/preset-typescript, concurrently, css-loader (+13 more)
+Cohesion: 0.08
+Nodes (25): devDependencies, @babel/core, babel-loader, @babel/preset-env, @babel/preset-react, @babel/preset-typescript, concurrently, copy-webpack-plugin (+17 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.10
-Nodes (24): updateRyvie, checkStoreCatalogUpdate(), getLatestCatalogTag(), getLatestGitHubTagViaGit(), { APPS_DIR, RYVIE_DIR }, axios, calculateSHA256(), crypto (+16 more)
+Cohesion: 0.11
+Nodes (26): updateRyvie, getLatestGitHubTagViaGit(), { APPS_DIR, RYVIE_DIR }, axios, calculateSHA256(), crypto, { detectMode }, downloadFile() (+18 more)
 
 ### Community 31 - "Community 31"
 Cohesion: 0.12
-Nodes (18): authLimiter, { createSafeClient, escapeLdapFilterValue, getUserRole }, { ensureConnected }, express, {
+Nodes (16): authLimiter, { createSafeClient, escapeLdapFilterValue, getUserRole }, { ensureConnected }, express, {
   getTokenExpirationSeconds,
   checkBruteForce,
   recordFailedAttempt,
   clearFailedAttempts,
   signToken,
   allowlistToken,
-}, jwt, ldap, ldapConfig (+10 more)
+}, jwt, ldap, ldapConfig (+8 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.21
-Nodes (18): Add Client OAuth Script, Add Keycloak Client Script, Caddy Reverse Proxy Container, Keycloak Docker Compose, Keycloak Environment Variables, Keycloak SSO Container, Keycloak PostgreSQL Container, Keycloak SSO Migration Guide (+10 more)
+Cohesion: 0.05
+Nodes (40): 1. Authentication Security, 1. Authentication Testing, 1. Brute Force Attacks, 1. Environment Security, 1. Input Validation, 2. Brute Force Testing, 2. Data Protection, 2. Infrastructure (+32 more)
 
 ### Community 33 - "Community 33"
 Cohesion: 0.11
 Nodes (18): compilerOptions, allowJs, allowSyntheticDefaultImports, esModuleInterop, forceConsistentCasingInFileNames, lib, module, moduleResolution (+10 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.12
-Nodes (17): useSocket(), useUpdate(), Home(), Settings(), activeUpdateWorkers, { checkAllUpdates }, crypto, express (+9 more)
+Cohesion: 0.11
+Nodes (28): GlobalUpdateModal(), useSocket(), UpdateContext, UpdateContextType, UpdateProvider(), useUpdate(), Home(), Settings() (+20 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.11
-Nodes (18): common, add, back, confirm, delete, edit, filter, install (+10 more)
+Cohesion: 0.07
+Nodes (27): common, add, back, cancel, close, confirm, delete, edit (+19 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.14
-Nodes (12): SocketContextValue, SocketProvider(), SocketProviderProps, root, rootElement, connectRyvieSocket(), ifElectron(), ifWeb() (+4 more)
+Cohesion: 0.15
+Nodes (12): open, cpuRamWidget, cpu, open, ram, title, installIndicator, finalizing (+4 more)
 
 ### Community 37 - "Community 37"
-Cohesion: 0.18
-Nodes (13): ItemTypes, Taskbar, weatherIcons, weatherImages, WIDGET_CONFIGS, clearInstallState(), InstallationData, InstallState (+5 more)
+Cohesion: 0.17
+Nodes (14): ItemTypes, Taskbar, weatherIcons, weatherImages, WIDGET_CONFIGS, clearInstallState(), InstallationData, InstallState (+6 more)
 
 ### Community 38 - "Community 38"
 Cohesion: 0.13
 Nodes (15): axios, express, fs, getInstalledAppIds(), getUserPreferencesPath(), loadUserPreferences(), multer, path (+7 more)
 
 ### Community 39 - "Community 39"
-Cohesion: 0.11
-Nodes (17): AccessMode, ApiResponse, AppActionResponse, AppInstallResponse, AppStatus, BaseUrls, DragEndData, DraggedItem (+9 more)
+Cohesion: 0.06
+Nodes (40): GridLauncher(), fetchAppsFromManifests(), generateAppConfigFromManifests(), generateDefaultAppsList(), generateTaskbarConfig(), GRID_CONFIG, images, DragEndData (+32 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.16
-Nodes (11): fetchAppsFromManifests(), generateAppConfigFromManifests(), generateDefaultAppsList(), generateTaskbarConfig(), GRID_CONFIG, images, GridItem, UseGridLayoutReturn (+3 more)
+Cohesion: 0.05
+Nodes (39): Ajouter des variables d'environnement, Arrêter tout, Backend (Node.js), Backend (nodemon), Basculer entre les modes, 📝 Bonnes Pratiques, Build manuel, Build production échoue (+31 more)
 
 ### Community 41 - "Community 41"
-Cohesion: 0.14
-Nodes (16): configure, open, cpuRamWidget, cpu, ram, actionError, confirmUninstall, errorMissingAppId (+8 more)
+Cohesion: 0.10
+Nodes (22): configure, restart, start, stop, uninstall, actionError, confirmUninstall, errorMissingAppId (+14 more)
 
 ### Community 42 - "Community 42"
-Cohesion: 0.18
-Nodes (16): Auth Service, client, { createClient }, ensureConnected(), allowlistToken(), checkBruteForce(), clearFailedAttempts(), { ensureConnected } (+8 more)
+Cohesion: 0.22
+Nodes (17): Auth Service, path, client, { createClient }, ensureConnected(), allowlistToken(), checkBruteForce(), clearFailedAttempts() (+9 more)
 
 ### Community 43 - "Community 43"
 Cohesion: 0.20
 Nodes (16): POST /api/authenticate Endpoint, GET /api/settings/ryvie-domains Endpoint, JWT Token Authentication Mechanism, GET /api/machine-id Endpoint, Caddy Reverse Proxy Service, Docker Runtime vs Data Separation Principle, /data BTRFS Storage Mount, Ryvie Docker Services Stack (+8 more)
 
 ### Community 44 - "Community 44"
-Cohesion: 0.16
-Nodes (11): createGenericIcon(), { execSync }, findAppIcon(), findDockerCompose(), fs, GENERIC_ICON_PATH, main(), path (+3 more)
+Cohesion: 0.18
+Nodes (14): createGenericIcon(), { execSync }, extractPortsFromCompose(), findAppIcon(), findDockerCompose(), fs, generateManifest(), GENERIC_ICON_PATH (+6 more)
 
 ### Community 45 - "Community 45"
-Cohesion: 0.34
-Nodes (16): step1, step2, step3, connect, desktop, rpictures, appStore, title (+8 more)
+Cohesion: 0.12
+Nodes (33): description, step1, step2, step3, subtitle, title, appStore, title (+25 more)
 
 ### Community 46 - "Community 46"
-Cohesion: 0.15
-Nodes (13): authenticateTokenOrFirstTime(), checkIsFirstTime(), { createClient }, dotenv, hasPermission(), isAdmin(), jwt, verifyToken() (+5 more)
+Cohesion: 0.05
+Nodes (38): 1. Configuration initiale, 2. Développement quotidien, 3. Avant de commiter, 4. Déploiement, Autres documents importants, Bonnes pratiques, Caveman - Optimisation Claude Code, Commandes Docker utiles (+30 more)
 
 ### Community 47 - "Community 47"
 Cohesion: 0.18
-Nodes (13): Docker, { execSync }, fs, getAppDockerStatus(), listInstalledApps(), { MANIFESTS_DIR, APPS_DIR }, path, restartApp() (+5 more)
+Nodes (14): Docker, { execSync }, fs, getAppDockerStatus(), getAppManifest(), listInstalledApps(), { MANIFESTS_DIR, APPS_DIR }, path (+6 more)
 
 ### Community 48 - "Community 48"
-Cohesion: 0.15
-Nodes (12): LDAP Service, express, router, { signToken, allowlistToken }, stateStore, ensureLdapRunning(), escapeLdapFilterValue(), getRole() (+4 more)
+Cohesion: 0.22
+Nodes (8): express, getOriginFromRequest(), ldapService, normalizeOriginToCaddy(), oidcService, router, { signToken, allowlistToken }, stateStore
 
 ### Community 49 - "Community 49"
-Cohesion: 0.14
-Nodes (12): path, startServer(), ensureRedisRunning(), { execSync }, { BACKGROUNDS_DIR, PRESETS_DIR }, fs, path, watchBackgrounds() (+4 more)
+Cohesion: 0.15
+Nodes (12): startServer(), ensureRedisRunning(), { execSync }, { BACKGROUNDS_DIR, PRESETS_DIR }, fs, path, syncBackgrounds(), watchBackgrounds() (+4 more)
 
 ### Community 50 - "Community 50"
-Cohesion: 0.33
-Nodes (15): step1, step2, step3, connect, desktop, rpictures, title, alt (+7 more)
+Cohesion: 0.11
+Nodes (30): description, step1, step2, step3, subtitle, title, description, step1 (+22 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.30
-Nodes (14): enforceArchitectureBase(), ensureCorePersistentDirectories(), ensureLdapComposeIsHealthy(), ensureOpenLdapOnNetworks(), execSafe(), extractComposeValue(), findLegacyOpenLdapVolume(), hasDirectoryContent() (+6 more)
+Cohesion: 0.05
+Nodes (37): 400 - Bad Request, 401 - Unauthorized, 401 - Unauthorized, 403 - Forbidden (accès remote), 404 - Not Found, 429 - Too Many Requests, 500 - Internal Server Error, 500 - Internal Server Error (+29 more)
 
 ### Community 52 - "Community 52"
-Cohesion: 0.16
-Nodes (13): { createSafeClient, getRole, parseDnParts, escapeRdnValue }, express, ldap, ldapConfig, { listInstalledApps }, router, { startApp }, syncLdapWithApps() (+5 more)
+Cohesion: 0.19
+Nodes (19): LDAP Service, updateUser(), express, { listUsersWithRoles, listUsersPublic }, router, { verifyToken }, createSafeClient(), ensureLdapRunning() (+11 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.13
-Nodes (11): activeContainers, { app, BrowserWindow, ipcMain, session, dialog }, axios, { fork }, fs, { getServerUrl }, path, pendingDownloads (+3 more)
-
-### Community 54 - "Community 54"
-Cohesion: 0.26
-Nodes (14): App Config, App Manager Service, Frontend Architecture, Base Widget Component, CPU RAM Widget Component, Docker Service, Grid Launcher Documentation, Grid Launcher Component (+6 more)
+Cohesion: 0.18
+Nodes (10): { createSafeClient, getRole, parseDnParts, escapeRdnValue }, express, ldap, ldapConfig, { listInstalledApps }, router, { startApp }, syncLdapWithApps() (+2 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.15
-Nodes (13): author, bugs, url, description, homepage, license, main, name (+5 more)
+Cohesion: 0.14
+Nodes (14): author, bugs, url, description, homepage, license, main, name (+6 more)
 
 ### Community 56 - "Community 56"
 Cohesion: 0.16
 Nodes (8): express, router, startupTracker, checkAllDone(), markDone(), markError(), services, ServiceStatus
 
 ### Community 57 - "Community 57"
-Cohesion: 0.15
-Nodes (13): dependencies, axios, @fortawesome/fontawesome-svg-core, @fortawesome/free-solid-svg-icons, @fortawesome/react-fontawesome, ldapjs, react, react-dnd (+5 more)
+Cohesion: 0.14
+Nodes (14): dependencies, axios, @fortawesome/fontawesome-svg-core, @fortawesome/free-solid-svg-icons, @fortawesome/react-fontawesome, ldapjs, react, react-dnd (+6 more)
 
 ### Community 58 - "Community 58"
-Cohesion: 0.27
-Nodes (13): Auth Callback Page, Keycloak SSO Documentation, Keycloak SSO System, Keycloak SSO Summary, LDAP Server, OIDC Auth Route, Keycloak Realm Config, Redis Token Store (+5 more)
+Cohesion: 0.21
+Nodes (15): Auth Callback Page, Home Page, Frontend Entry HTML, Keycloak SSO Documentation, Keycloak SSO System, Keycloak SSO Summary, LDAP Server, Electron to Web Migration Guide (+7 more)
 
 ### Community 59 - "Community 59"
 Cohesion: 0.15
 Nodes (10): backendPackageJson, crypto, encryptionKey, envExists, envPath, fs, jwtEncryptionKey, jwtSecret (+2 more)
 
 ### Community 60 - "Community 60"
-Cohesion: 0.17
-Nodes (11): getServerUrl(), fetchUsers(), args, { getServerUrl }, io, serverUrl, socket, AccessMode (+3 more)
+Cohesion: 0.06
+Nodes (34): 2a. Démarrage du monitor, 2b. Lancement de la mise à jour, Backend, Déclenchement, Détail des opérations (5% → 60%), Endpoints, Exécution du worker, Fallback sans curl (+26 more)
 
 ### Community 62 - "Community 62"
-Cohesion: 0.17
-Nodes (12): loading, welcome, accessCta, enterServer, localNetwork, localNetworkSubtitle, noServerDetected, preloading (+4 more)
+Cohesion: 0.09
+Nodes (25): next, previous, close, loading, onboarding, close, loading, next (+17 more)
 
 ### Community 63 - "Community 63"
 Cohesion: 0.33
-Nodes (11): { execSync }, getDefaultRouteInterface(), getFallbackIP(), getLocalIP(), getNetworkManagerIP(), getPrivateIP(), IGNORED_INTERFACE_PATTERNS, listNetworkInterfaces() (+3 more)
+Nodes (12): { execSync }, getDefaultRouteInterface(), getFallbackIP(), getLocalIP(), getNetworkManagerIP(), getPrivateIP(), getPrivateIPInternal(), IGNORED_INTERFACE_PATTERNS (+4 more)
 
 ### Community 64 - "Community 64"
-Cohesion: 0.18
-Nodes (11): welcome, accessCta, enterServer, localNetwork, localNetworkSubtitle, noServerDetected, preloading, remoteNetwork (+3 more)
+Cohesion: 0.09
+Nodes (25): next, previous, close, loading, onboarding, close, loading, next (+17 more)
 
 ### Community 65 - "Community 65"
-Cohesion: 0.18
-Nodes (11): applications, storageWidget, analyzing, analyzingSubtitle, apps, available, noDisk, others (+3 more)
+Cohesion: 0.15
+Nodes (13): applications, storageWidget, analyzing, analyzingSubtitle, applications, apps, available, noDisk (+5 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.29
-Nodes (9): OIDC Service, config, exchangeCodeForTokens(), generateAuthUrl(), getBackendRedirectUri(), getIssuerFromOrigin(), getUserInfo(), OIDCConfig (+1 more)
+Cohesion: 0.06
+Nodes (32): 1. Accéder à Keycloak, 2. Créer le client, 3. Configurer les URLs, 4. Récupérer le secret, 5. Exporter la configuration, Ajouter rPictures, Ajouter une autre application, Appliquer les changements (+24 more)
 
 ### Community 67 - "Community 67"
-Cohesion: 0.18
-Nodes (11): applications, storageWidget, analyzing, analyzingSubtitle, apps, available, noDisk, others (+3 more)
+Cohesion: 0.09
+Nodes (24): error, status, applications, critical, error, healthy, partial, running (+16 more)
 
 ### Community 68 - "Community 68"
 Cohesion: 0.22
 Nodes (9): app, cors, express, fs, log(), path, performCleanupAndShutdown(), server (+1 more)
 
 ### Community 69 - "Community 69"
-Cohesion: 0.20
-Nodes (10): account, account-console, admin-cli, broker, realm-management, security-admin-console, clientScopes, realm (+2 more)
+Cohesion: 0.18
+Nodes (11): account, account-console, admin-cli, broker, realm-management, security-admin-console, clientScopes, realm (+3 more)
 
 ### Community 70 - "Community 70"
-Cohesion: 0.22
-Nodes (9): listUsersPublic(), { exec }, execPromise, getServerInfo(), os, osutils, restartServer(), si (+1 more)
+Cohesion: 0.14
+Nodes (15): { APPS_DIR, MANIFESTS_DIR }, express, { getLocalIP }, { getServerInfo, restartServer }, router, si, { verifyToken }, { exec } (+7 more)
 
 ### Community 71 - "Community 71"
 Cohesion: 0.33
 Nodes (9): Contributor License Agreement v1.0, GitHub CLA Configuration Checklist, CLA 3-Step Quick Setup, CLA Assistant GitHub Bot, CLA GitHub Actions Workflow, CLA Assistant Setup Guide, Contributing Guide, Pull Request Template (+1 more)
 
 ### Community 72 - "Community 72"
-Cohesion: 0.22
-Nodes (9): error, status, critical, healthy, partial, running, starting, stopped (+1 more)
+Cohesion: 0.06
+Nodes (31): 1. Choisissez ou créez une issue, 2. Créez une branche, 3. Développez votre contribution, 4. Committez vos changements, 5. Synchronisez avec upstream, 6. Poussez vers votre fork, Avant de commencer, Backend (Node.js/TypeScript) (+23 more)
 
 ### Community 73 - "Community 73"
-Cohesion: 0.22
-Nodes (9): attributes, cibaAuthRequestedUserHint, cibaBackchannelTokenDeliveryMode, cibaExpiresIn, cibaInterval, parRequestUriLifespan, realmReusableOtpCode, oauth2DeviceCodeLifespan (+1 more)
+Cohesion: 0.18
+Nodes (11): attributes, cibaAuthRequestedUserHint, cibaBackchannelTokenDeliveryMode, cibaExpiresIn, cibaInterval, oauth2DeviceCodeLifespan, oauth2DevicePollingInterval, parRequestUriLifespan (+3 more)
 
 ### Community 74 - "Community 74"
-Cohesion: 0.22
-Nodes (9): scripts, build:web, dev, dist, electron, pack, serve, start (+1 more)
+Cohesion: 0.20
+Nodes (10): scripts, build, build:web, dev, dist, electron, pack, serve (+2 more)
 
 ### Community 75 - "Community 75"
 Cohesion: 0.31
 Nodes (9): App Store App Icon, Generic App Icon R Letter, Portainer App Icon, Application Icon, Letter R Image, Outline Icon, Ryvie Logo, AppStore Task Icon (+1 more)
 
 ### Community 76 - "Community 76"
-Cohesion: 0.17
-Nodes (12): App Store Catalog (apps.json), App Store Documentation, Auth Route, Install Worker, LDAP Config, TypeScript Migration Guide, Paths Config, Storage Route (+4 more)
+Cohesion: 0.06
+Nodes (30): 1. Commits Git, 2. Debugging, 3. Revue de code, 💡 Astuces Ryvie, 📋 Cas d'usage Ryvie, Caveman - Guide de démarrage rapide pour Ryvie, Caveman ne s'active pas, Changer de mode (+22 more)
 
 ### Community 77 - "Community 77"
-Cohesion: 0.22
-Nodes (8): DragEndData, DraggedItem, DragOffset, DragPosition, useDrag(), UseDragHandlers, UseDragReturn, Icon()
+Cohesion: 0.06
+Nodes (30): 📈 Benefits vs. Alternatives, 📊 CLA Key Terms Summary, CLA System Overview for Ryvie, CLA vs. DCO (Developer Certificate of Origin), 🏆 Conclusion, 🎨 Contributor Experience, Core Documents, Documentation (+22 more)
 
 ### Community 78 - "Community 78"
-Cohesion: 0.25
-Nodes (8): status, critical, healthy, partial, running, starting, stopped, warning
+Cohesion: 0.06
+Nodes (30): 1. Déclenchement, 2. Snapshot de sécurité, 3. Téléchargement, 4. Extraction, 5. Copie des configurations locales, 6. Application de la nouvelle version, 7. Build et redémarrage, 8. Nettoyage (+22 more)
 
 ### Community 79 - "Community 79"
-Cohesion: 0.25
-Nodes (7): { APPS_DIR, MANIFESTS_DIR }, express, { getLocalIP }, { getServerInfo, restartServer }, router, si, { verifyToken }
+Cohesion: 0.07
+Nodes (27): Activation, Avantages, 🪨 Caveman Claude (19 tokens), caveman-commit, caveman-compress, caveman-help, caveman-review, 🗣️ Claude Normal (69 tokens) (+19 more)
 
 ### Community 80 - "Community 80"
-Cohesion: 0.29
-Nodes (7): readyMessage, tip1, tip2, tip3, tip4, tipsTitle, ready
+Cohesion: 0.27
+Nodes (11): ready, description, readyMessage, subtitle, tip1, tip2, tip3, tip4 (+3 more)
 
 ### Community 81 - "Community 81"
-Cohesion: 0.29
-Nodes (7): readyMessage, tip1, tip2, tip3, tip4, tipsTitle, ready
+Cohesion: 0.27
+Nodes (11): ready, description, readyMessage, subtitle, tip1, tip2, tip3, tip4 (+3 more)
 
 ### Community 82 - "Community 82"
-Cohesion: 0.29
-Nodes (7): browserSecurityHeaders, contentSecurityPolicy, referrerPolicy, strictTransportSecurity, xContentTypeOptions, xFrameOptions, xRobotsTag
+Cohesion: 0.25
+Nodes (8): browserSecurityHeaders, contentSecurityPolicy, contentSecurityPolicyReportOnly, referrerPolicy, strictTransportSecurity, xContentTypeOptions, xFrameOptions, xRobotsTag
 
 ### Community 83 - "Community 83"
-Cohesion: 0.29
-Nodes (7): defaultRole, clientRole, composite, containerId, description, name, id
+Cohesion: 0.25
+Nodes (8): defaultRole, clientRole, composite, containerId, description, id, name, id
 
 ### Community 84 - "Community 84"
 Cohesion: 0.29
@@ -511,12 +574,16 @@ Cohesion: 0.43
 Nodes (4): handleAuthError(), initializeToken(), logout(), setAuthToken()
 
 ### Community 86 - "Community 86"
-Cohesion: 0.33
-Nodes (6): checkPendingSnapshots(), cleanAllSnapshots(), { execSync }, fs, path, registerPendingSnapshot()
+Cohesion: 0.22
+Nodes (11): error, status, critical, error, healthy, partial, running, starting (+3 more)
+
+### Community 87 - "Community 87"
+Cohesion: 0.25
+Nodes (3): WeatherData, WeatherWidgetProps, WidgetRemoveButtonProps
 
 ### Community 88 - "Community 88"
-Cohesion: 0.47
-Nodes (6): WidgetMenuPortal(), name, storage, weather, widgetAddButton, cpuRam
+Cohesion: 0.18
+Nodes (13): description, name, storage, weather, description, name, description, name (+5 more)
 
 ### Community 89 - "Community 89"
 Cohesion: 0.33
@@ -535,12 +602,12 @@ Cohesion: 0.70
 Nodes (5): Cloudy Weather Icon, Humidity Weather Icon, Rainy Weather Icon, Sunny Weather Icon, Wind Weather Icon
 
 ### Community 93 - "Community 93"
-Cohesion: 0.60
-Nodes (5): name, storage, weather, widgetAddButton, cpuRam
+Cohesion: 0.18
+Nodes (13): description, name, storage, weather, description, name, description, name (+5 more)
 
 ### Community 94 - "Community 94"
-Cohesion: 0.40
-Nodes (4): CopyWebpackPlugin, HtmlWebpackPlugin, path, ReactRefreshWebpackPlugin
+Cohesion: 0.33
+Nodes (5): CopyWebpackPlugin, fs, HtmlWebpackPlugin, path, ReactRefreshWebpackPlugin
 
 ### Community 95 - "Community 95"
 Cohesion: 0.83
@@ -567,34 +634,268 @@ Cohesion: 0.67
 Nodes (3): Task Transfer Icon (SVG), Task User Icon (PNG), User Avatar Icon (SVG)
 
 ### Community 123 - "Community 123"
+Cohesion: 0.07
+Nodes (27): 1. Importer le composant, 2. Utiliser dans le JSX, 3. Format des données, ♿ Accessibilité, 🚀 Améliorations futures, 🏗️ Architecture, 🎯 Comportements, Drag & Drop (+19 more)
+
+### Community 124 - "Community 124"
+Cohesion: 0.07
+Nodes (26): **1. Authentification**, 1. **Déconnexion initiée par l'utilisateur**, 1. **Initiation de la connexion**, 2. **Authentification Keycloak**, **2. Récupérer un client**, 3. **Callback et échange de tokens**, **3. Mettre à jour un client**, 4. **Récupération des informations utilisateur** (+18 more)
+
+### Community 125 - "Community 125"
+Cohesion: 0.07
+Nodes (26): 1. **Intégration Keycloak SSO pour Ryvie Dashboard** ✅, 2. **Préparation intégration rPictures** ✅, 📊 Architecture SSO finale, ✅ Ce qui a été fait, Client Keycloak créé, Clients Keycloak, 🛠️ Commandes utiles, Configuration Keycloak (+18 more)
+
+### Community 126 - "Community 126"
+Cohesion: 0.08
+Nodes (24): 1. Create a Dedicated Repository for CLA Signatures, 2. Create a Personal Access Token (PAT), 3. Add the PAT as a Repository Secret, 4. Verify the Workflow Configuration, Allowlist, Alternative: DCO (Developer Certificate of Origin), CLA Assistant Setup Guide for Ryvie Maintainers, For Contributors (+16 more)
+
+### Community 127 - "Community 127"
+Cohesion: 0.08
+Nodes (23): 1. Détection automatique du mode d'accès, 2. Gestion des plateformes, 3. Gestion des sessions, 4. Composants adaptés, 🔧 Configuration requise côté serveur, CORS, 🔍 Débogage, Endpoints requis (+15 more)
+
+### Community 128 - "Community 128"
+Cohesion: 0.09
+Nodes (22): 1. Repository Setup, 2. GitHub Configuration, 3. Workflow Files, 4. Documentation, 5. Testing the CLA Bot, 6. Communication, 📚 Additional Resources, Allowlist (Auto-exempt) (+14 more)
+
+### Community 129 - "Community 129"
+Cohesion: 0.09
+Nodes (22): 1. Structure du projet, 2. Fichiers convertis, 3. Package.json, 4. Configuration TypeScript (tsconfig.json), Avertissements de compilation, Changements effectués, Configuration, Dépendances ajoutées (+14 more)
+
+### Community 130 - "Community 130"
+Cohesion: 0.08
+Nodes (24): firstTimeSetup, allFieldsRequired, checking, confirmPassword, confirmPasswordPlaceholder, createButton, creating, email (+16 more)
+
+### Community 131 - "Community 131"
+Cohesion: 0.09
+Nodes (22): 1. **BaseWidget** (`src/components/widgets/BaseWidget.js`), 1. Créer le composant widget, 2. Ajouter dans le menu de sélection, 2. **CpuRamWidget** (`src/components/widgets/CpuRamWidget.js`), 3. Ajouter le rendu dans GridLauncher, 3. **StorageWidget** (`src/components/widgets/StorageWidget.js`), 4. Ajouter les styles (optionnel), 4. **WidgetAddButton** (`src/components/WidgetAddButton.js`) (+14 more)
+
+### Community 132 - "Community 132"
+Cohesion: 0.14
+Nodes (17): description, title, description, title, connect, desktop, rpictures, subtitle (+9 more)
+
+### Community 133 - "Community 133"
+Cohesion: 0.10
+Nodes (19): 1.1 Déclenchement (Frontend), 1.2 Routes (Backend), 1.3 Vérification de la mise à jour, 1.4 Récupération de la dernière release (Git ls-remote), 1.5 Mise à jour effective, 1. Mise à jour du catalogue d’applications, 2.1 Déclenchement, 2.2 Vérification pour une application (+11 more)
+
+### Community 134 - "Community 134"
+Cohesion: 0.10
+Nodes (19): 1. Le runtime Docker est dans `/data`, 2. Le mode d'execution Ryvie est encore en dev, 4. Portainer n'est pas versionne comme les autres stacks, 5. Certaines dependances reseau sont implicites, 6. Le plan de reprise depend encore trop de l'etat precedent, 7. Le montage `/data` doit être vérifié avant tout redémarrage, Ce qui ne va pas actuellement, et comment le corriger, Changements à faire dans le code (+11 more)
+
+### Community 135 - "Community 135"
+Cohesion: 0.10
+Nodes (19): 🔧 Actions sur les Apps, Ancien système (zones fixes), Anciennes fonctions conservées pour compatibilité :, Architecture Ryvie - Frontend, Backend, Bug restart (21/10/2025), Composants, 🎯 Configuration Centralisée (+11 more)
+
+### Community 136 - "Community 136"
+Cohesion: 0.11
+Nodes (18): Activation manuelle, Avec un disque manquant, Comportement en Mode Dégradé, Exemple de configuration `/etc/fstab`, Implémentation Automatique, Logs de l'Opération, Logs système, Lors de la création du RAID (+10 more)
+
+### Community 137 - "Community 137"
+Cohesion: 0.11
+Nodes (19): login, accessMode, accessModeError, authError, connecting, invalidCredentials, or, preparingSubtitle (+11 more)
+
+### Community 138 - "Community 138"
+Cohesion: 0.11
+Nodes (17): 1. Service de Mise à Jour (`/opt/Ryvie/Ryvie-Back/services/updateService.ts`), 2. Routes Settings (`/opt/Ryvie/Ryvie-Back/routes/settings.ts`), 3. Worker de Mise à Jour (`/opt/Ryvie/Ryvie-Back/workers/updateWorker.js`), Avantages de la Solution, Backend, Backend, Différences, Différences avec le Système d'Installation (+9 more)
+
+### Community 139 - "Community 139"
+Cohesion: 0.12
+Nodes (15): 1. Grant of Copyright License, 2. Grant of Patent License, 3. Original Work Certification, 4. No Compensation, 5. Support and Warranty Disclaimer, 6. Future License Changes, 7. Notification of Issues, For Corporate Contributors (+7 more)
+
+### Community 140 - "Community 140"
 Cohesion: 0.13
-Nodes (14): AppStoreApp, activeWorkers, { checkStoreCatalogUpdate }, cleaningApps, express, { getApps, getAppById, clearCache, getStoreHealth, getRateLimitInfo, updateAppFromStore, uninstallApp, forceCleanupCancelledInstall, progressEmitter }, lastProgressMap, router (+6 more)
+Nodes (15): description, title, description, title, connect, desktop, rpictures, subtitle (+7 more)
+
+### Community 141 - "Community 141"
+Cohesion: 0.13
+Nodes (15): 1. FirstTimeSetup.tsx (100%), 2. Welcome.tsx (100%), 3. Login.tsx (100%), 🔄 Comment utiliser, en.json (Anglais), 📝 Fichiers de traduction, fr.json (Français), ✅ Pages complètement traduites (+7 more)
+
+### Community 142 - "Community 142"
+Cohesion: 0.13
+Nodes (15): installIndicator, finalizing, hide, installationConnectionError, installationError, installationFailed, installing, maxInstallationsReached (+7 more)
+
+### Community 143 - "Community 143"
+Cohesion: 0.14
+Nodes (13): 🎨 Activation du thème, Ajouter une image de fond, Ajouter votre logo, 🔄 Appliquer les modifications, Changer les couleurs, ⚠️ Dépannage, Le thème n'apparaît pas, Méthode 1 : Via l'interface admin (Recommandé) (+5 more)
+
+### Community 144 - "Community 144"
+Cohesion: 0.15
+Nodes (13): Problème : Boucle de redirection, Problème : Boucle de redirection entre modes, Problème : "Invalid redirect URI", Problème : "Invalid redirect URI" en mode PRIVATE, Problème : "Invalid redirect URI" en mode REMOTE, Problème : "Invalid state", Problème : Keycloak inaccessible en mode PRIVATE, Problème : Keycloak inaccessible en mode REMOTE (+5 more)
+
+### Community 145 - "Community 145"
+Cohesion: 0.15
+Nodes (12): 1. **Ryvie Desktop** (Page 3 - L'Écosystème Ryvie), 2. **Ryvie Connect** (Page 3 - L'Écosystème Ryvie), 3. **Airpicture** (Page 3 - L'Écosystème Ryvie), 4. **Menu Clic Droit** (Page 4 - Gérez Vos Applications), CSS à ajouter pour les vraies images:, 📍 Emplacements des Images, Exemple de modification pour Ryvie Desktop:, Images Requises pour l'Onboarding (+4 more)
+
+### Community 146 - "Community 146"
+Cohesion: 0.29
+Nodes (6): errors, networkError, serverError, tryAgain, unknownError, serverError
+
+### Community 147 - "Community 147"
+Cohesion: 0.17
+Nodes (11): Conclusion, Documentation officielle, Dépendances à installer, Migration vers Keycloak SSO - Guide complet, Outils utiles, Prérequis, Ressources, Support (+3 more)
+
+### Community 148 - "Community 148"
+Cohesion: 0.47
+Nodes (10): BTRFS Filesystem, update-and-restart.sh script, Rollback Script, cleanup(), log(), perform_health_check(), rollback(), update_status() (+2 more)
+
+### Community 149 - "Community 149"
+Cohesion: 0.18
+Nodes (11): Applications Docker, Architecture cible robuste, Architecture cible ultra solide, Authentification, Ce que l'app Ryvie doit piloter, Ordre de reprise systemique, Ou tourne quoi, Point important pour la migration future (+3 more)
+
+### Community 150 - "Community 150"
+Cohesion: 0.18
+Nodes (10): Ce que le code fait deja, Ce qui doit partir dans la migration, Fichier a retenir, Limites actuelles a garder en tete, Objectif, Pourquoi ce decoupage est solide, Regle de migration importante, Ryvie - Resume architecture ultra solide (+2 more)
+
+### Community 151 - "Community 151"
+Cohesion: 0.18
+Nodes (11): 📝 Clés de traduction disponibles, Exemple dans Settings.tsx (ligne 1618), Guide d'utilisation du système i18n, 🎯 Pages à modifier, 💡 Pourquoi ça ne change pas actuellement ?, ❌ Problème actuel, 🔄 Prochaine étape, 🔧 Solution : Remplacer les textes en dur (+3 more)
+
+### Community 152 - "Community 152"
+Cohesion: 0.20
+Nodes (9): Ce que je recommande de faire ensuite, Ce qui peut casser pendant la migration, Etat actuel de la machine, Etat des lieux complet - Architecture Docker Ryvie, Fichiers de reference, Flux de stockage / RAID, Moteur Docker, Priorite pratique pour redemarrer vite apres migration (+1 more)
+
+### Community 153 - "Community 153"
+Cohesion: 0.20
+Nodes (9): CLA Quick Start Guide - 5 Minutes Setup, 📚 Full Documentation, 🚀 Quick Setup (3 Steps), Step 1: Create the Signatures Repository (2 minutes), Step 2: Create Personal Access Token (2 minutes), Step 3: Add Token to Repository Secrets (1 minute), 🧪 Test It (Optional), ❓ Troubleshooting (+1 more)
+
+### Community 154 - "Community 154"
+Cohesion: 0.20
+Nodes (9): ✅ Comportement attendu, ❌ Comportement observé, 🔍 Contexte additionnel, 🐛 Description du bug, 🖥️ Environnement, 📝 Logs d'erreur, 📸 Screenshots, 🔧 Solutions tentées (+1 more)
+
+### Community 155 - "Community 155"
+Cohesion: 0.20
+Nodes (9): 🔄 Alternatives considérées, ✅ Checklist, 📝 Contexte additionnel, 🔧 Détails techniques (optionnel), 📊 Impact utilisateur, 🎨 Mockups / Wireframes, 🎯 Problème à résoudre, 🚀 Résumé de la fonctionnalité (+1 more)
+
+### Community 156 - "Community 156"
+Cohesion: 0.20
+Nodes (9): Architecture du Repo 🛠️, 👥 Authors, 🤝 Contributing, ⚠️ Disclaimer, 🏗️ Développement & Architecture, 🚀 Fonctionnalités, 💻 Installation (utilisateur final), 📋 Prérequis (+1 more)
+
+### Community 157 - "Community 157"
+Cohesion: 0.20
+Nodes (9): Configuration CORS pour Ryvie, 🔧 Configuration serveur requise, ✅ Corrections apportées côté client, 📝 Endpoints requis, 🔄 Logique de fallback implémentée, Pour le serveur local (`http://ryvie.local:3002`), Pour le serveur public (`https://status.makerfaire.jules.ryvie.fr`), 🚨 Problème identifié (+1 more)
+
+### Community 158 - "Community 158"
+Cohesion: 0.22
+Nodes (8): 1. Stockage et montage, 2. Reseaux Docker, 3. Services critiques, 4. Compatibilite LDAP legacy, 5. Démarrage Ryvie, 6. Validation fonctionnelle, 7. Critere de succes, Ryvie - Checklist de verification post-migration RAID
+
+### Community 159 - "Community 159"
+Cohesion: 0.22
+Nodes (8): Architecture de `/data`, Comment Synology gère ça, Endpoint de secours, Flux de migration RAID, Pourquoi Docker casse avec btrfs send/receive, Pourquoi Docker doit rester sur /data (et non sur /), Principe fondamental, Stratégie de Migration Stockage — Ryvie
+
+### Community 160 - "Community 160"
+Cohesion: 0.22
+Nodes (8): Checklist, Comment cela a été testé ?, Description, Impact sur les utilisateurs, Motivation et contexte, Notes supplémentaires, Screenshots (si applicable), Type de changement
+
+### Community 161 - "Community 161"
+Cohesion: 0.33
+Nodes (6): open, cpuRamWidget, cpu, open, ram, title
+
+### Community 162 - "Community 162"
+Cohesion: 0.25
+Nodes (7): Architecture, Configuration, Documentation App Store, Flux de données, Services impliqués, Variables d'environnement, Vue d'ensemble
+
+### Community 163 - "Community 163"
+Cohesion: 0.25
+Nodes (8): 5.1 Créer des clients OIDC pour chaque application, 5.2 Configurer chaque application, 5.3 Supprimer l'authentification LDAP des applications, 5.4 Tester le SSO entre applications, **Application Node.js/Express**, **Application PHP**, **Application Python/Django**, Phase 5 : Migration des applications
+
+### Community 164 - "Community 164"
+Cohesion: 0.25
+Nodes (7): API Endpoints (skeleton in Step 0), CLI Subcommands (skeleton), CreateRaidRequest, Disk, Proposal, RaidStatus, Ryvie Storage JSON Contracts (Step 0)
+
+### Community 165 - "Community 165"
+Cohesion: 0.29
+Nodes (6): Approche, Ce qui a changé, Futures apps, Migration SSO apps : port 3005 → /auth (Caddy), rDrive, rPictures
+
+### Community 166 - "Community 166"
+Cohesion: 0.29
+Nodes (7): 2.1 Créer le realm "ryvie", 2.2 Configurer la connexion LDAP, 2.3 Mapper les attributs LDAP, 2.4 Créer le client OIDC pour Ryvie, 2.5 Configurer les mappers de rôles, 2.6 Mapper les groupes LDAP vers les rôles Keycloak, Phase 2 : Configuration Keycloak
+
+### Community 167 - "Community 167"
+Cohesion: 0.33
+Nodes (6): errors, networkError, serverError, tryAgain, unknownError, serverError
+
+### Community 168 - "Community 168"
+Cohesion: 0.33
+Nodes (6): Compose Docker a conserver, Conclusion pratique, Donnees a migrer absolument, Donnees a recreer proprement, Inventaire a migrer ou recreer, Points a verifier avant reprise
+
+### Community 169 - "Community 169"
+Cohesion: 0.33
+Nodes (6): 1.1 Créer la structure de fichiers, 1.2 Docker Compose, 1.3 Configuration Caddy pour Keycloak, 1.3 Démarrer Keycloak, 1.4 Accéder à l'interface admin, Phase 1 : Déploiement de Keycloak
+
+### Community 170 - "Community 170"
+Cohesion: 0.33
+Nodes (6): 3.1 Installer les dépendances, 3.2 Créer le service OIDC, 3.3 Créer les routes d'authentification OIDC, 3.4 Intégrer les routes OIDC, 3.5 Variables d'environnement, Phase 3 : Migration Backend Ryvie
+
+### Community 171 - "Community 171"
+Cohesion: 0.33
+Nodes (6): 4.1 Créer la page de callback, 4.2 Modifier la page de login, 4.3 Ajouter la route de callback, 4.4 Ajouter les traductions, 4.5 Gérer la déconnexion SSO, Phase 4 : Migration Frontend Ryvie
+
+### Community 172 - "Community 172"
+Cohesion: 0.33
+Nodes (6): 6.1 Tests d'authentification, 6.2 Tests SSO, 6.3 Tests de bascule Private/Remote, 6.3 Tests de rôles, 6.4 Tests de performance, Tests et validation
+
+### Community 173 - "Community 173"
+Cohesion: 0.40
+Nodes (5): Apps, Caddy, Keycloak, LDAP, Points de vigilance specifiques
+
+### Community 174 - "Community 174"
+Cohesion: 0.40
+Nodes (5): Avant de toucher aux disques, Ordre de redemarrage apres migration, Ordre de reprise des services, Pendant la migration stockage, Procedure recommandee de migration
+
+### Community 175 - "Community 175"
+Cohesion: 0.40
+Nodes (5): Architecture cible, Composants (mode LOCAL), Flux d'authentification SSO (mode LOCAL), Phase 1 : Déploiement en mode LOCAL uniquement, Système Private/Remote de Ryvie (pour référence future)
+
+### Community 176 - "Community 176"
+Cohesion: 0.40
+Nodes (5): Mode PRIVATE (réseau local), Mode REMOTE (accès distant via Netbird), Récapitulatif des URLs, URLs des applications (exemples), Variables d'environnement finales
+
+### Community 177 - "Community 177"
+Cohesion: 0.50
+Nodes (4): A garder dans `/data`, A garder dans `/opt/Ryvie`, A recreer automatiquement, Decoupage recommande
+
+### Community 178 - "Community 178"
+Cohesion: 0.50
+Nodes (4): Backend / Frontend, Ce qui controlle le demarrage, Health / readiness, Mise a jour
+
+### Community 179 - "Community 179"
+Cohesion: 0.50
+Nodes (4): Après la migration, Avant la migration, Checklist de migration, Pendant la migration
+
+### Community 180 - "Community 180"
+Cohesion: 0.67
+Nodes (3): A migrer, A recreer, ne pas copier brutement, Stockage persistant sous /data
+
+### Community 181 - "Community 181"
+Cohesion: 0.67
+Nodes (3): Apps, Base commune, Matrice des stacks Docker
+
+### Community 182 - "Community 182"
+Cohesion: 0.67
+Nodes (3): 7.1 Rollback complet vers LDAP, 7.2 Rollback partiel (coexistence), Rollback
 
 ## Ambiguous Edges - Review These
-- `Docker Service` → `Realtime Service`  [AMBIGUOUS]
-  docs/UPDATE_SYSTEM.md · relation: shares_data_with
 - `Outline Icon` → `Application Icon`  [AMBIGUOUS]
   Ryvie-Front/src/icons/Outline.png · relation: semantically_similar_to
 
 ## Knowledge Gaps
-- **1195 isolated node(s):** `PreToolUse`, `allow`, `path`, `express`, `cors` (+1190 more)
+- **2015 isolated node(s):** `PreToolUse`, `allow`, `path`, `express`, `cors` (+2010 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **19 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **26 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **What is the exact relationship between `Docker Service` and `Realtime Service`?**
-  _Edge tagged AMBIGUOUS (relation: shares_data_with) - confidence is low._
 - **What is the exact relationship between `Outline Icon` and `Application Icon`?**
   _Edge tagged AMBIGUOUS (relation: semantically_similar_to) - confidence is low._
-- **Why does `Language Context` connect `Community 12` to `Community 34`, `Community 4`, `Community 5`, `Community 37`, `Community 36`, `Community 41`, `Community 123`, `Community 19`, `Community 87`, `Community 88`, `Community 25`, `Community 26`, `Community 27`, `Community 28`?**
-  _High betweenness centrality (0.230) - this node is a cross-community bridge._
-- **Why does `settings` connect `Community 1` to `Community 67`, `Community 4`, `Community 5`, `Community 41`, `Community 78`, `Community 15`, `Community 50`, `Community 23`, `Community 88`, `Community 27`, `Community 30`?**
-  _High betweenness centrality (0.107) - this node is a cross-community bridge._
-- **Why does `settings` connect `Community 0` to `Community 65`, `Community 6`, `Community 7`, `Community 72`, `Community 11`, `Community 45`, `Community 21`, `Community 28`, `Community 93`?**
-  _High betweenness centrality (0.086) - this node is a cross-community bridge._
+- **Why does `Language Context` connect `Community 12` to `Community 34`, `Community 3`, `Community 36`, `Community 5`, `Community 37`, `Community 4`, `Community 146`, `Community 19`, `Community 88`, `Community 25`, `Community 27`?**
+  _High betweenness centrality (0.072) - this node is a cross-community bridge._
+- **Why does `settings` connect `Community 1` to `Community 64`, `Community 67`, `Community 132`, `Community 36`, `Community 5`, `Community 4`, `Community 137`, `Community 15`, `Community 88`, `Community 27`, `Community 30`?**
+  _High betweenness centrality (0.056) - this node is a cross-community bridge._
+- **Why does `settings` connect `Community 0` to `Community 65`, `Community 130`, `Community 6`, `Community 7`, `Community 45`, `Community 142`, `Community 146`, `Community 21`, `Community 86`, `Community 93`, `Community 62`?**
+  _High betweenness centrality (0.043) - this node is a cross-community bridge._
 - **What connects `PreToolUse`, `allow`, `path` to the rest of the system?**
-  _1195 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _2015 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.015625 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.014184397163120567 - nodes in this community are weakly interconnected._
+- **Should `Community 1` be split into smaller, more focused modules?**
+  _Cohesion score 0.014388489208633094 - nodes in this community are weakly interconnected._

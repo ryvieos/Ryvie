@@ -354,11 +354,21 @@ const AppStore = () => {
     const originalImages = Array.from(container.querySelectorAll('.preview-image'));
     const count = originalImages.length;
     if (count === 0) return;
-    
+
+    // Centre une image HORIZONTALEMENT dans le conteneur, sans toucher au scroll
+    // vertical de la modale (scrollIntoView faisait remonter toute la page).
+    const centerImage = (img, smooth = false) => {
+      if (!img) return;
+      const cRect = container.getBoundingClientRect();
+      const iRect = img.getBoundingClientRect();
+      const delta = (iRect.left - cRect.left) - (container.clientWidth - img.clientWidth) / 2;
+      container.scrollBy({ left: delta, behavior: smooth ? 'smooth' : 'auto' });
+    };
+
     // Cas 1 seule image: centrer et sortir
     if (count === 1) {
       setTimeout(() => {
-        originalImages[0].scrollIntoView({ block: 'nearest', inline: 'center' });
+        centerImage(originalImages[0], false);
       }, 0);
       return;
     }
@@ -375,7 +385,7 @@ const AppStore = () => {
     setTimeout(() => {
       const allImages = Array.from(container.querySelectorAll('.preview-image'));
       if (allImages[1]) {
-        allImages[1].scrollIntoView({ block: 'nearest', inline: 'center' });
+        centerImage(allImages[1], false);
       }
     }, 0);
     
@@ -391,14 +401,14 @@ const AppStore = () => {
         // On est sur le clone de la première image; revenir instantanément à la première vraie
         const firstReal = imgs[1];
         if (firstReal) {
-          firstReal.scrollIntoView({ block: 'nearest', inline: 'center' });
+          centerImage(firstReal, false);
           currentIndex = 1;
         }
       } else if (nearStart) {
         // Si l'utilisateur revient au tout début, aller à la dernière vraie image
         const lastReal = imgs[imgs.length - 2];
         if (lastReal) {
-          lastReal.scrollIntoView({ block: 'nearest', inline: 'center' });
+          centerImage(lastReal, false);
           currentIndex = imgs.length - 2;
         }
       }
@@ -419,11 +429,7 @@ const AppStore = () => {
       const targetIndex = Math.max(0, Math.min(currentIndex, allImages.length - 1));
       const targetImage = allImages[targetIndex];
       if (targetImage) {
-        targetImage.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'nearest', 
-          inline: 'center' 
-        });
+        centerImage(targetImage, true);
       }
     }, 3500);
     
@@ -559,7 +565,7 @@ const AppStore = () => {
 /**
  * Installe ou met à jour une app depuis l'App Store
  */
-  const installApp = async (appId, appName, isUpdate = false) => {
+  const installApp = async (appId, appName, isUpdate = false, appIcon = null) => {
   let eventSource; // Déclaré ici pour être accessible dans finally
   
   try {
@@ -615,6 +621,7 @@ const AppStore = () => {
       installing: true,
       appName: appName,
       appId: appId,
+      appIcon: appIcon,
       progress: 0,
       isUpdate: isUpdate
     }, '*');
@@ -733,6 +740,8 @@ try {
           
           state.installations[appId] = {
             appName: appName,
+            appIcon: appIcon,
+            isUpdate: isUpdate,
             progress: data.progress || 0,
             lastUpdate: Date.now()
           };
@@ -745,9 +754,11 @@ try {
         
         // Envoyer la progression à Home pour l'indicateur
         window.parent.postMessage({ 
-          type: 'APPSTORE_INSTALL_PROGRESS', 
+          type: 'APPSTORE_INSTALL_PROGRESS',
           appName: appName,
           appId: appId,
+          appIcon: appIcon,
+          isUpdate: isUpdate,
           progress: data.progress
         }, '*');
         
@@ -1193,7 +1204,7 @@ try {
 
                         setSelectedApp(app);
                         if (label === 'Installer' || label === 'Mettre à jour') {
-                          installApp(app.id, app.name, updateAvailable);
+                          installApp(app.id, app.name, updateAvailable, app.icon);
                         }
                       };
 
@@ -1342,7 +1353,7 @@ try {
 
                       // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                       if (label === t('appStore.install') || label === t('appStore.update')) {
-                        installApp(app.id, app.name, updateAvailable);
+                        installApp(app.id, app.name, updateAvailable, app.icon);
                       }
                     };
 
@@ -1430,7 +1441,7 @@ try {
                     // TODO: branch vers routine d'installation/mise à jour lorsqu'elle sera câblée
                     if (label === t('appStore.install') || label === t('appStore.update')) {
                       if (selectedApp) {
-                        installApp(selectedApp.id, selectedApp.name, updateAvailable);
+                        installApp(selectedApp.id, selectedApp.name, updateAvailable, selectedApp.icon);
                       }
                     }
                   };

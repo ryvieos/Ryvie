@@ -1053,7 +1053,7 @@ const Home = () => {
           }, 4000);
         }
       } else if (event.data && event.data.type === 'APPSTORE_INSTALL_STATUS') {
-        const { installing, appName, appId, progress, error, cancelled, isUpdate } = event.data;
+        const { installing, appName, appId, appIcon, progress, error, cancelled, isUpdate } = event.data;
         console.log('[Home] Réception du statut d\'installation:', installing, appName, appId, { progress, error, cancelled });
         setAppStoreInstalling(installing);
 
@@ -1064,6 +1064,7 @@ const Home = () => {
               ...prev,
               [appId]: {
                 appName,
+                appIcon: appIcon || prev[appId]?.appIcon || null,
                 isUpdate: isUpdate || prev[appId]?.isUpdate || false,
                 progress: progress || prev[appId]?.progress || 0 // Conserver la progression existante si pas de nouvelle valeur
               }
@@ -1072,22 +1073,48 @@ const Home = () => {
             return updated;
           });
         } else if (!installing && appId) {
-          // Installation terminée, annulée ou échouée
-          // Attendre un peu avant de supprimer pour que l'utilisateur voie la notification finale
-          const delay = error || cancelled ? 3000 : 2000;
-          setTimeout(() => {
+          const removeAfter = (ms) => setTimeout(() => {
             setInstallingApps(prev => {
+              if (!prev[appId]) return prev;
               const newApps = { ...prev };
               delete newApps[appId];
               saveInstallState(newApps);
               removeInstallation(appId);
               return newApps;
             });
-          }, delay);
-          
+          }, ms);
+
+          if (error || cancelled) {
+            // Échec/annulation : retirer après un court délai
+            removeAfter(3000);
+          } else {
+            // Install OU mise à jour : le téléchargement est fini mais l'app (re)démarre encore.
+            // On garde le camembert (awaitingStart) jusqu'à ce qu'elle soit "running" — géré par
+            // l'effet de surveillance du statut. Le flag awaitingStart garantit qu'on ne retire
+            // JAMAIS le camembert pendant le téléchargement (même si l'app était déjà running
+            // avant une mise à jour). Filet de sécurité à 90s.
+            setInstallingApps(prev => {
+              if (!prev[appId]) return prev;
+              const updated = { ...prev, [appId]: { ...prev[appId], awaitingStart: true } };
+              saveInstallState(updated);
+              return updated;
+            });
+            removeAfter(90000);
+          }
+
           // Rafraîchir immédiatement les icônes - le manifest est généré AVANT 100%
           console.log('[Home] Installation terminée, rafraîchissement immédiat des icônes');
           refreshDesktopIcons();
+
+          // Après une install/màj réussie, l'app redémarre et met quelques secondes à
+          // repasser "running". Comme le statut ne dépend que des push socket (pas de
+          // polling périodique), on rafraîchit /api/apps plusieurs fois pour éviter que
+          // l'icône reste GRISE alors que l'app tourne déjà.
+          if (!error && !cancelled) {
+            [3000, 8000, 15000, 30000].forEach(ms => setTimeout(() => {
+              try { refreshDesktopIcons(); } catch (_) {}
+            }, ms));
+          }
         }
         
         // Si on attendait la fin d'une installation pour démonter
@@ -1108,7 +1135,7 @@ const Home = () => {
         }
       } else if (event.data && event.data.type === 'APPSTORE_INSTALL_PROGRESS') {
         // Mise à jour de la progression uniquement
-        const { appId, appName, progress } = event.data;
+        const { appId, appName, appIcon, isUpdate, progress } = event.data;
         if (appId) {
           setInstallingApps(prev => {
             // TOUJOURS maintenir l'entrée, même si la progression ne change pas
@@ -1117,8 +1144,9 @@ const Home = () => {
               // Mettre à jour la progression existante
               updated = {
                 ...prev,
-                [appId]: { 
-                  ...prev[appId], 
+                [appId]: {
+                  ...prev[appId],
+                  appIcon: prev[appId].appIcon || appIcon || null,
                   progress: typeof progress === 'number' ? progress : (prev[appId].progress || 0)
                 }
               };
@@ -1126,7 +1154,7 @@ const Home = () => {
               // Nouvelle app pas encore enregistrée - l'ajouter immédiatement
               updated = {
                 ...prev,
-                [appId]: { appName, progress: progress || 0 }
+                [appId]: { appName, appIcon: appIcon || null, isUpdate: !!isUpdate, progress: progress || 0 }
               };
             }
             // Toujours sauvegarder pour maintenir la persistance
@@ -1321,19 +1349,24 @@ const Home = () => {
         
         for (const appId of installIds) {
           const isActive = activeInstalls.includes(appId);
-          const isInstalled = installedApps.some(app => app.id === appId);
+          const installedEntry = installedApps.find(app => app.id === appId);
+          const isInstalled = !!installedEntry;
+          const isRunning = installedEntry?.status === 'running';
           const installData = savedInstalls[appId];
           const progress = installData?.progress || 0;
-          
+
           // Ne nettoyer que si:
-          // 1. L'app est installée ET la progression est à 100%
+          // 1. L'app est installée ET réellement démarrée (running) -> le camembert reste
+          //    affiché tant que l'app n'est pas prête, même si le téléchargement est à 100%.
           // 2. OU l'installation n'est plus active ET la dernière mise à jour date de plus de 30 secondes
           const lastUpdate = installData?.lastUpdate || Date.now();
           const timeSinceUpdate = Date.now() - lastUpdate;
           const isStale = timeSinceUpdate > 30000; // 30 secondes
-          
-          if ((isInstalled && progress >= 100) || (!isActive && isStale)) {
-            console.log(`[Home] Polling: Installation de ${appId} terminée (progress: ${progress}%, active: ${isActive}, stale: ${isStale}), nettoyage`);
+
+          // Ne nettoyer que si l'install/màj n'est PLUS active côté backend
+          // (sinon on retirerait une mise à jour en cours, l'app étant déjà "running").
+          if (!isActive && (isRunning || isStale)) {
+            console.log(`[Home] Polling: Installation de ${appId} terminée (progress: ${progress}%, running: ${isRunning}, active: ${isActive}, stale: ${isStale}), nettoyage`);
             removeInstallation(appId);
             setInstallingApps(prev => {
               const updated = { ...prev };
@@ -1358,6 +1391,29 @@ const Home = () => {
       if (pollInterval) clearInterval(pollInterval);
     };
   }, []);
+
+  // Retirer le camembert d'installation dès que l'app correspondante est "running"
+  // (le téléchargement reste affiché tant que l'app n'est pas réellement prête).
+  useEffect(() => {
+    setInstallingApps(prev => {
+      let changed = false;
+      const next = { ...prev };
+      Object.keys(prev).forEach(rawId => {
+        const entry = prev[rawId];
+        const st = appStatus[`app-${rawId}`]?.status;
+        // Install ET mise à jour : on retire le camembert quand l'app est "running",
+        // mais SEULEMENT après la fin du téléchargement (awaitingStart) — ainsi on ne le
+        // retire jamais pendant le téléchargement d'une màj (où l'app est encore running).
+        if (entry && entry.awaitingStart && st === 'running') {
+          delete next[rawId];
+          removeInstallation(rawId);
+          changed = true;
+        }
+      });
+      if (changed) saveInstallState(next);
+      return changed ? next : prev;
+    });
+  }, [appStatus]);
 
   // Vérifier si l'utilisateur doit voir l'onboarding
   useEffect(() => {
@@ -1524,13 +1580,28 @@ const Home = () => {
         return;
       }
       if (!accessMode || !currentUserName) return;
+
+      // Garder l'état Home synchronisé avec les changements manuels.
+      // Sinon, à la fin d'une installation, performRefresh voit l'app (déplacée par
+      // l'utilisateur pendant le téléchargement) absente de launcherLayout, la traite
+      // comme "nouvelle" et la repositionne (l'icône saute de place).
+      if (isManualChange && snapshot) {
+        if (snapshot.layout) setLauncherLayout(snapshot.layout);
+        if (snapshot.anchors) setLauncherAnchors(snapshot.anchors);
+      }
+
       const serverUrl = getServerUrl(accessMode);
       if (launcherSaveRef.current) clearTimeout(launcherSaveRef.current);
       // Construire la liste des apps selon l'ordre actuel de la grille (snapshot.layout)
       // Tri par row puis col, en gardant uniquement les apps présentes dans appsConfig
+      // Inclure aussi les apps en cours d'installation (clé installingApps = id sans préfixe "app-")
+      // pour que la réconciliation backend ne les considère pas comme "manquantes" et ne les
+      // repositionne pas (sinon l'icône déplacée pendant le téléchargement saute de place).
+      const isKnownApp = (id) =>
+        appsConfig[id] || installingApps[String(id).replace(/^app-/, '')];
       const appsList = snapshot && snapshot.layout
         ? Object.entries(snapshot.layout)
-            .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+            .filter(([id, pos]) => id && isKnownApp(id) && id !== 'weather' && !String(id).startsWith('widget-') && pos)
             .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
             .map(([id]) => id)
         : Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-'));
@@ -1558,8 +1629,8 @@ const Home = () => {
         }
       }, 300);
     } catch (_) {}
-  }, [accessMode, currentUserName, appsConfig, launcherLoadedFromBackend, widgets]);
-  
+  }, [accessMode, currentUserName, appsConfig, launcherLoadedFromBackend, widgets, installingApps]);
+
   // Handler: ajouter un widget (empêcher les doublons)
   const handleAddWidget = React.useCallback((widgetType) => {
     console.log('[Home] Tentative d\'ajout d\'un widget:', widgetType);
@@ -2607,13 +2678,38 @@ const Home = () => {
               apps={(function() {
                 const hasLayout = launcherLayout && typeof launcherLayout === 'object' && Object.keys(launcherLayout).length > 0;
                 const allAppIds = Object.keys(appsConfig || {}).filter(id => id && id.startsWith('app-'));
-                if (!hasLayout) return allAppIds;
-                const orderedFromLayout = Object.entries(launcherLayout)
-                  .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
-                  .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
-                  .map(([id]) => id);
-                const missing = allAppIds.filter(id => !orderedFromLayout.includes(id));
-                return [...orderedFromLayout, ...missing];
+                let baseApps;
+                if (!hasLayout) {
+                  baseApps = allAppIds;
+                } else {
+                  const orderedFromLayout = Object.entries(launcherLayout)
+                    .filter(([id, pos]) => id && appsConfig[id] && id !== 'weather' && !String(id).startsWith('widget-') && pos)
+                    .sort((a, b) => (a[1].row - b[1].row) || (a[1].col - b[1].col))
+                    .map(([id]) => id);
+                  const missing = allAppIds.filter(id => !orderedFromLayout.includes(id));
+                  baseApps = [...orderedFromLayout, ...missing];
+                }
+                // Ajouter les apps en cours d'installation (nouvelles installs uniquement,
+                // pas encore présentes dans appsConfig). Les mises à jour sont déjà dans la liste.
+                const installingTiles = Object.keys(installingApps || {})
+                  .filter(rawId => installingApps[rawId] && installingApps[rawId].appName && !installingApps[rawId].isUpdate)
+                  .map(rawId => `app-${rawId}`)
+                  .filter(gridId => !baseApps.includes(gridId) && !appsConfig[gridId]);
+                return [...baseApps, ...installingTiles];
+              })()}
+              installProgress={(function() {
+                const map = {};
+                Object.entries(installingApps || {}).forEach(([rawId, data]) => {
+                  if (data && data.appName) {
+                    map[`app-${rawId}`] = {
+                      progress: data.progress || 0,
+                      isUpdate: !!data.isUpdate,
+                      appName: data.appName,
+                      appIcon: data.appIcon || null
+                    };
+                  }
+                });
+                return map;
               })()}
               weather={weather}
               weatherImages={weatherImages}

@@ -19,6 +19,7 @@ const GridLauncher = ({
   iconImages,
   appsConfig,
   appStatus,
+  installProgress = {},
   handleClick,
   setShowWeatherModal,
   setTempCity,
@@ -45,6 +46,20 @@ const GridLauncher = ({
   const [rows, setRows] = useState(baseRows);
   const [snappedPosition, setSnappedPosition] = useState(null);
   const pendingManualSaveRef = useRef(false); // Track si on doit sauvegarder après un drag manuel
+  // Délai d'animation d'entrée FIGÉ par item (calculé une seule fois). Sinon, déplacer une
+  // app change sa colonne -> change le délai -> change la chaîne `animation` -> React met à
+  // jour le style et l'animation se relance. (À combiner avec l'ordre DOM stable ci-dessous.)
+  // IMPORTANT: on ne fige le délai qu'une fois `revealReady` vrai, c.-à-d. quand le layout
+  // responsive est stabilisé. Avant ça, les colonnes peuvent encore changer (recalcul @200ms
+  // + réorganisation de useGridLayout) : figer trop tôt donne un délai basé sur une colonne
+  // transitoire -> la vague gauche->droite apparaît dans le désordre.
+  const revealDelaysRef = useRef({});
+  const getRevealDelay = (id, colIndex) => {
+    if (revealDelaysRef.current[id] == null) revealDelaysRef.current[id] = (colIndex || 0) * 150;
+    return revealDelaysRef.current[id];
+  };
+  // Tant que faux, les tuiles restent invisibles (opacity:0 via CSS) sans animation.
+  const [revealReady, setRevealReady] = useState(false);
 
   // Calculer le nombre de colonnes et lignes qui rentrent dans l'espace disponible
   useEffect(() => {
@@ -161,7 +176,26 @@ const GridLauncher = ({
     ...widgets.map(widget => ({ id: widget.id, type: 'widget', widgetType: widget.type, w: widget.w || 2, h: widget.h || 2 }))
   ];
 
+  // Ordre de RENDU stable (trié par id), indépendant des positions. La position visuelle
+  // est gérée par gridColumn/gridRow, donc l'ordre du DOM peut rester fixe. Sinon, quand
+  // la prop `apps` se re-trie après un déplacement, React réordonne les nœuds du DOM, ce
+  // qui RELANCE leurs animations CSS d'entrée (le bug "l'animation se rejoue sur certaines apps").
+  const appsRenderOrder = [...apps].sort();
+  const widgetsRenderOrder = [...widgets].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
   const { layout, moveItem, swapItems, pixelToGrid, getAnchors } = useGridLayout(items, cols, initialLayout, initialAnchors);
+
+  // Déclencher la vague d'apparition une seule fois, quand le layout est prêt ET stabilisé.
+  // On attend un court délai après que le layout devient non vide pour laisser passer le
+  // recalcul responsive des colonnes (updateGridLayout @200ms) + la réorganisation associée.
+  // C'est seulement à cet instant qu'on fige les délais (via getRevealDelay) à partir des
+  // colonnes FINALES, garantissant une vague gauche->droite cohérente.
+  useEffect(() => {
+    if (revealReady) return;
+    if (!layout || Object.keys(layout).length === 0) return;
+    const t = setTimeout(() => setRevealReady(true), 260);
+    return () => clearTimeout(t);
+  }, [layout, revealReady]);
 
   // NE PLUS notifier automatiquement le parent à chaque changement de layout
   // car cela déclenchait des sauvegardes backend lors des réorganisations automatiques (responsive).
@@ -387,13 +421,16 @@ const GridLauncher = ({
         {/* Slots en arrière-plan */}
         {renderSlots()}
 
-        {/* Apps */}
-        {apps.map((appId, index) => {
+        {/* Apps — rendues dans un ordre DOM stable (positions via gridColumn/gridRow) */}
+        {appsRenderOrder.map((appId, index) => {
           if (!layout[appId]) return null;
           
           const colIndex = layout[appId].col || 0;
-          const animDelayMs = colIndex * 180;
-          const isClickable = !appsConfig?.[appId]?.showStatus || (appStatus?.[appId]?.status === 'running');
+          // On ne fige le délai (et ne lance l'animation) qu'une fois le layout stabilisé.
+          const animDelayMs = revealReady ? getRevealDelay(appId, colIndex) : 0;
+          const installInfo = installProgress?.[appId] || null;
+          // Une app en cours d'installation/màj n'est jamais cliquable
+          const isClickable = installInfo ? false : (!appsConfig?.[appId]?.showStatus || (appStatus?.[appId]?.status === 'running'));
 
           return (
             <div
@@ -403,7 +440,7 @@ const GridLauncher = ({
               style={{
                 gridColumn: layout[appId].col + 1,
                 gridRow: layout[appId].row + 1,
-                animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards`,
+                animation: revealReady ? `accordionReveal 1050ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards` : 'none',
                 cursor: isClickable ? 'pointer' : 'not-allowed'
               }}
               onPointerDown={(e) => handlers.onPointerDown(e, appId, { w: 1, h: 1 })}
@@ -429,7 +466,8 @@ const GridLauncher = ({
             >
               <Icon
                 id={appId}
-                src={iconImages[appId]}
+                src={iconImages[appId] || installInfo?.appIcon}
+                installInfo={installInfo}
                 zoneId="grid"
                 moveIcon={moveIcon || (() => {})}
                 handleClick={() => {
@@ -451,14 +489,14 @@ const GridLauncher = ({
           );
         })}
 
-        {/* Widgets */}
-        {widgets.map((widget) => {
+        {/* Widgets — ordre DOM stable également */}
+        {widgetsRenderOrder.map((widget) => {
           if (!layout[widget.id]) return null;
 
           const widgetW = widget.w || 2;
           const widgetH = widget.h || 2;
           const colIndex = layout[widget.id].col || 0;
-          const animDelayMs = colIndex * 180;
+          const animDelayMs = revealReady ? getRevealDelay(widget.id, colIndex) : 0;
 
           const renderWidget = () => {
             const commonProps = {
@@ -478,12 +516,6 @@ const GridLauncher = ({
                     weatherImages={weatherImages}
                     weatherIcons={weatherIcons}
                     weatherCity={weatherCity}
-                    onClick={() => {
-                      if (hasDragged) return;
-                      setTempCity((weatherCity || weather.location || '').toString());
-                      setClosingWeatherModal(false);
-                      setShowWeatherModal(true);
-                    }}
                   />
                 );
               default:
@@ -498,10 +530,21 @@ const GridLauncher = ({
               style={{
                 gridColumn: `${layout[widget.id].col + 1} / span ${widgetW}`,
                 gridRow: `${layout[widget.id].row + 1} / span ${widgetH}`,
-                animation: `accordionReveal 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards`,
+                animation: revealReady ? `accordionReveal 1050ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards` : 'none',
                 cursor: 'grab'
               }}
               onPointerDown={(e) => handlers.onPointerDown(e, widget.id, { w: widgetW, h: widgetH })}
+              onClick={(e) => {
+                // Le clic est géré au niveau de la tuile : avec setPointerCapture (drag),
+                // l'événement click est ciblé sur la tuile, pas sur l'enfant BaseWidget.
+                if (hasDragged) return;
+                if (e.target && e.target.closest && e.target.closest('.widget-remove-btn')) return;
+                if (widget.type === 'weather') {
+                  setTempCity((weatherCity || weather.location || '').toString());
+                  setClosingWeatherModal(false);
+                  setShowWeatherModal(true);
+                }
+              }}
             >
               {renderWidget()}
             </div>

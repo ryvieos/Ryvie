@@ -307,23 +307,23 @@ const getUrl = (urlConfig: UrlConfig, accessMode: string): string => {
 };
 
 const getServerUrl = (accessMode: string): string => {
+  const { protocol } = getCurrentLocation();
+
+  if (protocol === 'https:' && typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+
   const domains = netbirdData?.domains || {};
-  const { hostname, protocol, port } = getCurrentLocation();
+  const { hostname } = getCurrentLocation();
 
   if (hostname === 'ryvie.local') {
     return 'http://ryvie.local';
   }
 
-  if (protocol === 'https:' && domains.status) {
+  if (domains.status) {
     return `https://${domains.status}`;
   }
 
-  // Si on est derrière Caddy (port 80), tout passe par le même origin
-  if (port === '80' || port === '') {
-    return `http://${hostname}`;
-  }
-
-  // Dev sans Caddy (port 3000 webpack-dev-server) → backend direct
   return buildAppUrl('status', LOCAL_PORTS.SERVER);
 };
 
