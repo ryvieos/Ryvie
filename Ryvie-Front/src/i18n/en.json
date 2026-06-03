@@ -161,6 +161,8 @@
   "installIndicator": {
     "showProgress": "Show {appName} progress",
     "installing": "Installing",
+    "updating": "Updating",
+    "finalizing": "Finalizing…",
     "hide": "Hide"
   },
   "updateModal": {

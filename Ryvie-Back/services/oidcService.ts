@@ -9,7 +9,9 @@ interface OIDCConfig {
 }
 
 const config: OIDCConfig = {
-  issuer: process.env.OIDC_ISSUER || 'http://ryvie.local:3005/realms/ryvie',
+  // Keycloak est servi par Caddy sur le port 80/443 sous le préfixe /auth
+  // (plus sur le port 3005). Discovery côté backend via localhost (toujours joignable).
+  issuer: process.env.OIDC_ISSUER || 'http://localhost/auth/realms/ryvie',
   clientId: process.env.OIDC_CLIENT_ID || 'ryvie-dashboard',
   clientSecret: process.env.OIDC_CLIENT_SECRET || 'ryvie-dashboard-secret-change-me',
   redirectUri: process.env.OIDC_REDIRECT_URI || 'http://ryvie.local/api/auth/callback',
@@ -21,8 +23,10 @@ let discoveredConfig: oauth.Configuration | null = null;
 function getIssuerFromOrigin(origin: string): string {
   const url = new URL(origin);
   const protocol = url.protocol || 'http:';
-  // Remplacer le port par 3005 pour Keycloak en conservant le schéma réel
-  return `${protocol}//${url.hostname}:3005/realms/ryvie`;
+  // Keycloak est servi par Caddy sur le port 80/443 sous le préfixe /auth et reflète
+  // dynamiquement le Host. On garde donc l'hôte demandé (joignable par le navigateur)
+  // sans port, avec le préfixe /auth. (Avant: ':3005/realms' n'existe plus.)
+  return `${protocol}//${url.hostname}/auth/realms/ryvie`;
 }
 
 // Fonction pour construire le redirect_uri vers le backend

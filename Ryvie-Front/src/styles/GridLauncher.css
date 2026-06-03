@@ -360,7 +360,7 @@
   position: absolute;
   inset: 0;
   border-radius: 18px;
-  background: rgba(25, 25, 25, 0.6);
+  background: rgba(15, 15, 15, 0.78);
   /* trou un peu plus grand que le disque (22px) -> anneau transparent de séparation */
   -webkit-mask: radial-gradient(circle 26px at 50% 50%, transparent 0 25.5px, #000 26px);
   mask: radial-gradient(circle 26px at 50% 50%, transparent 0 25.5px, #000 26px);
@@ -380,6 +380,14 @@
   pointer-events: none;
 }
 
+/* Variable animable pour fluidifier le remplissage du camembert (sinon un
+   conic-gradient saute d'un coup quand la progression bondit, ex: 10% -> 75%). */
+@property --icon-progress {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
 /* Camembert dans le cercle central : la part DÉJÀ téléchargée est transparente
    (on voit la vraie couleur de l'icône dessous), la part RESTANTE est grise. */
 .grid-tile .icon .icon-progress-disc {
@@ -389,9 +397,10 @@
   background: conic-gradient(
     from -90deg,
     transparent 0 var(--icon-progress, 0%),
-    rgba(25, 25, 25, 0.6) var(--icon-progress, 0%) 100%
+    rgba(25, 25, 25, 0.65) var(--icon-progress, 0%) 100%
   );
-  transition: background 0.3s ease;
+  /* Anime la variable elle-même -> remplissage progressif et fluide */
+  transition: --icon-progress 0.5s ease;
 }
 
 /* Spinner indéterminé pour les transitions start/stop/restart (centré comme le disque) */

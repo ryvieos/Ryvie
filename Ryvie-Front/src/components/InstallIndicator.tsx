@@ -5,21 +5,22 @@ import { useLanguage } from '../contexts/LanguageContext';
 /**
  * Indicateur d'installation individuel pour une app
  */
-const InstallIndicatorItem = ({ appName, progress, isUpdate, isMinimized, onToggleMinimize }) => {
+const InstallIndicatorItem = ({ appName, progress, isUpdate, awaitingStart, isMinimized, onToggleMinimize }) => {
   const { t } = useLanguage();
-  // Calculer la largeur de la barre de progression
-  const progressWidth = progress > 0 ? Math.min(progress, 100) : 5;
-  
+  // Phase de finalisation : téléchargement terminé mais l'app n'est pas encore prête (démarrage)
+  // Calculer la largeur de la barre de progression (pleine pendant la finalisation)
+  const progressWidth = awaitingStart ? 100 : (progress > 0 ? Math.min(progress, 100) : 5);
+
   if (isMinimized) {
     return (
-      <button 
+      <button
         className="install-indicator-minimized"
         onClick={onToggleMinimize}
         title={t('installIndicator.showProgress', { appName })}
       >
         <div className="minimized-spinner"></div>
         <span className="minimized-app">{appName}</span>
-        <span className="minimized-progress">{Math.round(progress || 0)}%</span>
+        <span className="minimized-progress">{awaitingStart ? t('installIndicator.finalizing') : `${Math.round(progress || 0)}%`}</span>
       </button>
     );
   }
@@ -51,9 +52,11 @@ const InstallIndicatorItem = ({ appName, progress, isUpdate, isMinimized, onTogg
               style={{ width: `${progressWidth}%` }}
             />
           </div>
-          {progress > 0 && (
+          {awaitingStart ? (
+            <span className="install-indicator-percent">{t('installIndicator.finalizing')}</span>
+          ) : (progress > 0 && (
             <span className="install-indicator-percent">{Math.round(progress)}%</span>
-          )}
+          ))}
         </div>
         
         <button 
@@ -112,6 +115,7 @@ const InstallIndicator = ({ installations, topOffset = 24 }) => {
             appName={data.appName}
             progress={data.progress}
             isUpdate={data.isUpdate}
+            awaitingStart={data.awaitingStart}
             isMinimized={isMinimized}
             onToggleMinimize={() => toggleMinimize(appId)}
           />

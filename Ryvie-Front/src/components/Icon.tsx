@@ -77,15 +77,20 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   const status = appStatusData?.status;
   // Installation ou mise à jour en cours -> camembert de progression
   const isInstalling = !!installInfo;
+  // Plafonné à 95% : le camembert n'est retiré que lorsque l'app est réellement
+  // "running" (cf. Home), donc on garde toujours une petite part grise tant que
+  // l'app n'est pas prête, même si le téléchargement est à 100%.
   const installPercent = isInstalling
-    ? Math.max(0, Math.min(100, Math.round(installInfo.progress || 0)))
+    ? Math.max(0, Math.min(95, Math.round(installInfo.progress || 0)))
     : 0;
 
-  // États transitoires (démarrage/arrêt/redémarrage) hors installation -> grise + spinner
+  // États transitoires -> grise + spinner UNIQUEMENT pour une action explicite de
+  // l'utilisateur (start/stop/restart/désinstallation). On n'affiche PAS le spinner
+  // pour un statut "starting"/"partial" passif (ex: démarrage automatique après une
+  // installation), qui ressemblerait à tort à un redémarrage.
   const isTransitioning = !isInstalling && appConfig.showStatus && (
     isUninstalling ||
-    pendingAction === 'starting' || pendingAction === 'stopping' ||
-    status === 'starting' || status === 'partial'
+    pendingAction === 'starting' || pendingAction === 'stopping'
   );
 
   // App arrêtée -> grise fixe

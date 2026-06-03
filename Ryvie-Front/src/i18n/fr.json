@@ -162,6 +162,7 @@
     "showProgress": "Afficher la progression de {appName}",
     "installing": "Installation",
     "updating": "Mise à jour",
+    "finalizing": "Finalisation…",
     "updateError": "Erreur lors de l'installation/mise à jour",
     "mustBeConnected": "Vous devez être connecté pour installer des applications",
     "sessionExpired": "Votre session a expiré. Veuillez vous reconnecter.",

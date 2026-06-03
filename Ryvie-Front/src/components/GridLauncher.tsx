@@ -482,12 +482,6 @@ const GridLauncher = ({
                     weatherImages={weatherImages}
                     weatherIcons={weatherIcons}
                     weatherCity={weatherCity}
-                    onClick={() => {
-                      if (hasDragged) return;
-                      setTempCity((weatherCity || weather.location || '').toString());
-                      setClosingWeatherModal(false);
-                      setShowWeatherModal(true);
-                    }}
                   />
                 );
               default:
@@ -506,6 +500,17 @@ const GridLauncher = ({
                 cursor: 'grab'
               }}
               onPointerDown={(e) => handlers.onPointerDown(e, widget.id, { w: widgetW, h: widgetH })}
+              onClick={(e) => {
+                // Le clic est géré au niveau de la tuile : avec setPointerCapture (drag),
+                // l'événement click est ciblé sur la tuile, pas sur l'enfant BaseWidget.
+                if (hasDragged) return;
+                if (e.target && e.target.closest && e.target.closest('.widget-remove-btn')) return;
+                if (widget.type === 'weather') {
+                  setTempCity((weatherCity || weather.location || '').toString());
+                  setClosingWeatherModal(false);
+                  setShowWeatherModal(true);
+                }
+              }}
             >
               {renderWidget()}
             </div>
