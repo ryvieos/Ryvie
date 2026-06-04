@@ -241,8 +241,10 @@ router.get('/switch', async (req: any, res: any) => {
     console.log('[OIDC] Switch user - origin:', origin, 'login_hint:', loginHint || '(none)');
     
     const url = new URL(origin);
-    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
-    
+    // Issuer PUBLIC (vu par le navigateur) : Keycloak est servi par Caddy sous /auth,
+    // plus sur :3005/realms. On conserve le proto d'origine (https en accès distant).
+    const issuer = `${url.protocol}//${url.hostname}/auth/realms/ryvie`;
+
     // Redirect to KC logout with client_id (post.logout.redirect.uris=+ allows any redirect)
     // This destroys the KC session cookie in the browser
     const postLogoutRedirect = `${origin}/api/auth/switch-login?login_hint=${encodeURIComponent(loginHint)}`;
@@ -289,7 +291,10 @@ router.get('/logout', async (req: any, res: any) => {
     const frontendOrigin = getFrontendOrigin(origin);
     
     const url = new URL(origin);
-    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
+    // Issuer PUBLIC (vu par le navigateur) : Keycloak est servi par Caddy sous /auth,
+    // plus sur :3005/realms. On conserve le proto d'origine (https en accès distant) pour
+    // que l'issuer corresponde à celui de l'id_token_hint.
+    const issuer = `${url.protocol}//${url.hostname}/auth/realms/ryvie`;
     const logoutUrl = `${issuer}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(frontendOrigin)}${idToken ? `&id_token_hint=${idToken}` : ''}`;
 
     console.log('[OIDC] Logging out from backend origin:', origin);
