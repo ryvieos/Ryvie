@@ -1,5 +1,7 @@
 import * as oauth from 'openid-client';
 import { randomBytes } from 'crypto';
+import * as http from 'http';
+import * as https from 'https';
 
 interface OIDCConfig {
   issuer: string;
@@ -20,6 +22,7 @@ const config: OIDCConfig = {
 let discoveredConfig: oauth.Configuration | null = null;
 
 // Fonction pour construire l'issuer dynamiquement basé sur l'origine
+// Utilisé UNIQUEMENT pour les URLs vues par le navigateur (authorize).
 function getIssuerFromOrigin(origin: string): string {
   const url = new URL(origin);
   const protocol = url.protocol || 'http:';
@@ -27,6 +30,73 @@ function getIssuerFromOrigin(origin: string): string {
   // dynamiquement le Host. On garde donc l'hôte demandé (joignable par le navigateur)
   // sans port, avec le préfixe /auth. (Avant: ':3005/realms' n'existe plus.)
   return `${protocol}//${url.hostname}/auth/realms/ryvie`;
+}
+
+const REALM_PATH = '/auth/realms/ryvie';
+
+interface SimpleResponse {
+  ok: boolean;
+  status: number;
+  text: () => Promise<string>;
+  json: () => Promise<any>;
+}
+
+// Appel serveur-à-serveur vers Keycloak.
+// On tape le Caddy LOCAL (OIDC_INTERNAL_BASE, défaut http://127.0.0.1), JAMAIS l'origin
+// public : en accès distant celle-ci ressort sur Internet et repasse par l'ingress du
+// cluster, qui supprime l'en-tête `Authorization` → /userinfo en 401 "Missing token".
+// MAIS on présente à Keycloak le Host + proto PUBLICS (issus de l'origin). Sinon Keycloak
+// émettrait/attendrait un issuer http://127.0.0.1, incohérent avec le token émis lors de
+// l'authorize sur le domaine public (iss=https://demo.ryvie.fr) → "Invalid token issuer".
+// Le détour par Caddy local résout `@auth_https` (cf. Caddyfile) et reflète l'hôte public.
+// NB: on utilise le module http natif car fetch (undici) interdit de fixer l'en-tête Host.
+function localKeycloakRequest(
+  origin: string | undefined,
+  path: string,
+  opts: { method?: string; headers?: Record<string, string>; body?: string } = {}
+): Promise<SimpleResponse> {
+  const target = new URL(process.env.OIDC_INTERNAL_BASE || 'http://127.0.0.1');
+  const lib = target.protocol === 'https:' ? https : http;
+  const headers: Record<string, string> = { ...(opts.headers || {}) };
+  if (origin) {
+    const pub = new URL(origin);
+    // Hôte + proto publics → issuer cohérent avec le flow navigateur.
+    headers['Host'] = pub.host;
+    headers['X-Forwarded-Host'] = pub.host;
+    headers['X-Forwarded-Proto'] = pub.protocol.replace(':', '');
+  }
+  if (opts.body) {
+    headers['Content-Length'] = Buffer.byteLength(opts.body).toString();
+  }
+  return new Promise<SimpleResponse>((resolve, reject) => {
+    const req = lib.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port || (target.protocol === 'https:' ? 443 : 80),
+        path,
+        method: opts.method || 'GET',
+        headers,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => {
+          const data = Buffer.concat(chunks).toString('utf-8');
+          const status = res.statusCode || 0;
+          resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            text: async () => data,
+            json: async () => JSON.parse(data),
+          });
+        });
+      }
+    );
+    req.on('error', reject);
+    if (opts.body) req.write(opts.body);
+    req.end();
+  });
 }
 
 // Fonction pour construire le redirect_uri vers le backend
@@ -100,17 +170,13 @@ export async function generateAuthUrl(state: string, nonce: string, origin: stri
 }
 
 export async function exchangeCodeForTokens(code: string, state: string, nonce: string, origin: string) {
+  // redirect_uri DOIT rester l'URL publique envoyée au navigateur lors de l'authorize.
   const redirectUri = getBackendRedirectUri(origin);
-  const issuer = getIssuerFromOrigin(origin);
-  
+
   console.log('[OIDC] Exchange code for tokens - redirectUri:', redirectUri);
-  console.log('[OIDC] Exchange code for tokens - issuer:', issuer);
-  console.log('[OIDC] Exchange code for tokens - origin:', origin);
+  console.log('[OIDC] Exchange code for tokens - origin (public issuer):', origin);
 
   try {
-    // Appel manuel au token endpoint pour contourner la validation stricte de l'issuer
-    const tokenEndpoint = `${issuer}/protocol/openid-connect/token`;
-    
     const params = new URLSearchParams({
       grant_type: 'authorization_code',
       code: code,
@@ -119,7 +185,8 @@ export async function exchangeCodeForTokens(code: string, state: string, nonce: 
       client_secret: config.clientSecret,
     });
 
-    const response = await fetch(tokenEndpoint, {
+    // Appel local mais avec Host/proto publics → token émis avec iss = origin public.
+    const response = await localKeycloakRequest(origin, `${REALM_PATH}/protocol/openid-connect/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -162,10 +229,9 @@ export async function exchangeCodeForTokens(code: string, state: string, nonce: 
 
 export async function getUserInfo(accessToken: string, origin?: string) {
   try {
-    const issuer = getIssuerFromOrigin(origin);
-    const userinfoEndpoint = `${issuer}/protocol/openid-connect/userinfo`;
-    
-    const response = await fetch(userinfoEndpoint, {
+    // Appel local (préserve Authorization, évite l'ingress) mais avec Host/proto publics
+    // → l'issuer attendu par /userinfo = celui du token (origin public). Cf. localKeycloakRequest.
+    const response = await localKeycloakRequest(origin, `${REALM_PATH}/protocol/openid-connect/userinfo`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,

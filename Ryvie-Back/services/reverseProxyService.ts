@@ -451,6 +451,13 @@ function generateAppProxyConfig(appId, proxyConfig) {
 function generateCaddyfileContent() {
   return `{
   auto_https disable_redirects
+  servers {
+    # Le ingress du cluster (Tailscale 100.64.0.0/10) et le réseau local sont des proxys
+    # de confiance : on préserve leurs X-Forwarded-* (notamment X-Forwarded-Proto=https)
+    # au lieu de les écraser. Sinon le backend, vu en http par Caddy local, croit être en
+    # clair → origin OIDC http://… incohérent avec le token (https) → "Invalid token issuer".
+    trusted_proxies static private_ranges 100.64.0.0/10
+  }
 }
 
 # Site principal (catch-all port 80 : ryvie.local, IP privée, localhost, etc.)
@@ -477,8 +484,23 @@ http://:80 {
   }
 
   # 3) Keycloak (SSO) — accessible via /auth/*
-  @auth path /auth /auth/*
-  reverse_proxy @auth keycloak:8080 {
+  # Le protocole d'origine est porté par X-Forwarded-Proto :
+  #  - accès distant HTTPS : le ingress du cluster envoie XFP=https → on relaie https
+  #    (sinon Keycloak se croit en clair → formulaire « non sécurisé » + cookies de
+  #     session non posés → boucle de connexion).
+  #  - accès local direct (http://ryvie.local sur le port 80) : pas de XFP https → http.
+  @auth_https {
+    path /auth /auth/*
+    header X-Forwarded-Proto https
+  }
+  reverse_proxy @auth_https keycloak:8080 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-Proto https
+  }
+
+  @auth_http path /auth /auth/*
+  reverse_proxy @auth_http keycloak:8080 {
     header_up Host {host}
     header_up X-Real-IP {remote_host}
     header_up X-Forwarded-Proto http
