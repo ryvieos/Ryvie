@@ -9,11 +9,17 @@ const APPS_OAUTH_FILE = '/data/config/keycloak/apps-oauth.json';
 const MANIFESTS_DIR = '/data/config/manifests';
 const KEYCLOAK_ENV = '/data/config/keycloak/.env';
 
+// Domaine public canonique de la box (issuer Keycloak public) + template issuer local.
+// Pilotés par env → plus aucun domaine codé en dur dans le code des apps.
+const OAUTH_PUBLIC_HOST = process.env.OAUTH_PUBLIC_HOST || 'demo.ryvie.fr';
+const OAUTH_ISSUER_URL = process.env.OAUTH_ISSUER_URL || 'http://ryvie.local/auth/realms/ryvie';
+
 // Variables .env OAuth standardisées (communes à toutes les apps Ryvie)
-const OAUTH_ENV_VARS = {
+const OAUTH_ENV_VARS: Record<string, string> = {
   clientId: 'OAUTH_CLIENT_ID',
   clientSecret: 'OAUTH_CLIENT_SECRET',
-  issuerUrl: 'OAUTH_ISSUER_URL'
+  issuerUrl: 'OAUTH_ISSUER_URL',
+  publicHost: 'OAUTH_PUBLIC_HOST'
 };
 
 interface AppOAuthEntry {
@@ -73,13 +79,22 @@ async function saveAppsOAuth(data: AppsOAuthData): Promise<void> {
 /**
  * Lit le manifest d'une app et retourne { sso, sourceDir, dockerComposePath } si sso === true
  */
-function getSsoManifest(appId: string): { sourceDir: string; dockerComposePath: string } | null {
+function getSsoManifest(appId: string): { sourceDir: string; dockerComposePath: string; ssoEnv: Record<string, string> | null; ssoMode: string } | null {
   const manifestPath = path.join(MANIFESTS_DIR, appId, 'manifest.json');
   if (!fsSync.existsSync(manifestPath)) return null;
   try {
     const manifest = JSON.parse(fsSync.readFileSync(manifestPath, 'utf8'));
     if (manifest.sso !== true) return null;
-    return { sourceDir: manifest.sourceDir, dockerComposePath: manifest.dockerComposePath || '' };
+    return {
+      sourceDir: manifest.sourceDir,
+      dockerComposePath: manifest.dockerComposePath || '',
+      // Adaptateur générique : une app tierce (ex. Nextcloud) déclare le nom de ses
+      // variables OIDC via manifest.ssoEnv, et son mode via manifest.ssoMode :
+      //  - 'static'  : issuer = domaine public fixe (l'app ne sait pas faire de dynamique)
+      //  - 'dynamic' : issuer = template local + OAUTH_PUBLIC_HOST (app Ryvie avec buildIssuerUrl)
+      ssoEnv: manifest.ssoEnv || null,
+      ssoMode: manifest.ssoMode || 'dynamic'
+    };
   } catch { return null; }
 }
 
@@ -197,10 +212,37 @@ function setEnvVar(content: string, varName: string, value: string): string {
   return content.trimEnd() + `\n${varName}=${value}\n`;
 }
 
+function escapeRegExp(s: string): string {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Construit la table { NOM_VARIABLE_ENV: valeur } des paramètres OIDC à écrire dans le .env d'une app.
+ * Noms de variables = ceux déclarés par l'app (ssoEnv) sinon les noms OAUTH_* standards Ryvie.
+ */
+function computeAppOidcEnv(
+  clientId: string,
+  clientSecret: string,
+  ssoEnv: Record<string, string> | null,
+  ssoMode: string
+): Record<string, string> {
+  const names: Record<string, string> = { ...OAUTH_ENV_VARS, ...(ssoEnv || {}) };
+  const issuerUrl = ssoMode === 'static'
+    ? `https://${OAUTH_PUBLIC_HOST}/auth/realms/ryvie`
+    : OAUTH_ISSUER_URL;
+  const values: Record<string, string> = { clientId, clientSecret, issuerUrl, publicHost: OAUTH_PUBLIC_HOST };
+  const out: Record<string, string> = {};
+  for (const key of Object.keys(values)) {
+    const varName = names[key];
+    if (varName) out[varName] = values[key];
+  }
+  return out;
+}
+
 /**
  * Vérifie si le .env de l'app a déjà les bonnes valeurs OAuth
  */
-function envAlreadySynced(envPath: string, clientId: string, clientSecret: string): boolean {
+function envAlreadySynced(envPath: string, envMap: Record<string, string>): boolean {
   try {
     if (!fsSync.existsSync(envPath)) return false;
     let content: string;
@@ -211,16 +253,15 @@ function envAlreadySynced(envPath: string, clientId: string, clientSecret: strin
         content = execSync(`sudo cat "${envPath}"`, { encoding: 'utf8' });
       } else { return false; }
     }
-    const hasClientId = new RegExp(`^${OAUTH_ENV_VARS.clientId}=${clientId}$`, 'm').test(content);
-    const hasSecret = new RegExp(`^${OAUTH_ENV_VARS.clientSecret}=${clientSecret}$`, 'm').test(content);
-    return hasClientId && hasSecret;
+    return Object.keys(envMap).every(name =>
+      new RegExp(`^${name}=${escapeRegExp(envMap[name])}\\s*$`, 'm').test(content));
   } catch { return false; }
 }
 
 /**
  * Écrit les variables OAuth dans le .env d'une app
  */
-async function syncAppEnv(envPath: string, clientId: string, clientSecret: string): Promise<boolean> {
+async function syncAppEnv(envPath: string, envMap: Record<string, string>): Promise<boolean> {
   try {
     if (!fsSync.existsSync(envPath)) {
       console.warn(`[appsOAuth] ⚠️ .env non trouvé: ${envPath}`);
@@ -236,8 +277,9 @@ async function syncAppEnv(envPath: string, clientId: string, clientSecret: strin
       } else { throw readErr; }
     }
 
-    content = setEnvVar(content, OAUTH_ENV_VARS.clientId, clientId);
-    content = setEnvVar(content, OAUTH_ENV_VARS.clientSecret, clientSecret);
+    for (const name of Object.keys(envMap)) {
+      content = setEnvVar(content, name, envMap[name]);
+    }
 
     // Écrire (sudo fallback si permission denied)
     try {
@@ -303,10 +345,11 @@ async function provisionAppOAuth(appId: string): Promise<{ success: boolean; env
 
     if (needSave) await saveAppsOAuth(data);
 
-    // Synchro .env si nécessaire
+    // Synchro .env si nécessaire (clientId/secret + issuer + public host, selon le mapping de l'app)
+    const envMap = computeAppOidcEnv(entry.clientId, entry.clientSecret, sso.ssoEnv, sso.ssoMode);
     let envChanged = false;
-    if (!envAlreadySynced(envPath, entry.clientId, entry.clientSecret)) {
-      await syncAppEnv(envPath, entry.clientId, entry.clientSecret);
+    if (!envAlreadySynced(envPath, envMap)) {
+      await syncAppEnv(envPath, envMap);
       envChanged = true;
     } else {
       console.log(`[appsOAuth] ✅ .env de ${appId} déjà à jour (skip)`);
