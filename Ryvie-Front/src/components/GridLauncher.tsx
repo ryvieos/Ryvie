@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import '../styles/GridLauncher.css';
 import useGridLayout from '../hooks/useGridLayout';
 import useDrag from '../hooks/useDrag';
@@ -197,23 +198,49 @@ const GridLauncher = ({
     return () => clearTimeout(t);
   }, [layout, revealReady]);
 
-  // Re-armer la vague d'apparition quand l'ENSEMBLE des apps/widgets change
-  // (installation / désinstallation). Sans ça, les délais figés dans revealDelaysRef
-  // restent calculés sur les anciennes colonnes : insérer une app fait refluer la grille
-  // et la vague gauche->droite se rejoue dans le désordre (le composant n'étant pas
-  // démonté à cause du keep-alive de CachedRoutes, qui se contente d'un display:none/block
-  // -> les animations CSS rejouent au retour sur Home). On NE déclenche PAS sur un simple
-  // drag (l'ensemble des ids est identique, seules les colonnes bougent), ce qui préserve
-  // le correctif anti-rejouement au déplacement. Au re-arm, les délais sont refigés à
+  // Re-armer la vague d'apparition uniquement quand une app/widget est AJOUTÉE
+  // (installation). Sans ça, les délais figés dans revealDelaysRef restent calculés
+  // sur les anciennes colonnes : insérer une app fait refluer la grille et la vague
+  // gauche->droite se rejoue dans le désordre (le composant n'étant pas démonté à cause
+  // du keep-alive de CachedRoutes, qui se contente d'un display:none/block -> les
+  // animations CSS rejouent au retour sur Home). Au re-arm, les délais sont refigés à
   // partir des colonnes FINALES post-reflow via getRevealDelay.
-  const itemIdSignature = [...appsRenderOrder, ...widgetsRenderOrder.map(w => w.id)].join('|');
-  const prevItemIdSignatureRef = useRef(itemIdSignature);
+  // On NE re-arme PAS sur :
+  //  - un simple drag (l'ensemble des ids est identique, seules les colonnes bougent)
+  //    -> préserve le correctif anti-rejouement au déplacement ;
+  //  - une désinstallation (retrait pur d'un id) -> sinon toutes les icônes rejouent
+  //    l'animation alors qu'on veut juste voir la tuile disparaître.
+  const itemIds = [...appsRenderOrder, ...widgetsRenderOrder.map(w => w.id)];
+  const itemIdSignature = itemIds.join('|');
+  const prevItemIdsRef = useRef(itemIds);
   useEffect(() => {
-    if (prevItemIdSignatureRef.current === itemIdSignature) return;
-    prevItemIdSignatureRef.current = itemIdSignature;
+    const prevSet = new Set(prevItemIdsRef.current);
+    const hasAddition = itemIds.some(id => !prevSet.has(id));
+    prevItemIdsRef.current = itemIds;
+    if (!hasAddition) return; // retrait pur (désinstallation) ou inchangé : pas de re-jeu
     revealDelaysRef.current = {};
     setRevealReady(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemIdSignature]);
+
+  // Re-armer la vague à chaque RETOUR sur Home. CachedRoutes garde Home monté et bascule
+  // simplement display:none/block : au retour, le navigateur RELANCE les animations CSS
+  // d'entrée. Sans re-arm, elles rejouent avec les délais figés précédemment -> après une
+  // install/désinstallation (colonnes refluées), la vague repart dans le désordre. On vide
+  // donc revealDelaysRef et on remet revealReady=false pour refiger les délais sur les
+  // colonnes ACTUELLES. useLayoutEffect: l'état est remis AVANT le paint, ce qui évite un
+  // flash de vague périmée juste avant la vague ordonnée.
+  const location = useLocation();
+  const prevPathRef = useRef(location.pathname);
+  useLayoutEffect(() => {
+    const prev = prevPathRef.current;
+    prevPathRef.current = location.pathname;
+    if (location.pathname === '/home' && prev !== '/home') {
+      revealDelaysRef.current = {};
+      setRevealReady(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   // NE PLUS notifier automatiquement le parent à chaque changement de layout
   // car cela déclenchait des sauvegardes backend lors des réorganisations automatiques (responsive).
