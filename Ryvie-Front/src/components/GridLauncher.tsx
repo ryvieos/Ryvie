@@ -197,6 +197,24 @@ const GridLauncher = ({
     return () => clearTimeout(t);
   }, [layout, revealReady]);
 
+  // Re-armer la vague d'apparition quand l'ENSEMBLE des apps/widgets change
+  // (installation / désinstallation). Sans ça, les délais figés dans revealDelaysRef
+  // restent calculés sur les anciennes colonnes : insérer une app fait refluer la grille
+  // et la vague gauche->droite se rejoue dans le désordre (le composant n'étant pas
+  // démonté à cause du keep-alive de CachedRoutes, qui se contente d'un display:none/block
+  // -> les animations CSS rejouent au retour sur Home). On NE déclenche PAS sur un simple
+  // drag (l'ensemble des ids est identique, seules les colonnes bougent), ce qui préserve
+  // le correctif anti-rejouement au déplacement. Au re-arm, les délais sont refigés à
+  // partir des colonnes FINALES post-reflow via getRevealDelay.
+  const itemIdSignature = [...appsRenderOrder, ...widgetsRenderOrder.map(w => w.id)].join('|');
+  const prevItemIdSignatureRef = useRef(itemIdSignature);
+  useEffect(() => {
+    if (prevItemIdSignatureRef.current === itemIdSignature) return;
+    prevItemIdSignatureRef.current = itemIdSignature;
+    revealDelaysRef.current = {};
+    setRevealReady(false);
+  }, [itemIdSignature]);
+
   // NE PLUS notifier automatiquement le parent à chaque changement de layout
   // car cela déclenchait des sauvegardes backend lors des réorganisations automatiques (responsive).
   // Seuls les drags manuels (handleDrop) déclenchent maintenant onLayoutChange avec isManualChange=true.
