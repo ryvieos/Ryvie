@@ -54,9 +54,13 @@ function parseDnParts(dn) {
 }
 
 function getRole(dn, groupMemberships) {
-  if (groupMemberships.includes(ldapConfig.adminGroup)) return 'Admin';
-  if (groupMemberships.includes(ldapConfig.userGroup)) return 'User';
-  if (groupMemberships.includes(ldapConfig.guestGroup)) return 'Guest';
+  // Les DN LDAP sont insensibles à la casse : on normalise avant comparaison, sinon une
+  // simple différence de casse entre la valeur 'member' du groupe et le DN de l'entrée
+  // (ex: cn=Test vs cn=test) fait échouer la correspondance -> rôle 'Unknown'.
+  const memberships = (groupMemberships || []).map((m) => String(m).toLowerCase());
+  if (memberships.includes(String(ldapConfig.adminGroup).toLowerCase())) return 'Admin';
+  if (memberships.includes(String(ldapConfig.userGroup).toLowerCase())) return 'User';
+  if (memberships.includes(String(ldapConfig.guestGroup).toLowerCase())) return 'Guest';
   return 'Unknown';
 }
 
@@ -130,14 +134,17 @@ async function listUsersWithRoles() {
                 groupRes.on('searchEntry', (groupEntry) => {
                   const members = groupEntry.pojo.attributes.find(attr => attr.type === 'member')?.values || [];
                   members.forEach((member) => {
-                    if (!roles[member]) roles[member] = [];
-                    roles[member].push(groupEntry.pojo.objectName);
+                    // Indexer par DN normalisé (minuscules) : les DN LDAP sont insensibles
+                    // à la casse, alors qu'une clé d'objet JS est sensible à la casse.
+                    const key = String(member).toLowerCase();
+                    if (!roles[key]) roles[key] = [];
+                    roles[key].push(groupEntry.pojo.objectName);
                   });
                 });
                 groupRes.on('end', () => {
                   const usersWithRoles = ldapUsers.map(user => ({
                     ...user,
-                    role: getRole(user.dn, roles[user.dn] || []),
+                    role: getRole(user.dn, roles[String(user.dn).toLowerCase()] || []),
                   }));
                   ldapClient.unbind();
                   resolve(usersWithRoles);

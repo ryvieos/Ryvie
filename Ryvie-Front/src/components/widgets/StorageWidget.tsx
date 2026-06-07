@@ -14,7 +14,7 @@ const { getServerUrl } = urlsConfig;
 /**
  * Widget affichant l'utilisation du stockage
  */
-const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: () => void; accessMode?: string }) => {
+const StorageWidget = ({ id, onRemove, accessMode, openSignal }: { id: string; onRemove?: () => void; accessMode?: string; openSignal?: number }) => {
   const { t } = useLanguage();
   const [data, setData] = useState<Array<{ device: string; mount: string; used: number; total: number }>>([]);
   const [loading, setLoading] = useState(true);
@@ -24,28 +24,7 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
   const [storageDetail, setStorageDetail] = useState<any>(null); // détail complet du stockage
   const [storageDetailLoading, setStorageDetailLoading] = useState(false);
   const navigate = useNavigate();
-
-  const pointerDownTime = useRef<number>(0);
-  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    pointerDownTime.current = Date.now();
-    pointerDownPos.current = { x: e.clientX, y: e.clientY };
-
-    const onUp = (upEvent: PointerEvent) => {
-      const elapsed = Date.now() - pointerDownTime.current;
-      const dx = Math.abs(upEvent.clientX - (pointerDownPos.current?.x ?? 0));
-      const dy = Math.abs(upEvent.clientY - (pointerDownPos.current?.y ?? 0));
-
-      if (elapsed < 250 && dx < 8 && dy < 8) {
-        handleOpenModal();
-      }
-
-      document.removeEventListener('pointerup', onUp);
-    };
-
-    document.addEventListener('pointerup', onUp);
-  };
+  const prevOpenSignalRef = useRef<number>(0);
 
   useEffect(() => {
     const fetchStorageStats = async () => {
@@ -155,6 +134,17 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
     }
   };
 
+  // Ouverture déclenchée depuis la tuile (GridLauncher). Le drag utilise setPointerCapture,
+  // donc le clic est capté au niveau de la tuile et non du widget enfant : GridLauncher
+  // incrémente openSignal pour demander l'ouverture de la modale (même mécanisme que la météo).
+  useEffect(() => {
+    if (openSignal && openSignal !== prevOpenSignalRef.current) {
+      prevOpenSignalRef.current = openSignal;
+      handleOpenModal();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal]);
+
   const handleCloseModal = () => {
     console.log('[StorageWidget] Closing modal');
     setShowModal(false);
@@ -197,7 +187,7 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
         ) : data.length === 0 ? (
           <div className="widget-empty">{t('storageWidget.noDisk')}</div>
         ) : (
-          <div className="storage-content storage-clickable" onPointerDown={handlePointerDown} style={{ cursor: 'pointer', height: '100%' }}>
+          <div className="storage-content storage-clickable" style={{ cursor: 'pointer', height: '100%' }}>
             {data.slice(0, 1).map((disk, index) => {
               const usedPercent = Math.round((disk.used / disk.total) * 100);
               const status = getStatus(usedPercent);

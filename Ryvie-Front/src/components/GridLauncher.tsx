@@ -61,6 +61,10 @@ const GridLauncher = ({
   };
   // Tant que faux, les tuiles restent invisibles (opacity:0 via CSS) sans animation.
   const [revealReady, setRevealReady] = useState(false);
+  // Signaux d'ouverture de modale par widget. Le drag utilise setPointerCapture, donc le
+  // clic est capté au niveau de la tuile : incrémenter le compteur d'un id demande au widget
+  // correspondant d'ouvrir sa modale (utilisé pour le widget stockage).
+  const [widgetOpenSignals, setWidgetOpenSignals] = useState({});
 
   // Calculer le nombre de colonnes et lignes qui rentrent dans l'espace disponible
   useEffect(() => {
@@ -552,7 +556,7 @@ const GridLauncher = ({
               case 'cpu-ram':
                 return <CpuRamWidget {...commonProps} accessMode={accessMode} />;
               case 'storage':
-                return <StorageWidget {...commonProps} accessMode={accessMode} />;
+                return <StorageWidget {...commonProps} accessMode={accessMode} openSignal={widgetOpenSignals[widget.id] || 0} />;
               case 'weather':
                 return (
                   <WeatherWidget
@@ -588,6 +592,8 @@ const GridLauncher = ({
                   setTempCity((weatherCity || weather.location || '').toString());
                   setClosingWeatherModal(false);
                   setShowWeatherModal(true);
+                } else if (widget.type === 'storage') {
+                  setWidgetOpenSignals(s => ({ ...s, [widget.id]: (s[widget.id] || 0) + 1 }));
                 }
               }}
             >
