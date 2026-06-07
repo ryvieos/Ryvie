@@ -467,24 +467,38 @@ const Taskbar = React.memo(({ handleClick, appsConfig, onLoaded }) => {
   }, [appsConfig]);
 
   const loadedRef = React.useRef(false);
-  const totalRef = React.useRef(0);
-  const loadedCountRef = React.useRef(0);
 
+  // Précharger + décoder les icônes locales pour réchauffer le cache et signaler "prêt"
+  // (déclenche l'animation d'entrée de la barre). On NE bloque PAS le rendu des <img>
+  // là-dessus : le `src` est toujours posé, et le décodage atomique est demandé via
+  // l'attribut decoding="sync" sur chaque <img>. Filet de secours (timeout 500ms) géré
+  // côté parent si le décodage ne résout jamais.
   React.useEffect(() => {
-    // Compter le nombre total d'images à charger
-    totalRef.current = taskbarApps.filter(({ iconId }) => images[iconId]).length;
-    loadedCountRef.current = 0;
     loadedRef.current = false;
-  }, [taskbarApps]);
-
-  const handleImgLoad = React.useCallback(() => {
-    if (loadedRef.current) return;
-    loadedCountRef.current += 1;
-    if (loadedCountRef.current === totalRef.current) {
+    let cancelled = false;
+    const ready = () => {
+      if (cancelled || loadedRef.current) return;
       loadedRef.current = true;
       try { onLoaded && onLoaded(); } catch {}
+    };
+    const srcs = Array.from(new Set(taskbarApps.map(({ iconId }) => images[iconId]).filter(Boolean)));
+    if (srcs.length === 0) {
+      ready();
+      return;
     }
-  }, [onLoaded]);
+    Promise.all(srcs.map(src => {
+      const img = new Image();
+      img.src = src;
+      if (typeof img.decode === 'function') {
+        return img.decode().catch(() => undefined);
+      }
+      return new Promise(resolve => {
+        img.onload = () => resolve(undefined);
+        img.onerror = () => resolve(undefined);
+      });
+    })).then(ready);
+    return () => { cancelled = true; };
+  }, [taskbarApps, onLoaded]);
 
   return (
     <div className="taskbar">
@@ -509,7 +523,7 @@ const Taskbar = React.memo(({ handleClick, appsConfig, onLoaded }) => {
                     src={imgSrc}
                     alt={label}
                     title={label}
-                    onLoad={handleImgLoad}
+                    decoding="sync"
                     onError={(e) => {
                       try { console.warn('[Taskbar] Image failed to load', { iconId, src: imgSrc }); } catch (_) {}
                       e.currentTarget.style.display = 'none';
@@ -533,7 +547,7 @@ const Taskbar = React.memo(({ handleClick, appsConfig, onLoaded }) => {
                     src={imgSrc}
                     alt={label}
                     title={label}
-                    onLoad={handleImgLoad}
+                    decoding="sync"
                     onError={(e) => {
                       try { console.warn('[Taskbar] Image failed to load', { iconId, src: imgSrc }); } catch (_) {}
                       e.currentTarget.style.display = 'none';
@@ -666,17 +680,51 @@ const Home = () => {
   const [taskbarReady, setTaskbarReady] = useState(false); // Animations taskbar quand les icônes de la barre sont chargées
   const taskbarLoadedOnceRef = React.useRef(false); // Assure que l'animation ne se joue qu'une seule fois
   const taskbarTimeoutRef = React.useRef(null); // Timeout de secours pour forcer l'affichage
-  const [bgDataUrl, setBgDataUrl] = useState(null); // DataURL du fond d'écran mis en cache
+  const [bgDataUrl, setBgDataUrl] = useState(() => {
+    // Lire le cache dataURL du fond AU MONTAGE pour un premier paint instantané (pas de
+    // re-téléchargement réseau qui se peindrait en streaming de haut en bas). On reconstruit
+    // la même clé que loadAndCacheBackground: `bgCache_${backgroundImage}`.
+    try {
+      const currentUser = getCurrentUser();
+      let bg = 'default';
+      if (currentUser) {
+        const cachedBg = localStorage.getItem(`ryvie_bg_${currentUser}`);
+        if (cachedBg && typeof cachedBg === 'string') bg = cachedBg;
+      }
+      const cached = StorageManager.getItem(`bgCache_${bg}`);
+      return cached || null;
+    } catch {
+      return null;
+    }
+  }); // DataURL du fond d'écran mis en cache
   const [bgUrl, setBgUrl] = useState(null);         // URL calculée courante
   const [showOnboarding, setShowOnboarding] = useState(false); // Afficher l'overlay d'onboarding
   const [prevBgUrl, setPrevBgUrl] = useState(null); // URL précédente pour crossfade
   const [bgFadeKey, setBgFadeKey] = useState(0);    // clé pour relancer l'animation
   const [disconnectedSince, setDisconnectedSince] = useState(null); // Timestamp de début de déconnexion
   const launcherSaveRef = React.useRef(null); // debounce save
-  // NE PAS charger depuis localStorage au montage - attendre le backend (source de vérité)
-  // Le localStorage sera mis à jour après le chargement du backend
-  const [launcherLayout, setLauncherLayout] = useState(null); // Layout chargé depuis le backend
-  const [launcherAnchors, setLauncherAnchors] = useState(null); // Ancres chargées depuis le backend
+  // Amorcer layout/anchors depuis le cache localStorage AU MONTAGE (comme les widgets) pour
+  // que la grille s'affiche directement aux bonnes positions, au lieu d'apparaître à une
+  // mauvaise place (positions par défaut) puis de se recaler quand le backend répond. Le
+  // backend reste la source de vérité : il écrasera ces valeurs s'il diffère.
+  const readLauncherCache = () => {
+    try {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const cached = localStorage.getItem(`launcher_${currentUser}`);
+        if (cached) return JSON.parse(cached);
+      }
+    } catch {}
+    return null;
+  };
+  const [launcherLayout, setLauncherLayout] = useState(() => {
+    const l = readLauncherCache();
+    return (l && l.layout && Object.keys(l.layout).length > 0) ? l.layout : null;
+  }); // Layout (cache au montage, puis backend)
+  const [launcherAnchors, setLauncherAnchors] = useState(() => {
+    const l = readLauncherCache();
+    return (l && l.anchors && Object.keys(l.anchors).length > 0) ? l.anchors : null;
+  }); // Ancres (cache au montage, puis backend)
   const [launcherLoadedFromBackend, setLauncherLoadedFromBackend] = useState(false); // Indique si les données ont été chargées
   const launcherInitialLoadDone = React.useRef(false); // Flag pour savoir si le chargement initial est terminé
   const normalizeWidgets = React.useCallback((rawWidgets) => {
@@ -2565,54 +2613,52 @@ const Home = () => {
     }
   }, [appsConfig, appStoreMounted, accessMode, navigate]);
 
-  // Construit l'URL de fond d'écran à partir de l'état courant
-  const buildBackgroundUrl = () => {
-    if (!accessMode) {
-      console.log('[Home] accessMode non défini, pas de fond personnalisé');
-      // Utiliser une dataURL si on en a une en cache
-      if (bgDataUrl) {
-        return `url(${bgDataUrl})`;
-      }
-      return null; // Utilise le CSS par défaut
-    }
-    
-    console.log('[Home] 🎨 Application du fond:', backgroundImage);
-    // Priorité au cache dataURL pour l'affichage offline
-    if (bgDataUrl) {
-      return `url(${bgDataUrl})`;
-    }
-
-    if (backgroundImage?.startsWith('custom-')) {
-      // Fond personnalisé uploadé - charger via l'API backend
-      const filename = backgroundImage.replace('custom-', '');
-      const serverUrl = getServerUrl(accessMode);
-      const bgUrl = `${serverUrl}/api/backgrounds/${filename}`;
-      console.log('[Home] 🎨 Fond personnalisé:', bgUrl);
-      return `url(${bgUrl})`;
-    }
-    
-    // Si c'est un fond prédéfini (preset-filename.ext) - charger via API backend
-    if (backgroundImage?.startsWith('preset-')) {
-      if (!accessMode) return {};
-      const filename = backgroundImage.replace('preset-', '');
-      const serverUrl = getServerUrl(accessMode);
-      console.log('[Home] 🎨 Fond prédéfini via API:', filename);
-      return `url(${serverUrl}/api/backgrounds/presets/${filename})`;
-    }
-    
-    // Fond par défaut - via API (le cache prendra le relais si disponible)
-    if (!accessMode) return {};
+  // Construit l'URL SOURCE brute du fond (sans wrapper `url(...)`) à partir de l'état courant.
+  const buildBackgroundSrc = () => {
+    // Priorité au cache dataURL (offline + premier paint instantané, pas de réseau).
+    if (bgDataUrl) return bgDataUrl;
+    if (!accessMode) return null; // Utilise le CSS par défaut
     const serverUrl = getServerUrl(accessMode);
-    console.log('[Home] 🎨 Fond par défaut via API');
-    return `url(${serverUrl}/api/backgrounds/presets/default.webp)`;
+    if (backgroundImage?.startsWith('custom-')) {
+      return `${serverUrl}/api/backgrounds/${backgroundImage.replace('custom-', '')}`;
+    }
+    if (backgroundImage?.startsWith('preset-')) {
+      return `${serverUrl}/api/backgrounds/presets/${backgroundImage.replace('preset-', '')}`;
+    }
+    return `${serverUrl}/api/backgrounds/presets/default.webp`;
   };
 
-  // Mettre à jour les URLs de fond et déclencher un crossfade quand la source change
+  // Mettre à jour le fond + crossfade quand la source change. On DÉCODE l'image
+  // (img.decode()) AVANT de l'appliquer en `background-image` : une grande image posée
+  // directement en CSS est décodée au moment de la peinture, souvent par bandes
+  // (effet "de haut en bas"). En décodant d'abord, l'image est en cache et se peint
+  // en un seul frame.
   useEffect(() => {
-    const newUrl = buildBackgroundUrl();
-    setPrevBgUrl((prev) => (prev === newUrl ? null : bgUrl));
-    setBgUrl(newUrl);
-    setBgFadeKey((k) => k + 1);
+    const src = buildBackgroundSrc();
+    if (!src) {
+      setPrevBgUrl(null);
+      setBgUrl(null);
+      setBgFadeKey((k) => k + 1);
+      return;
+    }
+    const cssUrl = `url(${src})`;
+    let cancelled = false;
+    const apply = () => {
+      if (cancelled) return;
+      // Garde l'ancien calque pour le crossfade (sauf si identique).
+      setPrevBgUrl(bgUrl && bgUrl !== cssUrl ? bgUrl : null);
+      setBgUrl(cssUrl);
+      setBgFadeKey((k) => k + 1);
+    };
+    const img = new Image();
+    img.src = src;
+    if (typeof img.decode === 'function') {
+      img.decode().then(apply).catch(apply);
+    } else {
+      img.onload = apply;
+      img.onerror = apply;
+    }
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backgroundImage, bgDataUrl, accessMode]);
 

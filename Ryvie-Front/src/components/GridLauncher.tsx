@@ -198,9 +198,46 @@ const GridLauncher = ({
   useEffect(() => {
     if (revealReady) return;
     if (!layout || Object.keys(layout).length === 0) return;
-    const t = setTimeout(() => setRevealReady(true), 260);
-    return () => clearTimeout(t);
-  }, [layout, revealReady]);
+    let cancelled = false;
+
+    // 1) Délai mini pour laisser le recalcul responsive des colonnes se stabiliser
+    //    (figeage des délais sur les colonnes FINALES -> vague gauche->droite cohérente).
+    const minDelay = new Promise(resolve => setTimeout(resolve, 260));
+
+    // 2) Précharger/décoder les icônes AVANT de révéler les tuiles, pour ne jamais
+    //    afficher de carré blanc le temps du téléchargement (cas du tout premier
+    //    chargement à froid, cache navigateur vide). Une fois en cache (24h côté
+    //    backend), c'est quasi instantané aux chargements suivants.
+    const srcs = Array.from(new Set(apps.map(id => iconImages[id]).filter(Boolean)));
+    const preloadIcons = Promise.all(srcs.map(src => {
+      const img = new Image();
+      img.src = src;
+      // img.decode() résout quand l'image est ENTIÈREMENT décodée et prête à être
+      // peinte en un seul frame -> pas de rendu progressif "de haut en bas". On
+      // retombe sur onload si decode() n'est pas dispo / échoue.
+      if (typeof img.decode === 'function') {
+        return img.decode().catch(() => undefined);
+      }
+      return new Promise(resolve => {
+        img.onload = () => resolve(undefined);
+        img.onerror = () => resolve(undefined);
+      });
+    }));
+
+    // 3) Filet de sécurité : ne JAMAIS bloquer la vague au-delà de ~2.5s, même si
+    //    une icône est lente/indisponible (laisse le temps au premier chargement à
+    //    froid de tout télécharger + décoder avant de révéler).
+    const safety = new Promise(resolve => setTimeout(resolve, 2500));
+
+    Promise.race([
+      Promise.all([minDelay, preloadIcons]),
+      safety
+    ]).then(() => {
+      if (!cancelled) setRevealReady(true);
+    });
+
+    return () => { cancelled = true; };
+  }, [layout, revealReady, apps, iconImages]);
 
   // Re-armer la vague d'apparition uniquement quand une app/widget est AJOUTÉE
   // (installation). Sans ça, les délais figés dans revealDelaysRef restent calculés

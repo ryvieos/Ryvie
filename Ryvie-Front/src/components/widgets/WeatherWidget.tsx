@@ -30,6 +30,8 @@ const WeatherWidget = ({
   onRemove,
   onClick
 }: WeatherWidgetProps) => {
+  const bgSrc = weather.icon ? weatherImages[`./${weather.icon}`] : undefined;
+
   return (
     <BaseWidget
       id={id}
@@ -41,8 +43,8 @@ const WeatherWidget = ({
       <div
         className="weather-card"
         style={{
-          backgroundImage: weatherImages[`./${weather.icon}`]
-            ? `url(${weatherImages[`./${weather.icon}`]})`
+          backgroundImage: bgSrc
+            ? `url(${bgSrc})`
             : 'linear-gradient(135deg, rgba(100, 180, 255, 0.9), rgba(80, 150, 255, 0.9))'
         }}
       >

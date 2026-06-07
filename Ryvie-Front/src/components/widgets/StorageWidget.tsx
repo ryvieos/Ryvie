@@ -11,15 +11,35 @@ import { useLanguage } from '../../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;
 
+// Cache "dernière valeur connue" (stale-while-revalidate) : on réaffiche immédiatement
+// le stockage du dernier chargement, puis on rafraîchit en arrière-plan. Évite le skeleton
+// gris à chaque visite (l'appel /api/server-info peut prendre plusieurs secondes).
+const STORAGE_CACHE_KEY = 'ryvie_widget_storage_cache';
+type StorageDisk = { device: string; mount: string; used: number; total: number };
+const readStorageCache = (): StorageDisk[] | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return null;
+};
+const writeStorageCache = (disks: StorageDisk[]) => {
+  try { localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(disks)); } catch {}
+};
+
 /**
  * Widget affichant l'utilisation du stockage
  */
 const StorageWidget = ({ id, onRemove, accessMode, openSignal }: { id: string; onRemove?: () => void; accessMode?: string; openSignal?: number }) => {
   const { t } = useLanguage();
-  const [data, setData] = useState<Array<{ device: string; mount: string; used: number; total: number }>>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedStorage = readStorageCache();
+  const [data, setData] = useState<StorageDisk[]>(cachedStorage || []);
+  const [loading, setLoading] = useState(!cachedStorage);
   const [barProgress, setBarProgress] = useState(0); // animate from 0
-  const [entered, setEntered] = useState(false); // fade-in flag
+  const [entered, setEntered] = useState(!!cachedStorage); // fade-in flag (déjà entré si cache)
   const [showModal, setShowModal] = useState(false); // fenêtre flottante
   const [storageDetail, setStorageDetail] = useState<any>(null); // détail complet du stockage
   const [storageDetailLoading, setStorageDetailLoading] = useState(false);
@@ -57,12 +77,14 @@ const StorageWidget = ({ id, onRemove, accessMode, openSignal }: { id: string; o
           const totalBytes = total * (1024 ** 3);
           
           // Créer un objet disque unique pour /data
-          setData([{
+          const disks = [{
             device: '/data',
             mount: '/data',
             used: usedBytes,
             total: totalBytes
-          }]);
+          }];
+          setData(disks);
+          writeStorageCache(disks);
           setLoading(false);
         }
       } catch (error) {
