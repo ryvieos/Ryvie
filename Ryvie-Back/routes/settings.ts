@@ -81,7 +81,15 @@ router.patch('/settings/token-expiration', verifyToken, (req: any, res: any) => 
     if (saveSettings(settings)) {
       // Mettre à jour la variable d'environnement pour les prochains tokens
       process.env.JWT_EXPIRES_MINUTES = minutes.toString();
-      
+
+      // Aligner aussi la durée de session SSO Keycloak (idle + max lifespan), pour
+      // que ce réglage gouverne la vraie session SSO et pas seulement le JWT dashboard.
+      // Best-effort, non bloquant : un échec Keycloak n'empêche pas la sauvegarde.
+      try {
+        const { setRealmSessionTimeout } = require('../services/keycloakService');
+        Promise.resolve(setRealmSessionTimeout(parseInt(minutes))).catch(() => {});
+      } catch (_) {}
+
       console.log(`[settings] Durée d'expiration du token modifiée: ${minutes} minutes`);
       res.json({ 
         success: true, 
@@ -579,8 +587,11 @@ router.get('/settings/ryvie-domains', verifyToken, isAdmin, (req: any, res: any)
 
     let setupKey = null;
     try {
-      const envPath = '/data/config/netbird/.env';
-      if (fs.existsSync(envPath)) {
+      // La setup key NetBird peut être écrite à plusieurs emplacements selon le mode
+      // de provisioning de la box. On essaie les chemins connus dans l'ordre.
+      const envPath = ['/data/config/netbird/.env', '/netbird/.env']
+        .find((p) => fs.existsSync(p));
+      if (envPath) {
         const envContent = fs.readFileSync(envPath, 'utf8');
         const line = envContent.split(/\r?\n/).find(l => l.trim().startsWith('NETBIRD_SETUP_KEY='));
         if (line) {

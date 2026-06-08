@@ -13,6 +13,21 @@ const User = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
 
+  // Identité FIABLE de l'utilisateur connecté = l'uid issu du JWT (stable), et NON
+  // getCurrentUser() qui renvoie le nom d'affichage figé au login (qui ne correspond
+  // plus à l'uid ni au nom courant si on se renomme). Sert à interdire de supprimer
+  // son propre compte.
+  const getCurrentUid = (): string => {
+    try {
+      const { token } = getSessionInfo() || {};
+      if (!token) return '';
+      const payload = JSON.parse(atob(String(token).split('.')[1]));
+      return String(payload?.uid || '').trim().toLowerCase();
+    } catch {
+      return '';
+    }
+  };
+
   // Liste des utilisateurs récupérée depuis l'API
   const [users, setUsers] = useState([]);
   const [formOpen, setFormOpen] = useState(false);
@@ -219,12 +234,15 @@ const User = () => {
   };
 
   const confirmDeleteUser = (user) => {
-    // Interdire la suppression de soi-même côté UI
-    const currentUser = getCurrentUser() || '';
-    if (
-      user?.uid && currentUser &&
-      String(user.uid).trim().toLowerCase() === String(currentUser).trim().toLowerCase()
-    ) {
+    // Interdire la suppression de soi-même côté UI. Comparaison sur l'uid STABLE du
+    // token (fiable), + repli sur le nom de session (au cas où le token manquerait).
+    const currentUid = getCurrentUid();
+    const currentUser = String(getCurrentUser() || '').trim().toLowerCase();
+    const targetUid = String(user?.uid || '').trim().toLowerCase();
+    const isSelf =
+      (!!targetUid && (targetUid === currentUid || (!!currentUser && targetUid === currentUser))) ||
+      (!!currentUser && String(user?.name || '').trim().toLowerCase() === currentUser);
+    if (isSelf) {
       setMessage("Vous ne pouvez pas supprimer votre propre compte");
       setMessageType('error');
       return;
@@ -274,21 +292,17 @@ const User = () => {
       return false;
     }
     
-    // En mode ajout, l'UID est identique au nom saisi
-    if (!editUser) {
-      const candidate = newUser.name;
-      if (!candidate) {
-        setMessage('Nom invalide pour générer un identifiant (uid)');
-        setMessageType('error');
-        return false;
-      }
-    } else {
-      // En mode édition, l'UID est en lecture seule mais on vérifie sa présence
-      if (!newUser.uid.trim()) {
-        setMessage('L\'identifiant (uid) est requis');
-        setMessageType('error');
-        return false;
-      }
+    // L'identifiant (uid) est l'identifiant de connexion : saisi à la création,
+    // fixe ensuite. Lettres/chiffres/. _ - uniquement.
+    if (!newUser.uid.trim()) {
+      setMessage(editUser ? "L'identifiant (uid) est requis" : "L'identifiant de connexion est requis");
+      setMessageType('error');
+      return false;
+    }
+    if (!editUser && !/^[a-zA-Z0-9._-]+$/.test(newUser.uid.trim())) {
+      setMessage('Identifiant invalide : lettres, chiffres, . _ - uniquement (pas d\'espace)');
+      setMessageType('error');
+      return false;
     }
     
     if (!newUser.email.trim()) {
@@ -318,15 +332,9 @@ const User = () => {
       return false;
     }
     
-    // Validation de l'identifiant (uid) - lettres, chiffres, tirets, underscores
-    const uidRegex = /^[a-z0-9_-]+$/;
-    const uidToCheck = editUser ? newUser.uid : newUser.name;
-    if (!uidRegex.test(uidToCheck)) {
-      setMessage('Le nom (utilisé comme identifiant) doit contenir uniquement des lettres minuscules, chiffres, tirets ou underscores');
-      setMessageType('error');
-      return false;
-    }
-    
+    // L'identifiant (uid) n'est plus saisi : il est généré côté serveur (opaque et
+    // stable). Le nom est donc libre (espaces, accents, majuscules autorisés).
+
     return true;
   };
 
@@ -347,7 +355,7 @@ const User = () => {
       const serverUrl = getServerUrl(accessMode || 'private');
       const checkResponse = await axios.post(
         `${serverUrl}/api/check-user-exists`,
-        { uid: newUser.uid || newUser.name, email: newUser.email },
+        { uid: newUser.uid, email: newUser.email },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -492,9 +500,9 @@ const User = () => {
         const addPayload = {
           ...commonPayload,
           newUser: {
+            uid: newUser.uid,
             cn: newUser.name,
             sn: newUser.name.split(' ').pop() || newUser.name,
-            uid: newUser.uid,
             mail: newUser.email,
             password: newUser.password,
             role: newUser.role
@@ -769,29 +777,24 @@ const User = () => {
                 
                 <input
                   type="text"
-                  placeholder={editUser ? t('userManagement.name') : t('userManagement.nameAsUid')}
+                  placeholder={t('userManagement.name')}
                   value={newUser.name}
                   onChange={(e) => {
-                    const nameVal = e.target.value;
-                    if (editUser) {
-                      setNewUser({ ...newUser, name: nameVal });
-                    } else {
-                      // En ajout, l'UID = nom exactement
-                      setNewUser({ ...newUser, name: nameVal, uid: nameVal });
-                    }
+                    // Nom d'affichage : libre et modifiable (se répercute dans les apps).
+                    setNewUser({ ...newUser, name: e.target.value });
                   }}
                 />
-                {editUser && (
-                  <input
-                    type="text"
-                    placeholder={t('userManagement.uid')}
-                    value={newUser.uid}
-                    onChange={(e) => setNewUser({ ...newUser, uid: e.target.value })}
-                    disabled={!!editUser}
-                    readOnly={!!editUser}
-                    title={editUser ? t('userManagement.uidCannotBeChanged') : undefined}
-                  />
-                )}
+                <input
+                  type="text"
+                  placeholder={t('userManagement.uid') || 'Identifiant de connexion'}
+                  value={newUser.uid}
+                  onChange={(e) => setNewUser({ ...newUser, uid: e.target.value })}
+                  disabled={!!editUser}
+                  readOnly={!!editUser}
+                  title={editUser
+                    ? (t('userManagement.uidCannotBeChanged') || "L'identifiant de connexion ne peut pas être changé")
+                    : "Identifiant de connexion (fixe). Le nom affiché reste modifiable."}
+                />
                 <input
                   type="email"
                   placeholder={t('userManagement.email')}
@@ -984,11 +987,14 @@ const User = () => {
             </div>
           ) : (
             users.map((user, index) => {
-              const isCurrentUser = 
-                String(getCurrentUser() || '').trim().toLowerCase() ===
-                  String(user.uid || '').trim().toLowerCase() ||
-                String(getCurrentUser() || '').trim().toLowerCase() ===
-                  String(user.name || '').trim().toLowerCase();
+              // Compte courant = match sur l'uid STABLE du token (fiable même après
+              // renommage), avec repli sur le nom de session.
+              const _sessName = String(getCurrentUser() || '').trim().toLowerCase();
+              const _selfUid = getCurrentUid();
+              const _uidLc = String(user.uid || '').trim().toLowerCase();
+              const isCurrentUser =
+                (!!_selfUid && _uidLc === _selfUid) ||
+                (!!_sessName && (_uidLc === _sessName || String(user.name || '').trim().toLowerCase() === _sessName));
               
               // Obtenir les initiales pour l'avatar
               const getInitials = (name) => {

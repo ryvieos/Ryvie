@@ -1,6 +1,14 @@
 const ldap = require('ldapjs');
+const crypto = require('crypto');
 const ldapConfig = require('../config/ldap');
 const DEFAULT_EMAIL_DOMAIN = process.env.DEFAULT_EMAIL_DOMAIN || 'localhost';
+
+// Génère un identifiant (uid) stable, opaque et neutre, sans lien avec le nom.
+// L'uid sert de clé d'identité immuable (RDN LDAP, SSO, home dir, apps) : il ne
+// change jamais, alors que le nom (cn) reste librement modifiable.
+function generateOpaqueUid() {
+  return 'u' + crypto.randomBytes(5).toString('hex'); // ex: u7f3a9c21b3
+}
 
 function createSafeClient(opts: any = {}) {
   const client = ldap.createClient({
@@ -255,6 +263,7 @@ export = {
   createSafeClient,
   escapeLdapFilterValue,
   escapeRdnValue,
+  generateOpaqueUid,
   parseDnParts,
   getRole,
   getUserRole,

@@ -3,7 +3,7 @@ const ldap = require('ldapjs');
 const router = express.Router();
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const ldapConfig = require('../config/ldap');
-const { createSafeClient, getRole, parseDnParts, escapeRdnValue } = require('../services/ldapService');
+const { createSafeClient, getRole, parseDnParts, escapeRdnValue, generateOpaqueUid } = require('../services/ldapService');
 const { startApp } = require('../services/dockerService');
 const { listInstalledApps } = require('../services/appManagerService');
 
@@ -67,10 +67,10 @@ router.get('/admin/users/sync-ldap', verifyToken, isAdmin, async (req: any, res:
 
 // POST /api/check-user-exists — check if user exists by UID or email (no admin auth required)
 router.post('/check-user-exists', verifyToken, async (req: any, res: any) => {
-  const { uid, email } = req.body || {};
+  const { uid, name, email } = req.body || {};
 
-  if (!uid && !email) {
-    return res.status(400).json({ error: 'UID ou email requis' });
+  if (!uid && !name && !email) {
+    return res.status(400).json({ error: 'UID, nom ou email requis' });
   }
 
   const ldapClient = createSafeClient();
@@ -81,15 +81,18 @@ router.post('/check-user-exists', verifyToken, async (req: any, res: any) => {
       return res.status(500).json({ error: 'Erreur de connexion LDAP' });
     }
 
-    // Build filter to check UID or email
+    // Build filter to check UID, name (cn) or email. Le cn sert d'identifiant de
+    // connexion (Keycloak username) : il doit donc être unique. La comparaison LDAP
+    // sur cn/mail est insensible à la casse, ce qui est le comportement voulu.
     let filterParts = [];
-    if (uid) filterParts.push(`(uid=${uid})`);
-    if (email) filterParts.push(`(mail=${email})`);
+    if (uid) filterParts.push(`(uid=${escapeLdapFilterValue(uid)})`);
+    if (name) filterParts.push(`(cn=${escapeLdapFilterValue(name)})`);
+    if (email) filterParts.push(`(mail=${escapeLdapFilterValue(email)})`);
     const checkFilter = filterParts.length > 1 ? `(|${filterParts.join('')})` : filterParts[0];
 
-    ldapClient.search(ldapConfig.userSearchBase, { filter: checkFilter, scope: 'sub', attributes: ['uid', 'mail'] }, (err, checkRes) => {
+    ldapClient.search(ldapConfig.userSearchBase, { filter: checkFilter, scope: 'sub', attributes: ['uid', 'cn', 'mail'] }, (err, checkRes) => {
       if (err) {
-        console.error('Erreur vérification uid/mail :', err);
+        console.error('Erreur vérification nom/uid/mail :', err);
         ldapClient.unbind();
         return res.status(500).json({ error: 'Erreur lors de la vérification de l\'utilisateur' });
       }
@@ -97,15 +100,21 @@ router.post('/check-user-exists', verifyToken, async (req: any, res: any) => {
       let conflict = null;
       checkRes.on('searchEntry', (entry) => {
         const entryUid = entry.pojo.attributes.find((a) => a.type === 'uid')?.values[0];
+        const entryCn = entry.pojo.attributes.find((a) => a.type === 'cn')?.values[0];
         const entryMail = entry.pojo.attributes.find((a) => a.type === 'mail')?.values[0];
-        if (uid && entryUid === uid) conflict = 'UID';
-        else if (email && entryMail === email) conflict = 'email';
+        if (uid && entryUid && String(entryUid).toLowerCase() === String(uid).toLowerCase()) conflict = 'UID';
+        else if (email && entryMail && String(entryMail).toLowerCase() === String(email).toLowerCase()) conflict = 'email';
+        else if (name && entryCn && String(entryCn).toLowerCase() === String(name).toLowerCase()) conflict = 'nom';
       });
 
       checkRes.on('end', () => {
         ldapClient.unbind();
         if (conflict) {
-          const errorMessage = conflict === 'email' ? 'Cette adresse mail est déjà utilisée.' : 'Cet utilisateur existe déjà.';
+          const errorMessage = conflict === 'email'
+            ? 'Cette adresse mail est déjà utilisée.'
+            : conflict === 'UID'
+              ? 'Cet identifiant de connexion est déjà utilisé.'
+              : 'Cet utilisateur existe déjà.';
           return res.status(409).json({ exists: true, conflict, error: errorMessage });
         }
         return res.json({ exists: false });
@@ -127,9 +136,16 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
   if (!adminUid || !adminPassword || !newUser) {
     return res.status(400).json({ error: 'Champs requis manquants (adminUid, adminPassword, newUser)' });
   }
-  const { uid, cn, sn, mail, password, role } = newUser;
-  if (!uid || !cn || !sn || !mail || !password || !role) {
+  const { uid: rawUid, cn, sn, mail, password, role } = newUser;
+  if (!rawUid || !cn || !sn || !mail || !password || !role) {
     return res.status(400).json({ error: 'Champs requis manquants pour newUser (uid, cn, sn, mail, password, role)' });
+  }
+  // L'uid est l'identifiant de connexion (= preferred_username) : saisi par l'admin,
+  // lisible, fixe et unique. Normalisé en minuscules sans caractères spéciaux.
+  // Le nom affiché (cn) reste libre et modifiable, et n'est pas un identifiant.
+  const uid = String(rawUid).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  if (!uid) {
+    return res.status(400).json({ error: "Identifiant invalide (lettres, chiffres, . _ - uniquement)" });
   }
 
   const ldapClient = createSafeClient();
@@ -179,8 +195,10 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                 return res.status(403).json({ error: 'Droits admin requis' });
               }
 
-              // 5) Check for UID or email conflicts
-              const checkFilter = `(|(uid=${uid})(mail=${mail}))`;
+              // 5) Conflits : l'uid (identifiant de connexion) et l'email doivent être
+              // uniques. Le cn (nom affiché) peut être dupliqué, ce n'est pas un
+              // identifiant.
+              const checkFilter = `(|(uid=${escapeLdapFilterValue(uid)})(mail=${escapeLdapFilterValue(mail)}))`;
               ldapClient.search(ldapConfig.userSearchBase, { filter: checkFilter, scope: 'sub', attributes: ['uid', 'mail'] }, (err, checkRes) => {
                 if (err) {
                   console.error('Erreur vérification uid/mail :', err);
@@ -190,8 +208,8 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                 checkRes.on('searchEntry', (entry) => {
                   const entryUid = entry.pojo.attributes.find((a) => a.type === 'uid')?.values[0];
                   const entryMail = entry.pojo.attributes.find((a) => a.type === 'mail')?.values[0];
-                  if (entryUid === uid) conflict = 'UID';
-                  else if (entryMail === mail) conflict = 'email';
+                  if (entryUid && String(entryUid).toLowerCase() === String(uid).toLowerCase()) conflict = 'identifiant';
+                  else if (entryMail && String(entryMail).toLowerCase() === String(mail).toLowerCase()) conflict = 'email';
                 });
                 checkRes.on('end', () => {
                   if (conflict) {
@@ -201,7 +219,9 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                   }
 
                   // 6) Create user entry with posixAccount and employeeType
-                  const newUserDN = `cn=${cn},${ldapConfig.userSearchBase}`;
+                  // RDN basé sur l'uid (immuable) et non sur le cn : renommer le nom
+                  // ne change donc plus le DN ni les appartenances de groupe.
+                  const newUserDN = `uid=${escapeRdnValue(uid)},${ldapConfig.userSearchBase}`;
                   
                   // Générer uidNumber et gidNumber uniques (basé sur timestamp)
                   const uidNumber = String(10000 + Math.floor(Math.random() * 90000));
@@ -211,10 +231,15 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                   const employeeTypeMap = { Admin: 'admins', User: 'users', Guest: 'guests' };
                   const employeeType = employeeTypeMap[role] || 'users';
                   
+                  // givenName + sn = cn : le sync LDAP→Immich construit le nom comme
+                  // `(givenName || uid) + (sn si ≠ firstName)`. En posant givenName=cn et
+                  // sn=cn, le nom affiché dans les apps = exactement le nom (cn), sans
+                  // jamais faire apparaître l'uid.
                   const entry = {
                     objectClass: ['inetOrgPerson', 'posixAccount', 'shadowAccount'],
                     cn,
-                    sn,
+                    sn: cn,
+                    givenName: cn,
                     uid,
                     mail,
                     userPassword: password,
@@ -363,7 +388,15 @@ router.post('/delete-user', verifyToken, isAdmin, async (req: any, res: any) => 
     return res.status(400).json({ error: 'adminUid, adminPassword et uid requis' });
   }
 
-  if (String(adminUid).trim().toLowerCase() === String(uid).trim().toLowerCase()) {
+  // Interdiction de supprimer SON PROPRE compte. On compare sur l'identité FIABLE :
+  // l'uid de l'utilisateur connecté (issu du JWT vérifié), pas l'adminUid saisi dans
+  // le modal (qui peut être un nom/email ≠ uid et contournait donc la protection).
+  const sessionUid = String(req.user?.uid || '').trim().toLowerCase();
+  const targetUid = String(uid).trim().toLowerCase();
+  if (
+    targetUid === String(adminUid).trim().toLowerCase() ||
+    (sessionUid && sessionUid === targetUid)
+  ) {
     return res.status(403).json({ error: "Vous ne pouvez pas supprimer votre propre compte" });
   }
 
@@ -682,10 +715,13 @@ router.put('/update-user', verifyToken, isAdmin, async (req: any, res: any) => {
                   const currentCn = userEntry.pojo.attributes.find((a) => a.type === 'cn')?.values[0];
                   const currentSn = userEntry.pojo.attributes.find((a) => a.type === 'sn')?.values[0];
 
-                  // Check email uniqueness
-                  const proceedUpdate = () => updateUser();
-                  if (email !== currentMail) {
-                    ldapClient.search(ldapConfig.userSearchBase, { filter: `(&(mail=${email})(!(uid=${targetUid})))`, scope: 'sub', attributes: ['uid'] }, (err, emailCheckRes) => {
+                  // Le nom affiché (cn) est librement modifiable et peut être dupliqué :
+                  // ce n'est pas un identifiant. Seul l'email doit rester unique.
+                  const escTarget = escapeLdapFilterValue(targetUid);
+
+                  const checkEmailUnique = (next) => {
+                    if (email === currentMail) return next();
+                    ldapClient.search(ldapConfig.userSearchBase, { filter: `(&(mail=${escapeLdapFilterValue(email)})(!(uid=${escTarget})))`, scope: 'sub', attributes: ['uid'] }, (err, emailCheckRes) => {
                       if (err) {
                         console.error('Erreur vérification email :', err);
                         return res.status(500).json({ error: 'Erreur vérification email' });
@@ -698,12 +734,12 @@ router.put('/update-user', verifyToken, isAdmin, async (req: any, res: any) => {
                           adminAuthClient.unbind();
                           return res.status(409).json({ error: 'Un utilisateur avec cet email existe déjà' });
                         }
-                        proceedUpdate();
+                        next();
                       });
                     });
-                  } else {
-                    proceedUpdate();
-                  }
+                  };
+
+                  checkEmailUnique(() => updateUser());
 
                   function updateUser() {
                     // Detect RDN attribute and parent DN using centralized helper
@@ -716,10 +752,12 @@ router.put('/update-user', verifyToken, isAdmin, async (req: any, res: any) => {
                     if (nameChanged && !isCnRdn) {
                       changes.push(new ldap.Change({ operation: 'replace', modification: new ldap.Attribute({ type: 'cn', values: [name] }) }));
                     }
-                    if (nameChanged) {
-                      const lastName = name.split(' ').pop() || name;
-                      changes.push(new ldap.Change({ operation: 'replace', modification: new ldap.Attribute({ type: 'sn', values: [lastName] }) }));
-                    }
+                    // sn = givenName = nom : le sync Immich construit name = (givenName||uid)+sn,
+                    // donc en alignant les deux sur le nom, l'app affiche exactement le nom (cn),
+                    // sans uid. On le (ré)applique à CHAQUE mise à jour → corrige aussi les anciens
+                    // comptes (sans givenName) au moindre ré-enregistrement.
+                    changes.push(new ldap.Change({ operation: 'replace', modification: new ldap.Attribute({ type: 'sn', values: [name] }) }));
+                    changes.push(new ldap.Change({ operation: 'replace', modification: new ldap.Attribute({ type: 'givenName', values: [name] }) }));
                     if (email !== currentMail) {
                       changes.push(new ldap.Change({ operation: 'replace', modification: new ldap.Attribute({ type: 'mail', values: [email] }) }));
                     }

@@ -638,6 +638,11 @@ async function ensureKeycloakRunning(): Promise<{ success: boolean; alreadyRunni
     // 8. S'assurer que le thème ryvie est appliqué au realm
     ensureRealmTheme();
 
+    // 8b. Migration idempotente : configuration OIDC STANDARD pour LDAP
+    // (uid = login = preferred_username ; cn = nom d'affichage = claim name ;
+    // sub = identité stable). Compatible avec toutes les apps, sans bidouille.
+    await ensureStandardLdapMapping();
+
     // 9. Provisionnement SSO apps géré par appsOAuthService.syncAllAppsOAuth() dans index.ts
 
     return { success: true, alreadyRunning: !wasStarted, started: wasStarted };
@@ -799,4 +804,232 @@ function removeAppSSOClient(appId: string): void {
   }
 }
 
-module.exports = { ensureKeycloakRunning, removeAppSSOClient };
+// ---------------------------------------------------------------------------
+// Migration : configuration OIDC STANDARD pour LDAP
+// ---------------------------------------------------------------------------
+// Modèle conventionnel, compatible avec toutes les apps OIDC (Immich, rdrive…) :
+//   - uid                = identifiant de connexion (login)         -> usernameLDAPAttribute=uid
+//   - preferred_username = uid                                      -> claim depuis la propriété username
+//   - name               = nom d'affichage (cn), librement éditable -> claim depuis firstName (= cn)
+//   - sub                = identifiant stable interne (entryUUID)   -> géré par Keycloak
+// Idempotente : n'écrit que si la config diffère, ne resynchronise que si besoin,
+// n'interrompt jamais le démarrage, et nettoie les anciens mappers "découplés".
+
+const KC_BASE = 'http://localhost/auth';
+const KC_REALM = 'ryvie';
+const LDAP_UID_ATTR = 'ldapUid'; // attribut Keycloak qui porte l'uid LDAP
+
+async function kcAdminToken(): Promise<string> {
+  const pass = getAdminPassword();
+  const res = await fetch(`${KC_BASE}/realms/master/protocol/openid-connect/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'password',
+      client_id: 'admin-cli',
+      username: 'admin',
+      password: pass,
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`token admin HTTP ${res.status}`);
+  const j: any = await res.json();
+  return j.access_token;
+}
+
+async function kcReq(token: string, method: string, path: string, body?: any): Promise<any> {
+  const res = await fetch(`${KC_BASE}/admin/realms/${KC_REALM}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`${method} ${path} -> HTTP ${res.status} ${txt.slice(0, 200)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function firstVal(config: any, key: string): string | undefined {
+  const v = config?.[key];
+  return Array.isArray(v) ? v[0] : v;
+}
+
+async function ensureStandardLdapMapping(): Promise<void> {
+  try {
+    const token = await kcAdminToken();
+    let changed = false;
+
+    // 1) Composants de fédération LDAP
+    const ldapComponents = await kcReq(token, 'GET', '/components?type=org.keycloak.storage.UserStorageProvider');
+    const ldapProviders = (ldapComponents || []).filter((c: any) => c.providerId === 'ldap');
+    if (!ldapProviders.length) {
+      console.log('[keycloak] ℹ️  Aucun provider LDAP trouvé, mapping standard ignoré');
+      return;
+    }
+
+    for (const ldap of ldapProviders) {
+      // 1a) Login = uid
+      if (firstVal(ldap.config, 'usernameLDAPAttribute') !== 'uid') {
+        ldap.config.usernameLDAPAttribute = ['uid'];
+        await kcReq(token, 'PUT', `/components/${ldap.id}`, ldap);
+        changed = true;
+        console.log(`[keycloak] 🔧 usernameLDAPAttribute -> uid (${ldap.id})`);
+      }
+
+      // 1b) Mappers du provider
+      const mappers = await kcReq(token, 'GET', `/components?parent=${ldap.id}&type=org.keycloak.storage.ldap.mappers.LDAPStorageMapper`);
+
+      // username <- uid (identifiant de connexion)
+      const usernameMapper = (mappers || []).find(
+        (m: any) => m.providerId === 'user-attribute-ldap-mapper' && firstVal(m.config, 'user.model.attribute') === 'username'
+      );
+      if (usernameMapper && (firstVal(usernameMapper.config, 'ldap.attribute') !== 'uid' || firstVal(usernameMapper.config, 'always.read.value.from.ldap') !== 'true')) {
+        usernameMapper.config['ldap.attribute'] = ['uid'];
+        usernameMapper.config['always.read.value.from.ldap'] = ['true'];
+        await kcReq(token, 'PUT', `/components/${usernameMapper.id}`, usernameMapper);
+        changed = true;
+        console.log(`[keycloak] 🔧 mapper username -> uid (${usernameMapper.id})`);
+      }
+
+      // firstName <- cn (= nom d'affichage), toujours relu pour propager les renommages
+      const firstNameMapper = (mappers || []).find(
+        (m: any) => m.providerId === 'user-attribute-ldap-mapper' && firstVal(m.config, 'user.model.attribute') === 'firstName'
+      );
+      if (firstNameMapper && (firstVal(firstNameMapper.config, 'ldap.attribute') !== 'cn' || firstVal(firstNameMapper.config, 'always.read.value.from.ldap') !== 'true')) {
+        firstNameMapper.config['ldap.attribute'] = ['cn'];
+        firstNameMapper.config['always.read.value.from.ldap'] = ['true'];
+        await kcReq(token, 'PUT', `/components/${firstNameMapper.id}`, firstNameMapper);
+        changed = true;
+        console.log(`[keycloak] 🔧 mapper firstName -> cn always.read (${firstNameMapper.id})`);
+      }
+
+      // lastName <- sn, toujours relu
+      const lastNameMapper = (mappers || []).find(
+        (m: any) => m.providerId === 'user-attribute-ldap-mapper' && firstVal(m.config, 'user.model.attribute') === 'lastName'
+      );
+      if (lastNameMapper && firstVal(lastNameMapper.config, 'always.read.value.from.ldap') !== 'true') {
+        lastNameMapper.config['always.read.value.from.ldap'] = ['true'];
+        await kcReq(token, 'PUT', `/components/${lastNameMapper.id}`, lastNameMapper);
+        changed = true;
+        console.log(`[keycloak] 🔧 mapper lastName -> always.read (${lastNameMapper.id})`);
+      }
+
+      // Nettoyage : retirer l'ancien mapper "ldap-uid" (bidouille du découplage)
+      const uidMapper = (mappers || []).find(
+        (m: any) => m.providerId === 'user-attribute-ldap-mapper' && firstVal(m.config, 'user.model.attribute') === LDAP_UID_ATTR
+      );
+      if (uidMapper) {
+        await kcReq(token, 'DELETE', `/components/${uidMapper.id}`);
+        changed = true;
+        console.log(`[keycloak] 🧹 mapper ldap-uid supprimé (${uidMapper.id})`);
+      }
+    }
+
+    // 2) Claims (client scope "profile")
+    const scopes = await kcReq(token, 'GET', '/client-scopes');
+    const profile = (scopes || []).find((s: any) => s.name === 'profile');
+    if (profile) {
+      // preferred_username <- username (= uid). Standard : identifiant de connexion.
+      const pm = (profile.protocolMappers || []).find(
+        (m: any) => firstVal(m.config, 'claim.name') === 'preferred_username'
+      );
+      if (pm && firstVal(pm.config, 'user.attribute') !== 'username') {
+        pm.config['user.attribute'] = 'username';
+        await kcReq(token, 'PUT', `/client-scopes/${profile.id}/protocol-mappers/models/${pm.id}`, pm);
+        changed = true;
+        console.log('[keycloak] 🔧 preferred_username -> username (= uid)');
+      }
+
+      // name = nom d'affichage. On supprime le full-name mapper (qui colle
+      // firstName+lastName -> doublage) et on émet `name` directement depuis
+      // firstName (qui lit cn). Le nom affiché reste donc librement éditable et
+      // se propage aux apps au prochain login.
+      const fullNameMapper = (profile.protocolMappers || []).find(
+        (m: any) => m.protocolMapper === 'oidc-full-name-mapper'
+      );
+      if (fullNameMapper) {
+        await kcReq(token, 'DELETE', `/client-scopes/${profile.id}/protocol-mappers/models/${fullNameMapper.id}`);
+        changed = true;
+        console.log('[keycloak] 🔧 full-name mapper supprimé (doublage évité)');
+      }
+      const nameMapper = (profile.protocolMappers || []).find(
+        (m: any) => m.protocolMapper === 'oidc-usermodel-property-mapper' && firstVal(m.config, 'claim.name') === 'name'
+      );
+      if (!nameMapper) {
+        await kcReq(token, 'POST', `/client-scopes/${profile.id}/protocol-mappers/models`, {
+          name: 'ryvie-name-display',
+          protocol: 'openid-connect',
+          protocolMapper: 'oidc-usermodel-property-mapper',
+          config: {
+            'user.attribute': 'firstName',
+            'claim.name': 'name',
+            'jsonType.label': 'String',
+            'id.token.claim': 'true',
+            'access.token.claim': 'true',
+            'userinfo.token.claim': 'true',
+          },
+        });
+        changed = true;
+        console.log('[keycloak] 🔧 mapper name <- nom d\'affichage (cn) créé');
+      } else if (firstVal(nameMapper.config, 'user.attribute') !== 'firstName') {
+        nameMapper.config['user.attribute'] = 'firstName';
+        await kcReq(token, 'PUT', `/client-scopes/${profile.id}/protocol-mappers/models/${nameMapper.id}`, nameMapper);
+        changed = true;
+        console.log('[keycloak] 🔧 mapper name -> firstName (cn)');
+      }
+    } else {
+      console.warn('[keycloak] ⚠️  client scope "profile" introuvable');
+    }
+
+    // 3) Re-synchroniser depuis LDAP uniquement si on a modifié quelque chose
+    if (changed) {
+      for (const ldap of ldapProviders) {
+        try {
+          await kcReq(token, 'POST', `/user-storage/${ldap.id}/sync?action=triggerFullSync`);
+          console.log(`[keycloak] 🔄 Re-sync LDAP déclenchée (${ldap.id})`);
+        } catch (e: any) {
+          console.warn(`[keycloak] ⚠️  Re-sync échouée (${ldap.id}):`, e.message);
+        }
+      }
+      console.log('[keycloak] ✅ Mapping OIDC standard appliqué');
+    } else {
+      console.log('[keycloak] ✅ Mapping OIDC standard déjà en place');
+    }
+  } catch (err: any) {
+    // Ne jamais interrompre le démarrage du backend pour cette migration.
+    console.warn('[keycloak] ⚠️  Mapping OIDC standard non appliqué:', err.message);
+  }
+}
+
+// Aligne la durée de session SSO Keycloak (idle + max lifespan) sur `minutes`.
+// Permet au réglage "Durée de session" du dashboard de piloter aussi la session
+// Keycloak (et donc les apps SSO), pas seulement le JWT du dashboard.
+async function setRealmSessionTimeout(minutes: number): Promise<boolean> {
+  try {
+    const secs = Math.max(60, Math.floor(Number(minutes) || 0) * 60);
+    const token = await kcAdminToken();
+    const realm: any = await kcReq(token, 'GET', '');
+    if (!realm || typeof realm !== 'object') throw new Error('realm representation introuvable');
+    realm.ssoSessionIdleTimeout = secs;
+    realm.ssoSessionMaxLifespan = secs;
+    // On ne touche PAS à accessTokenLifespan : il reste court (rafraîchi automatiquement
+    // pendant la session). On borne juste s'il dépassait la session.
+    if (typeof realm.accessTokenLifespan === 'number' && realm.accessTokenLifespan > secs) {
+      realm.accessTokenLifespan = secs;
+    }
+    await kcReq(token, 'PUT', '', realm);
+    console.log(`[keycloak] 🔧 Session SSO alignée: idle+max = ${secs}s (${minutes} min)`);
+    return true;
+  } catch (err: any) {
+    console.warn('[keycloak] ⚠️  setRealmSessionTimeout échoué:', err.message);
+    return false;
+  }
+}
+
+module.exports = { ensureKeycloakRunning, removeAppSSOClient, setRealmSessionTimeout };

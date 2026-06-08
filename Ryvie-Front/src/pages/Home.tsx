@@ -582,8 +582,12 @@ const Taskbar = React.memo(({ handleClick, appsConfig, onLoaded }) => {
 const Home = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const [accessMode, setAccessMode] = useState(null); 
+  const [accessMode, setAccessMode] = useState(null);
   const [currentUserName, setCurrentUserName] = useState('');
+  // Nom d'affichage LIVE (cn courant), récupéré depuis le serveur. La session ne
+  // contient que le nom figé au login : après un renommage, le chip doit afficher
+  // le nom à jour. On ne touche PAS aux clés de préférences (getCurrentUser()).
+  const [displayName, setDisplayName] = useState('');
   const [userRole, setUserRole] = useState('User');
   const isAdmin = String(userRole || '').toLowerCase() === 'admin';
   const [appsConfig, setAppsConfig] = useState(() => {
@@ -1530,6 +1534,29 @@ const Home = () => {
       setUserRole(getCurrentUserRole() || 'User');
     } catch (_) {}
   }, []);
+
+  // Récupérer le nom d'affichage À JOUR depuis le serveur (le nom de session est figé
+  // au login → après un renommage, le chip resterait obsolète). On matche par l'uid
+  // contenu dans le JWT, puis on lit le `name` (= cn courant) renvoyé par l'API.
+  useEffect(() => {
+    const session = getSessionInfo() || {};
+    if (!session.token || !accessMode) return;
+    let uid = '';
+    try {
+      const payload = JSON.parse(atob(String(session.token).split('.')[1]));
+      uid = payload.uid || '';
+    } catch (_) {}
+    if (!uid) return;
+    const serverUrl = getServerUrl(accessMode);
+    axios.get(`${serverUrl}/api/users-public`)
+      .then((res) => {
+        const me = (res.data || []).find(
+          (u: any) => String(u.uid || '').trim().toLowerCase() === String(uid).trim().toLowerCase()
+        );
+        if (me && me.name) setDisplayName(me.name);
+      })
+      .catch(() => {});
+  }, [accessMode]);
   
   // Charger l'IP locale ET la config depuis les manifests en parallèle (optimisation)
   useEffect(() => {
@@ -2438,6 +2465,12 @@ const Home = () => {
 
     const checkForUpdates = async () => {
       try {
+        // Respecter le réglage "Activer les notifications" : si désactivé, ne pas
+        // afficher la notification de mise à jour.
+        if (localStorage.getItem('ryvie_notifications_enabled') === 'false') {
+          console.log('[Home] 🔕 Notifications désactivées → notif de mise à jour ignorée');
+          return;
+        }
         const lastDismissed = localStorage.getItem('ryvie_update_dismissed');
         const hideUntil = lastDismissed ? parseInt(lastDismissed, 10) : 0;
         
@@ -2711,10 +2744,10 @@ const Home = () => {
               }
             }}
           />
-          {currentUserName && (
+          {(displayName || currentUserName) && (
             <div className="user-chip" title={t('home.connectedUser')}>
-              <div className="avatar">{String(currentUserName).charAt(0).toUpperCase()}</div>
-              <div className="name">{currentUserName}</div>
+              <div className="avatar">{String(displayName || currentUserName).charAt(0).toUpperCase()}</div>
+              <div className="name">{displayName || currentUserName}</div>
             </div>
           )}
           

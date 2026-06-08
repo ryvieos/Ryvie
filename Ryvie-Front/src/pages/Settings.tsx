@@ -53,7 +53,13 @@ const Settings = () => {
     backupFrequency: 'daily',
     encryptionEnabled: true,
     twoFactorAuth: false,
-    notificationsEnabled: true,
+    notificationsEnabled: (() => {
+      try {
+        const cached = localStorage.getItem('ryvie_notifications_enabled');
+        if (cached === 'false') return false;
+      } catch {}
+      return true;
+    })(),
     darkMode: (() => {
       try {
         const currentUser = getCurrentUser();
@@ -1056,6 +1062,13 @@ const Settings = () => {
       showToast('L\'authentification à deux facteurs n\'est pas encore disponible', 'info');
       // Ne pas changer l'état
       return;
+    } else if (setting === 'notificationsEnabled') {
+      // Persister le réglage (lu par Home pour masquer la notif de mise à jour).
+      setSettings(prev => ({ ...prev, notificationsEnabled: value }));
+      try {
+        localStorage.setItem('ryvie_notifications_enabled', String(!!value));
+      } catch (_) {}
+      showToast(value ? 'Notifications activées' : 'Notifications désactivées', 'success');
     } else {
       setSettings(prev => ({
         ...prev,

@@ -72,8 +72,23 @@ export class SessionManager {
     const hasToken = !!token;
     const hasUser = !!this.getCurrentUser();
     const sessionActive = StorageManager.getItem<boolean>(this.sessionActiveKey, false) || false;
-    
+
+    // Une session avec un token EXPIRÉ n'est plus active. Le refresh côté serveur
+    // exige un token valide (jwt.verify), donc un token expiré ne peut pas être
+    // prolongé : on considère la session terminée.
+    if (hasToken && this.isTokenExpired(token as string)) return false;
+
     return hasToken && hasUser && sessionActive;
+  }
+
+  isTokenExpired(token: string): boolean {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (!payload || typeof payload.exp !== 'number') return false;
+      return Math.floor(Date.now() / 1000) >= payload.exp;
+    } catch {
+      return false; // en cas de doute, ne pas invalider abusivement
+    }
   }
 
   getToken(): string | null {
