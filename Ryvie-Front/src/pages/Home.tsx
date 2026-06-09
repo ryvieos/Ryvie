@@ -895,18 +895,34 @@ const Home = () => {
                     return;
                   }
                   
-                  setLauncherLayout(backendLayout);
-                  setLauncherAnchors(backendAnchors);
-                  console.log('[Home] ✅ Layout mis à jour depuis le backend:', Object.keys(backendLayout).length, 'items');
-                  
-                  // Mettre à jour le localStorage
+                  // FUSION LOCAL-PRIORITAIRE : le backend ne sert qu'à APPORTER la
+                  // position des nouvelles apps. On ne réécrit JAMAIS la position
+                  // (ni l'ancre) d'une app déjà placée localement. Ainsi, si
+                  // l'utilisateur déplace une icône PENDANT l'installation, son
+                  // geste n'est jamais écrasé par la réconciliation backend
+                  // (fini le "retour à la position initiale pendant l'install").
+                  // On utilise les updaters fonctionnels pour fusionner sur l'état
+                  // LE PLUS RÉCENT (y compris un drag arrivé entre-temps).
+                  const onlyNew = (backend, prev) => {
+                    const local = prev || {};
+                    const merged = { ...local };
+                    Object.keys(backend).forEach(id => {
+                      if (!(id in local)) merged[id] = backend[id]; // ajout pur
+                    });
+                    return merged;
+                  };
+                  setLauncherLayout(prev => onlyNew(backendLayout, prev));
+                  setLauncherAnchors(prev => onlyNew(backendAnchors, prev));
+                  console.log('[Home] ✅ Nouvelles positions backend fusionnées (local prioritaire, drags préservés)');
+
+                  // Cache localStorage : même fusion local-prioritaire (best-effort)
                   try {
                     const currentUser = getCurrentUser();
                     if (currentUser) {
                       const cached = localStorage.getItem(`launcher_${currentUser}`);
                       const launcher = cached ? JSON.parse(cached) : {};
-                      launcher.layout = backendLayout;
-                      launcher.anchors = backendAnchors;
+                      launcher.layout = onlyNew(backendLayout, launcher.layout);
+                      launcher.anchors = onlyNew(backendAnchors, launcher.anchors);
                       localStorage.setItem(`launcher_${currentUser}`, JSON.stringify(launcher));
                     }
                   } catch (e) {}

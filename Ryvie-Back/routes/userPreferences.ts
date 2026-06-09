@@ -14,6 +14,33 @@ if (!fs.existsSync(PREFERENCES_DIR)) {
   fs.mkdirSync(PREFERENCES_DIR, { recursive: true });
 }
 
+// ---------------------------------------------------------------------------
+// Sérialisation des cycles read-modify-write du fichier de préférences, PAR
+// utilisateur. Plusieurs chemins écrivent le MÊME <user>.json sans coordination
+// (reconcileAllUsersLayout appelé 1× par install -> 2× en parallèle quand on
+// installe 2 apps d'un coup, le GET /user/preferences qui réconcilie+sauvegarde
+// et que le front poll en boucle pendant l'install, et les PATCH de sauvegarde
+// manuelle). Sans verrou, ces opérations s'entrelacent sur leurs `await` :
+// l'une lit l'état S, une autre écrit S', puis la première réécrit (S + sa
+// modif) en écrasant S' -> "lost update". L'écriture gagnante porte alors une
+// base antérieure au dernier déplacement -> les icônes "reviennent" à leur
+// ancienne position (même des apps pas en cours d'install).
+//
+// On enchaîne donc toutes les opérations d'un même utilisateur, et on relit le
+// fichier À L'INTÉRIEUR du verrou (juste avant d'écrire) pour toujours partir
+// du dernier état persisté.
+const userPrefsLocks: { [username: string]: Promise<any> } = {};
+
+function withUserPrefsLock<T>(username: string, fn: () => T | Promise<T>): Promise<T> {
+  const prev = userPrefsLocks[username] || Promise.resolve();
+  // Exécuter fn après l'opération précédente, qu'elle ait réussi ou échoué.
+  const run = prev.then(() => fn(), () => fn());
+  // La chaîne stockée ne doit jamais rejeter, sinon les opérations suivantes
+  // seraient court-circuitées : on neutralise son résultat.
+  userPrefsLocks[username] = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 /**
  * Trouve une position libre dans la grille pour un item de taille width x height
  * @param layout - Layout actuel {itemId: {col, row, w, h}}
@@ -117,11 +144,15 @@ async function reconcileAllUsersLayout() {
     for (const file of files) {
       const username = file.replace('.json', '');
       const filePath = path.join(PREFERENCES_DIR, file);
-      
+
+      // Sérialiser avec les autres écritures de cet utilisateur (autre install
+      // concurrente, GET réconciliant, PATCH manuel) et relire le fichier ICI,
+      // sous verrou, pour ne jamais repartir d'une base périmée.
+      await withUserPrefsLock(username, () => {
       try {
         const preferences = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        
-        if (!preferences.launcher) continue;
+
+        if (!preferences.launcher) return;
         
         const existingApps = Array.isArray(preferences.launcher.apps) ? preferences.launcher.apps : [];
         const missing = installed.filter(id => !existingApps.includes(id));
@@ -169,6 +200,7 @@ async function reconcileAllUsersLayout() {
       } catch (err: any) {
         console.warn(`[reconcileAllUsersLayout] ⚠️ Erreur pour ${username}:`, err.message);
       }
+      });
     }
     
     console.log('[reconcileAllUsersLayout] ✅ Réconciliation terminée');
@@ -371,8 +403,9 @@ router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username; // uid est le nom d'utilisateur dans le JWT
     console.log('[userPreferences] GET pour utilisateur:', username);
+    const preferences = await withUserPrefsLock(username, async () => {
     let preferences = loadUserPreferences(username);
-    
+
     if (!preferences) {
       // Créer des préférences par défaut avec le launcher par défaut complet
       const defaultLauncher = await generateDefaultLauncher();
@@ -476,7 +509,10 @@ router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
     } catch (e: any) {
       console.warn('[userPreferences] Réconciliation des apps échouée:', e?.message);
     }
-    
+
+    return preferences;
+    });
+
     res.json(preferences);
   } catch (error: any) {
     console.error('[userPreferences] Erreur GET:', error);
@@ -485,13 +521,14 @@ router.get('/user/preferences', verifyToken, async (req: any, res: any) => {
 });
 
 // POST /api/user/preferences - Sauvegarder les préférences de l'utilisateur
-router.post('/user/preferences', verifyToken, (req: any, res: any) => {
+router.post('/user/preferences', verifyToken, async (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] POST pour utilisateur:', username);
     const preferences = req.body;
-    
-    if (saveUserPreferences(username, preferences)) {
+
+    const ok = await withUserPrefsLock(username, () => saveUserPreferences(username, preferences));
+    if (ok) {
       res.json({ success: true, message: 'Préférences sauvegardées' });
     } else {
       res.status(500).json({ error: 'Échec de la sauvegarde' });
@@ -532,7 +569,7 @@ router.patch('/user/preferences/zones', verifyToken, (req: any, res: any) => {
 });
 
 // PATCH /api/user/preferences/launcher - Mettre à jour la disposition du launcher (anchors/layout/widgets/apps)
-router.patch('/user/preferences/launcher', verifyToken, (req: any, res: any) => {
+router.patch('/user/preferences/launcher', verifyToken, async (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] PATCH launcher pour utilisateur:', username);
@@ -542,13 +579,6 @@ router.patch('/user/preferences/launcher', verifyToken, (req: any, res: any) => 
       return res.status(400).json({ error: 'launcher requis (object)' });
     }
 
-    // Charger préférences existantes ou valeurs par défaut minimales
-    let preferences = loadUserPreferences(username) || {
-      zones: {},
-      theme: 'default',
-      language: 'fr'
-    };
-
     // Normaliser les champs du launcher
     const normalized = {
       anchors: launcher.anchors && typeof launcher.anchors === 'object' ? launcher.anchors : {},
@@ -557,11 +587,21 @@ router.patch('/user/preferences/launcher', verifyToken, (req: any, res: any) => 
       apps: Array.isArray(launcher.apps) ? launcher.apps : []
     };
 
-    preferences.launcher = normalized;
+    // Relire sous verrou (les autres clés restent à jour) puis écrire, sérialisé
+    // avec les réconciliations d'install concurrentes.
+    const saved = await withUserPrefsLock(username, () => {
+      const preferences = loadUserPreferences(username) || {
+        zones: {},
+        theme: 'default',
+        language: 'fr'
+      };
+      preferences.launcher = normalized;
+      return saveUserPreferences(username, preferences) ? preferences : null;
+    });
 
-    if (saveUserPreferences(username, preferences)) {
+    if (saved) {
       console.log('[userPreferences] Launcher sauvegardé pour', username);
-      return res.json({ success: true, launcher: preferences.launcher });
+      return res.json({ success: true, launcher: saved.launcher });
     } else {
       return res.status(500).json({ error: 'Échec de la sauvegarde' });
     }
@@ -572,7 +612,7 @@ router.patch('/user/preferences/launcher', verifyToken, (req: any, res: any) => 
 });
 
 // PATCH /api/user/preferences - Merge générique de préférences (incluant éventuellement launcher)
-router.patch('/user/preferences', verifyToken, (req: any, res: any) => {
+router.patch('/user/preferences', verifyToken, async (req: any, res: any) => {
   try {
     const username = req.user.uid || req.user.username;
     console.log('[userPreferences] PATCH generic pour utilisateur:', username);
@@ -581,14 +621,16 @@ router.patch('/user/preferences', verifyToken, (req: any, res: any) => {
       return res.status(400).json({ error: 'Corps JSON requis' });
     }
 
-    let preferences = loadUserPreferences(username) || {
+    const incoming = req.body || {};
+
+    const preferences = await withUserPrefsLock(username, () => {
+    const preferences = loadUserPreferences(username) || {
       zones: {},
       theme: 'default',
       language: 'fr'
     };
 
     // Merge superficiel des clés fournies
-    const incoming = req.body || {};
     if (incoming.launcher && typeof incoming.launcher === 'object') {
       const l = incoming.launcher;
       preferences.launcher = {
@@ -610,7 +652,10 @@ router.patch('/user/preferences', verifyToken, (req: any, res: any) => {
       if (k in incoming) preferences[k] = incoming[k];
     });
 
-    if (saveUserPreferences(username, preferences)) {
+    return saveUserPreferences(username, preferences) ? preferences : null;
+    });
+
+    if (preferences) {
       return res.json({ success: true, preferences });
     } else {
       return res.status(500).json({ error: 'Échec de la sauvegarde' });
