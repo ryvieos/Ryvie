@@ -1,6 +1,6 @@
 {
   "name": "ryvie",
-  "version": "0.0.18-alpha",
+  "version": "0.0.19-alpha",
   "description": "Votre Cloud personnel transparent",
   "main": "index.js",
   "scripts": {

@@ -1,0 +1,78 @@
+name: Dev Pre-release
+
+# Sur chaque push/merge sur la branche `dev` (et uniquement celle-ci),
+# crée une pré-release incrémentale : v<version>-dev.N
+# où <version> vient de package.json (ex: 0.0.19-alpha) et N s'incrémente
+# de 1 par rapport à la dernière pré-release existante du même socle.
+on:
+  push:
+    branches:
+      - dev
+
+# Empêche deux runs concurrents de calculer le même numéro N.
+concurrency:
+  group: dev-prerelease
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  prerelease:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (historique + tags complets)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calcule le prochain numéro de pré-release
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          BASE="$(jq -r '.version' package.json)"   # ex: 0.0.19-alpha
+          PREFIX="v${BASE}-dev."
+          echo "Socle (package.json): $BASE"
+          echo "Préfixe recherché:    $PREFIX"
+
+          # Cherche le plus grand N parmi les releases existantes ET les tags
+          # (robuste même si une release a été supprimée mais le tag subsiste).
+          MAX=0
+          collect() {
+            local name="$1"
+            case "$name" in
+              "${PREFIX}"*)
+                local n="${name##*.}"
+                if [[ "$n" =~ ^[0-9]+$ ]] && (( n > MAX )); then MAX="$n"; fi
+                ;;
+            esac
+          }
+
+          while read -r tagName; do
+            [ -n "$tagName" ] && collect "$tagName"
+          done < <(gh release list --limit 500 --json tagName --jq '.[].tagName' 2>/dev/null || true)
+
+          while read -r tagName; do
+            [ -n "$tagName" ] && collect "$tagName"
+          done < <(git tag --list "${PREFIX}*")
+
+          NEXT=$((MAX + 1))
+          TAG="${PREFIX}${NEXT}"
+          echo "Dernier N trouvé:     $MAX"
+          echo "Nouvelle pré-release: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Crée la pré-release GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # gh crée le tag (sur le commit poussé) ET la pré-release en une étape.
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes
