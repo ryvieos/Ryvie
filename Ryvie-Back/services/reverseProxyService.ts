@@ -4,7 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const Docker = require('dockerode');
 const { getLocalIP, getPrivateIP } = require('../utils/network');
-const { REVERSE_PROXY_DIR } = require('../config/paths');
+const { REVERSE_PROXY_DIR, NETBIRD_FILE } = require('../config/paths');
 const yaml = require('js-yaml');
 const { composeUpWithRecovery } = require('./dockerService');
 
@@ -405,15 +405,42 @@ async function getAllAppProxyConfigs() {
 }
 
 /**
- * Génère la configuration Caddyfile pour une application avec proxy
+ * Lit l'ensemble des appId qui possèdent un domaine public Netbird (ryvie.fr).
+ * Quand un domaine public existe, l'ingress cloud termine le TLS et contacte le
+ * backend de la box en HTTP clair : le bloc local DOIT alors être en HTTP.
+ * Sans domaine public, l'app n'est accessible qu'en direct (IP tunnel/LAN) et
+ * a besoin de HTTPS local (tls internal) si elle l'exige (contexte sécurisé).
  */
-function generateAppProxyConfig(appId, proxyConfig) {
+async function getPublicDomainAppIds() {
+  try {
+    const raw = await fs.readFile(NETBIRD_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    const domains = (data && data.domains) || {};
+    return new Set(Object.keys(domains).map((id) => String(id).toLowerCase()));
+  } catch (error) {
+    console.warn(`[reverseProxyService] ⚠️ Impossible de lire les domaines Netbird (${NETBIRD_FILE}): ${error.message}`);
+    return new Set();
+  }
+}
+
+/**
+ * Génère la configuration Caddyfile pour une application avec proxy
+ *
+ * hasPublicDomain : si true, l'app est exposée via l'ingress cloud (qui parle
+ * HTTP au backend) → on force un bloc HTTP même si proxy.https=true, sinon Caddy
+ * répond « 400 Client sent an HTTP request to an HTTPS server » (et le cloud 502).
+ */
+function generateAppProxyConfig(appId, proxyConfig, hasPublicDomain = false) {
   const { port, https, target } = proxyConfig;
   const targetPort = target.port;
-  
+
+  // Le HTTPS local (tls internal) n'a de sens que pour l'accès direct sans
+  // domaine public. Avec un domaine public, le TLS est assuré côté cloud.
+  const useHttps = https && !hasPublicDomain;
+
   let config = '';
-  
-  if (https) {
+
+  if (useHttps) {
     // Configuration HTTPS avec wildcard et on_demand
     config = `
 # --- ${appId.toUpperCase()} (HTTPS - Port ${port}) ---
@@ -525,10 +552,14 @@ async function generateFullCaddyfileContent() {
   
   // Récupérer les configs proxy des apps
   const appsResult = await getAllAppProxyConfigs();
-  
+
+  // Apps exposées via un domaine public (cloud termine le TLS, backend en HTTP)
+  const publicDomainAppIds = await getPublicDomainAppIds();
+
   if (appsResult.success && appsResult.configs.length > 0) {
     for (const { appId, config } of appsResult.configs) {
-      const appConfig = generateAppProxyConfig(appId, config);
+      const hasPublicDomain = publicDomainAppIds.has(String(appId).toLowerCase());
+      const appConfig = generateAppProxyConfig(appId, config, hasPublicDomain);
       content += appConfig;
     }
   }
