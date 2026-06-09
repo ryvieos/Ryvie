@@ -5,7 +5,7 @@ const ldap = require('ldapjs');
 const jwt = require('jsonwebtoken');
 const { ensureConnected } = require('../redisClient');
 const ldapConfig = require('../config/ldap');
-const { createSafeClient, escapeLdapFilterValue, getUserRole } = require('../services/ldapService');
+const { createSafeClient, escapeLdapFilterValue, getUserRole, generateOpaqueUid } = require('../services/ldapService');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 const {
   getTokenExpirationSeconds,
@@ -260,11 +260,13 @@ router.get('/ldap/check-first-time', async (req: any, res: any) => {
 
 // POST /api/ldap/create-first-user - Créer le premier utilisateur admin
 router.post('/ldap/create-first-user', async (req: any, res: any) => {
-  const { uid, name, email, password, language } = req.body;
+  const { name, email, password, language } = req.body;
 
-  if (!uid || !name || !email || !password) {
-    return res.status(400).json({ error: 'Tous les champs sont requis (uid, name, email, password)' });
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Tous les champs sont requis (name, email, password)' });
   }
+  // uid opaque et stable généré côté serveur ; le nom (cn) reste librement modifiable.
+  const uid = generateOpaqueUid();
 
   const ldapClient = createSafeClient();
 
@@ -306,7 +308,8 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
           }
 
           // Créer l'utilisateur avec employeeType pour définir le rôle
-          const userDN = `cn=${name},${ldapConfig.userSearchBase}`;
+          // RDN basé sur l'uid (immuable) et non sur le cn.
+          const userDN = `uid=${uid},${ldapConfig.userSearchBase}`;
           const userEntry: any = {
             objectClass: ['inetOrgPerson', 'posixAccount', 'shadowAccount'],
             uid,

@@ -117,7 +117,12 @@ const generateAppConfigFromManifests = async (accessMode: string): Promise<Recor
     apps.forEach(app => {
       const iconId = `app-${app.id}`;
       
-      const iconUrl = `${serverUrl}/api/apps/${app.id}/icon?t=${Date.now()}`;
+      // URL d'icône STABLE (sans `?t=${Date.now()}`). Le backend renvoie déjà
+      // `Cache-Control: public, max-age=86400` (cf. routes/apps.ts) : une URL stable
+      // permet au navigateur de servir l'icône depuis son cache au lieu de la
+      // re-télécharger à chaque (re)génération de config. Sinon, chaque chargement
+      // change l'URL -> re-fetch -> tuiles blanches le temps du téléchargement.
+      const iconUrl = `${serverUrl}/api/apps/${app.id}/icon`;
 
       if (app.mainPort && Number.isInteger(app.mainPort)) {
         try { 

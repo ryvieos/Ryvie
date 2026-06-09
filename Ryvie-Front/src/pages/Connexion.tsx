@@ -159,13 +159,16 @@ const Userlogin = () => {
       return;
     }
 
-    // Utilisateur différent → logout + redirect vers SSO Keycloak avec login_hint
+    // Utilisateur différent → logout + redirect vers SSO Keycloak avec login_hint.
+    // On pré-remplit l'EMAIL (et non l'uid) sur la page de login Keycloak, en repli
+    // sur l'uid si l'email n'est pas disponible/valide.
     const serverUrl = getServerUrl(accessMode);
     console.log(`[Connexion] Switch vers ${userName} via SSO Keycloak`);
     endSession();
+    const loginHint = (userObj?.email && /^\S+@\S+\.\S+$/.test(userObj.email)) ? userObj.email : userId;
     // Rediriger la fenêtre parente (ou la fenêtre courante) vers le SSO
     const targetWindow = (window.parent !== window) ? window.parent : window;
-    targetWindow.location.href = `${serverUrl}/api/auth/switch?login_hint=${encodeURIComponent(userId)}`;
+    targetWindow.location.href = `${serverUrl}/api/auth/switch?login_hint=${encodeURIComponent(loginHint)}`;
   };
 
   // Helper: check if a given list user matches the current session user (by id or name)

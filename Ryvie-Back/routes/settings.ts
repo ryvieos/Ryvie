@@ -81,7 +81,15 @@ router.patch('/settings/token-expiration', verifyToken, (req: any, res: any) => 
     if (saveSettings(settings)) {
       // Mettre à jour la variable d'environnement pour les prochains tokens
       process.env.JWT_EXPIRES_MINUTES = minutes.toString();
-      
+
+      // Aligner aussi la durée de session SSO Keycloak (idle + max lifespan), pour
+      // que ce réglage gouverne la vraie session SSO et pas seulement le JWT dashboard.
+      // Best-effort, non bloquant : un échec Keycloak n'empêche pas la sauvegarde.
+      try {
+        const { setRealmSessionTimeout } = require('../services/keycloakService');
+        Promise.resolve(setRealmSessionTimeout(parseInt(minutes))).catch(() => {});
+      } catch (_) {}
+
       console.log(`[settings] Durée d'expiration du token modifiée: ${minutes} minutes`);
       res.json({ 
         success: true, 
@@ -554,58 +562,14 @@ router.get('/machine-id', (req: any, res: any) => {
 });
 
 // GET /api/settings/ryvie-domains - Récupérer les domaines publics Netbird (nécessite authentification)
-router.get('/settings/ryvie-domains', verifyToken, (req: any, res: any) => {
+router.get('/settings/ryvie-domains', verifyToken, isAdmin, (req: any, res: any) => {
   try {
-    const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-    const clientIPRaw = xff || req.ip || req.connection.remoteAddress || '';
-    const cleanIP = clientIPRaw.replace('::ffff:', '');
-    const hostHeader = String(req.headers.host || '');
-    const hostOnly = hostHeader.split(':')[0].toLowerCase();
+    // Accès réservé aux administrateurs (middleware isAdmin ci-dessus). Les URLs publiques
+    // et la setup key sont sensibles (la setup key permet de rejoindre le VPN), mais on
+    // autorise désormais un admin authentifié à les récupérer y compris en accès distant.
+    // Les utilisateurs non-admins reçoivent 403 partout.
+    console.log(`[settings] Accès ryvie-domains (admin) - Utilisateur: ${req.user?.username || req.user?.uid}`);
 
-    const isLocalHost = hostHeader.startsWith('localhost') || cleanIP === 'localhost' || hostOnly.endsWith('.local');
-    const isLoopback = cleanIP === '127.0.0.1' || cleanIP.startsWith('127.') || cleanIP === '::1';
-
-    let isPrivateIPv4 = false;
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(cleanIP)) {
-      const [a,b] = cleanIP.split('.').map(n => parseInt(n,10));
-      isPrivateIPv4 = cleanIP.startsWith('10.') ||
-                      cleanIP.startsWith('192.168.') ||
-                      (a === 172 && b >= 16 && b <= 31);
-    }
-
-    // IPv6 privé (ULA fc00::/7 => fc.. ou fd..), link-local fe80::/10
-    const isPrivateIPv6 = cleanIP.startsWith('fc') || cleanIP.startsWith('fd') || cleanIP.startsWith('fe80:');
-
-    // Netbird tunnel IPs (plage 100.0.0.0/8)
-    const isNetbirdTunnel = cleanIP.startsWith('100.');
-
-    const isLocal = isLocalHost || isLoopback || isPrivateIPv4 || isPrivateIPv6 || isNetbirdTunnel;
-
-    // Refuser explicitement l'accès si la requête passe par un domaine public Netbird
-    try {
-      if (fs.existsSync(NETBIRD_FILE)) {
-        const nb = JSON.parse(fs.readFileSync(NETBIRD_FILE, 'utf8')) || {};
-        const domains = nb.domains ? Object.values(nb.domains).filter(Boolean).map(d => String(d).toLowerCase()) : [];
-        if (domains.includes(hostOnly) || hostOnly.endsWith('.ryvie.fr')) {
-          console.log(`[settings] Accès via domaine remote Netbird refusé (${hostOnly})`);
-          return res.status(403).json({ error: 'Accès refusé: cette API n\'est pas exposée via le domaine remote' });
-        }
-      }
-    } catch (_: any) {}
-
-    // Bloquer le port remote 3002 uniquement si la requête n'est PAS locale
-    if (!isLocal && hostHeader.includes(':3002')) {
-      console.log(`[settings] Accès via port remote 3002 refusé pour ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP})`);
-      return res.status(403).json({ error: 'Accès refusé: cette API n\'est pas exposée via l\'adresse remote' });
-    }
-
-    if (!isLocal) {
-      console.log(`[settings] Tentative d'accès non-local à ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP})`);
-      return res.status(403).json({ error: 'Accès refusé: cette API est uniquement accessible en local' });
-    }
-    
-    console.log(`[settings] Accès autorisé à ryvie-domains depuis ${clientIPRaw} (nettoyé: ${cleanIP}) - Utilisateur: ${req.user?.username || req.user?.uid}`);
-    
     // Charger settings pour récupérer l'id de l'instance
     const settings = loadSettings();
 
@@ -623,8 +587,11 @@ router.get('/settings/ryvie-domains', verifyToken, (req: any, res: any) => {
 
     let setupKey = null;
     try {
-      const envPath = '/data/config/netbird/.env';
-      if (fs.existsSync(envPath)) {
+      // La setup key NetBird peut être écrite à plusieurs emplacements selon le mode
+      // de provisioning de la box. On essaie les chemins connus dans l'ordre.
+      const envPath = ['/data/config/netbird/.env', '/netbird/.env']
+        .find((p) => fs.existsSync(p));
+      if (envPath) {
         const envContent = fs.readFileSync(envPath, 'utf8');
         const line = envContent.split(/\r?\n/).find(l => l.trim().startsWith('NETBIRD_SETUP_KEY='));
         if (line) {

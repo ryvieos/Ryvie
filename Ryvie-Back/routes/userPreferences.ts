@@ -274,8 +274,11 @@ function saveUserPreferences(username, preferences) {
 async function generateDefaultLauncher() {
   const maxCols = 12;
   
-  // Widgets par défaut avec IDs corrects pour le frontend
+  // Widgets par défaut avec IDs corrects pour le frontend.
+  // 'weather' est positionné dans layout/anchors ci-dessous : il doit AUSSI figurer
+  // ici, sinon il n'est jamais rendu (c'était le bug du widget météo manquant).
   const defaultWidgets = [
+    { id: 'weather', type: 'weather' },
     { id: 'widget-cpu-ram-0', type: 'cpu-ram' },
     { id: 'widget-storage-1', type: 'storage' }
   ];

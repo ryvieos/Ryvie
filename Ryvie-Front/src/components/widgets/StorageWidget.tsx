@@ -11,41 +11,40 @@ import { useLanguage } from '../../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;
 
+// Cache "dernière valeur connue" (stale-while-revalidate) : on réaffiche immédiatement
+// le stockage du dernier chargement, puis on rafraîchit en arrière-plan. Évite le skeleton
+// gris à chaque visite (l'appel /api/server-info peut prendre plusieurs secondes).
+const STORAGE_CACHE_KEY = 'ryvie_widget_storage_cache';
+type StorageDisk = { device: string; mount: string; used: number; total: number };
+const readStorageCache = (): StorageDisk[] | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return null;
+};
+const writeStorageCache = (disks: StorageDisk[]) => {
+  try { localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(disks)); } catch {}
+};
+
 /**
  * Widget affichant l'utilisation du stockage
  */
-const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: () => void; accessMode?: string }) => {
+const StorageWidget = ({ id, onRemove, accessMode, openSignal }: { id: string; onRemove?: () => void; accessMode?: string; openSignal?: number }) => {
   const { t } = useLanguage();
-  const [data, setData] = useState<Array<{ device: string; mount: string; used: number; total: number }>>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedStorage = readStorageCache();
+  const [data, setData] = useState<StorageDisk[]>(cachedStorage || []);
+  const [loading, setLoading] = useState(!cachedStorage);
   const [barProgress, setBarProgress] = useState(0); // animate from 0
-  const [entered, setEntered] = useState(false); // fade-in flag
+  const [entered, setEntered] = useState(!!cachedStorage); // fade-in flag (déjà entré si cache)
   const [showModal, setShowModal] = useState(false); // fenêtre flottante
   const [storageDetail, setStorageDetail] = useState<any>(null); // détail complet du stockage
   const [storageDetailLoading, setStorageDetailLoading] = useState(false);
   const navigate = useNavigate();
-
-  const pointerDownTime = useRef<number>(0);
-  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    pointerDownTime.current = Date.now();
-    pointerDownPos.current = { x: e.clientX, y: e.clientY };
-
-    const onUp = (upEvent: PointerEvent) => {
-      const elapsed = Date.now() - pointerDownTime.current;
-      const dx = Math.abs(upEvent.clientX - (pointerDownPos.current?.x ?? 0));
-      const dy = Math.abs(upEvent.clientY - (pointerDownPos.current?.y ?? 0));
-
-      if (elapsed < 250 && dx < 8 && dy < 8) {
-        handleOpenModal();
-      }
-
-      document.removeEventListener('pointerup', onUp);
-    };
-
-    document.addEventListener('pointerup', onUp);
-  };
+  const prevOpenSignalRef = useRef<number>(0);
 
   useEffect(() => {
     const fetchStorageStats = async () => {
@@ -78,12 +77,14 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
           const totalBytes = total * (1024 ** 3);
           
           // Créer un objet disque unique pour /data
-          setData([{
+          const disks = [{
             device: '/data',
             mount: '/data',
             used: usedBytes,
             total: totalBytes
-          }]);
+          }];
+          setData(disks);
+          writeStorageCache(disks);
           setLoading(false);
         }
       } catch (error) {
@@ -155,6 +156,17 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
     }
   };
 
+  // Ouverture déclenchée depuis la tuile (GridLauncher). Le drag utilise setPointerCapture,
+  // donc le clic est capté au niveau de la tuile et non du widget enfant : GridLauncher
+  // incrémente openSignal pour demander l'ouverture de la modale (même mécanisme que la météo).
+  useEffect(() => {
+    if (openSignal && openSignal !== prevOpenSignalRef.current) {
+      prevOpenSignalRef.current = openSignal;
+      handleOpenModal();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal]);
+
   const handleCloseModal = () => {
     console.log('[StorageWidget] Closing modal');
     setShowModal(false);
@@ -197,7 +209,7 @@ const StorageWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: ()
         ) : data.length === 0 ? (
           <div className="widget-empty">{t('storageWidget.noDisk')}</div>
         ) : (
-          <div className="storage-content storage-clickable" onPointerDown={handlePointerDown} style={{ cursor: 'pointer', height: '100%' }}>
+          <div className="storage-content storage-clickable" style={{ cursor: 'pointer', height: '100%' }}>
             {data.slice(0, 1).map((disk, index) => {
               const usedPercent = Math.round((disk.used / disk.total) * 100);
               const status = getStatus(usedPercent);

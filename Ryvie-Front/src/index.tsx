@@ -13,7 +13,8 @@ import Welcome from './pages/Welcome';
 import Userlogin from './pages/Connexion';
 import ServerRestarting from './pages/ServerRestarting';
 import Onboarding from './pages/Onboarding';
-import { initializeSession, isSessionActive, endSession } from './utils/sessionManager';
+import { initializeSession, isSessionActive, endSession, getSessionInfo } from './utils/sessionManager';
+import { handleTokenError } from './utils/setupAxios';
 import { isElectron } from './utils/platformUtils';
 import { handleAuthError } from './services/authService';
 import faviconUrl from './icons/ryvielogo0.png';
@@ -35,6 +36,39 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const App = () => {
+  // Vérification PROACTIVE de l'expiration de session, sur TOUTE page : timer
+  // périodique + retour sur l'onglet. Si le token est expiré, on déconnecte et on
+  // redirige vers /login (sans attendre un appel API qui renverrait 401). Le token
+  // expiré n'étant pas rafraîchissable (le serveur fait jwt.verify), c'est cohérent.
+  useEffect(() => {
+    const checkExpiry = () => {
+      try {
+        const { token } = getSessionInfo() || {};
+        if (!token) return; // pas de session → rien à faire
+        let expired = false;
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          expired = typeof payload?.exp === 'number' && Math.floor(Date.now() / 1000) >= payload.exp;
+        } catch { expired = false; }
+        if (expired) {
+          console.log('[App] Session expirée détectée (vérif proactive) → déconnexion');
+          handleTokenError('EXPIRED_TOKEN');
+        }
+      } catch (_) {}
+    };
+    const interval = setInterval(checkExpiry, 30000);
+    const onFocus = () => checkExpiry();
+    const onVisible = () => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') checkExpiry(); };
+    if (typeof window !== 'undefined') window.addEventListener('focus', onFocus);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    checkExpiry();
+    return () => {
+      clearInterval(interval);
+      if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
   useEffect(() => {
     // Initialiser la session au démarrage
     initializeSession();

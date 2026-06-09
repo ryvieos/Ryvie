@@ -7,15 +7,37 @@ import { useLanguage } from '../../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;
 
+// Cache "dernière valeur connue" (stale-while-revalidate) : on réaffiche immédiatement
+// le CPU/RAM du dernier chargement, puis on rafraîchit en arrière-plan. Évite le skeleton
+// gris à chaque visite (l'appel /api/server-info peut prendre plusieurs secondes).
+const CPURAM_CACHE_KEY = 'ryvie_widget_cpuram_cache';
+type CpuRamData = { cpu: number; ram: number; ramTotal: number };
+const readCpuRamCache = (): CpuRamData | null => {
+  try {
+    const raw = localStorage.getItem(CPURAM_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.cpu === 'number' && typeof parsed.ram === 'number') return parsed;
+    }
+  } catch {}
+  return null;
+};
+const writeCpuRamCache = (d: CpuRamData) => {
+  try { localStorage.setItem(CPURAM_CACHE_KEY, JSON.stringify(d)); } catch {}
+};
+
 /**
  * Widget affichant l'utilisation CPU et RAM
  */
 const CpuRamWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: () => void; accessMode?: string }) => {
   const { t } = useLanguage();
-  const [data, setData] = useState({ cpu: 0, ram: 0, ramTotal: 0 });
-  const [loading, setLoading] = useState(true);
-  const [smoothed, setSmoothed] = useState({ cpu: 0, ram: 0 });
-  const [displayed, setDisplayed] = useState({ cpu: 0, ram: 0 });
+  const cachedCpuRam = readCpuRamCache();
+  const [data, setData] = useState<CpuRamData>(cachedCpuRam || { cpu: 0, ram: 0, ramTotal: 0 });
+  const [loading, setLoading] = useState(!cachedCpuRam);
+  // Amorcer les valeurs lissées/affichées depuis le cache pour afficher les jauges
+  // directement à la bonne valeur (pas d'animation depuis 0 à chaque visite).
+  const [smoothed, setSmoothed] = useState({ cpu: cachedCpuRam?.cpu || 0, ram: cachedCpuRam?.ram || 0 });
+  const [displayed, setDisplayed] = useState({ cpu: cachedCpuRam?.cpu || 0, ram: cachedCpuRam?.ram || 0 });
   const cpuAnimRef = useRef<number | null>(null);
   const ramAnimRef = useRef<number | null>(null);
   
@@ -59,11 +81,13 @@ const CpuRamWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: () 
             ramTotalValue = response.data.ramTotal;
           }
           
-          setData({
+          const next = {
             cpu: Math.round(cpuValue),
             ram: Math.round(ramValue),
             ramTotal: ramTotalValue
-          });
+          };
+          setData(next);
+          writeCpuRamCache(next);
           setLoading(false);
         }
       } catch (error) {

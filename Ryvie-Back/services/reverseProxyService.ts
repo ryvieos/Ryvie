@@ -4,7 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const Docker = require('dockerode');
 const { getLocalIP, getPrivateIP } = require('../utils/network');
-const { REVERSE_PROXY_DIR } = require('../config/paths');
+const { REVERSE_PROXY_DIR, NETBIRD_FILE } = require('../config/paths');
 const yaml = require('js-yaml');
 const { composeUpWithRecovery } = require('./dockerService');
 
@@ -405,15 +405,42 @@ async function getAllAppProxyConfigs() {
 }
 
 /**
- * Génère la configuration Caddyfile pour une application avec proxy
+ * Lit l'ensemble des appId qui possèdent un domaine public Netbird (ryvie.fr).
+ * Quand un domaine public existe, l'ingress cloud termine le TLS et contacte le
+ * backend de la box en HTTP clair : le bloc local DOIT alors être en HTTP.
+ * Sans domaine public, l'app n'est accessible qu'en direct (IP tunnel/LAN) et
+ * a besoin de HTTPS local (tls internal) si elle l'exige (contexte sécurisé).
  */
-function generateAppProxyConfig(appId, proxyConfig) {
+async function getPublicDomainAppIds() {
+  try {
+    const raw = await fs.readFile(NETBIRD_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    const domains = (data && data.domains) || {};
+    return new Set(Object.keys(domains).map((id) => String(id).toLowerCase()));
+  } catch (error) {
+    console.warn(`[reverseProxyService] ⚠️ Impossible de lire les domaines Netbird (${NETBIRD_FILE}): ${error.message}`);
+    return new Set();
+  }
+}
+
+/**
+ * Génère la configuration Caddyfile pour une application avec proxy
+ *
+ * hasPublicDomain : si true, l'app est exposée via l'ingress cloud (qui parle
+ * HTTP au backend) → on force un bloc HTTP même si proxy.https=true, sinon Caddy
+ * répond « 400 Client sent an HTTP request to an HTTPS server » (et le cloud 502).
+ */
+function generateAppProxyConfig(appId, proxyConfig, hasPublicDomain = false) {
   const { port, https, target } = proxyConfig;
   const targetPort = target.port;
-  
+
+  // Le HTTPS local (tls internal) n'a de sens que pour l'accès direct sans
+  // domaine public. Avec un domaine public, le TLS est assuré côté cloud.
+  const useHttps = https && !hasPublicDomain;
+
   let config = '';
-  
-  if (https) {
+
+  if (useHttps) {
     // Configuration HTTPS avec wildcard et on_demand
     config = `
 # --- ${appId.toUpperCase()} (HTTPS - Port ${port}) ---
@@ -451,6 +478,13 @@ function generateAppProxyConfig(appId, proxyConfig) {
 function generateCaddyfileContent() {
   return `{
   auto_https disable_redirects
+  servers {
+    # Le ingress du cluster (Tailscale 100.64.0.0/10) et le réseau local sont des proxys
+    # de confiance : on préserve leurs X-Forwarded-* (notamment X-Forwarded-Proto=https)
+    # au lieu de les écraser. Sinon le backend, vu en http par Caddy local, croit être en
+    # clair → origin OIDC http://… incohérent avec le token (https) → "Invalid token issuer".
+    trusted_proxies static private_ranges 100.64.0.0/10
+  }
 }
 
 # Site principal (catch-all port 80 : ryvie.local, IP privée, localhost, etc.)
@@ -477,8 +511,23 @@ http://:80 {
   }
 
   # 3) Keycloak (SSO) — accessible via /auth/*
-  @auth path /auth /auth/*
-  reverse_proxy @auth keycloak:8080 {
+  # Le protocole d'origine est porté par X-Forwarded-Proto :
+  #  - accès distant HTTPS : le ingress du cluster envoie XFP=https → on relaie https
+  #    (sinon Keycloak se croit en clair → formulaire « non sécurisé » + cookies de
+  #     session non posés → boucle de connexion).
+  #  - accès local direct (http://ryvie.local sur le port 80) : pas de XFP https → http.
+  @auth_https {
+    path /auth /auth/*
+    header X-Forwarded-Proto https
+  }
+  reverse_proxy @auth_https keycloak:8080 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-Proto https
+  }
+
+  @auth_http path /auth /auth/*
+  reverse_proxy @auth_http keycloak:8080 {
     header_up Host {host}
     header_up X-Real-IP {remote_host}
     header_up X-Forwarded-Proto http
@@ -503,10 +552,14 @@ async function generateFullCaddyfileContent() {
   
   // Récupérer les configs proxy des apps
   const appsResult = await getAllAppProxyConfigs();
-  
+
+  // Apps exposées via un domaine public (cloud termine le TLS, backend en HTTP)
+  const publicDomainAppIds = await getPublicDomainAppIds();
+
   if (appsResult.success && appsResult.configs.length > 0) {
     for (const { appId, config } of appsResult.configs) {
-      const appConfig = generateAppProxyConfig(appId, config);
+      const hasPublicDomain = publicDomainAppIds.has(String(appId).toLowerCase());
+      const appConfig = generateAppProxyConfig(appId, config, hasPublicDomain);
       content += appConfig;
     }
   }

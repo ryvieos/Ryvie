@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import '../styles/GridLauncher.css';
 import useGridLayout from '../hooks/useGridLayout';
 import useDrag from '../hooks/useDrag';
@@ -60,6 +61,10 @@ const GridLauncher = ({
   };
   // Tant que faux, les tuiles restent invisibles (opacity:0 via CSS) sans animation.
   const [revealReady, setRevealReady] = useState(false);
+  // Signaux d'ouverture de modale par widget. Le drag utilise setPointerCapture, donc le
+  // clic est capté au niveau de la tuile : incrémenter le compteur d'un id demande au widget
+  // correspondant d'ouvrir sa modale (utilisé pour le widget stockage).
+  const [widgetOpenSignals, setWidgetOpenSignals] = useState({});
 
   // Calculer le nombre de colonnes et lignes qui rentrent dans l'espace disponible
   useEffect(() => {
@@ -193,9 +198,90 @@ const GridLauncher = ({
   useEffect(() => {
     if (revealReady) return;
     if (!layout || Object.keys(layout).length === 0) return;
-    const t = setTimeout(() => setRevealReady(true), 260);
-    return () => clearTimeout(t);
-  }, [layout, revealReady]);
+    let cancelled = false;
+
+    // 1) Délai mini pour laisser le recalcul responsive des colonnes se stabiliser
+    //    (figeage des délais sur les colonnes FINALES -> vague gauche->droite cohérente).
+    const minDelay = new Promise(resolve => setTimeout(resolve, 260));
+
+    // 2) Précharger/décoder les icônes AVANT de révéler les tuiles, pour ne jamais
+    //    afficher de carré blanc le temps du téléchargement (cas du tout premier
+    //    chargement à froid, cache navigateur vide). Une fois en cache (24h côté
+    //    backend), c'est quasi instantané aux chargements suivants.
+    const srcs = Array.from(new Set(apps.map(id => iconImages[id]).filter(Boolean)));
+    const preloadIcons = Promise.all(srcs.map(src => {
+      const img = new Image();
+      img.src = src;
+      // img.decode() résout quand l'image est ENTIÈREMENT décodée et prête à être
+      // peinte en un seul frame -> pas de rendu progressif "de haut en bas". On
+      // retombe sur onload si decode() n'est pas dispo / échoue.
+      if (typeof img.decode === 'function') {
+        return img.decode().catch(() => undefined);
+      }
+      return new Promise(resolve => {
+        img.onload = () => resolve(undefined);
+        img.onerror = () => resolve(undefined);
+      });
+    }));
+
+    // 3) Filet de sécurité : ne JAMAIS bloquer la vague au-delà de ~2.5s, même si
+    //    une icône est lente/indisponible (laisse le temps au premier chargement à
+    //    froid de tout télécharger + décoder avant de révéler).
+    const safety = new Promise(resolve => setTimeout(resolve, 2500));
+
+    Promise.race([
+      Promise.all([minDelay, preloadIcons]),
+      safety
+    ]).then(() => {
+      if (!cancelled) setRevealReady(true);
+    });
+
+    return () => { cancelled = true; };
+  }, [layout, revealReady, apps, iconImages]);
+
+  // Re-armer la vague d'apparition uniquement quand une app/widget est AJOUTÉE
+  // (installation). Sans ça, les délais figés dans revealDelaysRef restent calculés
+  // sur les anciennes colonnes : insérer une app fait refluer la grille et la vague
+  // gauche->droite se rejoue dans le désordre (le composant n'étant pas démonté à cause
+  // du keep-alive de CachedRoutes, qui se contente d'un display:none/block -> les
+  // animations CSS rejouent au retour sur Home). Au re-arm, les délais sont refigés à
+  // partir des colonnes FINALES post-reflow via getRevealDelay.
+  // On NE re-arme PAS sur :
+  //  - un simple drag (l'ensemble des ids est identique, seules les colonnes bougent)
+  //    -> préserve le correctif anti-rejouement au déplacement ;
+  //  - une désinstallation (retrait pur d'un id) -> sinon toutes les icônes rejouent
+  //    l'animation alors qu'on veut juste voir la tuile disparaître.
+  const itemIds = [...appsRenderOrder, ...widgetsRenderOrder.map(w => w.id)];
+  const itemIdSignature = itemIds.join('|');
+  const prevItemIdsRef = useRef(itemIds);
+  useEffect(() => {
+    const prevSet = new Set(prevItemIdsRef.current);
+    const hasAddition = itemIds.some(id => !prevSet.has(id));
+    prevItemIdsRef.current = itemIds;
+    if (!hasAddition) return; // retrait pur (désinstallation) ou inchangé : pas de re-jeu
+    revealDelaysRef.current = {};
+    setRevealReady(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemIdSignature]);
+
+  // Re-armer la vague à chaque RETOUR sur Home. CachedRoutes garde Home monté et bascule
+  // simplement display:none/block : au retour, le navigateur RELANCE les animations CSS
+  // d'entrée. Sans re-arm, elles rejouent avec les délais figés précédemment -> après une
+  // install/désinstallation (colonnes refluées), la vague repart dans le désordre. On vide
+  // donc revealDelaysRef et on remet revealReady=false pour refiger les délais sur les
+  // colonnes ACTUELLES. useLayoutEffect: l'état est remis AVANT le paint, ce qui évite un
+  // flash de vague périmée juste avant la vague ordonnée.
+  const location = useLocation();
+  const prevPathRef = useRef(location.pathname);
+  useLayoutEffect(() => {
+    const prev = prevPathRef.current;
+    prevPathRef.current = location.pathname;
+    if (location.pathname === '/home' && prev !== '/home') {
+      revealDelaysRef.current = {};
+      setRevealReady(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   // NE PLUS notifier automatiquement le parent à chaque changement de layout
   // car cela déclenchait des sauvegardes backend lors des réorganisations automatiques (responsive).
@@ -507,7 +593,7 @@ const GridLauncher = ({
               case 'cpu-ram':
                 return <CpuRamWidget {...commonProps} accessMode={accessMode} />;
               case 'storage':
-                return <StorageWidget {...commonProps} accessMode={accessMode} />;
+                return <StorageWidget {...commonProps} accessMode={accessMode} openSignal={widgetOpenSignals[widget.id] || 0} />;
               case 'weather':
                 return (
                   <WeatherWidget
@@ -543,6 +629,8 @@ const GridLauncher = ({
                   setTempCity((weatherCity || weather.location || '').toString());
                   setClosingWeatherModal(false);
                   setShowWeatherModal(true);
+                } else if (widget.type === 'storage') {
+                  setWidgetOpenSignals(s => ({ ...s, [widget.id]: (s[widget.id] || 0) + 1 }));
                 }
               }}
             >

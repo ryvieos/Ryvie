@@ -167,30 +167,36 @@ router.get('/callback', async (req: any, res: any) => {
     
     const userinfo = await getUserInfo(tokens.accessToken!, origin);
 
-    // Déterminer le rôle depuis LDAP basé sur les groupes
-    const uid = userinfo.preferred_username || userinfo.sub;
-    
+    // Identifiant de login renvoyé par Keycloak. Selon la config de fédération,
+    // preferred_username peut être le cn (nom) ou l'uid. On le traduit vers l'uid
+    // LDAP réel (opaque, stable) pour que le reste du backend garde une identité fixe.
+    const loginId = userinfo.preferred_username || userinfo.sub;
+    let uid = loginId;
+
     // Chercher le DN de l'utilisateur dans LDAP
     const ldap = require('ldapjs');
     const ldapConfig = require('../config/ldap');
-    
+
     let userDN = null;
     let role = 'Guest';
-    
+
     try {
       const ldapClient = ldapService.createSafeClient();
       await new Promise((resolve, reject) => {
         ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err: any) => {
           if (err) return reject(err);
-          
-          const filter = `(&(objectClass=inetOrgPerson)(uid=${ldapService.escapeLdapFilterValue(uid)}))`;
-          ldapClient.search(ldapConfig.userSearchBase, { filter, scope: 'sub', attributes: ['dn'] }, (err2: any, res: any) => {
+
+          const esc = ldapService.escapeLdapFilterValue(loginId);
+          const filter = `(&(objectClass=inetOrgPerson)(|(uid=${esc})(cn=${esc})(mail=${esc})))`;
+          ldapClient.search(ldapConfig.userSearchBase, { filter, scope: 'sub', attributes: ['dn', 'uid'] }, (err2: any, res: any) => {
             if (err2) return reject(err2);
-            
+
             res.on('searchEntry', (entry: any) => {
               userDN = entry.pojo.objectName;
+              const realUid = entry.pojo.attributes.find((a: any) => a.type === 'uid')?.values?.[0];
+              if (realUid) uid = realUid; // identité stable, indépendante du nom de login
             });
-            
+
             res.on('end', async () => {
               ldapClient.unbind();
               if (userDN) {
@@ -202,7 +208,7 @@ router.get('/callback', async (req: any, res: any) => {
         });
       });
     } catch (error: any) {
-      console.warn(`[OIDC] Failed to get user DN from LDAP for ${uid}:`, error.message);
+      console.warn(`[OIDC] Failed to get user DN from LDAP for ${loginId}:`, error.message);
     }
 
     console.log(`[OIDC] Role determined for ${uid}: ${role} (DN: ${userDN || 'not found'})`);
@@ -241,8 +247,10 @@ router.get('/switch', async (req: any, res: any) => {
     console.log('[OIDC] Switch user - origin:', origin, 'login_hint:', loginHint || '(none)');
     
     const url = new URL(origin);
-    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
-    
+    // Issuer PUBLIC (vu par le navigateur) : Keycloak est servi par Caddy sous /auth,
+    // plus sur :3005/realms. On conserve le proto d'origine (https en accès distant).
+    const issuer = `${url.protocol}//${url.hostname}/auth/realms/ryvie`;
+
     // Redirect to KC logout with client_id (post.logout.redirect.uris=+ allows any redirect)
     // This destroys the KC session cookie in the browser
     const postLogoutRedirect = `${origin}/api/auth/switch-login?login_hint=${encodeURIComponent(loginHint)}`;
@@ -289,7 +297,10 @@ router.get('/logout', async (req: any, res: any) => {
     const frontendOrigin = getFrontendOrigin(origin);
     
     const url = new URL(origin);
-    const issuer = `http://${url.hostname}:3005/realms/ryvie`;
+    // Issuer PUBLIC (vu par le navigateur) : Keycloak est servi par Caddy sous /auth,
+    // plus sur :3005/realms. On conserve le proto d'origine (https en accès distant) pour
+    // que l'issuer corresponde à celui de l'id_token_hint.
+    const issuer = `${url.protocol}//${url.hostname}/auth/realms/ryvie`;
     const logoutUrl = `${issuer}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(frontendOrigin)}${idToken ? `&id_token_hint=${idToken}` : ''}`;
 
     console.log('[OIDC] Logging out from backend origin:', origin);
