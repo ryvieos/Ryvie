@@ -8,6 +8,9 @@ const { execSync } = require('child_process');
 const APPS_OAUTH_FILE = '/data/config/keycloak/apps-oauth.json';
 const MANIFESTS_DIR = '/data/config/manifests';
 const KEYCLOAK_ENV = '/data/config/keycloak/.env';
+// Source de vérité de l'exposition publique de la box (map { appId: domaine public }).
+// 'app' = domaine public du front/dashboard, sous lequel Keycloak est servi en /auth.
+const NETBIRD_FILE = '/data/config/netbird/netbird-data.json';
 
 // Domaine public canonique de la box (issuer Keycloak public) + template issuer local.
 // Pilotés par env → plus aucun domaine codé en dur dans le code des apps.
@@ -220,17 +223,42 @@ function escapeRegExp(s: string): string {
  * Construit la table { NOM_VARIABLE_ENV: valeur } des paramètres OIDC à écrire dans le .env d'une app.
  * Noms de variables = ceux déclarés par l'app (ssoEnv) sinon les noms OAUTH_* standards Ryvie.
  */
+/**
+ * Lit la map des domaines publics depuis netbird-data.json (vide si non exposé / illisible).
+ */
+function readNetbirdDomains(): Record<string, string> {
+  try {
+    const data = JSON.parse(fsSync.readFileSync(NETBIRD_FILE, 'utf8'));
+    return (data && data.domains) || {};
+  } catch {
+    return {};
+  }
+}
+
 function computeAppOidcEnv(
+  appId: string,
   clientId: string,
   clientSecret: string,
   ssoEnv: Record<string, string> | null,
   ssoMode: string
 ): Record<string, string> {
   const names: Record<string, string> = { ...OAUTH_ENV_VARS, ...(ssoEnv || {}) };
-  const issuerUrl = ssoMode === 'static'
-    ? `https://${OAUTH_PUBLIC_HOST}/auth/realms/ryvie`
+
+  // Issuer dynamique piloté par l'exposition réelle (netbird-data.json), pas par un domaine
+  // codé en dur. Si le front (clé 'app') ET l'app sont exposés publiquement, l'issuer doit
+  // pointer sur le domaine public du front (où Keycloak est servi en /auth) — sinon le
+  // navigateur hors-LAN ne peut pas joindre http://ryvie.local. Sinon → issuer local.
+  // ssoMode === 'static' force le public (app incapable de gérer le dynamique).
+  const domains = readNetbirdDomains();
+  const publicAppHost = domains.app || OAUTH_PUBLIC_HOST; // ex. demo.ryvie.fr
+  const frontExposed = !!domains.app;
+  const appExposed = !!domains[appId];
+  const usePublicIssuer = ssoMode === 'static' || (frontExposed && appExposed);
+
+  const issuerUrl = usePublicIssuer
+    ? `https://${publicAppHost}/auth/realms/ryvie`
     : OAUTH_ISSUER_URL;
-  const values: Record<string, string> = { clientId, clientSecret, issuerUrl, publicHost: OAUTH_PUBLIC_HOST };
+  const values: Record<string, string> = { clientId, clientSecret, issuerUrl, publicHost: publicAppHost };
   const out: Record<string, string> = {};
   for (const key of Object.keys(values)) {
     const varName = names[key];
@@ -346,7 +374,7 @@ async function provisionAppOAuth(appId: string): Promise<{ success: boolean; env
     if (needSave) await saveAppsOAuth(data);
 
     // Synchro .env si nécessaire (clientId/secret + issuer + public host, selon le mapping de l'app)
-    const envMap = computeAppOidcEnv(entry.clientId, entry.clientSecret, sso.ssoEnv, sso.ssoMode);
+    const envMap = computeAppOidcEnv(appId, entry.clientId, entry.clientSecret, sso.ssoEnv, sso.ssoMode);
     let envChanged = false;
     if (!envAlreadySynced(envPath, envMap)) {
       await syncAppEnv(envPath, envMap);
