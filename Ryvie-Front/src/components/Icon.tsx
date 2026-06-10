@@ -5,6 +5,7 @@ import axios from '../utils/setupAxios';
 import urlsConfig from '../config/urls';
 import { useLanguage } from '../contexts/LanguageContext';
 import AppAccountsModal from './AppAccountsModal';
+import AppSettingsModal from './AppSettingsModal';
 
 const { getServerUrl } = urlsConfig;
 const ItemTypes = { ICON: 'icon' };
@@ -48,11 +49,16 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   const resetResultRef = React.useRef<any>(null);
   const [confirmModal, setConfirmModal] = React.useState({ show: false, type: '', title: '', message: '', onConfirm: null });
   const [accountsModalOpen, setAccountsModalOpen] = React.useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = React.useState(false);
 
   // L'app gère-t-elle des comptes internes réinitialisables ? (non-SSO + recette)
   const canManageAccounts = appConfig.sso !== true && !!appConfig.hasAccounts;
   // L'app propose-t-elle une réinitialisation d'accès native (CLI, ex. n8n) ?
   const canResetOwner = appConfig.sso !== true && !!appConfig.hasOwnerReset;
+  // Réglages (adresse publique) : pas pour les apps Ryvie dont l'exposition est native
+  const EXPOSURE_NATIVE_APPS = ['rdrive', 'rpictures', 'rtransfer', 'rdrop'];
+  const canOpenSettings = !!appConfig.id &&
+    !EXPOSURE_NATIVE_APPS.includes(String(appConfig.id).toLowerCase().replace(/^ryvie-/, ''));
   
   React.useEffect(() => {
     setImgSrc(src);
@@ -113,7 +119,7 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   const isTransitioning = !isInstalling && appConfig.showStatus && (
     isUninstalling ||
     pendingAction === 'starting' || pendingAction === 'stopping' ||
-    pendingAction === 'resetting'
+    pendingAction === 'resetting' || pendingAction === 'exposing'
   );
 
   // App arrêtée -> grise fixe
@@ -123,8 +129,11 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   // L'icône doit-elle être assombrie/grisée ?
   const isDimmed = isInstalling || isTransitioning || isStopped;
 
-  // Vérifier si l'app est cliquable (seulement si running, et jamais pendant une installation)
-  const isClickable = !isInstalling && (!appConfig.showStatus || status === 'running');
+  // Vérifier si l'app est cliquable (seulement si running, et jamais pendant une
+  // installation ni pendant l'activation d'une adresse publique — sinon on ouvre
+  // une URL qui ne répond pas encore)
+  const isClickable = !isInstalling && pendingAction !== 'exposing' &&
+    (!appConfig.showStatus || status === 'running');
   
   const handleIconClick = () => {
     // Ne rien faire si l'app n'est pas running (rouge ou orange)
@@ -138,6 +147,49 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
     if (isProcessingMenuActionRef.current) return;
     handleClick(id);
   };
+
+  // ── Spinner « activation d'une adresse publique » ──
+  // Démarre quand la création est lancée dans la modale Réglages et ne s'arrête
+  // que lorsque l'app répond RÉELLEMENT à l'adresse générée (sonde backend),
+  // pour éviter de cliquer sur une route pas encore active.
+  const exposurePollRef = React.useRef<any>(null);
+  const exposureSafetyRef = React.useRef<any>(null);
+
+  const stopExposureSpinner = React.useCallback(() => {
+    if (exposurePollRef.current) { clearInterval(exposurePollRef.current); exposurePollRef.current = null; }
+    if (exposureSafetyRef.current) { clearTimeout(exposureSafetyRef.current); exposureSafetyRef.current = null; }
+    setPendingAction((p) => (p === 'exposing' ? null : p));
+  }, []);
+
+  const handleExposureStart = React.useCallback(() => {
+    setPendingAction('exposing');
+    if (exposurePollRef.current) clearInterval(exposurePollRef.current);
+    const serverUrl = getServerUrl(accessMode);
+    const exposureAppId = appConfig.id || id;
+    exposurePollRef.current = setInterval(async () => {
+      try {
+        const res = await axios.get(
+          `${serverUrl}/api/apps/${exposureAppId}/exposure/ready`,
+          { timeout: 10000, _noAuthRedirect: true } as any
+        );
+        if (res.data?.ready) stopExposureSpinner();
+      } catch (_) { /* backend occupé par la création : on réessaie */ }
+    }, 4000);
+    // Filet de sécurité : ne jamais laisser le spinner tourner plus de 5 min
+    if (exposureSafetyRef.current) clearTimeout(exposureSafetyRef.current);
+    exposureSafetyRef.current = setTimeout(stopExposureSpinner, 300000);
+  }, [accessMode, appConfig.id, id, stopExposureSpinner]);
+
+  // Échec de la création → on coupe le spinner tout de suite
+  const handleExposureError = React.useCallback(() => {
+    stopExposureSpinner();
+  }, [stopExposureSpinner]);
+
+  // Nettoyage si l'icône est démontée pendant l'activation
+  React.useEffect(() => () => {
+    if (exposurePollRef.current) clearInterval(exposurePollRef.current);
+    if (exposureSafetyRef.current) clearTimeout(exposureSafetyRef.current);
+  }, []);
 
   const handleContextMenu = (e) => {
     // IMPORTANT: Toujours empêcher le menu natif du navigateur en premier
@@ -574,6 +626,18 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
         />
       )}
 
+      {/* Modal de réglages de l'app (admin) : adresse publique */}
+      {settingsModalOpen && (
+        <AppSettingsModal
+          appId={appConfig.id || id}
+          appName={appConfig.name || id}
+          accessMode={accessMode}
+          onClose={() => setSettingsModalOpen(false)}
+          onExposureStart={handleExposureStart}
+          onExposureError={handleExposureError}
+        />
+      )}
+
       {!imgError && (
         <div className="icon-container">
           <div
@@ -707,6 +771,28 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
                       </svg>
                     </span>
                     <span>{t('icon.resetAccess')}</span>
+                  </div>
+                </>
+              )}
+              {canOpenSettings && (
+                <>
+                  <div className="context-menu-separator" role="separator" />
+                  <div
+                    className="context-menu-item"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setActiveContextMenu(null);
+                      setSettingsModalOpen(true);
+                    }}
+                  >
+                    <span className="context-menu-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <circle cx="12" cy="12" r="3" strokeWidth="2" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <span>{t('icon.settings')}</span>
                   </div>
                 </>
               )}

@@ -461,7 +461,7 @@ const StorageWidget = ({ id, onRemove, accessMode, openSignal }: { id: string; o
                                 }}
                               />
                             )}
-                            <span style={{ fontSize: '15px', fontWeight: '500', fontFamily: 'system-ui, -apple-system, sans-serif' }}>{app.name}</span>
+                            <span style={{ fontSize: '15px', fontWeight: '500' }}>{app.name}</span>
                           </div>
                           <span style={{ fontSize: '15px', fontWeight: '600' }}>
                             {app.sizeFormatted}

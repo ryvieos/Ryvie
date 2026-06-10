@@ -2048,6 +2048,18 @@ async function uninstallApp(appId) {
         message: `Le dossier de l'application ${appId} n'existe pas: ${appDir}`
       };
     }
+
+    // 2a. Supprimer l'adresse publique de l'app si elle en a une (best effort,
+    // ne bloque jamais la désinstallation)
+    try {
+      const publicExposure = require('./publicExposureService');
+      const cleanup = await publicExposure.cleanupExposure(appId);
+      if (cleanup.removed) {
+        console.log(`[Uninstall] ✅ Adresse publique de ${appId} supprimée`);
+      }
+    } catch (exposureError: any) {
+      console.warn(`[Uninstall] ⚠️ Nettoyage adresse publique: ${exposureError.message}`);
+    }
     
     // 2b. Déterminer le fichier docker-compose à utiliser
     // Priorité : dockerComposePath du manifest > labels Docker > recherche à la racine

@@ -6,6 +6,7 @@ const { verifyToken, hasPermission, isAdmin } = require('../middleware/auth');
 const { getAppStatus, startApp, stopApp, restartApp } = require('../services/dockerService');
 const appManager = require('../services/appManagerService');
 const appAccounts = require('../services/appAccountsService');
+const publicExposure = require('../services/publicExposureService');
 
 // GET /api/apps - list applications and status
 router.get('/apps', async (req: any, res: any) => {
@@ -170,6 +171,69 @@ router.get('/apps/:id/default-credentials', verifyToken, async (req: any, res: a
       console.error(`Erreur statut compte par défaut de ${id}:`, error.message);
     }
     res.status(status).json({ error: error.message || 'Erreur serveur' });
+  }
+});
+
+// GET /api/apps/:id/exposure - public address status of an app (admin only)
+router.get('/apps/:id/exposure', verifyToken, isAdmin, async (req: any, res: any) => {
+  const { id } = req.params;
+  try {
+    const result = await publicExposure.getExposure(id);
+    res.status(200).json(result);
+  } catch (error: any) {
+    const status = error.status || 500;
+    if (status >= 500) {
+      console.error(`Erreur statut d'exposition de ${id}:`, error.message);
+    }
+    res.status(status).json({ error: error.message || 'Erreur serveur' });
+  }
+});
+
+// GET /api/apps/:id/exposure/ready - is the public address actually reachable? (admin only)
+// Sondé par le frontend pour faire durer le spinner de l'icône jusqu'à ce que
+// l'app réponde vraiment à l'adresse générée.
+router.get('/apps/:id/exposure/ready', verifyToken, isAdmin, async (req: any, res: any) => {
+  const { id } = req.params;
+  try {
+    const result = await publicExposure.isExposureReady(id);
+    res.status(200).json(result);
+  } catch (error: any) {
+    const status = error.status || 500;
+    if (status >= 500) {
+      console.error(`Erreur sonde d'exposition de ${id}:`, error.message);
+    }
+    res.status(status).json({ error: error.message || 'Erreur serveur' });
+  }
+});
+
+// POST /api/apps/:id/exposure - create a public address for an app (admin only)
+// Opération longue (DNS + Caddy côté cloud) : jusqu'à ~2 minutes.
+router.post('/apps/:id/exposure', verifyToken, isAdmin, async (req: any, res: any) => {
+  const { id } = req.params;
+  try {
+    const result = await publicExposure.exposeApp(id);
+    res.status(200).json(result);
+  } catch (error: any) {
+    const status = error.status || 500;
+    if (status >= 500) {
+      console.error(`Erreur création d'adresse publique de ${id}:`, error.message);
+    }
+    res.status(status).json({ success: false, error: error.message || 'Erreur serveur' });
+  }
+});
+
+// DELETE /api/apps/:id/exposure - remove the public address of an app (admin only)
+router.delete('/apps/:id/exposure', verifyToken, isAdmin, async (req: any, res: any) => {
+  const { id } = req.params;
+  try {
+    const result = await publicExposure.unexposeApp(id);
+    res.status(200).json(result);
+  } catch (error: any) {
+    const status = error.status || 500;
+    if (status >= 500) {
+      console.error(`Erreur suppression d'adresse publique de ${id}:`, error.message);
+    }
+    res.status(status).json({ success: false, error: error.message || 'Erreur serveur' });
   }
 });
 

@@ -89,6 +89,33 @@ const loadNetbirdData = async (): Promise<NetbirdData> => {
   return netbirdData;
 };
 
+/**
+ * Re-télécharge netbird-data.json et remplace les données en mémoire.
+ * À appeler après création/suppression d'une adresse publique : le prochain
+ * clic sur l'icône utilise immédiatement la nouvelle URL, sans recharger la page.
+ */
+const refreshNetbirdData = async (): Promise<NetbirdData> => {
+  try {
+    const response = await fetch('/config/netbird-data.json?t=' + Date.now(), { cache: 'no-cache' });
+    if (response.ok) {
+      const data = await response.json();
+      netbirdData = { ...data };
+      // Resynchroniser les URLs REMOTE des apps déjà enregistrées
+      const domains = netbirdData?.domains || {};
+      Object.keys(appPorts).forEach((id) => {
+        const upper = id.toUpperCase();
+        if (BASE_URLS?.APPS?.[upper]) {
+          BASE_URLS.APPS[upper].REMOTE = domains[id] ? `https://${domains[id]}` : '';
+        }
+      });
+      console.log('[urls] Données Netbird rafraîchies:', Object.keys(domains));
+    }
+  } catch (error: any) {
+    console.warn('[urls] Erreur lors du rafraîchissement de netbird-data.json:', error.message);
+  }
+  return netbirdData;
+};
+
 const loadAppPorts = async (): Promise<Record<string, number>> => {
   if (appPortsLoaded) {
     return appPorts;
@@ -453,5 +480,6 @@ export default {
   setLocalIP,
   getLocalIP,
   loadNetbirdData,
+  refreshNetbirdData,
   loadAppPorts
 };
