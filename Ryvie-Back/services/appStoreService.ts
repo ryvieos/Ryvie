@@ -1464,8 +1464,19 @@ LOCAL_IP=${localIP}
       // Non bloquant - l'installation est déjà terminée
     }
     
+    // 6c. Provisionner le compte par défaut (apps non-SSO) si la recette le demande.
+    // Idempotent et non bloquant : si l'app a déjà son compte (install.sh / défaut
+    // embarqué), c'est un no-op ; sinon Ryvie le crée via l'adaptateur.
+    currentStep = 'default-account-provisioning';
+    try {
+      const appAccounts = require('./appAccountsService');
+      await appAccounts.provisionDefault(appId);
+    } catch (provError: any) {
+      console.warn(`[Update] ⚠️ Provisioning du compte par défaut de ${appId}:`, provError.message);
+    }
+
     sendProgressUpdate(appId, 100, 'Installation terminée avec succès !', 'completed');
-    
+
     // 7. Forcer la réconciliation du layout pour placer l'icône AVANT de modifier Caddy
     console.log('[Update] 🔄 Réconciliation du layout utilisateur...');
     try {

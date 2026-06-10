@@ -142,7 +142,15 @@ const generateAppConfigFromManifests = async (accessMode: string): Promise<Recor
         isTaskbarApp: false,
         containerName: app.id,
         mainPort: app.mainPort,
-        ports: app.ports
+        ports: app.ports,
+        // Auth SSO (Keycloak) → pas de gestion de comptes locale
+        sso: app.sso === true,
+        // Stratégie list/reset présente → menu « Gérer les comptes »
+        hasAccounts: !!(app.accounts && app.accounts.strategy),
+        // Bloc default présent → bandeau identifiants par défaut à l'ouverture
+        hasDefaultAccount: !!(app.accounts && app.accounts.default),
+        // Bloc ownerReset présent → action « Réinitialiser l'accès » (CLI native)
+        hasOwnerReset: !!(app.accounts && app.accounts.ownerReset)
       };
     });
     

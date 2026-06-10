@@ -38,7 +38,8 @@ const GridLauncher = ({
   widgets = [],
   onAddWidget,
   onRemoveWidget,
-  refreshDesktopIcons
+  refreshDesktopIcons,
+  newApps
 }) => {
   const gridRef = useRef(null);
   const resizeTimeoutRef = useRef(null);
@@ -570,6 +571,7 @@ const GridLauncher = ({
                 setAppStatus={setAppStatus}
                 accessMode={accessMode}
                 refreshDesktopIcons={refreshDesktopIcons}
+                isNew={newApps?.has?.(appId)}
               />
             </div>
           );

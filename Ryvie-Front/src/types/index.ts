@@ -20,6 +20,10 @@ export interface AppConfig {
   mainPort?: number;
   ports?: number[];
   route?: string | null;
+  sso?: boolean;
+  hasAccounts?: boolean;
+  hasDefaultAccount?: boolean;
+  hasOwnerReset?: boolean;
 }
 
 export interface AppManifest {
@@ -30,6 +34,8 @@ export interface AppManifest {
   mainPort: number;
   ports: number[];
   requiresHttps?: boolean;
+  sso?: boolean;
+  accounts?: any;
 }
 
 export interface NetbirdData {

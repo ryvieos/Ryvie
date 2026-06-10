@@ -405,7 +405,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L1",
       "id": "middleware_auth",
-      "community": 24,
+      "community": 3,
       "norm_label": "auth.ts"
     },
     {
@@ -414,7 +414,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L2",
       "id": "middleware_auth_jwt",
-      "community": 24,
+      "community": 3,
       "norm_label": "jwt"
     },
     {
@@ -423,7 +423,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L3",
       "id": "middleware_auth_dotenv",
-      "community": 24,
+      "community": 3,
       "norm_label": "dotenv"
     },
     {
@@ -432,7 +432,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L4",
       "id": "middleware_auth_createclient",
-      "community": 24,
+      "community": 3,
       "norm_label": "{ createclient }"
     },
     {
@@ -441,7 +441,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L14",
       "id": "middleware_auth_redisclient",
-      "community": 24,
+      "community": 3,
       "norm_label": "redisclient"
     },
     {
@@ -450,7 +450,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L33",
       "id": "middleware_auth_verifytoken",
-      "community": 24,
+      "community": 34,
       "norm_label": "verifytoken()"
     },
     {
@@ -459,7 +459,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L105",
       "id": "middleware_auth_isadmin",
-      "community": 24,
+      "community": 34,
       "norm_label": "isadmin()"
     },
     {
@@ -468,7 +468,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L116",
       "id": "middleware_auth_haspermission",
-      "community": 24,
+      "community": 3,
       "norm_label": "haspermission()"
     },
     {
@@ -477,7 +477,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L147",
       "id": "middleware_auth_checkisfirsttime",
-      "community": 24,
+      "community": 3,
       "norm_label": "checkisfirsttime()"
     },
     {
@@ -486,7 +486,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L182",
       "id": "middleware_auth_resetfirsttimecache",
-      "community": 24,
+      "community": 3,
       "norm_label": "resetfirsttimecache()"
     },
     {
@@ -495,7 +495,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L188",
       "id": "middleware_auth_authenticatetokenorfirsttime",
-      "community": 24,
+      "community": 3,
       "norm_label": "authenticatetokenorfirsttime()"
     },
     {
@@ -999,7 +999,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L1",
       "id": "routes_appstore",
-      "community": 24,
+      "community": 3,
       "norm_label": "appstore.ts"
     },
     {
@@ -1008,7 +1008,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L1",
       "id": "routes_appstore_express",
-      "community": 24,
+      "community": 3,
       "norm_label": "express"
     },
     {
@@ -1017,7 +1017,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L2",
       "id": "routes_appstore_router",
-      "community": 24,
+      "community": 3,
       "norm_label": "router"
     },
     {
@@ -1026,7 +1026,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L3",
       "id": "routes_appstore_verifytoken_haspermission",
-      "community": 24,
+      "community": 3,
       "norm_label": "{ verifytoken, haspermission }"
     },
     {
@@ -1035,7 +1035,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L4",
       "id": "routes_appstore_getapps_getappbyid_clearcache_getstorehealth_getratelimitinfo_updateappfromstore_uninstallapp_forcecleanupcancelledinstall_progressemitter",
-      "community": 24,
+      "community": 3,
       "norm_label": "{ getapps, getappbyid, clearcache, getstorehealth, getratelimitinfo, updateappfromstore, uninstallapp, forcecleanupcancelledinstall, progressemitter }"
     },
     {
@@ -1044,7 +1044,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L5",
       "id": "routes_appstore_checkstorecatalogupdate",
-      "community": 24,
+      "community": 3,
       "norm_label": "{ checkstorecatalogupdate }"
     },
     {
@@ -1053,7 +1053,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L6",
       "id": "routes_appstore_updatestorecatalog",
-      "community": 24,
+      "community": 3,
       "norm_label": "{ updatestorecatalog }"
     },
     {
@@ -1062,7 +1062,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L9",
       "id": "routes_appstore_activeworkers",
-      "community": 24,
+      "community": 3,
       "norm_label": "activeworkers"
     },
     {
@@ -1071,7 +1071,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L12",
       "id": "routes_appstore_lastprogressmap",
-      "community": 24,
+      "community": 3,
       "norm_label": "lastprogressmap"
     },
     {
@@ -1080,7 +1080,7 @@
       "source_file": "Ryvie-Back/routes/appStore.ts",
       "source_location": "L15",
       "id": "routes_appstore_cleaningapps",
-      "community": 24,
+      "community": 3,
       "norm_label": "cleaningapps"
     },
     {
@@ -2146,19 +2146,10 @@
       "norm_label": "bcrypt"
     },
     {
-      "label": "axios",
-      "file_type": "code",
-      "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L15",
-      "id": "services_appaccountsservice_axios",
-      "community": 47,
-      "norm_label": "axios"
-    },
-    {
       "label": "appManager",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L16",
+      "source_location": "L15",
       "id": "services_appaccountsservice_appmanager",
       "community": 47,
       "norm_label": "appmanager"
@@ -2167,7 +2158,7 @@
       "label": "dockerExec()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L39",
+      "source_location": "L38",
       "id": "services_appaccountsservice_dockerexec",
       "community": 47,
       "norm_label": "dockerexec()"
@@ -2176,7 +2167,7 @@
       "label": "Account",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L79",
+      "source_location": "L78",
       "id": "services_appaccountsservice_account",
       "community": 47,
       "norm_label": "account"
@@ -2185,7 +2176,7 @@
       "label": "ListResult",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L86",
+      "source_location": "L85",
       "id": "services_appaccountsservice_listresult",
       "community": 47,
       "norm_label": "listresult"
@@ -2194,7 +2185,7 @@
       "label": "getRecipe()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L97",
+      "source_location": "L96",
       "id": "services_appaccountsservice_getrecipe",
       "community": 47,
       "norm_label": "getrecipe()"
@@ -2203,7 +2194,7 @@
       "label": "railsList()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L124",
+      "source_location": "L122",
       "id": "services_appaccountsservice_railslist",
       "community": 47,
       "norm_label": "railslist()"
@@ -2212,7 +2203,7 @@
       "label": "railsReset()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L137",
+      "source_location": "L135",
       "id": "services_appaccountsservice_railsreset",
       "community": 47,
       "norm_label": "railsreset()"
@@ -2221,7 +2212,7 @@
       "label": "pyListScript()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L160",
+      "source_location": "L158",
       "id": "services_appaccountsservice_pylistscript",
       "community": 47,
       "norm_label": "pylistscript()"
@@ -2230,7 +2221,7 @@
       "label": "pyResetScript()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L179",
+      "source_location": "L177",
       "id": "services_appaccountsservice_pyresetscript",
       "community": 47,
       "norm_label": "pyresetscript()"
@@ -2239,7 +2230,7 @@
       "label": "bcryptSqliteList()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L207",
+      "source_location": "L205",
       "id": "services_appaccountsservice_bcryptsqlitelist",
       "community": 47,
       "norm_label": "bcryptsqlitelist()"
@@ -2248,7 +2239,7 @@
       "label": "bcryptSqliteReset()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L219",
+      "source_location": "L217",
       "id": "services_appaccountsservice_bcryptsqlitereset",
       "community": 47,
       "norm_label": "bcryptsqlitereset()"
@@ -2257,7 +2248,7 @@
       "label": "affineList()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L254",
+      "source_location": "L252",
       "id": "services_appaccountsservice_affinelist",
       "community": 47,
       "norm_label": "affinelist()"
@@ -2266,7 +2257,7 @@
       "label": "affineReset()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L278",
+      "source_location": "L276",
       "id": "services_appaccountsservice_affinereset",
       "community": 47,
       "norm_label": "affinereset()"
@@ -2275,7 +2266,7 @@
       "label": "parseAccountsJson()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L342",
+      "source_location": "L340",
       "id": "services_appaccountsservice_parseaccountsjson",
       "community": 47,
       "norm_label": "parseaccountsjson()"
@@ -2284,7 +2275,7 @@
       "label": "minPasswordOk()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L358",
+      "source_location": "L356",
       "id": "services_appaccountsservice_minpasswordok",
       "community": 47,
       "norm_label": "minpasswordok()"
@@ -2293,7 +2284,7 @@
       "label": "listAccountsByRecipe()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L363",
+      "source_location": "L361",
       "id": "services_appaccountsservice_listaccountsbyrecipe",
       "community": 47,
       "norm_label": "listaccountsbyrecipe()"
@@ -2302,7 +2293,7 @@
       "label": "bcryptSqliteReadHash()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L379",
+      "source_location": "L377",
       "id": "services_appaccountsservice_bcryptsqlitereadhash",
       "community": 47,
       "norm_label": "bcryptsqlitereadhash()"
@@ -2311,7 +2302,7 @@
       "label": "affineReadHash()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L395",
+      "source_location": "L393",
       "id": "services_appaccountsservice_affinereadhash",
       "community": 47,
       "norm_label": "affinereadhash()"
@@ -2320,7 +2311,7 @@
       "label": "verifyAccountPassword()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L406",
+      "source_location": "L404",
       "id": "services_appaccountsservice_verifyaccountpassword",
       "community": 47,
       "norm_label": "verifyaccountpassword()"
@@ -2329,34 +2320,16 @@
       "label": "railsCreateDefault()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L442",
+      "source_location": "L440",
       "id": "services_appaccountsservice_railscreatedefault",
       "community": 47,
       "norm_label": "railscreatedefault()"
     },
     {
-      "label": "buildBody()",
-      "file_type": "code",
-      "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L468",
-      "id": "services_appaccountsservice_buildbody",
-      "community": 47,
-      "norm_label": "buildbody()"
-    },
-    {
-      "label": "apiCall()",
-      "file_type": "code",
-      "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L476",
-      "id": "services_appaccountsservice_apicall",
-      "community": 47,
-      "norm_label": "apicall()"
-    },
-    {
       "label": "apiSignup()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L493",
+      "source_location": "L467",
       "id": "services_appaccountsservice_apisignup",
       "community": 47,
       "norm_label": "apisignup()"
@@ -2365,7 +2338,7 @@
       "label": "loginVerify()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L509",
+      "source_location": "L499",
       "id": "services_appaccountsservice_loginverify",
       "community": 47,
       "norm_label": "loginverify()"
@@ -2727,7 +2700,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L82",
       "id": "services_appstoreservice_getratelimitinfo",
-      "community": 24,
+      "community": 3,
       "norm_label": "getratelimitinfo()"
     },
     {
@@ -2736,7 +2709,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L87",
       "id": "services_appstoreservice_progressemitter",
-      "community": 24,
+      "community": 3,
       "norm_label": "progressemitter"
     },
     {
@@ -2916,7 +2889,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L825",
       "id": "services_appstoreservice_clearcache",
-      "community": 24,
+      "community": 3,
       "norm_label": "clearcache()"
     },
     {
@@ -2925,7 +2898,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L844",
       "id": "services_appstoreservice_getstorehealth",
-      "community": 24,
+      "community": 3,
       "norm_label": "getstorehealth()"
     },
     {
@@ -5031,7 +5004,7 @@
       "source_file": "Ryvie-Back/services/updateCheckService.ts",
       "source_location": "L317",
       "id": "services_updatecheckservice_getlatestgithubtagviagit",
-      "community": 30,
+      "community": 22,
       "norm_label": "getlatestgithubtagviagit()"
     },
     {
@@ -5085,7 +5058,7 @@
       "source_file": "Ryvie-Back/services/updateCheckService.ts",
       "source_location": "L523",
       "id": "services_updatecheckservice_checkstorecatalogupdate",
-      "community": 24,
+      "community": 3,
       "norm_label": "checkstorecatalogupdate()"
     },
     {
@@ -5211,7 +5184,7 @@
       "source_file": "Ryvie-Back/services/updateService.ts",
       "source_location": "L35",
       "id": "services_updateservice_getcurrentryvieversion",
-      "community": 30,
+      "community": 22,
       "norm_label": "getcurrentryvieversion()"
     },
     {
@@ -5247,7 +5220,7 @@
       "source_file": "Ryvie-Back/services/updateService.ts",
       "source_location": "L105",
       "id": "services_updateservice_updateryvie",
-      "community": 30,
+      "community": 22,
       "norm_label": "updateryvie()"
     },
     {
@@ -5274,7 +5247,7 @@
       "source_file": "Ryvie-Back/services/updateService.ts",
       "source_location": "L431",
       "id": "services_updateservice_updatestorecatalog",
-      "community": 24,
+      "community": 3,
       "norm_label": "updatestorecatalog()"
     },
     {
@@ -5904,7 +5877,7 @@
       "source_file": "Ryvie-Back/workers/installWorker.ts",
       "source_location": "L1",
       "id": "workers_installworker",
-      "community": 24,
+      "community": 190,
       "norm_label": "installworker.ts"
     },
     {
@@ -5913,7 +5886,7 @@
       "source_file": "Ryvie-Back/workers/installWorker.ts",
       "source_location": "L8",
       "id": "workers_installworker_appstoreservice",
-      "community": 24,
+      "community": 190,
       "norm_label": "appstoreservice"
     },
     {
@@ -5922,7 +5895,7 @@
       "source_file": "Ryvie-Back/workers/installWorker.ts",
       "source_location": "L32",
       "id": "workers_installworker_timeoutid",
-      "community": 24,
+      "community": 190,
       "norm_label": "timeoutid"
     },
     {
@@ -5931,7 +5904,7 @@
       "source_file": "Ryvie-Back/workers/uninstallWorker.ts",
       "source_location": "L1",
       "id": "workers_uninstallworker",
-      "community": 24,
+      "community": 190,
       "norm_label": "uninstallworker.ts"
     },
     {
@@ -5940,7 +5913,7 @@
       "source_file": "Ryvie-Back/workers/uninstallWorker.ts",
       "source_location": "L8",
       "id": "workers_uninstallworker_appstoreservice",
-      "community": 24,
+      "community": 190,
       "norm_label": "appstoreservice"
     },
     {
@@ -5949,7 +5922,7 @@
       "source_file": "Ryvie-Back/workers/uninstallWorker.ts",
       "source_location": "L30",
       "id": "workers_uninstallworker_timeoutid",
-      "community": 24,
+      "community": 190,
       "norm_label": "timeoutid"
     },
     {
@@ -6156,7 +6129,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L244",
       "id": "ryvie_front_main_fetchusers",
-      "community": 146,
+      "community": 192,
       "norm_label": "fetchusers()"
     },
     {
@@ -6849,7 +6822,7 @@
       "source_file": "Ryvie-Front/src/components/CachedRoutes.tsx",
       "source_location": "L1",
       "id": "components_cachedroutes",
-      "community": 25,
+      "community": 86,
       "norm_label": "cachedroutes.tsx"
     },
     {
@@ -6858,7 +6831,7 @@
       "source_file": "Ryvie-Front/src/components/CachedRoutes.tsx",
       "source_location": "L8",
       "id": "components_cachedroutes_cachedroutes",
-      "community": 25,
+      "community": 86,
       "norm_label": "cachedroutes()"
     },
     {
@@ -6903,7 +6876,7 @@
       "source_file": "Ryvie-Front/src/components/GlobalUpdateModal.tsx",
       "source_location": "L1",
       "id": "components_globalupdatemodal",
-      "community": 27,
+      "community": 86,
       "norm_label": "globalupdatemodal.tsx"
     },
     {
@@ -6912,7 +6885,7 @@
       "source_file": "Ryvie-Front/src/components/GlobalUpdateModal.tsx",
       "source_location": "L6",
       "id": "components_globalupdatemodal_globalupdatemodal",
-      "community": 27,
+      "community": 86,
       "norm_label": "globalupdatemodal()"
     },
     {
@@ -6921,7 +6894,7 @@
       "source_file": "Ryvie-Front/src/components/GridLauncher.tsx",
       "source_location": "L1",
       "id": "components_gridlauncher",
-      "community": 39,
+      "community": 188,
       "norm_label": "gridlauncher.tsx"
     },
     {
@@ -6930,7 +6903,7 @@
       "source_file": "Ryvie-Front/src/components/GridLauncher.tsx",
       "source_location": "L14",
       "id": "components_gridlauncher_gridlauncher",
-      "community": 39,
+      "community": 188,
       "norm_label": "gridlauncher()"
     },
     {
@@ -7011,7 +6984,7 @@
       "source_file": "Ryvie-Front/src/components/OnboardingOverlay.tsx",
       "source_location": "L1",
       "id": "components_onboardingoverlay",
-      "community": 12,
+      "community": 25,
       "norm_label": "onboardingoverlay.tsx"
     },
     {
@@ -7020,7 +6993,7 @@
       "source_file": "Ryvie-Front/src/components/OnboardingOverlay.tsx",
       "source_location": "L10",
       "id": "components_onboardingoverlay_onboardingpage",
-      "community": 12,
+      "community": 25,
       "norm_label": "onboardingpage"
     },
     {
@@ -7029,7 +7002,7 @@
       "source_file": "Ryvie-Front/src/components/OnboardingOverlay.tsx",
       "source_location": "L17",
       "id": "components_onboardingoverlay_onboardingoverlayprops",
-      "community": 12,
+      "community": 25,
       "norm_label": "onboardingoverlayprops"
     },
     {
@@ -7038,7 +7011,7 @@
       "source_file": "Ryvie-Front/src/components/OnboardingOverlay.tsx",
       "source_location": "L21",
       "id": "components_onboardingoverlay_onboardingoverlay",
-      "community": 12,
+      "community": 25,
       "norm_label": "onboardingoverlay()"
     },
     {
@@ -7110,7 +7083,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/CpuRamWidget.tsx",
       "source_location": "L1",
       "id": "widgets_cpuramwidget",
-      "community": 87,
+      "community": 12,
       "norm_label": "cpuramwidget.tsx"
     },
     {
@@ -7119,7 +7092,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/CpuRamWidget.tsx",
       "source_location": "L14",
       "id": "widgets_cpuramwidget_cpuramdata",
-      "community": 87,
+      "community": 12,
       "norm_label": "cpuramdata"
     },
     {
@@ -7128,7 +7101,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/CpuRamWidget.tsx",
       "source_location": "L15",
       "id": "widgets_cpuramwidget_readcpuramcache",
-      "community": 87,
+      "community": 12,
       "norm_label": "readcpuramcache()"
     },
     {
@@ -7137,7 +7110,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/CpuRamWidget.tsx",
       "source_location": "L25",
       "id": "widgets_cpuramwidget_writecpuramcache",
-      "community": 87,
+      "community": 12,
       "norm_label": "writecpuramcache()"
     },
     {
@@ -7146,7 +7119,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/CpuRamWidget.tsx",
       "source_location": "L32",
       "id": "widgets_cpuramwidget_cpuramwidget",
-      "community": 87,
+      "community": 12,
       "norm_label": "cpuramwidget()"
     },
     {
@@ -7155,7 +7128,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L1",
       "id": "widgets_storagewidget",
-      "community": 87,
+      "community": 12,
       "norm_label": "storagewidget.tsx"
     },
     {
@@ -7164,7 +7137,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L18",
       "id": "widgets_storagewidget_storagedisk",
-      "community": 87,
+      "community": 12,
       "norm_label": "storagedisk"
     },
     {
@@ -7173,7 +7146,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L19",
       "id": "widgets_storagewidget_readstoragecache",
-      "community": 87,
+      "community": 12,
       "norm_label": "readstoragecache()"
     },
     {
@@ -7182,7 +7155,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L29",
       "id": "widgets_storagewidget_writestoragecache",
-      "community": 87,
+      "community": 12,
       "norm_label": "writestoragecache()"
     },
     {
@@ -7191,7 +7164,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L36",
       "id": "widgets_storagewidget_storagewidget",
-      "community": 87,
+      "community": 12,
       "norm_label": "storagewidget()"
     },
     {
@@ -7263,7 +7236,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L1",
       "id": "config_appconfig",
-      "community": 39,
+      "community": 189,
       "norm_label": "appconfig.ts"
     },
     {
@@ -7272,7 +7245,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L11",
       "id": "config_appconfig_grid_config",
-      "community": 39,
+      "community": 188,
       "norm_label": "grid_config"
     },
     {
@@ -7281,7 +7254,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L20",
       "id": "config_appconfig_getbasetotalslots",
-      "community": 39,
+      "community": 189,
       "norm_label": "getbasetotalslots()"
     },
     {
@@ -7290,7 +7263,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L22",
       "id": "config_appconfig_getminwidthforfullgrid",
-      "community": 39,
+      "community": 189,
       "norm_label": "getminwidthforfullgrid()"
     },
     {
@@ -7299,7 +7272,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L28",
       "id": "config_appconfig_importall",
-      "community": 39,
+      "community": 189,
       "norm_label": "importall()"
     },
     {
@@ -7308,7 +7281,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L36",
       "id": "config_appconfig_images",
-      "community": 39,
+      "community": 189,
       "norm_label": "images"
     },
     {
@@ -7317,7 +7290,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L43",
       "id": "config_appconfig_extractappname",
-      "community": 39,
+      "community": 189,
       "norm_label": "extractappname()"
     },
     {
@@ -7326,7 +7299,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L53",
       "id": "config_appconfig_generatetaskbarconfig",
-      "community": 39,
+      "community": 189,
       "norm_label": "generatetaskbarconfig()"
     },
     {
@@ -7335,7 +7308,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L92",
       "id": "config_appconfig_fetchappsfrommanifests",
-      "community": 39,
+      "community": 189,
       "norm_label": "fetchappsfrommanifests()"
     },
     {
@@ -7344,7 +7317,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L110",
       "id": "config_appconfig_generateappconfigfrommanifests",
-      "community": 39,
+      "community": 189,
       "norm_label": "generateappconfigfrommanifests()"
     },
     {
@@ -7353,7 +7326,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L166",
       "id": "config_appconfig_generatedefaultappslist",
-      "community": 39,
+      "community": 189,
       "norm_label": "generatedefaultappslist()"
     },
     {
@@ -7578,7 +7551,7 @@
       "source_file": "Ryvie-Front/src/config/urls.ts",
       "source_location": "L309",
       "id": "config_urls_getserverurl",
-      "community": 14,
+      "community": 192,
       "norm_label": "getserverurl()"
     },
     {
@@ -7650,7 +7623,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L1",
       "id": "contexts_languagecontext",
-      "community": 25,
+      "community": 12,
       "norm_label": "languagecontext.tsx"
     },
     {
@@ -7659,7 +7632,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L6",
       "id": "contexts_languagecontext_translations",
-      "community": 87,
+      "community": 12,
       "norm_label": "translations"
     },
     {
@@ -7668,7 +7641,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L8",
       "id": "contexts_languagecontext_languagecontexttype",
-      "community": 87,
+      "community": 12,
       "norm_label": "languagecontexttype"
     },
     {
@@ -7677,7 +7650,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L15",
       "id": "contexts_languagecontext_languagecontext",
-      "community": 25,
+      "community": 12,
       "norm_label": "languagecontext"
     },
     {
@@ -7686,7 +7659,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L22",
       "id": "contexts_languagecontext_languageprovider",
-      "community": 25,
+      "community": 12,
       "norm_label": "languageprovider()"
     },
     {
@@ -7704,7 +7677,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L1",
       "id": "contexts_socketcontext",
-      "community": 37,
+      "community": 86,
       "norm_label": "socketcontext.tsx"
     },
     {
@@ -7713,7 +7686,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L8",
       "id": "contexts_socketcontext_socketcontextvalue",
-      "community": 37,
+      "community": 86,
       "norm_label": "socketcontextvalue"
     },
     {
@@ -7722,7 +7695,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L15",
       "id": "contexts_socketcontext_socketcontext",
-      "community": 37,
+      "community": 86,
       "norm_label": "socketcontext"
     },
     {
@@ -7740,7 +7713,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L25",
       "id": "contexts_socketcontext_socketproviderprops",
-      "community": 37,
+      "community": 86,
       "norm_label": "socketproviderprops"
     },
     {
@@ -7749,7 +7722,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L29",
       "id": "contexts_socketcontext_socketprovider",
-      "community": 37,
+      "community": 86,
       "norm_label": "socketprovider()"
     },
     {
@@ -7758,7 +7731,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L1",
       "id": "contexts_updatecontext",
-      "community": 27,
+      "community": 86,
       "norm_label": "updatecontext.tsx"
     },
     {
@@ -7767,7 +7740,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L3",
       "id": "contexts_updatecontext_updatecontexttype",
-      "community": 27,
+      "community": 86,
       "norm_label": "updatecontexttype"
     },
     {
@@ -7776,7 +7749,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L11",
       "id": "contexts_updatecontext_updatecontext",
-      "community": 27,
+      "community": 86,
       "norm_label": "updatecontext"
     },
     {
@@ -7785,7 +7758,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L13",
       "id": "contexts_updatecontext_updateprovider",
-      "community": 27,
+      "community": 86,
       "norm_label": "updateprovider()"
     },
     {
@@ -7794,7 +7767,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L37",
       "id": "contexts_updatecontext_useupdate",
-      "community": 27,
+      "community": 86,
       "norm_label": "useupdate()"
     },
     {
@@ -7803,7 +7776,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L1",
       "id": "hooks_usedrag",
-      "community": 39,
+      "community": 188,
       "norm_label": "usedrag.ts"
     },
     {
@@ -7812,7 +7785,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L3",
       "id": "hooks_usedrag_dragoffset",
-      "community": 39,
+      "community": 188,
       "norm_label": "dragoffset"
     },
     {
@@ -7821,7 +7794,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L8",
       "id": "hooks_usedrag_dragposition",
-      "community": 39,
+      "community": 188,
       "norm_label": "dragposition"
     },
     {
@@ -7830,7 +7803,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L13",
       "id": "hooks_usedrag_draggeditem",
-      "community": 39,
+      "community": 188,
       "norm_label": "draggeditem"
     },
     {
@@ -7839,7 +7812,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L18",
       "id": "hooks_usedrag_dragenddata",
-      "community": 39,
+      "community": 188,
       "norm_label": "dragenddata"
     },
     {
@@ -7848,7 +7821,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L27",
       "id": "hooks_usedrag_usedraghandlers",
-      "community": 39,
+      "community": 188,
       "norm_label": "usedraghandlers"
     },
     {
@@ -7857,7 +7830,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L33",
       "id": "hooks_usedrag_usedragreturn",
-      "community": 39,
+      "community": 188,
       "norm_label": "usedragreturn"
     },
     {
@@ -7866,7 +7839,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L41",
       "id": "hooks_usedrag_usedrag",
-      "community": 39,
+      "community": 188,
       "norm_label": "usedrag()"
     },
     {
@@ -7902,7 +7875,7 @@
       "source_file": "Ryvie-Front/src/hooks/useGridLayout.ts",
       "source_location": "L22",
       "id": "hooks_usegridlayout_usegridlayout",
-      "community": 39,
+      "community": 188,
       "norm_label": "usegridlayout()"
     },
     {
@@ -8172,7 +8145,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L31",
       "id": "i18n_en_errors",
-      "community": 188,
+      "community": 36,
       "norm_label": "errors"
     },
     {
@@ -8181,7 +8154,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L32",
       "id": "i18n_en_errors_tryagain",
-      "community": 188,
+      "community": 36,
       "norm_label": "tryagain"
     },
     {
@@ -8190,7 +8163,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L33",
       "id": "i18n_en_errors_networkerror",
-      "community": 188,
+      "community": 36,
       "norm_label": "networkerror"
     },
     {
@@ -8199,7 +8172,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L34",
       "id": "i18n_en_errors_servererror",
-      "community": 188,
+      "community": 36,
       "norm_label": "servererror"
     },
     {
@@ -8208,7 +8181,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L35",
       "id": "i18n_en_errors_unknownerror",
-      "community": 188,
+      "community": 36,
       "norm_label": "unknownerror"
     },
     {
@@ -8451,7 +8424,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L64",
       "id": "i18n_en_login_passwordplaceholder",
-      "community": 137,
+      "community": 5,
       "norm_label": "passwordplaceholder"
     },
     {
@@ -8541,7 +8514,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L74",
       "id": "i18n_en_login_success",
-      "community": 27,
+      "community": 137,
       "norm_label": "success"
     },
     {
@@ -8550,7 +8523,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L75",
       "id": "i18n_en_login_servererror",
-      "community": 188,
+      "community": 36,
       "norm_label": "servererror"
     },
     {
@@ -11313,7 +11286,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L435",
       "id": "i18n_en_settings_updateryvie",
-      "community": 30,
+      "community": 22,
       "norm_label": "updateryvie"
     },
     {
@@ -12834,7 +12807,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L64",
       "id": "i18n_fr_login_passwordplaceholder",
-      "community": 6,
+      "community": 130,
       "norm_label": "passwordplaceholder"
     },
     {
@@ -12915,7 +12888,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L73",
       "id": "i18n_fr_login_allfieldsrequired",
-      "community": 130,
+      "community": 6,
       "norm_label": "allfieldsrequired"
     },
     {
@@ -13572,7 +13545,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L150",
       "id": "i18n_fr_icon_error",
-      "community": 86,
+      "community": 65,
       "norm_label": "error"
     },
     {
@@ -14319,7 +14292,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L238",
       "id": "i18n_fr_storagewidget_status",
-      "community": 86,
+      "community": 65,
       "norm_label": "status"
     },
     {
@@ -14328,7 +14301,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L239",
       "id": "i18n_fr_status_healthy",
-      "community": 86,
+      "community": 65,
       "norm_label": "healthy"
     },
     {
@@ -14337,7 +14310,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L240",
       "id": "i18n_fr_status_warning",
-      "community": 86,
+      "community": 65,
       "norm_label": "warning"
     },
     {
@@ -14346,7 +14319,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L241",
       "id": "i18n_fr_status_critical",
-      "community": 86,
+      "community": 65,
       "norm_label": "critical"
     },
     {
@@ -15057,7 +15030,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L361",
       "id": "i18n_fr_onboarding_status",
-      "community": 86,
+      "community": 65,
       "norm_label": "status"
     },
     {
@@ -15066,7 +15039,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L362",
       "id": "i18n_fr_status_running",
-      "community": 86,
+      "community": 65,
       "norm_label": "running"
     },
     {
@@ -15075,7 +15048,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L363",
       "id": "i18n_fr_status_stopped",
-      "community": 86,
+      "community": 65,
       "norm_label": "stopped"
     },
     {
@@ -15084,7 +15057,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L364",
       "id": "i18n_fr_status_starting",
-      "community": 86,
+      "community": 65,
       "norm_label": "starting"
     },
     {
@@ -15093,7 +15066,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L365",
       "id": "i18n_fr_status_partial",
-      "community": 86,
+      "community": 65,
       "norm_label": "partial"
     },
     {
@@ -15102,7 +15075,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L366",
       "id": "i18n_fr_status_error",
-      "community": 86,
+      "community": 65,
       "norm_label": "error"
     },
     {
@@ -16686,7 +16659,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L1",
       "id": "src_index",
-      "community": 25,
+      "community": 86,
       "norm_label": "index.tsx"
     },
     {
@@ -16695,7 +16668,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L28",
       "id": "src_index_protectedroute",
-      "community": 25,
+      "community": 86,
       "norm_label": "protectedroute()"
     },
     {
@@ -16704,7 +16677,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L38",
       "id": "src_index_app",
-      "community": 25,
+      "community": 86,
       "norm_label": "app()"
     },
     {
@@ -16713,7 +16686,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L162",
       "id": "src_index_rootelement",
-      "community": 25,
+      "community": 86,
       "norm_label": "rootelement"
     },
     {
@@ -16722,7 +16695,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L166",
       "id": "src_index_root",
-      "community": 25,
+      "community": 86,
       "norm_label": "root"
     },
     {
@@ -16731,7 +16704,7 @@
       "source_file": "Ryvie-Front/src/pages/AppStore.tsx",
       "source_location": "L1",
       "id": "pages_appstore",
-      "community": 24,
+      "community": 3,
       "norm_label": "appstore.tsx"
     },
     {
@@ -16740,7 +16713,7 @@
       "source_file": "Ryvie-Front/src/pages/AppStore.tsx",
       "source_location": "L22",
       "id": "pages_appstore_appstoreapp",
-      "community": 24,
+      "community": 3,
       "norm_label": "appstoreapp"
     },
     {
@@ -16749,7 +16722,7 @@
       "source_file": "Ryvie-Front/src/pages/AppStore.tsx",
       "source_location": "L38",
       "id": "pages_appstore_appstore",
-      "community": 24,
+      "community": 12,
       "norm_label": "appstore()"
     },
     {
@@ -16758,7 +16731,7 @@
       "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
       "source_location": "L1",
       "id": "pages_authcallback",
-      "community": 25,
+      "community": 86,
       "norm_label": "authcallback.tsx"
     },
     {
@@ -16767,7 +16740,7 @@
       "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
       "source_location": "L5",
       "id": "pages_authcallback_authcallback",
-      "community": 25,
+      "community": 86,
       "norm_label": "authcallback()"
     },
     {
@@ -16776,7 +16749,7 @@
       "source_file": "Ryvie-Front/src/pages/Connexion.tsx",
       "source_location": "L1",
       "id": "pages_connexion",
-      "community": 25,
+      "community": 19,
       "norm_label": "connexion.tsx"
     },
     {
@@ -16875,7 +16848,7 @@
       "source_file": "Ryvie-Front/src/pages/Home.tsx",
       "source_location": "L63",
       "id": "pages_home_icon",
-      "community": 39,
+      "community": 188,
       "norm_label": "icon()"
     },
     {
@@ -16956,7 +16929,7 @@
       "source_file": "Ryvie-Front/src/pages/ServerRestarting.tsx",
       "source_location": "L1",
       "id": "pages_serverrestarting",
-      "community": 25,
+      "community": 12,
       "norm_label": "serverrestarting.tsx"
     },
     {
@@ -16983,7 +16956,7 @@
       "source_file": "Ryvie-Front/src/pages/Settings.tsx",
       "source_location": "L17",
       "id": "pages_settings_settings",
-      "community": 37,
+      "community": 86,
       "norm_label": "settings()"
     },
     {
@@ -17010,7 +16983,7 @@
       "source_file": "Ryvie-Front/src/pages/StorageSettings.tsx",
       "source_location": "L100",
       "id": "pages_storagesettings_storagesettings",
-      "community": 4,
+      "community": 12,
       "norm_label": "storagesettings()"
     },
     {
@@ -17019,7 +16992,7 @@
       "source_file": "Ryvie-Front/src/pages/User.tsx",
       "source_location": "L1",
       "id": "pages_user",
-      "community": 25,
+      "community": 19,
       "norm_label": "user.tsx"
     },
     {
@@ -17037,7 +17010,7 @@
       "source_file": "Ryvie-Front/src/pages/Welcome.tsx",
       "source_location": "L1",
       "id": "pages_welcome",
-      "community": 25,
+      "community": 19,
       "norm_label": "welcome.tsx"
     },
     {
@@ -17091,7 +17064,7 @@
       "source_file": "Ryvie-Front/src/services/authService.ts",
       "source_location": "L34",
       "id": "services_authservice_getcurrentuser",
-      "community": 25,
+      "community": 19,
       "norm_label": "getcurrentuser()"
     },
     {
@@ -17136,7 +17109,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L1",
       "id": "types_index_gridconfig",
-      "community": 39,
+      "community": 189,
       "norm_label": "gridconfig"
     },
     {
@@ -17145,7 +17118,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L10",
       "id": "types_index_appconfig",
-      "community": 39,
+      "community": 189,
       "norm_label": "appconfig"
     },
     {
@@ -17433,7 +17406,7 @@
       "source_file": "Ryvie-Front/src/utils/detectAccessMode.ts",
       "source_location": "L191",
       "id": "utils_detectaccessmode_testserverconnectivity",
-      "community": 14,
+      "community": 25,
       "norm_label": "testserverconnectivity()"
     },
     {
@@ -17469,7 +17442,7 @@
       "source_file": "Ryvie-Front/src/utils/detectAccessMode.ts",
       "source_location": "L235",
       "id": "utils_detectaccessmode_connectryviesocket",
-      "community": 37,
+      "community": 192,
       "norm_label": "connectryviesocket()"
     },
     {
@@ -17478,7 +17451,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L1",
       "id": "utils_fallbackdetection",
-      "community": 14,
+      "community": 192,
       "norm_label": "fallbackdetection.ts"
     },
     {
@@ -17487,7 +17460,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L4",
       "id": "utils_fallbackdetection_accessmode",
-      "community": 14,
+      "community": 192,
       "norm_label": "accessmode"
     },
     {
@@ -17496,7 +17469,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L6",
       "id": "utils_fallbackdetection_detectaccessmoderobust",
-      "community": 14,
+      "community": 192,
       "norm_label": "detectaccessmoderobust()"
     },
     {
@@ -17505,7 +17478,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L28",
       "id": "utils_fallbackdetection_testsimpleconnectivity",
-      "community": 14,
+      "community": 192,
       "norm_label": "testsimpleconnectivity()"
     },
     {
@@ -17514,7 +17487,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L69",
       "id": "utils_fallbackdetection_testcorsconnectivity",
-      "community": 14,
+      "community": 192,
       "norm_label": "testcorsconnectivity()"
     },
     {
@@ -17523,7 +17496,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L95",
       "id": "utils_fallbackdetection_detectwithretry",
-      "community": 14,
+      "community": 192,
       "norm_label": "detectwithretry()"
     },
     {
@@ -17667,7 +17640,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L43",
       "id": "utils_platformutils_storagemanager",
-      "community": 37,
+      "community": 19,
       "norm_label": "storagemanager"
     },
     {
@@ -17685,7 +17658,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L1",
       "id": "utils_sessionmanager",
-      "community": 25,
+      "community": 19,
       "norm_label": "sessionmanager.ts"
     },
     {
@@ -17694,7 +17667,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L4",
       "id": "utils_sessionmanager_userdata",
-      "community": 25,
+      "community": 19,
       "norm_label": "userdata"
     },
     {
@@ -17703,7 +17676,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L12",
       "id": "utils_sessionmanager_sessioninfo",
-      "community": 25,
+      "community": 19,
       "norm_label": "sessioninfo"
     },
     {
@@ -17892,7 +17865,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L235",
       "id": "utils_sessionmanager_getsessioninfo",
-      "community": 25,
+      "community": 19,
       "norm_label": "getsessioninfo()"
     },
     {
@@ -17901,7 +17874,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L236",
       "id": "utils_sessionmanager_initializesession",
-      "community": 25,
+      "community": 19,
       "norm_label": "initializesession()"
     },
     {
@@ -17910,7 +17883,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L237",
       "id": "utils_sessionmanager_issessionactive",
-      "community": 25,
+      "community": 19,
       "norm_label": "issessionactive()"
     },
     {
@@ -17919,7 +17892,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L238",
       "id": "utils_sessionmanager_getcurrentuser",
-      "community": 25,
+      "community": 19,
       "norm_label": "getcurrentuser()"
     },
     {
@@ -17928,7 +17901,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L239",
       "id": "utils_sessionmanager_getcurrentuserrole",
-      "community": 25,
+      "community": 19,
       "norm_label": "getcurrentuserrole()"
     },
     {
@@ -17937,7 +17910,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L240",
       "id": "utils_sessionmanager_endsession",
-      "community": 25,
+      "community": 19,
       "norm_label": "endsession()"
     },
     {
@@ -18243,7 +18216,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L1",
       "id": "ryvie_front_udpserver",
-      "community": 14,
+      "community": 194,
       "norm_label": "udpserver.js"
     },
     {
@@ -18252,7 +18225,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L1",
       "id": "ryvie_front_udpserver_io",
-      "community": 14,
+      "community": 194,
       "norm_label": "io"
     },
     {
@@ -18261,7 +18234,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L2",
       "id": "ryvie_front_udpserver_getserverurl",
-      "community": 14,
+      "community": 194,
       "norm_label": "{ getserverurl }"
     },
     {
@@ -18270,7 +18243,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L5",
       "id": "ryvie_front_udpserver_args",
-      "community": 14,
+      "community": 194,
       "norm_label": "args"
     },
     {
@@ -18279,7 +18252,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L9",
       "id": "ryvie_front_udpserver_serverurl",
-      "community": 14,
+      "community": 194,
       "norm_label": "serverurl"
     },
     {
@@ -18288,7 +18261,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L13",
       "id": "ryvie_front_udpserver_socket",
-      "community": 14,
+      "community": 194,
       "norm_label": "socket"
     },
     {
@@ -22151,7 +22124,7 @@
       "source_file": "I18N_SUMMARY.md",
       "source_location": "L1",
       "id": "i18n_summary",
-      "community": 87,
+      "community": 12,
       "norm_label": "i18n_summary.md"
     },
     {
@@ -24347,7 +24320,7 @@
       "source_file": "TRADUCTION_GUIDE.md",
       "source_location": "L1",
       "id": "traduction_guide",
-      "community": 87,
+      "community": 12,
       "norm_label": "traduction_guide.md"
     },
     {
@@ -30360,7 +30333,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "dev/prod mode guide",
       "id": "devprod_guide"
     },
@@ -30685,7 +30658,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "pm2 ecosystem config",
       "id": "ecosystemconfigjs_config"
     },
@@ -30724,7 +30697,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 26,
+      "community": 12,
       "norm_label": "settings page",
       "id": "settings_page"
     },
@@ -30763,7 +30736,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 87,
+      "community": 12,
       "norm_label": "welcome page",
       "id": "welcome_page"
     },
@@ -30776,7 +30749,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 87,
+      "community": 12,
       "norm_label": "login page",
       "id": "login_page"
     },
@@ -30789,7 +30762,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 87,
+      "community": 12,
       "norm_label": "language context",
       "id": "languagecontext_context"
     },
@@ -30802,7 +30775,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 87,
+      "community": 12,
       "norm_label": "french translations",
       "id": "frjson_translation"
     },
@@ -30815,7 +30788,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 87,
+      "community": 12,
       "norm_label": "english translations",
       "id": "enjson_translation"
     },
@@ -30841,7 +30814,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "production build script",
       "id": "prodsh_script"
     },
@@ -30906,7 +30879,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "pm2 process manager",
       "id": "pm2_manager"
     },
@@ -31647,7 +31620,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "update system documentation",
       "id": "updatesystem_doc"
     },
@@ -31673,7 +31646,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 26,
       "norm_label": "storage json contracts",
       "id": "storagecontracts_doc"
     },
@@ -31738,7 +31711,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "update monitor html page",
       "id": "updatemonitor_html"
     },
@@ -31777,7 +31750,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "startup tracker service",
       "id": "startuptracker_service"
     },
@@ -31842,7 +31815,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "health route",
       "id": "healthroute_route"
     },
@@ -31881,7 +31854,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "backend entry point (index.ts)",
       "id": "indexts_entrypoint"
     },
@@ -31894,7 +31867,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "update modal component",
       "id": "updatemodal_component"
     },
@@ -31907,7 +31880,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "global update modal component",
       "id": "globalupdatemodal_component"
     },
@@ -31920,7 +31893,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
+      "community": 86,
       "norm_label": "update context",
       "id": "updatecontext_context"
     },
@@ -31959,7 +31932,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "update monitor template server",
       "id": "updatemonitortemplate_script"
     },
@@ -31985,7 +31958,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 26,
       "norm_label": "rollback script",
       "id": "rollback_script"
     },
@@ -31998,7 +31971,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 3,
+      "community": 26,
       "norm_label": "development start script",
       "id": "devsh_script"
     },
@@ -32115,7 +32088,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 26,
       "norm_label": "btrfs filesystem",
       "id": "btrfs_concept"
     },
@@ -32128,7 +32101,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 24,
+      "community": 190,
       "norm_label": "install worker",
       "id": "installworker_worker"
     },
@@ -37096,21 +37069,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L476",
-      "weight": 1.0,
-      "source": "services_appaccountsservice",
-      "target": "services_appaccountsservice_apicall",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appAccountsService.ts",
       "source_location": "L467",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_appaccountsservice",
-      "target": "services_appaccountsservice_apisignup"
+      "target": "services_appaccountsservice_apisignup",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -37121,16 +37084,6 @@
       "confidence_score": 1.0,
       "source": "services_appaccountsservice",
       "target": "services_appaccountsservice_appmanager"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L15",
-      "weight": 1.0,
-      "source": "services_appaccountsservice",
-      "target": "services_appaccountsservice_axios",
-      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -37171,16 +37124,6 @@
       "confidence_score": 1.0,
       "source": "services_appaccountsservice",
       "target": "services_appaccountsservice_bcryptsqlitereset"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L468",
-      "weight": 1.0,
-      "source": "services_appaccountsservice",
-      "target": "services_appaccountsservice_buildbody",
-      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -37268,9 +37211,9 @@
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
       "source_location": "L499",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_appaccountsservice",
-      "target": "services_appaccountsservice_loginverify"
+      "target": "services_appaccountsservice_loginverify",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -37423,9 +37366,9 @@
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
       "source_location": "L484",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_appaccountsservice_apisignup",
-      "target": "services_appaccountsservice_dockerexec"
+      "target": "services_appaccountsservice_dockerexec",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -37467,9 +37410,9 @@
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
       "source_location": "L512",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_appaccountsservice_loginverify",
-      "target": "services_appaccountsservice_dockerexec"
+      "target": "services_appaccountsservice_dockerexec",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -37795,44 +37738,11 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L485",
-      "weight": 1.0,
-      "source": "services_appaccountsservice_apicall",
-      "target": "services_appaccountsservice_buildbody",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L498",
-      "weight": 1.0,
-      "source": "services_appaccountsservice_apisignup",
-      "target": "services_appaccountsservice_apicall",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appAccountsService.ts",
-      "source_location": "L514",
-      "weight": 1.0,
-      "source": "services_appaccountsservice_loginverify",
-      "target": "services_appaccountsservice_apicall",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appAccountsService.ts",
       "source_location": "L549",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_appaccountsservice_provisiondefault",
-      "target": "services_appaccountsservice_apisignup"
+      "target": "services_appaccountsservice_apisignup",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -37841,9 +37751,9 @@
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
       "source_location": "L593",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_appaccountsservice_getdefaultstatus",
-      "target": "services_appaccountsservice_loginverify"
+      "target": "services_appaccountsservice_loginverify",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -37852,9 +37762,9 @@
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
       "source_location": "L535",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_appaccountsservice_provisiondefault",
-      "target": "services_appaccountsservice_loginverify"
+      "target": "services_appaccountsservice_loginverify",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",

@@ -22,6 +22,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import GridLauncher from '../components/GridLauncher';
 import InstallIndicator from '../components/InstallIndicator';
 import OnboardingOverlay from '../components/OnboardingOverlay';
+import DefaultCredentialsModal from '../components/DefaultCredentialsModal';
  
 
 const WIDGET_CONFIGS = {
@@ -2517,6 +2518,75 @@ const Home = () => {
 
 
 
+  // Bandeau identifiants par défaut (affiché à l'ouverture tant que non changés)
+  const [credModal, setCredModal] = useState<any>({ open: false, appName: '', email: '', username: '', password: '', onOpen: null });
+
+  // Apps déjà ouvertes au moins une fois (pour la pastille bleue « nouveau »).
+  // null = pas encore initialisé. À la 1re init on marque toutes les apps présentes
+  // comme « déjà vues » (pas de pastille rétroactive) ; seules les NOUVELLES installs
+  // futures auront la pastille jusqu'à leur première ouverture.
+  const [openedApps, setOpenedApps] = useState<Set<string> | null>(() => {
+    try {
+      const s = localStorage.getItem('ryvie_opened_apps');
+      return s ? new Set(JSON.parse(s)) : null;
+    } catch (_) { return null; }
+  });
+
+  React.useEffect(() => {
+    if (openedApps !== null) return;
+    const ids = Object.keys(appsConfig || {}).filter((id) => id && id.startsWith('app-'));
+    if (ids.length === 0) return;
+    const set = new Set(ids);
+    try { localStorage.setItem('ryvie_opened_apps', JSON.stringify([...set])); } catch (_) {}
+    setOpenedApps(set);
+  }, [appsConfig, openedApps]);
+
+  const markAppOpened = React.useCallback((appId: string) => {
+    setOpenedApps((prev) => {
+      const set = new Set(prev || []);
+      if (set.has(appId)) return prev;
+      set.add(appId);
+      try { localStorage.setItem('ryvie_opened_apps', JSON.stringify([...set])); } catch (_) {}
+      return set;
+    });
+  }, []);
+
+  // Marque une app comme « neuve » (pastille bleue) : on la retire des « vues ».
+  // Appelé à la fin d'une (ré)installation (hors mise à jour).
+  const markAppNew = React.useCallback((appId: string) => {
+    setOpenedApps((prev) => {
+      if (!prev || !prev.has(appId)) return prev; // déjà neuve / pas initialisé
+      const set = new Set(prev);
+      set.delete(appId);
+      try { localStorage.setItem('ryvie_opened_apps', JSON.stringify([...set])); } catch (_) {}
+      return set;
+    });
+  }, []);
+
+  // Détecte les fins d'installation : une app qui était en cours d'install et qui
+  // n'y est plus → installation terminée → pastille bleue (sauf si c'était un update).
+  const prevInstallingRef = React.useRef<any>({});
+  React.useEffect(() => {
+    const prev = prevInstallingRef.current || {};
+    const currKeys = Object.keys(installingApps || {});
+    Object.keys(prev).forEach((rawId) => {
+      if (!currKeys.includes(rawId)) {
+        if (!prev[rawId]?.isUpdate) markAppNew(`app-${rawId}`);
+      }
+    });
+    prevInstallingRef.current = installingApps;
+  }, [installingApps, markAppNew]);
+
+  // Apps installées mais jamais ouvertes -> pastille bleue.
+  const newApps = React.useMemo(() => {
+    const s = new Set<string>();
+    if (!openedApps) return s;
+    Object.keys(appsConfig || {}).forEach((id) => {
+      if (id && id.startsWith('app-') && !openedApps.has(id)) s.add(id);
+    });
+    return s;
+  }, [appsConfig, openedApps]);
+
   const openAppWindow = (url, useOverlay = true, appName = '') => {
     console.log(`[Home] Ouverture de l'application: ${url}`);
     
@@ -2653,14 +2723,55 @@ const Home = () => {
     // Si c'est une application avec URL
     if (appConfig.urlKey) {
       const appUrl = getAppUrl(appConfig.urlKey, accessMode);
-      
+
       if (appUrl) {
-        openAppWindow(appUrl, !appConfig.useDirectWindow, appConfig.name);
+        const doOpen = () => openAppWindow(appUrl, !appConfig.useDirectWindow, appConfig.name);
+        const isFirstOpen = !!openedApps && !openedApps.has(iconId);
+        const serverUrl = getServerUrl(accessMode);
+        const hasCreds = appConfig.sso !== true && appConfig.hasDefaultAccount;
+
+        if (isFirstOpen && hasCreds) {
+          // 1RE OUVERTURE : on récupère les identifiants et on les AFFICHE AVANT
+          // d'ouvrir l'app (l'utilisateur clique « Ouvrir l'app » dans le modal).
+          axios
+            .get(`${serverUrl}/api/apps/${appConfig.id || iconId}/default-credentials`, { _noAuthRedirect: true } as any)
+            .then((res) => {
+              const d = res.data || {};
+              if (d.hasDefault && d.changed === false) {
+                setCredModal({
+                  open: true,
+                  appName: appConfig.name || iconId,
+                  email: d.email, username: d.username, password: d.password,
+                  onOpen: () => { markAppOpened(iconId); doOpen(); },
+                });
+              } else {
+                markAppOpened(iconId);
+                doOpen();
+              }
+            })
+            .catch(() => { markAppOpened(iconId); doOpen(); });
+        } else {
+          // Ouvertures suivantes : ouverture IMMÉDIATE (aucune latence).
+          markAppOpened(iconId);
+          doOpen();
+          // Rappel non bloquant en arrière-plan si le compte par défaut est inchangé.
+          if (hasCreds) {
+            axios
+              .get(`${serverUrl}/api/apps/${appConfig.id || iconId}/default-credentials`, { _noAuthRedirect: true } as any)
+              .then((res) => {
+                const d = res.data || {};
+                if (d.hasDefault && d.changed === false) {
+                  setCredModal({ open: true, appName: appConfig.name || iconId, email: d.email, username: d.username, password: d.password });
+                }
+              })
+              .catch(() => {});
+          }
+        }
       } else {
         console.log("Pas d'URL trouvée pour cette icône :", iconId);
       }
     }
-  }, [appsConfig, appStoreMounted, accessMode, navigate]);
+  }, [appsConfig, appStoreMounted, accessMode, navigate, openedApps, markAppOpened]);
 
   // Construit l'URL SOURCE brute du fond (sans wrapper `url(...)`) à partir de l'état courant.
   const buildBackgroundSrc = () => {
@@ -2829,6 +2940,7 @@ const Home = () => {
               onAddWidget={handleAddWidget}
               onRemoveWidget={handleRemoveWidget}
               refreshDesktopIcons={refreshDesktopIcons}
+              newApps={newApps}
             />
           </div>
           {/* Bouton de déconnexion fixe en bas à gauche */}
@@ -3293,11 +3405,22 @@ const Home = () => {
 
       {/* Overlay d'onboarding pour les nouveaux utilisateurs */}
       {showOnboarding && (
-        <OnboardingOverlay 
+        <OnboardingOverlay
           onComplete={() => {
             setShowOnboarding(false);
             console.log('[Home] Onboarding complété');
           }}
+        />
+      )}
+
+      {credModal.open && (
+        <DefaultCredentialsModal
+          appName={credModal.appName}
+          email={credModal.email}
+          username={credModal.username}
+          password={credModal.password}
+          onOpen={credModal.onOpen || undefined}
+          onClose={() => setCredModal((m) => ({ ...m, open: false }))}
         />
       )}
     </div>

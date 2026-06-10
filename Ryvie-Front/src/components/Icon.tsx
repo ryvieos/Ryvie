@@ -4,6 +4,7 @@ import { useDrag } from 'react-dnd';
 import axios from '../utils/setupAxios';
 import urlsConfig from '../config/urls';
 import { useLanguage } from '../contexts/LanguageContext';
+import AppAccountsModal from './AppAccountsModal';
 
 const { getServerUrl } = urlsConfig;
 const ItemTypes = { ICON: 'icon' };
@@ -33,15 +34,25 @@ const ContextMenuPortal = ({ children, x, y }) => {
 };
 
 // Composant Icon avec React.memo pour éviter les re-renders inutiles
-const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons }) => {
+const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons, isNew }) => {
   const { t } = useLanguage();
   const appConfig = appsConfig[id] || {};
   const [imgSrc, setImgSrc] = React.useState(src);
   const [imgError, setImgError] = React.useState(false);
   const [pendingAction, setPendingAction] = React.useState(null);
+  // Plancher de durée du spinner de réinitialisation d'accès (10 s minimum)
+  const [resetMinElapsed, setResetMinElapsed] = React.useState(true);
   const [isUninstalling, setIsUninstalling] = React.useState(false);
   const isProcessingMenuActionRef = React.useRef(false);
+  // Résultat d'un reset d'accès en attente d'affichage (montré quand le spinner s'arrête)
+  const resetResultRef = React.useRef<any>(null);
   const [confirmModal, setConfirmModal] = React.useState({ show: false, type: '', title: '', message: '', onConfirm: null });
+  const [accountsModalOpen, setAccountsModalOpen] = React.useState(false);
+
+  // L'app gère-t-elle des comptes internes réinitialisables ? (non-SSO + recette)
+  const canManageAccounts = appConfig.sso !== true && !!appConfig.hasAccounts;
+  // L'app propose-t-elle une réinitialisation d'accès native (CLI, ex. n8n) ?
+  const canResetOwner = appConfig.sso !== true && !!appConfig.hasOwnerReset;
   
   React.useEffect(() => {
     setImgSrc(src);
@@ -53,8 +64,19 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
       setPendingAction(null);
     } else if (pendingAction === 'starting' && appStatusData?.status === 'running') {
       setPendingAction(null);
+    } else if (pendingAction === 'resetting' && appStatusData?.status === 'running' && resetMinElapsed) {
+      // Reset : le spinner s'arrête quand l'app est RÉELLEMENT "running" (accessible)
+      // ET qu'au moins 10 s se sont écoulées (plancher). Sûr car on pose un statut
+      // optimiste "starting" au début (sinon ça couperait tout de suite).
+      setPendingAction(null);
+      // La notif « Accès réinitialisé » s'affiche PILE maintenant (spinner arrêté).
+      const r = resetResultRef.current;
+      if (r) {
+        resetResultRef.current = null;
+        setConfirmModal({ show: true, type: 'success', title: r.title, message: r.message, onConfirm: () => closeModal() } as any);
+      }
     }
-  }, [appStatusData?.status, pendingAction]);
+  }, [appStatusData?.status, pendingAction, resetMinElapsed]);
   
   const handleImageError = () => {
     if (imgError) return;
@@ -90,7 +112,8 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   // installation), qui ressemblerait à tort à un redémarrage.
   const isTransitioning = !isInstalling && appConfig.showStatus && (
     isUninstalling ||
-    pendingAction === 'starting' || pendingAction === 'stopping'
+    pendingAction === 'starting' || pendingAction === 'stopping' ||
+    pendingAction === 'resetting'
   );
 
   // App arrêtée -> grise fixe
@@ -291,11 +314,11 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
                 >
                   {t('common.cancel')}
                 </button>
-                <button 
-                  className="confirm-modal-btn confirm-modal-btn-danger" 
+                <button
+                  className="confirm-modal-btn confirm-modal-btn-danger"
                   onClick={(e) => { e.stopPropagation(); confirmModal.onConfirm(); }}
                 >
-                  {t('common.uninstall')}
+                  {confirmModal.confirmLabel || t('common.uninstall')}
                 </button>
               </>
             )}
@@ -304,6 +327,67 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
       </div>,
       document.body
     );
+  };
+
+  const handleOwnerReset = () => {
+    setActiveContextMenu(null);
+    if (confirmModal.show || modalClosingRef.current) return;
+    const appId = appConfig.id;
+    const appName = appConfig.name || id;
+    setConfirmModal({
+      show: true,
+      type: 'danger',
+      title: t('icon.resetAccessTitle').replace('{appName}', appName),
+      message: t('icon.resetAccessMessage'),
+      confirmLabel: t('icon.resetAccess'),
+      onConfirm: async () => {
+        setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null });
+        // Spinner + statut optimiste "starting" (comme un redémarrage) : le spinner
+        // restera tant que l'app n'est pas réellement revenue "running" (accessible)
+        // ET au moins 10 s (plancher, pour éviter un flash trop court).
+        setPendingAction('resetting');
+        setResetMinElapsed(false);
+        setTimeout(() => setResetMinElapsed(true), 10000);
+        if (setAppStatus) {
+          setAppStatus((prev: any) => ({ ...prev, [id]: { ...(prev?.[id] || {}), status: 'starting', progress: 50 } }));
+        }
+
+        try {
+          const serverUrl = getServerUrl(accessMode);
+          const res = await axios.post(`${serverUrl}/api/apps/${appId}/reset-owner`, {}, { _noAuthRedirect: true });
+          // Succès : on N'AFFICHE PAS la notif tout de suite. On la mémorise et elle
+          // sera montrée PILE quand le spinner s'arrêtera (app de retour "running").
+          resetResultRef.current = { title: t('icon.resetAccessDone'), message: res.data?.message || '' };
+          // Rafraîchir le statut en rafale ; l'effet coupe le spinner quand c'est prêt.
+          if (refreshDesktopIcons) {
+            [0, 2000, 5000, 10000, 20000, 35000, 55000].forEach((ms) =>
+              setTimeout(() => { try { refreshDesktopIcons(); } catch (_) {} }, ms)
+            );
+          }
+          // Filet de sécurité : si "running" n'est jamais détecté, on coupe le spinner
+          // et on affiche quand même la notif au bout de 90 s.
+          setTimeout(() => {
+            setPendingAction(null);
+            const r = resetResultRef.current;
+            if (r) {
+              resetResultRef.current = null;
+              setConfirmModal({ show: true, type: 'success', title: r.title, message: r.message, onConfirm: () => closeModal() } as any);
+            }
+          }, 90000);
+        } catch (e) {
+          // Erreur : on coupe le spinner et on affiche l'erreur immédiatement.
+          resetResultRef.current = null;
+          setConfirmModal({
+            show: true, type: 'error',
+            title: t('icon.error'),
+            message: e?.response?.data?.error || String(e?.message || ''),
+            onConfirm: () => closeModal(),
+          });
+          setPendingAction(null);
+          if (refreshDesktopIcons) { try { refreshDesktopIcons(); } catch (_) {} }
+        }
+      },
+    });
   };
 
   const handleAppAction = async (action) => {
@@ -479,7 +563,17 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
     <>
       {/* Modal de confirmation */}
       <ConfirmModalPortal />
-      
+
+      {/* Modal de gestion des comptes de l'app (admin, apps non-SSO) */}
+      {accountsModalOpen && (
+        <AppAccountsModal
+          appId={appConfig.id || id}
+          appName={appConfig.name || id}
+          accessMode={accessMode}
+          onClose={() => setAccountsModalOpen(false)}
+        />
+      )}
+
       {!imgError && (
         <div className="icon-container">
           <div
@@ -515,6 +609,18 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
             {/* Démarrage / arrêt / redémarrage en cours : spinner indéterminé centré */}
             {isTransitioning && (
               <div className="icon-progress"><div className="icon-spinner-ring"></div></div>
+            )}
+            {/* Pastille bleue : app installée jamais encore ouverte (disparaît à la 1re ouverture) */}
+            {isNew && !isInstalling && (
+              <span
+                aria-label="nouvelle app"
+                style={{
+                  position: 'absolute', top: -3, right: -3,
+                  width: 13, height: 13, borderRadius: '50%',
+                  background: '#2f6bff', border: '2px solid rgba(255,255,255,0.92)',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.45)', zIndex: 6, pointerEvents: 'none',
+                }}
+              />
             )}
           </div>
           {showName && <p className="icon-name">{appConfig.name || installInfo?.appName || id.replace('.jpeg', '').replace('.png', '').replace('.svg', '')}</p>}
@@ -560,14 +666,58 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
                 </span>
                 <span>{t('icon.restart')}</span>
               </div>
+              {canManageAccounts && (
+                <>
+                  <div className="context-menu-separator" role="separator" />
+                  <div
+                    className="context-menu-item"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setActiveContextMenu(null);
+                      setAccountsModalOpen(true);
+                    }}
+                  >
+                    <span className="context-menu-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <circle cx="12" cy="8" r="4" strokeWidth="2" />
+                        <path d="M4 21c0-4 4-6 8-6s8 2 8 6" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <span>{t('icon.manageAccounts')}</span>
+                  </div>
+                </>
+              )}
+              {canResetOwner && (
+                <>
+                  <div className="context-menu-separator" role="separator" />
+                  <div
+                    className="context-menu-item"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleOwnerReset();
+                    }}
+                  >
+                    <span className="context-menu-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M21 12a9 9 0 1 1-3.3-6.9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <polyline points="21 3 21 9 15 9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx="12" cy="12" r="3.2" strokeWidth="2" />
+                      </svg>
+                    </span>
+                    <span>{t('icon.resetAccess')}</span>
+                  </div>
+                </>
+              )}
               <div className="context-menu-separator" role="separator" />
-              <div 
-                className="context-menu-item context-menu-item-danger" 
-                onClick={(e) => { 
+              <div
+                className="context-menu-item context-menu-item-danger"
+                onClick={(e) => {
                   console.log('[Icon] 🖱️ Clic sur Désinstaller');
                   e.preventDefault();
-                  e.stopPropagation(); 
-                  handleAppAction('uninstall'); 
+                  e.stopPropagation();
+                  handleAppAction('uninstall');
                 }}
               >
                 <span className="context-menu-icon context-menu-icon-uninstall" aria-hidden="true">
@@ -628,6 +778,7 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
     prevProps.id === nextProps.id &&
     prevProps.src === nextProps.src &&
     prevProps.showName === nextProps.showName &&
+    prevProps.isNew === nextProps.isNew &&
     prevProps.isAdmin === nextProps.isAdmin &&
     prevProps.accessMode === nextProps.accessMode &&
     JSON.stringify(prevProps.appStatusData) === JSON.stringify(nextProps.appStatusData) &&
