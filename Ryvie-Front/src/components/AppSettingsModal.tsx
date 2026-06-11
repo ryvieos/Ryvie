@@ -19,10 +19,15 @@ interface Props {
   appName: string;
   accessMode: string;
   onClose: () => void;
-  /** Création d'adresse lancée : l'icône affiche un spinner jusqu'à ce que
-      l'app réponde réellement à l'adresse générée (sonde /exposure/ready). */
-  onExposureStart?: () => void;
-  /** Création échouée : couper le spinner de l'icône immédiatement. */
+  /** Opération d'exposition lancée (création ou suppression) : l'icône affiche
+      un spinner (plancher 10 s) qui ne s'arrête que lorsque le backend a confirmé
+      que l'app est de nouveau joignable (cf. onExposureSettled). */
+  onExposureStart?: (op: 'create' | 'delete') => void;
+  /** Backend confirmé : la requête create/delete a répondu, ce qui — côté backend
+      — n'arrive qu'après avoir sondé l'app post-redémarrage. Autorise l'arrêt du
+      spinner de l'icône (effectif une fois le plancher de 10 s écoulé). */
+  onExposureSettled?: () => void;
+  /** Opération échouée : couper le spinner de l'icône immédiatement. */
   onExposureError?: () => void;
 }
 
@@ -35,7 +40,7 @@ const EXPOSURE_TIMEOUT_MS = 240000;
  * Création/suppression via le backend, avec avertissement de sécurité avant
  * exposition publique.
  */
-const AppSettingsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose, onExposureStart, onExposureError }) => {
+const AppSettingsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose, onExposureStart, onExposureSettled, onExposureError }) => {
   const { t } = useLanguage();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -46,6 +51,8 @@ const AppSettingsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose
   const [working, setWorking] = React.useState<'create' | 'delete' | null>(null);
   const [toast, setToast] = React.useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [copied, setCopied] = React.useState(false);
+  // Panneau d'aide (icône ⓘ) : explique ce qu'est une adresse publique.
+  const [showInfo, setShowInfo] = React.useState(false);
 
   const serverUrl = getServerUrl(accessMode);
 
@@ -77,13 +84,16 @@ const AppSettingsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose
     setWorking('create');
     // Spinner sur l'icône de l'app : il ne s'arrêtera que lorsque l'adresse
     // générée répondra réellement (sonde backend), même après fermeture du modal.
-    onExposureStart?.();
+    onExposureStart?.('create');
     try {
       const res = await axios.post(
         `${serverUrl}/api/apps/${appId}/exposure`,
         {},
         { timeout: EXPOSURE_TIMEOUT_MS, _noAuthRedirect: true } as any
       );
+      // Le backend a fini d'attendre que l'adresse réponde réellement → on peut
+      // arrêter le spinner de l'icône (après son plancher de 10 s).
+      onExposureSettled?.();
       // ready === false : l'adresse est créée mais la route met encore quelques
       // instants à s'activer côté cloud → on prévient l'utilisateur.
       const base = res.data?.ready === false ? t('appSettings.createdPending') : t('appSettings.created');
@@ -106,11 +116,18 @@ const AppSettingsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose
   const deleteExposure = async () => {
     setConfirming(null);
     setWorking('delete');
+    // Spinner sur l'icône de l'app (plancher 10 s) : l'app redémarre pour retirer
+    // l'exposition, le spinner tient jusqu'à son retour « running », même après
+    // fermeture du modal.
+    onExposureStart?.('delete');
     try {
       const res = await axios.delete(
         `${serverUrl}/api/apps/${appId}/exposure`,
         { timeout: EXPOSURE_TIMEOUT_MS, _noAuthRedirect: true } as any
       );
+      // Le backend a fini d'attendre que l'app réponde de nouveau en local → on
+      // peut arrêter le spinner de l'icône (après son plancher de 10 s).
+      onExposureSettled?.();
       setToast({
         type: 'success',
         msg: res.data?.restarted
@@ -120,6 +137,8 @@ const AppSettingsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose
       // Recharge les domaines en mémoire : le prochain clic repasse sur l'accès direct.
       await Promise.all([refreshNetbirdData(), loadExposure()]);
     } catch (e: any) {
+      // Échec → on coupe aussi le spinner de l'icône
+      onExposureError?.();
       setToast({ type: 'error', msg: e?.response?.data?.error || t('appSettings.deleteError') });
     } finally {
       setWorking(null);
@@ -137,14 +156,46 @@ const AppSettingsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose
 
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
+  // Clic sur l'overlay : ferme la fenêtre (la création éventuelle continue en
+  // arrière-plan, cf. createExposure). stopPropagation est INDISPENSABLE : la
+  // modale est rendue via un portail dans l'arbre React de l'icône, donc sans ça
+  // le clic « remonte » jusqu'au onClick de la tuile (GridLauncher) et ouvrirait
+  // l'app au lieu de simplement fermer la fenêtre.
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClose();
+  };
+
   return ReactDOM.createPortal(
-    <div style={styles.overlay} onClick={onClose} onMouseDown={stop} onPointerDown={stop}>
+    <div style={styles.overlay} onClick={handleOverlayClick} onMouseDown={stop} onMouseUp={stop} onPointerDown={stop}>
       <style>{themeStyle}</style>
       <div style={styles.modal} className="asm-modal" onClick={stop} onMouseDown={stop}>
         <div style={styles.header}>
           <h3 style={styles.title}>{t('appSettings.title')} — {appName}</h3>
-          <button style={styles.closeBtn} onClick={onClose} aria-label={t('common.close')}>✕</button>
+          <div style={styles.headerActions}>
+            <button
+              style={{ ...styles.iconBtn, ...(showInfo ? styles.iconBtnActive : {}) }}
+              onClick={() => setShowInfo((v) => !v)}
+              aria-label={t('appSettings.info')}
+              aria-expanded={showInfo}
+              title={t('appSettings.info')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="11" x2="12" y2="16" />
+                <circle cx="12" cy="8" r="0.6" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+            <button style={styles.closeBtn} onClick={onClose} aria-label={t('common.close')}>✕</button>
+          </div>
         </div>
+
+        {showInfo && (
+          <div style={styles.infoBox}>
+            <div style={styles.infoTitleText}>{t('appSettings.infoTitle')}</div>
+            <div style={styles.infoText}>{t('appSettings.infoText')}</div>
+          </div>
+        )}
 
         {toast && (
           <div style={{ ...styles.toast, ...(toast.type === 'error' ? styles.toastError : styles.toastSuccess) }}>
@@ -213,6 +264,13 @@ const AppSettingsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose
                   >
                     {working === 'delete' ? t('appSettings.deleting') : t('appSettings.delete')}
                   </button>
+                </div>
+              )}
+
+              {working === 'delete' && (
+                <div style={styles.workingRow}>
+                  <span className="asm-spinner" style={styles.spinner} />
+                  <span style={styles.hint}>{t('appSettings.deletingHint')}</span>
                 </div>
               )}
             </>
@@ -316,10 +374,23 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px 20px', borderBottom: '1px solid var(--asm-border)',
   },
   title: { margin: 0, fontSize: 16, fontWeight: 600 },
+  headerActions: { display: 'flex', alignItems: 'center', gap: 4 },
+  iconBtn: {
+    background: 'transparent', border: 'none', color: 'var(--asm-muted)',
+    cursor: 'pointer', lineHeight: 0, padding: 4, borderRadius: 8,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  },
+  iconBtnActive: { color: '#3b6fe0', background: 'rgba(59,111,224,0.12)' },
   closeBtn: {
     background: 'transparent', border: 'none', color: 'var(--asm-muted)',
     fontSize: 18, cursor: 'pointer', lineHeight: 1,
   },
+  infoBox: {
+    margin: '12px 20px 0', padding: '12px 14px', borderRadius: 8,
+    background: 'rgba(59,111,224,0.08)', border: '1px solid rgba(59,111,224,0.22)',
+  },
+  infoTitleText: { fontSize: 13.5, fontWeight: 600, marginBottom: 6, color: 'var(--asm-fg)' },
+  infoText: { fontSize: 13, lineHeight: 1.55, color: 'var(--asm-muted)' },
   body: { padding: '14px 20px 20px', overflowY: 'auto' },
   sectionTitle: { fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--asm-muted)', marginBottom: 10 },
   muted: { color: 'var(--asm-muted)', padding: '4px 0 10px', fontSize: 14, lineHeight: 1.5 },

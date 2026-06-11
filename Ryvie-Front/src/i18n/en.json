@@ -195,11 +195,15 @@
     "deleteWarning": "The application will no longer be reachable from the Internet. It may restart automatically during the operation.",
     "confirmDelete": "Remove",
     "deleting": "Removing…",
+    "deletingHint": "Removing the address can take up to 2 minutes.",
     "deleted": "Public address removed.",
     "deleteError": "Unable to remove the public address. Please try again later.",
     "envUpdated": "The application is restarting to apply the change.",
     "copy": "Copy",
-    "copied": "Copied!"
+    "copied": "Copied!",
+    "info": "More information",
+    "infoTitle": "About public addresses",
+    "infoText": "A public address (*.ryvie.fr) makes this app reachable from the Internet, outside your Ryvie network. Generation goes through our cloud service and can take up to 2 minutes; the app may restart automatically to apply the change. You can close this window: creation keeps running in the background and the app icon shows a spinner until the address is active. Make sure every account is protected by a strong password before exposing the app."
   },
   "appAccounts": {
     "title": "Accounts",

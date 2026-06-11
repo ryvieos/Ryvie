@@ -195,11 +195,15 @@
     "deleteWarning": "L'application ne sera plus accessible depuis Internet. Elle peut redémarrer automatiquement pendant l'opération.",
     "confirmDelete": "Supprimer",
     "deleting": "Suppression en cours…",
+    "deletingHint": "La suppression peut prendre jusqu'à 2 minutes.",
     "deleted": "Adresse publique supprimée.",
     "deleteError": "Impossible de supprimer l'adresse publique. Réessayez plus tard.",
     "envUpdated": "L'application redémarre pour appliquer le changement.",
     "copy": "Copier",
-    "copied": "Copié !"
+    "copied": "Copié !",
+    "info": "Plus d'informations",
+    "infoTitle": "À propos des adresses publiques",
+    "infoText": "Une adresse publique (*.ryvie.fr) rend cette app accessible depuis Internet, en dehors de votre réseau Ryvie. La génération passe par notre service cloud et peut prendre jusqu'à 2 minutes ; l'app peut redémarrer automatiquement pour appliquer le changement. Vous pouvez fermer cette fenêtre : la création continue en arrière-plan et l'icône de l'app affiche un indicateur tant que l'adresse n'est pas active. Pensez à protéger chaque compte par un mot de passe solide avant d'exposer l'app."
   },
   "appAccounts": {
     "title": "Comptes",

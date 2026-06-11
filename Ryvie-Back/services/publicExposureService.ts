@@ -289,21 +289,75 @@ async function probeDomain(domain: string): Promise<boolean> {
 }
 
 /**
- * Attend que le domaine public réponde réellement. La création côté cloud est
- * asynchrone (DNS + route ingress) : on sonde jusqu'à obtenir une vraie réponse
- * de l'app, pour que le spinner côté UI dure jusqu'à ce que l'adresse fonctionne.
+ * Sonde UNE fois l'app en local. Le backend tourne sur l'hôte et chaque app
+ * publie son `mainPort` sur l'hôte (Caddy local proxifie host.docker.internal:port).
+ * Sert à savoir si l'app est de nouveau joignable après le redémarrage déclenché
+ * par une suppression d'adresse publique (retour aux URLs locales).
  */
-async function waitForDomainReady(domain: string, maxWaitMs = 60000): Promise<boolean> {
-  const deadline = Date.now() + maxWaitMs;
-  while (Date.now() < deadline) {
-    if (await probeDomain(domain)) {
-      console.log(`[publicExposure] ✅ ${domain} répond`);
-      return true;
-    }
-    await new Promise((r) => setTimeout(r, 3000));
+async function probeLocal(port: number): Promise<boolean> {
+  try {
+    const res = await axios.get(`http://127.0.0.1:${port}/`, {
+      timeout: 5000,
+      validateStatus: () => true
+    });
+    const body = typeof res.data === 'string' ? res.data : '';
+    return res.status < 500 && !/route not configured/i.test(body);
+  } catch (_) {
+    return false;
   }
-  console.warn(`[publicExposure] ⚠️ ${domain} ne répond pas encore après ${maxWaitMs / 1000}s (route en cours d'activation)`);
+}
+
+/**
+ * Attend qu'une cible réponde RÉELLEMENT et de façon STABLE.
+ *
+ * Le `--force-recreate` du redémarrage coupe l'ancien conteneur puis en démarre
+ * un neuf : sans précaution, une sonde lancée trop tôt validerait la réponse de
+ * l'ANCIEN conteneur (avant sa coupure) et le spinner UI s'arrêterait juste avant
+ * que l'app ne devienne injoignable (« connection refused » / « route not
+ * configured » au clic). Pour éviter ça :
+ *  - `initialDelayMs` : on laisse le recreate couper l'ancien conteneur avant de sonder,
+ *  - `settleProbes`   : on exige N réponses OK consécutives (un flux down-then-up
+ *                       casse la série → on ne valide qu'une app réellement stable).
+ */
+async function waitUntilReady(
+  probe: () => Promise<boolean>,
+  label: string,
+  { initialDelayMs = 6000, settleProbes = 2, intervalMs = 3000, maxWaitMs = 90000 } = {}
+): Promise<boolean> {
+  if (initialDelayMs) await new Promise((r) => setTimeout(r, initialDelayMs));
+  const deadline = Date.now() + maxWaitMs;
+  let consecutive = 0;
+  while (Date.now() < deadline) {
+    if (await probe()) {
+      if (++consecutive >= settleProbes) {
+        console.log(`[publicExposure] ✅ ${label} répond (stable)`);
+        return true;
+      }
+    } else {
+      consecutive = 0;
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  console.warn(`[publicExposure] ⚠️ ${label} ne répond pas de façon stable après ${maxWaitMs / 1000}s`);
   return false;
+}
+
+/**
+ * Attend que le domaine public réponde réellement. La création côté cloud est
+ * asynchrone (DNS + route ingress) ET l'app redémarre pour pointer ses URLs sur
+ * le nouveau domaine : on sonde jusqu'à une vraie réponse stable, pour que le
+ * spinner côté UI dure jusqu'à ce que l'adresse fonctionne vraiment.
+ */
+async function waitForDomainReady(domain: string, maxWaitMs = 90000): Promise<boolean> {
+  return waitUntilReady(() => probeDomain(domain), domain, { maxWaitMs });
+}
+
+/**
+ * Attend que l'app réponde de nouveau en local après le redémarrage déclenché
+ * par la suppression de son adresse publique (retour aux URLs locales).
+ */
+async function waitForLocalReady(port: number, maxWaitMs = 90000): Promise<boolean> {
+  return waitUntilReady(() => probeLocal(port), `127.0.0.1:${port}`, { maxWaitMs });
 }
 
 /**
@@ -315,9 +369,18 @@ async function isExposureReady(appId: string): Promise<any> {
   const id = normalizeAppId(appId);
   const data = await readNetbirdData();
   const domain = data?.domains?.[id];
-  if (!domain) return { exposed: false, ready: false };
-  const ready = await probeDomain(domain);
-  return { exposed: true, domain, ready };
+  if (domain) {
+    const ready = await probeDomain(domain);
+    return { exposed: true, domain, ready };
+  }
+  // Pas (ou plus) d'adresse publique : « prêt » = l'app répond de nouveau en
+  // local. Utile pour faire durer le spinner pendant le redémarrage qui suit une
+  // suppression d'adresse publique (retour aux URLs locales).
+  const manifest = getManifest(appId) || getManifest(id);
+  const port = manifest?.mainPort;
+  if (!port) return { exposed: false, ready: true };
+  const ready = await probeLocal(port);
+  return { exposed: false, ready };
 }
 
 // ───────── API publique ─────────
@@ -453,6 +516,7 @@ async function unexposeApp(appId: string): Promise<any> {
   const manifest = getManifest(appId) || getManifest(id);
   const port = manifest?.mainPort || 0;
   let envChanged = false;
+  let ready = true;
   if (manifest && port) {
     const appDir = resolveAppDir(manifest, id);
     try {
@@ -460,11 +524,18 @@ async function unexposeApp(appId: string): Promise<any> {
     } catch (err: any) {
       console.warn(`[publicExposure] ⚠️ Mise à jour .env de ${id}:`, err.message);
     }
-    if (envChanged) restartAppInBackground(id, appDir);
+    if (envChanged) {
+      restartAppInBackground(id, appDir);
+      // Attendre que l'app réponde de nouveau en local (elle redémarre pour
+      // revenir aux URLs locales). On ne rend la main — donc le spinner UI ne
+      // s'arrête — que lorsqu'elle est réellement de nouveau joignable, pour ne
+      // pas tomber sur « connection refused » en cliquant juste après.
+      ready = await waitForLocalReady(port);
+    }
   }
 
-  console.log(`[publicExposure] ✅ Adresse publique de ${id} supprimée`);
-  return { success: true, envChanged, restarted: envChanged };
+  console.log(`[publicExposure] ✅ Adresse publique de ${id} supprimée${ready ? '' : ' (redémarrage en cours)'}`);
+  return { success: true, envChanged, restarted: envChanged, ready };
 }
 
 /**

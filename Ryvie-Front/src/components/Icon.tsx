@@ -35,7 +35,7 @@ const ContextMenuPortal = ({ children, x, y }) => {
 };
 
 // Composant Icon avec React.memo pour éviter les re-renders inutiles
-const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons, isNew }) => {
+const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, showName, appStatusData, appsConfig, activeContextMenu, setActiveContextMenu, isAdmin, setAppStatus, accessMode, refreshDesktopIcons, isNew, onBusyChange }) => {
   const { t } = useLanguage();
   const appConfig = appsConfig[id] || {};
   const [imgSrc, setImgSrc] = React.useState(src);
@@ -43,6 +43,13 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   const [pendingAction, setPendingAction] = React.useState(null);
   // Plancher de durée du spinner de réinitialisation d'accès (10 s minimum)
   const [resetMinElapsed, setResetMinElapsed] = React.useState(true);
+  // Spinner d'exposition (création/suppression d'adresse publique) :
+  // - exposureMinElapsed : ≥10 s écoulées (plancher anti-flash)
+  // - exposureSettled : le backend a CONFIRMÉ que l'app est de nouveau joignable
+  //   (création : adresse publique qui répond ; suppression : app de retour en
+  //   local). C'est le signal fiable — le statut socket est trop tardif (≤30 s).
+  const [exposureMinElapsed, setExposureMinElapsed] = React.useState(true);
+  const [exposureSettled, setExposureSettled] = React.useState(true);
   const [isUninstalling, setIsUninstalling] = React.useState(false);
   const isProcessingMenuActionRef = React.useRef(false);
   // Résultat d'un reset d'accès en attente d'affichage (montré quand le spinner s'arrête)
@@ -82,6 +89,10 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
         setConfirmModal({ show: true, type: 'success', title: r.title, message: r.message, onConfirm: () => closeModal() } as any);
       }
     }
+    // L'arrêt du spinner d'exposition n'est PAS géré ici : le statut socket est
+    // trop tardif (rafraîchi ≤30 s, et seulement sur changement) pour voir le
+    // bref passage hors-ligne du redémarrage → on s'appuie sur la confirmation
+    // backend (exposureSettled), cf. l'effet dédié plus bas.
   }, [appStatusData?.status, pendingAction, resetMinElapsed]);
   
   const handleImageError = () => {
@@ -129,11 +140,23 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   // L'icône doit-elle être assombrie/grisée ?
   const isDimmed = isInstalling || isTransitioning || isStopped;
 
-  // Vérifier si l'app est cliquable (seulement si running, et jamais pendant une
-  // installation ni pendant l'activation d'une adresse publique — sinon on ouvre
-  // une URL qui ne répond pas encore)
-  const isClickable = !isInstalling && pendingAction !== 'exposing' &&
-    (!appConfig.showStatus || status === 'running');
+  // Vérifier si l'app est cliquable. Règle simple : une icône GRISÉE (arrêtée) ou
+  // avec un SPINNER (installation, démarrage, arrêt, reset, exposition, ou les
+  // deux) n'ouvre JAMAIS l'app — on tomberait sur une URL qui ne répond pas
+  // encore. On n'ouvre que si l'icône est en état normal (ni grisée, ni spinner)
+  // et réellement « running ».
+  const isClickable = !isDimmed && (!appConfig.showStatus || status === 'running');
+
+  // Remonte l'état « occupé » (grisé / spinner) au launcher : la tuile parente a
+  // sa propre logique de clic qui ne voit PAS les états transitoires internes
+  // (pendingAction) → sans ça elle ouvrirait l'app pendant le spinner.
+  const prevBusyRef = React.useRef<boolean | null>(null);
+  React.useEffect(() => {
+    if (prevBusyRef.current !== isDimmed) {
+      prevBusyRef.current = isDimmed;
+      onBusyChange?.(id, isDimmed);
+    }
+  }, [id, isDimmed, onBusyChange]);
   
   const handleIconClick = () => {
     // Ne rien faire si l'app n'est pas running (rouge ou orange)
@@ -148,47 +171,71 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
     handleClick(id);
   };
 
-  // ── Spinner « activation d'une adresse publique » ──
-  // Démarre quand la création est lancée dans la modale Réglages et ne s'arrête
-  // que lorsque l'app répond RÉELLEMENT à l'adresse générée (sonde backend),
-  // pour éviter de cliquer sur une route pas encore active.
-  const exposurePollRef = React.useRef<any>(null);
+  // ── Spinner « exposition d'une adresse publique » (création ou suppression) ──
+  // Démarre quand l'opération est lancée dans la modale Réglages. Le spinner tient
+  // au moins 10 s (plancher anti-flash) et ne s'arrête que lorsque le BACKEND a
+  // confirmé que l'app est de nouveau joignable (exposureSettled) — la requête
+  // create/delete ne répond qu'après avoir sondé l'app post-redémarrage. On ne se
+  // fie PAS au statut socket : il est rafraîchi au plus toutes les 30 s (et
+  // seulement sur changement), donc il rate souvent le bref passage hors-ligne du
+  // redémarrage → le spinner s'arrêtait avant que l'app ne grise, d'où les
+  // « connection refused » / « route not configured » au clic.
   const exposureSafetyRef = React.useRef<any>(null);
+  const exposureMinTimerRef = React.useRef<any>(null);
 
-  const stopExposureSpinner = React.useCallback(() => {
-    if (exposurePollRef.current) { clearInterval(exposurePollRef.current); exposurePollRef.current = null; }
+  const stopExposureSpinner = React.useCallback((markRunning = false) => {
     if (exposureSafetyRef.current) { clearTimeout(exposureSafetyRef.current); exposureSafetyRef.current = null; }
+    if (exposureMinTimerRef.current) { clearTimeout(exposureMinTimerRef.current); exposureMinTimerRef.current = null; }
+    // Succès confirmé par le backend (markRunning) : on pose un statut optimiste
+    // « running » AVANT de retirer le spinner. Sinon le statut socket (rafraîchi
+    // ≤30 s) est encore périmé et l'icône resterait grisée SANS spinner ~2 s avant
+    // de revenir. Comme le backend a sondé l'app (elle répond), c'est exact.
+    if (markRunning && setAppStatus) {
+      setAppStatus((prev: any) => ({ ...prev, [id]: { ...(prev?.[id] || {}), status: 'running' } }));
+    }
     setPendingAction((p) => (p === 'exposing' ? null : p));
-  }, []);
+    // Rafraîchit une dernière fois l'icône (image/statut) une fois l'op terminée.
+    if (refreshDesktopIcons) { try { refreshDesktopIcons(); } catch (_) {} }
+  }, [refreshDesktopIcons, setAppStatus, id]);
 
-  const handleExposureStart = React.useCallback(() => {
+  const handleExposureStart = React.useCallback((_op: 'create' | 'delete' = 'create') => {
     setPendingAction('exposing');
-    if (exposurePollRef.current) clearInterval(exposurePollRef.current);
-    const serverUrl = getServerUrl(accessMode);
-    const exposureAppId = appConfig.id || id;
-    exposurePollRef.current = setInterval(async () => {
-      try {
-        const res = await axios.get(
-          `${serverUrl}/api/apps/${exposureAppId}/exposure/ready`,
-          { timeout: 10000, _noAuthRedirect: true } as any
-        );
-        if (res.data?.ready) stopExposureSpinner();
-      } catch (_) { /* backend occupé par la création : on réessaie */ }
-    }, 4000);
+    setExposureSettled(false);
+    // Plancher anti-flash : le spinner tourne au moins 10 s.
+    setExposureMinElapsed(false);
+    if (exposureMinTimerRef.current) clearTimeout(exposureMinTimerRef.current);
+    exposureMinTimerRef.current = setTimeout(() => setExposureMinElapsed(true), 10000);
+
     // Filet de sécurité : ne jamais laisser le spinner tourner plus de 5 min
+    // (au cas où la requête create/delete n'aboutirait jamais).
     if (exposureSafetyRef.current) clearTimeout(exposureSafetyRef.current);
     exposureSafetyRef.current = setTimeout(stopExposureSpinner, 300000);
-  }, [accessMode, appConfig.id, id, stopExposureSpinner]);
+  }, [stopExposureSpinner]);
 
-  // Échec de la création → on coupe le spinner tout de suite
+  // Le backend a confirmé que l'app est de nouveau joignable (réponse create/delete
+  // reçue) → on autorise l'arrêt du spinner (effectif après le plancher de 10 s).
+  const handleExposureSettled = React.useCallback(() => {
+    setExposureSettled(true);
+  }, []);
+
+  // Échec de l'opération → on coupe le spinner tout de suite
   const handleExposureError = React.useCallback(() => {
     stopExposureSpinner();
   }, [stopExposureSpinner]);
 
-  // Nettoyage si l'icône est démontée pendant l'activation
+  // Arrêt du spinner d'exposition : app confirmée joignable par le backend ET
+  // plancher de 10 s écoulé.
+  React.useEffect(() => {
+    if (pendingAction === 'exposing' && exposureSettled && exposureMinElapsed) {
+      // Succès : statut optimiste « running » → pas de gris résiduel sans spinner.
+      stopExposureSpinner(true);
+    }
+  }, [pendingAction, exposureSettled, exposureMinElapsed, stopExposureSpinner]);
+
+  // Nettoyage si l'icône est démontée pendant l'opération
   React.useEffect(() => () => {
-    if (exposurePollRef.current) clearInterval(exposurePollRef.current);
     if (exposureSafetyRef.current) clearTimeout(exposureSafetyRef.current);
+    if (exposureMinTimerRef.current) clearTimeout(exposureMinTimerRef.current);
   }, []);
 
   const handleContextMenu = (e) => {
@@ -634,6 +681,7 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
           accessMode={accessMode}
           onClose={() => setSettingsModalOpen(false)}
           onExposureStart={handleExposureStart}
+          onExposureSettled={handleExposureSettled}
           onExposureError={handleExposureError}
         />
       )}

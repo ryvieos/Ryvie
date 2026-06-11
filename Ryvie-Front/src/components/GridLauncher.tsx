@@ -47,6 +47,19 @@ const GridLauncher = ({
   const [cols, setCols] = useState(baseCols);
   const [rows, setRows] = useState(baseRows);
   const [snappedPosition, setSnappedPosition] = useState(null);
+  // Apps « occupées » (grisées / spinner : installation, démarrage, arrêt, reset,
+  // exposition…). Le statut socket ne reflète PAS ces états transitoires (internes
+  // à <Icon>) et est rafraîchi ≤30 s : sans ça la tuile resterait cliquable et
+  // ouvrirait une app pas prête. <Icon> nous remonte l'état via onBusyChange.
+  const [busyApps, setBusyApps] = useState(() => new Set());
+  const markAppBusy = React.useCallback((appId: string, busy: boolean) => {
+    setBusyApps((prev) => {
+      if (busy === prev.has(appId)) return prev;
+      const next = new Set(prev);
+      if (busy) next.add(appId); else next.delete(appId);
+      return next;
+    });
+  }, []);
   const pendingManualSaveRef = useRef(false); // Track si on doit sauvegarder après un drag manuel
   // Délai d'animation d'entrée FIGÉ par item (calculé une seule fois). Sinon, déplacer une
   // app change sa colonne -> change le délai -> change la chaîne `animation` -> React met à
@@ -517,7 +530,7 @@ const GridLauncher = ({
           const animDelayMs = revealReady ? getRevealDelay(appId, colIndex) : 0;
           const installInfo = installProgress?.[appId] || null;
           // Une app en cours d'installation/màj n'est jamais cliquable
-          const isClickable = installInfo ? false : (!appsConfig?.[appId]?.showStatus || (appStatus?.[appId]?.status === 'running'));
+          const isClickable = installInfo ? false : (!busyApps.has(appId) && (!appsConfig?.[appId]?.showStatus || (appStatus?.[appId]?.status === 'running')));
 
           return (
             <div
@@ -572,6 +585,7 @@ const GridLauncher = ({
                 accessMode={accessMode}
                 refreshDesktopIcons={refreshDesktopIcons}
                 isNew={newApps?.has?.(appId)}
+                onBusyChange={markAppBusy}
               />
             </div>
           );
