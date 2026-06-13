@@ -345,13 +345,13 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/i18n/en.json": {
-    "mtime": 1781361589.3822289,
-    "ast_hash": "518b784da64f113da8ce89df3e45c1fb",
+    "mtime": 1781169483.4879272,
+    "ast_hash": "cd7711d28250930ed8d1fe603e0ebb37",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/i18n/fr.json": {
-    "mtime": 1781361595.0142205,
-    "ast_hash": "5852495092ee396795fd5e1adef15d7d",
+    "mtime": 1781169495.047879,
+    "ast_hash": "2d8839cb105c3a6fc6e9414cedd758d8",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/icons/index.d.ts": {
@@ -1020,13 +1020,13 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/routes/ai.ts": {
-    "mtime": 1781361583.4622376,
-    "ast_hash": "6f31e9da09d116496ffd8712f59a139e",
+    "mtime": 1781169071.3502405,
+    "ast_hash": "445d158a68d790cca667dda0e1337d33",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/services/aiService.ts": {
-    "mtime": 1781360616.8281972,
-    "ast_hash": "a40ba952ab14b91cd12d04bd757d2177",
+    "mtime": 1781169061.698313,
+    "ast_hash": "99e064ef59e3e5a1cd3d357fee8c3676",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/services/appEnvService.ts": {
@@ -1035,23 +1035,13 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/services/litellmService.ts": {
-    "mtime": 1781360210.9287992,
-    "ast_hash": "2a042c0ba4e4753579c4deda1d9a8b73",
+    "mtime": 1781169663.0232477,
+    "ast_hash": "e391c21cc1ba0ade1a5c16bdefcd8c9e",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/components/AiSettings.tsx": {
-    "mtime": 1781361609.550199,
-    "ast_hash": "f3bd39fae4519fe336257ea1ffe5c12f",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/.claude/settings.local.json": {
-    "mtime": 1781175148.2316198,
-    "ast_hash": "1657c9041cd169d9953273d6b5543a69",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/services/claudeCliService.ts": {
-    "mtime": 1781361578.2302454,
-    "ast_hash": "a619a858abfbdac24be17798e387ba41",
+    "mtime": 1781169434.3441398,
+    "ast_hash": "f59766679ec0f6129ca9933e6d0c996a",
     "semantic_hash": ""
   }
 }

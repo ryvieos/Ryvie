@@ -345,13 +345,13 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/i18n/en.json": {
-    "mtime": 1781361589.3822289,
-    "ast_hash": "518b784da64f113da8ce89df3e45c1fb",
+    "mtime": 1781361429.646473,
+    "ast_hash": "e8ba9826ed1ac6dba82263456e57f889",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/i18n/fr.json": {
-    "mtime": 1781361595.0142205,
-    "ast_hash": "5852495092ee396795fd5e1adef15d7d",
+    "mtime": 1781361434.7624648,
+    "ast_hash": "6de1be2d2fda6c57323294b707fa98a0",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/icons/index.d.ts": {
@@ -1020,8 +1020,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/routes/ai.ts": {
-    "mtime": 1781361583.4622376,
-    "ast_hash": "6f31e9da09d116496ffd8712f59a139e",
+    "mtime": 1781361084.8390727,
+    "ast_hash": "b434ca699dc5e519d107287135f19a38",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/services/aiService.ts": {
@@ -1040,8 +1040,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/components/AiSettings.tsx": {
-    "mtime": 1781361609.550199,
-    "ast_hash": "f3bd39fae4519fe336257ea1ffe5c12f",
+    "mtime": 1781361449.230442,
+    "ast_hash": "e39afa5c0e76d0556e52ab1761d4289a",
     "semantic_hash": ""
   },
   "/opt/Ryvie/.claude/settings.local.json": {
@@ -1050,8 +1050,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/services/claudeCliService.ts": {
-    "mtime": 1781361578.2302454,
-    "ast_hash": "a619a858abfbdac24be17798e387ba41",
+    "mtime": 1781361422.698484,
+    "ast_hash": "5ac45f157c1c48ee11e79d34d27a15e0",
     "semantic_hash": ""
   }
 }

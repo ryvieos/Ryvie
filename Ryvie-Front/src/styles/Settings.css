@@ -667,6 +667,280 @@ input:checked + .slider:before {
   transform: translateX(20px);
 }
 
+/* ── Réglages IA : liste des apps connectées ── */
+.ai-app-count {
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.ai-app-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-app-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 6px;
+  border-top: 1px solid #e9eef5;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.ai-app-row:first-child {
+  border-top: none;
+}
+
+.ai-app-row:hover {
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.ai-app-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ai-app-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #eef2f7;
+}
+
+.ai-app-name {
+  font-weight: 600;
+  color: #2d3748;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-app-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.ai-app-status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #94a3b8;
+  min-width: 64px;
+  text-align: right;
+}
+
+.ai-app-status.on {
+  color: #16a34a;
+}
+
+.ai-app-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: ai-app-spin 0.7s linear infinite;
+}
+
+@keyframes ai-app-spin {
+  to { transform: rotate(360deg); }
+}
+
+body.dark-mode .ai-app-row {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .ai-app-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body.dark-mode .ai-app-name {
+  color: #e2e8f0;
+}
+
+body.dark-mode .ai-app-icon {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Réglages IA : carte fournisseur (actions / statut / note) ── */
+.ai-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Dans l'en-tête, la pastille est sur la ligne du titre (pas de marge haute). */
+.ai-card-head .ai-gateway-pill {
+  margin-top: 0;
+}
+
+.ai-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Flash « ✓ Enregistré » après une sauvegarde réussie. */
+.toggle-button.ai-saved-flash {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%) !important;
+  color: #fff !important;
+  animation: ai-saved-pop 0.4s ease;
+}
+
+@keyframes ai-saved-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.ai-gateway-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.ai-gateway-pill.on {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.ai-gateway-pill.off {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+.ai-gateway-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ai-gateway-pill.on .ai-gateway-dot {
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+}
+
+.ai-alias-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  background: rgba(99, 102, 241, 0.07);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: 12px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #475569;
+}
+
+.ai-alias-icon {
+  flex-shrink: 0;
+}
+
+body.dark-mode .ai-alias-note {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.28);
+  color: #cbd5e1;
+}
+
+body.dark-mode .ai-gateway-pill.on {
+  background: rgba(22, 163, 74, 0.18);
+  color: #4ade80;
+}
+
+body.dark-mode .ai-gateway-pill.off {
+  background: rgba(217, 119, 6, 0.18);
+  color: #fbbf24;
+}
+
+/* Fournisseur Claude CLI : statut de connexion + login OAuth */
+.ai-cli-auth {
+  margin-top: 4px;
+}
+
+.ai-cli-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-cli-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.ai-cli-pill.on {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.ai-cli-pill.off {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+.ai-cli-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ai-cli-pill.on .ai-cli-dot {
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+}
+
+.ai-cli-login {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: rgba(99, 102, 241, 0.07);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: 12px;
+}
+
+.ai-cli-link {
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
+}
+
+body.dark-mode .ai-cli-pill.on {
+  background: rgba(22, 163, 74, 0.18);
+  color: #4ade80;
+}
+
+body.dark-mode .ai-cli-pill.off {
+  background: rgba(217, 119, 6, 0.18);
+  color: #fbbf24;
+}
+
+body.dark-mode .ai-cli-login {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.28);
+}
+
 /* Select */
 select {
   padding: 8px 32px 8px 12px;
@@ -693,6 +967,28 @@ select:disabled {
   background-color: #f1f5f9;
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+/* Champs texte/clé des réglages : même boîte que les selects. */
+input.setting-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #1a1a1a;
+  background-color: white;
+}
+
+input.setting-select::placeholder {
+  color: #94a3b8;
+}
+
+input.setting-select:focus {
+  outline: none;
+  border-color: #4776E6;
+  box-shadow: 0 0 0 3px rgba(71, 118, 230, 0.1);
 }
 
 /* Skeleton Loading */

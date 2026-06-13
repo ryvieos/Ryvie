@@ -11,6 +11,7 @@ import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, testServerC
 import { useSocket } from '../contexts/SocketContext';
 import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo, endSession } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
+import AiSettings from '../components/AiSettings';
 import { useUpdate } from '../contexts/UpdateContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -2550,6 +2551,12 @@ const Settings = () => {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Section IA — point central (LiteLLM piloté par Ryvie) */}
+      <section id="ryvie-ai" className="settings-section">
+        <h2>{t('settings.ai.section')}</h2>
+        <AiSettings accessMode={accessMode} />
       </section>
 
       {/* Section Mises à Jour */}

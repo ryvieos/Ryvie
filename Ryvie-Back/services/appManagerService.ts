@@ -85,6 +85,12 @@ async function getAppManifest(appDirName) {
         if (ryvieAppConfig && ryvieAppConfig.accounts) {
           manifest.accounts = ryvieAppConfig.accounts;
         }
+
+        // Recopier le bloc `ai:` (mapping config IA centrale → variables d'env de
+        // l'app), utilisé par aiService pour connecter l'app au proxy LiteLLM.
+        if (ryvieAppConfig && ryvieAppConfig.ai) {
+          manifest.ai = ryvieAppConfig.ai;
+        }
       } catch (yamlError: any) {
         console.warn(`[appManager] Impossible de lire ryvie-app.yml pour ${appDirName}:`, yamlError.message);
       }

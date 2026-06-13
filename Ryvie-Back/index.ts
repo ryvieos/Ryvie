@@ -205,6 +205,10 @@ app.use('/api', appStoreRouter);
 // Mount Health check route (for update polling)
 app.use('/api', healthRouter);
 
+// Mount AI (point central IA / LiteLLM) routes
+const aiRouter = require('./routes/ai');
+app.use('/api', aiRouter);
+
 // Servir tous les fichiers JSON de configuration depuis /data/config/frontend-view/
 app.get('/config/:filename.json', (req, res) => {
   const { FRONTEND_CONFIG_DIR } = require('./config/paths');
@@ -288,6 +292,7 @@ async function startServer() {
     startupTracker.registerService('appstore');
     startupTracker.registerService('backgrounds');
     startupTracker.registerService('netbird');
+    startupTracker.registerService('ai');
 
     // Mettre à niveau et auto-corriger l'architecture localement
     const { enforceArchitectureBase } = require('./services/architectureService');
@@ -390,6 +395,25 @@ async function startServer() {
       startupTracker.markError('keycloak', keycloakError.message);
     }
     
+    // Démarrer le proxy IA (LiteLLM) s'il a déjà été configuré par l'admin.
+    console.log('🔍 Vérification du point central IA (LiteLLM)...');
+    try {
+      const aiService = require('./services/aiService');
+      const aiResult = aiService.ensureRunning();
+      if (aiResult.success) {
+        if (aiResult.skipped) console.log('ℹ️  IA non configurée — LiteLLM non démarré');
+        else if (aiResult.alreadyRunning) console.log('✅ LiteLLM déjà en cours d\'exécution');
+        else if (aiResult.started) console.log('✅ LiteLLM démarré');
+        startupTracker.markDone('ai');
+      } else {
+        console.error('❌ Erreur LiteLLM:', aiResult.error);
+        startupTracker.markError('ai', aiResult.error || 'LiteLLM startup failed');
+      }
+    } catch (aiError: any) {
+      console.error('❌ Erreur critique LiteLLM:', aiError.message);
+      startupTracker.markError('ai', aiError.message);
+    }
+
     // Vérifier les snapshots en attente (après une mise à jour)
     const { checkPendingSnapshots } = require('./utils/snapshotCleanup');
     try {
