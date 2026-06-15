@@ -13,7 +13,11 @@
 const Docker = require('dockerode');
 const bcrypt = require('bcrypt');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
 const appManager = require('./appManagerService');
+const { APPS_DIR } = require('../config/paths');
 
 const docker = new Docker();
 
@@ -90,6 +94,9 @@ export interface ListResult {
   supported: boolean;
   reason?: string;
   accounts: Account[];
+  // Prévient l'UI qu'une réinitialisation de mot de passe redémarre/recrée l'app
+  // (ex. hermes-webui / hermes-dashboard).
+  restartsOnReset?: boolean;
 }
 
 /**
@@ -382,6 +389,86 @@ async function hermesWebuiReset(
   }
 }
 
+// ───────── Stratégie : hermes-dashboard (basic auth via .env, mdp unique) ─────
+// Le dashboard natif de Hermes (`hermes dashboard`, provider `basic`) lit
+// identifiant + mot de passe depuis des variables d'environnement, injectées via
+// le fichier .env du stack. Pour changer le mot de passe : on réécrit la variable
+// dans .env puis on RECRÉE le conteneur — un simple restart ne relit pas l'env,
+// qui est figé à la création. Le dashboard relit alors le nouveau mot de passe au
+// démarrage. Le mot de passe ne transite jamais par une ligne de commande shell
+// (écriture directe dans le fichier).
+async function hermesDashboardReset(
+  recipe: any,
+  appId: string,
+  newPassword: string,
+  mainPort?: number
+): Promise<void> {
+  const pwdVar = recipe.passwordVar || 'HERMES_DASHBOARD_BASIC_AUTH_PASSWORD';
+  const appDir = path.join(APPS_DIR, appId);
+  const envPath = path.join(appDir, '.env');
+
+  // 1. Réécrit (ou ajoute) la variable de mot de passe dans .env, en préservant
+  //    les autres lignes. Valeur écrite telle quelle (pas d'interpolation shell).
+  let lines: string[] = [];
+  try {
+    lines = fs.readFileSync(envPath, 'utf8').split('\n');
+  } catch (_) {
+    lines = [];
+  }
+  const prefix = `${pwdVar}=`;
+  let found = false;
+  lines = lines.map((l: string) => {
+    if (l.startsWith(prefix)) {
+      found = true;
+      return `${prefix}${newPassword}`;
+    }
+    return l;
+  });
+  if (!found) {
+    if (lines.length && lines[lines.length - 1] === '') {
+      lines.splice(lines.length - 1, 0, `${prefix}${newPassword}`);
+    } else {
+      lines.push(`${prefix}${newPassword}`);
+    }
+  }
+  fs.writeFileSync(envPath, lines.join('\n'));
+
+  // 2. Recrée le conteneur pour qu'il prenne la nouvelle valeur d'env (docker
+  //    compose up -d détecte le changement et recrée le service).
+  try {
+    execSync('docker compose up -d', { stdio: 'pipe', timeout: 120000, cwd: appDir });
+  } catch (e: any) {
+    const msg = (e.stderr || e.message || '').toString().slice(0, 200);
+    throw new Error(`hermes-dashboard: recréation du conteneur échouée: ${msg}`);
+  }
+
+  // 3. Vérification post-reset : le dashboard met quelques secondes à resservir →
+  //    on tente le login avec le nouveau mot de passe (jusqu'à ~30s).
+  const def = {
+    username: (recipe.default && recipe.default.username) || recipe.accountLabel || 'admin',
+    password: newPassword,
+    login: (recipe.default && recipe.default.login) || {
+      path: '/auth/password-login',
+      port: mainPort,
+      body: '{"provider":"basic","username":"{username}","password":"{password}"}',
+      okCodes: [200],
+    },
+  };
+  let ok = false;
+  for (let i = 0; i < 15; i++) {
+    try {
+      ok = await loginVerify(def, mainPort);
+    } catch (_) {
+      ok = false;
+    }
+    if (ok) break;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  if (!ok) {
+    throw new Error(VERIFY_FAIL_MSG);
+  }
+}
+
 // ───────────────────────────── Helpers ────────────────────────────────────
 
 function parseAccountsJson(stdout: string): Account[] {
@@ -414,6 +501,7 @@ async function listAccountsByRecipe(recipe: any): Promise<Account[]> {
     case 'affine-argon2':
       return affineList(recipe);
     case 'hermes-webui':
+    case 'hermes-dashboard':
       // Auth par MOT DE PASSE unique (pas de multi-utilisateurs) → un seul « compte ».
       return [{ id: 'admin', username: recipe.accountLabel || 'admin', isAdmin: true }];
     default:
@@ -753,6 +841,7 @@ async function listAccounts(appId: string): Promise<ListResult> {
     case 'bcrypt-sqlite':
     case 'affine-argon2':
     case 'hermes-webui':
+    case 'hermes-dashboard':
       // restartsOnReset : prévient l'UI qu'une réinitialisation redémarre l'app
       // (ex. Hermes, dont le hash est caché en mémoire). Déclaré dans le manifeste.
       return { supported: true, accounts: await listAccountsByRecipe(recipe), restartsOnReset: !!recipe.resetRestarts };
@@ -804,6 +893,8 @@ async function resetPassword(appId: string, accountId: string, newPassword: stri
       return affineReset(recipe, accountId, newPassword);
     case 'hermes-webui':
       return hermesWebuiReset(recipe, accountId, newPassword);
+    case 'hermes-dashboard':
+      return hermesDashboardReset(recipe, appId, newPassword, info.mainPort);
     default: {
       const err: any = new Error(`Stratégie inconnue: ${recipe.strategy}`);
       err.status = 400;
