@@ -1,0 +1,22 @@
+/* Styles globaux de l'application — chargés à la racine (index.tsx).
+   Police unique pour TOUTE l'interface : même pile que Settings (cf. Settings.css),
+   héritée par toutes les pages (Home, menus contextuels, etc.) et par les modales
+   rendues via portal dans document.body (analyse du stockage, météo, réglages d'app…). */
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Exceptions volontaires : ces éléments gardent la police d'origine (celle du
+   navigateur, comme avant l'unification) — rendu préféré sur le bureau :
+   - noms des apps sous les icônes
+   - tous les widgets (météo, stockage, CPU/RAM…)
+   - indicateur de statut du Ryvie (Connecté / Local / Web)
+   Les modales ouvertes depuis les widgets (analyse du stockage…) sont rendues
+   via portal dans document.body : elles gardent bien la police unifiée. */
+.icon-name,
+.base-widget,
+.weather-widget,
+.weather-widget-base,
+.server-status {
+  font-family: initial;
+}

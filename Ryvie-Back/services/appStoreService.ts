@@ -1464,8 +1464,19 @@ LOCAL_IP=${localIP}
       // Non bloquant - l'installation est déjà terminée
     }
     
+    // 6c. Provisionner le compte par défaut (apps non-SSO) si la recette le demande.
+    // Idempotent et non bloquant : si l'app a déjà son compte (install.sh / défaut
+    // embarqué), c'est un no-op ; sinon Ryvie le crée via l'adaptateur.
+    currentStep = 'default-account-provisioning';
+    try {
+      const appAccounts = require('./appAccountsService');
+      await appAccounts.provisionDefault(appId);
+    } catch (provError: any) {
+      console.warn(`[Update] ⚠️ Provisioning du compte par défaut de ${appId}:`, provError.message);
+    }
+
     sendProgressUpdate(appId, 100, 'Installation terminée avec succès !', 'completed');
-    
+
     // 7. Forcer la réconciliation du layout pour placer l'icône AVANT de modifier Caddy
     console.log('[Update] 🔄 Réconciliation du layout utilisateur...');
     try {
@@ -2037,7 +2048,31 @@ async function uninstallApp(appId) {
         message: `Le dossier de l'application ${appId} n'existe pas: ${appDir}`
       };
     }
-    
+
+    // 2a. Supprimer l'adresse publique de l'app si elle en a une (best effort,
+    // ne bloque jamais la désinstallation)
+    try {
+      const publicExposure = require('./publicExposureService');
+      const cleanup = await publicExposure.cleanupExposure(appId);
+      if (cleanup.removed) {
+        console.log(`[Uninstall] ✅ Adresse publique de ${appId} supprimée`);
+      }
+    } catch (exposureError: any) {
+      console.warn(`[Uninstall] ⚠️ Nettoyage adresse publique: ${exposureError.message}`);
+    }
+
+    // 2a-bis. Purger le lien IA central (LiteLLM) si l'app y était connectée :
+    // hook `disconnect` + purge de l'état (connectedApps/appSecrets/appModels) +
+    // régénération de la config LiteLLM. Fait AVANT le `compose down` car le hook
+    // a besoin que l'app tourne encore. purgeApp s'auto-protège (no-op si pas d'IA)
+    // et est best-effort : ne bloque jamais la désinstallation.
+    try {
+      const aiService = require('./aiService');
+      await aiService.purgeApp(appId);
+    } catch (aiError: any) {
+      console.warn(`[Uninstall] ⚠️ Purge du lien IA (LiteLLM): ${aiError.message}`);
+    }
+
     // 2b. Déterminer le fichier docker-compose à utiliser
     // Priorité : dockerComposePath du manifest > labels Docker > recherche à la racine
     console.log('[Uninstall] 🔍 Récupération des images Docker de l\'application...');

@@ -100,6 +100,12 @@ axios.interceptors.response.use(
   async error => {
     const originalRequest = error.config || {};
     if (error.response) {
+      // Certaines requêtes (ex. modal de gestion des comptes) gèrent leurs
+      // erreurs localement et ne doivent JAMAIS déclencher la redirection
+      // globale vers le login : on rejette sans intercepter.
+      if (originalRequest._noAuthRedirect) {
+        return Promise.reject(error);
+      }
       if (error.response.status === 401) {
         const errorCode = error.response.data?.code || null;
         console.log('Authentication error detected:', {

@@ -36,20 +36,51 @@ const useGridLayout = (
   // Flag pour savoir si on a déjà synchronisé les ancres au premier chargement
   const initialSyncDoneRef = useRef(false);
 
-  // Mettre à jour le layout et les ancres quand ils changent depuis le parent
+  // Synchronisation parent -> hook, en FUSION ADDITIVE (local prioritaire).
+  //
+  // Le composant rendu fait foi pour la position des items DÉJÀ placés : un push
+  // du parent (réconciliation backend pendant une installation, polling, etc.)
+  // ne doit JAMAIS réécrire la position d'un item déjà présent ici — sinon un
+  // drag de l'utilisateur fait pendant l'install saute à la position backend.
+  // On n'ADOPTE donc du parent que les items ABSENTS localement (les nouvelles
+  // apps). Le tout premier remplissage (état vide) adopte le layout tel quel,
+  // et un changement d'utilisateur passe par un remontage -> état vide -> reset.
+  // La suppression d'items est gérée séparément par la purge sur `items`.
   useEffect(() => {
-    if (initialLayout) {
-      setLayout(initialLayout);
-    }
+    if (!initialLayout) return;
+    setLayout(prev => {
+      if (!prev || Object.keys(prev).length === 0) return initialLayout; // 1er chargement
+      let added = false;
+      const merged = { ...prev };
+      Object.keys(initialLayout).forEach(id => {
+        if (!(id in merged)) { merged[id] = initialLayout[id]; added = true; }
+      });
+      return added ? merged : prev;
+    });
   }, [initialLayout]);
 
   useEffect(() => {
-    if (initialAnchors) {
-      setAnchors(initialAnchors);
-      // Mettre à jour les ancres de référence seulement quand le parent envoie de nouvelles ancres
-      referenceAnchorsRef.current = { ...initialAnchors };
-      console.log('[useGridLayout] 📌 Ancres de référence mises à jour:', Object.keys(initialAnchors).length, 'items');
-    }
+    if (!initialAnchors) return;
+    setAnchors(prev => {
+      if (!prev || Object.keys(prev).length === 0) {
+        referenceAnchorsRef.current = { ...initialAnchors };
+        console.log('[useGridLayout] 📌 Ancres de référence initialisées:', Object.keys(initialAnchors).length, 'items');
+        return initialAnchors;
+      }
+      let added = false;
+      const merged = { ...prev };
+      Object.keys(initialAnchors).forEach(id => {
+        if (!(id in merged)) { merged[id] = initialAnchors[id]; added = true; }
+      });
+      // N'ajouter que les ancres des nouveaux items dans la référence; ne pas
+      // écraser les ancres locales (drags) des items existants.
+      if (added) {
+        Object.keys(initialAnchors).forEach(id => {
+          if (referenceAnchorsRef.current[id] == null) referenceAnchorsRef.current[id] = initialAnchors[id];
+        });
+      }
+      return added ? merged : prev;
+    });
   }, [initialAnchors]);
 
   // Synchronisation initiale : recalculer les ancres depuis le layout pour garantir la cohérence
