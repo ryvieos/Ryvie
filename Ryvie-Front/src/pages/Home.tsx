@@ -2547,15 +2547,26 @@ const Home = () => {
     setOpenedApps(set);
   }, [appsConfig, openedApps]);
 
+  // Pousse l'état « apps ouvertes » côté compte (cohérence multi-navigateurs).
+  // Best-effort : en cas d'échec réseau on garde le cache localStorage.
+  const syncOpenedApps = React.useCallback((set: Set<string>) => {
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      axios.patch(`${serverUrl}/api/user/preferences/opened-apps`, { openedApps: [...set] })
+        .catch(() => {});
+    } catch (_) {}
+  }, [accessMode]);
+
   const markAppOpened = React.useCallback((appId: string) => {
     setOpenedApps((prev) => {
       const set = new Set(prev || []);
       if (set.has(appId)) return prev;
       set.add(appId);
       try { localStorage.setItem('ryvie_opened_apps', JSON.stringify([...set])); } catch (_) {}
+      syncOpenedApps(set);
       return set;
     });
-  }, []);
+  }, [syncOpenedApps]);
 
   // Marque une app comme « neuve » (pastille bleue) : on la retire des « vues ».
   // Appelé à la fin d'une (ré)installation (hors mise à jour).
@@ -2565,9 +2576,45 @@ const Home = () => {
       const set = new Set(prev);
       set.delete(appId);
       try { localStorage.setItem('ryvie_opened_apps', JSON.stringify([...set])); } catch (_) {}
+      syncOpenedApps(set);
       return set;
     });
-  }, []);
+  }, [syncOpenedApps]);
+
+  // Réconciliation serveur (source de vérité, par compte) ↔ cache localStorage.
+  // Au montage : on lit openedApps depuis /user/preferences. Présent → on aligne
+  // l'état + le cache local dessus. Absent → premier usage : on y pousse l'état
+  // local courant (ou un seed avec toutes les apps si rien en local).
+  const openedAppsSyncedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (openedAppsSyncedRef.current) return;
+    if (!appsConfig || Object.keys(appsConfig).length === 0) return;
+    openedAppsSyncedRef.current = true;
+    (async () => {
+      try {
+        const serverUrl = getServerUrl(accessMode);
+        const res = await axios.get(`${serverUrl}/api/user/preferences`);
+        const serverList = res?.data?.openedApps;
+        if (Array.isArray(serverList)) {
+          const set = new Set<string>(serverList);
+          setOpenedApps(set);
+          try { localStorage.setItem('ryvie_opened_apps', JSON.stringify([...set])); } catch (_) {}
+        } else {
+          let local: Set<string>;
+          try { local = new Set(JSON.parse(localStorage.getItem('ryvie_opened_apps') || '[]')); }
+          catch (_) { local = new Set(); }
+          const seed = local.size
+            ? local
+            : new Set(Object.keys(appsConfig).filter((id) => id && id.startsWith('app-')));
+          setOpenedApps(seed);
+          try { localStorage.setItem('ryvie_opened_apps', JSON.stringify([...seed])); } catch (_) {}
+          syncOpenedApps(seed);
+        }
+      } catch (_) {
+        // Hors-ligne / erreur : on conserve l'état localStorage déjà en place.
+      }
+    })();
+  }, [appsConfig, accessMode, syncOpenedApps]);
 
   // Détecte les fins d'installation : une app qui était en cours d'install et qui
   // n'y est plus → installation terminée → pastille bleue (sauf si c'était un update).

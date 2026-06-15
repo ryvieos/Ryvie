@@ -801,6 +801,41 @@ router.patch('/user/preferences/language', verifyToken, (req: any, res: any) => 
   }
 });
 
+// PATCH /api/user/preferences/opened-apps - Liste des apps déjà ouvertes (pilote la
+// pastille bleue « jamais ouverte »). Stockée côté compte pour être cohérente entre
+// navigateurs/appareils ; le front garde aussi un cache localStorage.
+router.patch('/user/preferences/opened-apps', verifyToken, async (req: any, res: any) => {
+  try {
+    const username = req.user.uid || req.user.username;
+    const { openedApps } = req.body;
+
+    if (!Array.isArray(openedApps) || !openedApps.every((x: any) => typeof x === 'string')) {
+      return res.status(400).json({ error: 'openedApps doit être un tableau de chaînes' });
+    }
+    // Dédoublonnage + borne de sécurité contre un payload abusif.
+    const cleaned = Array.from(new Set(openedApps)).slice(0, 500);
+
+    const saved = await withUserPrefsLock(username, async () => {
+      const preferences = loadUserPreferences(username) || {
+        zones: {},
+        theme: 'default',
+        language: 'fr'
+      };
+      preferences.openedApps = cleaned;
+      return saveUserPreferences(username, preferences);
+    });
+
+    if (saved) {
+      res.json({ success: true, openedApps: cleaned });
+    } else {
+      res.status(500).json({ error: 'Échec de la sauvegarde' });
+    }
+  } catch (error: any) {
+    console.error('[userPreferences] Erreur PATCH opened-apps:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // GET /api/backgrounds/presets - Lister tous les fonds d'écran prédéfinis depuis public/
 router.get('/backgrounds/presets', (req: any, res: any) => {
   try {
