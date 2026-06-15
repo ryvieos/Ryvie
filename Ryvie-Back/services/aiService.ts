@@ -570,6 +570,48 @@ async function disconnectApp(appId: string): Promise<any> {
 }
 
 /**
+ * Purge COMPLÈTE de l'état IA d'une app — à appeler lors de la DÉSINSTALLATION,
+ * AVANT que les conteneurs/fichiers de l'app soient supprimés (le hook disconnect
+ * a besoin que l'app tourne encore pour s'exécuter / nettoyer sa config).
+ * Best-effort : ne lève jamais (la désinstallation ne doit pas échouer pour ça).
+ *   1) déconnexion (hook disconnect + retrait env + détache du réseau LiteLLM),
+ *   2) purge des entrées de config (connectedApps, appSecrets, appModels),
+ *   3) régénération + application de la config LiteLLM (retire l'alias fantôme).
+ */
+async function purgeApp(appId: string): Promise<void> {
+  // 1) Déconnexion (lance le hook disconnect tant que l'app tourne encore).
+  try {
+    await deprovisionApp(appId);
+  } catch (e: any) {
+    console.warn(`[ai] purgeApp: déconnexion de ${appId} échouée (on continue):`, e?.message);
+  }
+
+  // 2) Purge des entrées de config propres à l'app.
+  let cfg: any;
+  try { cfg = loadConfig(); } catch (_) { return; }
+  if (!cfg) return;
+  let touched = false;
+  if (Array.isArray(cfg.connectedApps) && cfg.connectedApps.includes(appId)) {
+    cfg.connectedApps = cfg.connectedApps.filter((a: string) => a !== appId);
+    touched = true;
+  }
+  if (cfg.appSecrets && cfg.appSecrets[appId]) { delete cfg.appSecrets[appId]; touched = true; }
+  if (cfg.appModels && cfg.appModels[appId]) { delete cfg.appModels[appId]; touched = true; }
+  if (!touched) return;
+  try { saveConfig(cfg); } catch (e: any) {
+    console.warn(`[ai] purgeApp: sauvegarde config échouée:`, e?.message);
+    return;
+  }
+
+  // 3) Régénère + applique la config LiteLLM (retire l'alias de modèle fantôme).
+  try {
+    await applyLitellmConfig(loadConfig(), {});
+  } catch (e: any) {
+    console.warn(`[ai] purgeApp: régénération LiteLLM échouée:`, e?.message);
+  }
+}
+
+/**
  * Récupère EN DIRECT la liste des modèles d'un fournisseur via son API native.
  * Utilise la clé fournie (formulaire) ou, à défaut, celle déjà enregistrée.
  * Ne lève jamais : renvoie { ok, models } ou { ok:false, error }.
@@ -689,6 +731,7 @@ module.exports = {
   setAppModel,
   connectApp,
   disconnectApp,
+  purgeApp,
   testConnection,
   listProviderModels,
   ensureRunning

@@ -2060,7 +2060,19 @@ async function uninstallApp(appId) {
     } catch (exposureError: any) {
       console.warn(`[Uninstall] ⚠️ Nettoyage adresse publique: ${exposureError.message}`);
     }
-    
+
+    // 2a-bis. Purger le lien IA central (LiteLLM) si l'app y était connectée :
+    // hook `disconnect` + purge de l'état (connectedApps/appSecrets/appModels) +
+    // régénération de la config LiteLLM. Fait AVANT le `compose down` car le hook
+    // a besoin que l'app tourne encore. purgeApp s'auto-protège (no-op si pas d'IA)
+    // et est best-effort : ne bloque jamais la désinstallation.
+    try {
+      const aiService = require('./aiService');
+      await aiService.purgeApp(appId);
+    } catch (aiError: any) {
+      console.warn(`[Uninstall] ⚠️ Purge du lien IA (LiteLLM): ${aiError.message}`);
+    }
+
     // 2b. Déterminer le fichier docker-compose à utiliser
     // Priorité : dockerComposePath du manifest > labels Docker > recherche à la racine
     console.log('[Uninstall] 🔍 Récupération des images Docker de l\'application...');
