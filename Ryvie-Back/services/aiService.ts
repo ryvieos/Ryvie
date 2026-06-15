@@ -139,7 +139,19 @@ function ensureContainersOnNetwork(ai: any, attach: boolean): Promise<void> {
 // Nom de modèle STABLE exposé aux apps. LiteLLM le remappe vers le vrai modèle
 // courant → les apps pointent dessus une fois pour toutes, et changer de
 // modèle/fournisseur dans Ryvie ne nécessite AUCUNE reconfiguration des apps.
-const RYVIE_MODEL_ALIAS = 'ryvie-default';
+const RYVIE_MODEL_ALIAS = 'ryvie-ai';
+
+/** Modèle override d'une app (bloc `appModels` de la config), '' si aucun. */
+function appModelOverride(cfg: any, appId: string): string {
+  const m = cfg && cfg.appModels && cfg.appModels[appId];
+  return (m && String(m).trim()) || '';
+}
+
+/** Alias LiteLLM à utiliser pour une app : dédié `ryvie-ai-<appId>` si l'app a un
+ *  override de modèle, sinon l'alias global `ryvie-ai`. */
+function appModelAlias(cfg: any, appId: string): string {
+  return appModelOverride(cfg, appId) ? `${RYVIE_MODEL_ALIAS}-${appId}` : RYVIE_MODEL_ALIAS;
+}
 
 // ───────── Génération du config.yaml LiteLLM ─────────
 function buildConfigYaml(cfg: any): string {
@@ -166,8 +178,15 @@ function buildConfigYaml(cfg: any): string {
   // remapper cet alias ici → les apps n'ont RIEN à changer (vrai intérêt du gateway).
   if (cfg.model) addEntry(RYVIE_MODEL_ALIAS, cfg.model);
 
-  // Entrée nommée : le vrai modèle choisi (référence directe possible).
-  if (cfg.model) addEntry(cfg.model, cfg.model);
+  // Override par app : une app peut utiliser un modèle DIFFÉRENT du modèle global
+  // (même fournisseur). On expose alors un alias dédié `ryvie-ai-<appId>` routé vers
+  // ce modèle ; le hook de l'app reçoit cet alias via RYVIE_AI_MODEL (cf. hookVars).
+  // Les apps sans override gardent l'alias global `ryvie-ai`.
+  const appModels = (cfg.appModels && typeof cfg.appModels === 'object') ? cfg.appModels : {};
+  for (const appId of Object.keys(appModels)) {
+    const am = appModels[appId];
+    if (am && String(am).trim()) addEntry(`${RYVIE_MODEL_ALIAS}-${appId}`, String(am).trim());
+  }
 
   // Alias OpenAI : beaucoup d'apps (ex. AFFiNE Copilot) ont un registre interne de
   // modèles et n'acceptent QUE des noms OpenAI standards. Quand le fournisseur n'est
@@ -182,10 +201,6 @@ function buildConfigYaml(cfg: any): string {
       addEntry(alias, cfg.model);
     }
   }
-
-  // Route "*" : tout autre nom de modèle demandé par une app est transmis tel
-  // quel au fournisseur (compat. apps dont on contrôle le nom de modèle).
-  entries.push(`  - model_name: "*"\n    litellm_params:\n${paramsBlock('*')}`);
   return [
     '# Généré par Ryvie — LiteLLM. Ne pas éditer à la main.',
     'model_list:',
@@ -283,14 +298,16 @@ function mutateAppEnv(appDir: string, ai: any, remove: boolean): void {
 /** Variables passées aux scripts de hook (ai/connect.sh, ai/disconnect.sh). */
 function hookVars(appId: string, appDir: string, mode: 'connect' | 'disconnect', manifest?: any): Record<string, string> {
   const cfg = loadConfig();
+  const override = appModelOverride(cfg, appId);
   const vars: Record<string, string> = {
     RYVIE_AI_API_KEY: getMasterKey(cfg),
     RYVIE_AI_BASE_URL: appBaseUrl(),
-    // Les apps utilisent l'alias STABLE, pas le vrai nom de modèle → un changement
-    // de modèle ultérieur côté Ryvie ne les impacte pas. Le vrai modèle est exposé
-    // séparément pour info (RYVIE_AI_BACKEND_MODEL).
-    RYVIE_AI_MODEL: RYVIE_MODEL_ALIAS,
-    RYVIE_AI_BACKEND_MODEL: cfg.model || '',
+    // Les apps utilisent un alias STABLE, pas le vrai nom de modèle → un changement
+    // de modèle ultérieur côté Ryvie ne les impacte pas. Alias dédié `ryvie-ai-<app>`
+    // si l'app a un modèle personnalisé, sinon l'alias global `ryvie-ai`. Le vrai
+    // modèle est exposé séparément pour info (RYVIE_AI_BACKEND_MODEL).
+    RYVIE_AI_MODEL: appModelAlias(cfg, appId),
+    RYVIE_AI_BACKEND_MODEL: override || cfg.model || '',
     RYVIE_AI_PROVIDER: cfg.provider || '',
     RYVIE_AI_MODE: mode,
     RYVIE_APP_ID: appId,
@@ -410,7 +427,17 @@ async function listApps(): Promise<any[]> {
   for (const d of dirs) {
     let m: any = null;
     try { m = await appManager.getAppManifest(d); } catch (_) { m = null; }
-    if (m && m.ai) out.push({ id: d, name: m.name || d, connected: connected.has(d), restarts: m.ai.restart !== false });
+    if (m && m.ai) out.push({
+      id: d,
+      name: m.name || d,
+      connected: connected.has(d),
+      // « redémarre » = Ryvie recrée la stack (restart !== false) OU le hook de l'app
+      // redémarre lui-même un conteneur (hookRestarts, ex. Hermes). Sert à l'UI pour
+      // prévenir avant connexion/déconnexion/changement de modèle.
+      restarts: m.ai.restart !== false || m.ai.hookRestarts === true,
+      // Modèle propre à l'app (override) ou null → utilise le modèle global par défaut.
+      model: appModelOverride(cfg, d) || null
+    });
   }
   return out.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
@@ -449,18 +476,33 @@ async function setProviderConfig(input: any): Promise<any> {
     throw Object.assign(new Error('Une clé d\'API est requise pour ce fournisseur'), { status: 400 });
   }
 
-  const masterKey = getMasterKey(cfg);
+  getMasterKey(cfg);
   saveConfig(cfg);
 
-  // LiteLLM ne lit config.yaml/.env qu'au démarrage → on ne (re)démarre QUE si le
-  // contenu effectif change : nouvelle clé, ou config.yaml généré différent de
-  // celui sur disque (fournisseur, URL, modèle, alias…), ou s'il n'est pas en route.
-  // Réenregistrer une config IDENTIQUE ne provoque donc aucun redémarrage.
+  const { ready, restarted } = await applyLitellmConfig(cfg, { keyChanged });
+
+  // PAS de re-provisioning des apps connectées : elles pointent sur l'alias STABLE
+  // `ryvie-ai` (ou leur alias dédié `ryvie-ai-<app>`), que LiteLLM vient de remapper
+  // vers le nouveau modèle. Changer de modèle/fournisseur est donc TRANSPARENT pour
+  // les apps (rien à redémarrer). Le re-provision n'a lieu qu'au connect explicite
+  // d'une app ou lors d'un changement de modèle par app (setAppModel).
+
+  return { ...getStatus(ready), ready, restarted };
+}
+
+/**
+ * (Re)génère la config LiteLLM depuis `cfg` et NE redémarre le proxy QUE si le
+ * contenu effectif change (nouvelle clé, YAML différent, ou proxy à l'arrêt) :
+ * réécrire une config identique ne provoque aucun redémarrage. Mutualisé entre
+ * setProviderConfig (changement de fournisseur) et setAppModel (modèle par app).
+ */
+async function applyLitellmConfig(cfg: any, opts: { keyChanged?: boolean } = {}): Promise<{ ready: boolean; restarted: boolean }> {
+  const masterKey = getMasterKey(cfg);
   const newYaml = buildConfigYaml(cfg);
   let curYaml = '';
   try { curYaml = require('fs').readFileSync(LITELLM_CONFIG_YAML, 'utf8'); } catch (_) { curYaml = ''; }
   const needRestart =
-    keyChanged ||
+    !!opts.keyChanged ||
     !litellm.isConfigured() ||
     !litellm.isRunning() ||
     newYaml !== curYaml;
@@ -476,13 +518,32 @@ async function setProviderConfig(input: any): Promise<any> {
   } else {
     ready = litellm.isRunning();
   }
+  return { ready, restarted: needRestart };
+}
 
-  // PAS de re-provisioning des apps connectées : elles pointent sur l'alias STABLE
-  // `ryvie-default`, que LiteLLM vient de remapper vers le nouveau modèle. Changer
-  // de modèle/fournisseur est donc TRANSPARENT pour les apps (rien à redémarrer/
-  // reconfigurer). Le re-provision n'a lieu qu'au connect explicite d'une app.
+/**
+ * Définit (ou efface) le modèle PROPRE à une app. Modèle vide/null ou égal au modèle
+ * global → pas d'override, l'app retombe sur l'alias global `ryvie-ai`. Régénère la
+ * config LiteLLM (pour créer/retirer l'alias dédié) puis, si l'app est connectée,
+ * la re-provisionne pour que son hook reçoive le bon alias dans RYVIE_AI_MODEL.
+ */
+async function setAppModel(appId: string, model: any): Promise<any> {
+  const cfg = loadConfig();
+  if (!cfg.provider) throw Object.assign(new Error('Configurez d\'abord un fournisseur IA'), { status: 400 });
+  cfg.appModels = (cfg.appModels && typeof cfg.appModels === 'object') ? cfg.appModels : {};
+  const m = (model && String(model).trim()) || '';
+  if (m && m !== cfg.model) cfg.appModels[appId] = m;
+  else delete cfg.appModels[appId]; // vide ou identique au modèle global → override retiré
+  saveConfig(cfg);
 
-  return { ...getStatus(ready), ready, restarted: needRestart };
+  const { ready } = await applyLitellmConfig(cfg, {});
+
+  // Ré-applique à l'app SI elle est connectée : son hook relit RYVIE_AI_MODEL (alias
+  // dédié ou global). Une app non connectée prendra le bon alias à sa prochaine connexion.
+  if ((cfg.connectedApps || []).includes(appId)) {
+    await provisionApp(appId);
+  }
+  return { ...getStatus(ready), ready, appId, appModel: cfg.appModels[appId] || null };
 }
 
 /** Connecte une app : env + redémarrage + hook connect + ajout à la liste. */
@@ -625,6 +686,7 @@ module.exports = {
   getProviders,
   listApps,
   setProviderConfig,
+  setAppModel,
   connectApp,
   disconnectApp,
   testConnection,

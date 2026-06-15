@@ -29,6 +29,8 @@ const AppAccountsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose
   const [supported, setSupported] = React.useState(true);
   const [reason, setReason] = React.useState<string | null>(null);
   const [accounts, setAccounts] = React.useState<Account[]>([]);
+  // Vrai si réinitialiser un mot de passe redémarre l'app (ex. Hermes) → avertissement.
+  const [restartsOnReset, setRestartsOnReset] = React.useState(false);
 
   // Compte en cours de réinitialisation (formulaire inline)
   const [resettingId, setResettingId] = React.useState<string | null>(null);
@@ -47,6 +49,7 @@ const AppAccountsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose
       setSupported(res.data.supported !== false);
       setReason(res.data.reason || null);
       setAccounts(Array.isArray(res.data.accounts) ? res.data.accounts : []);
+      setRestartsOnReset(res.data.restartsOnReset === true);
     } catch (e: any) {
       setError(e?.response?.data?.error || t('appAccounts.loadError'));
     } finally {
@@ -154,6 +157,9 @@ const AppAccountsModal: React.FC<Props> = ({ appId, appName, accessMode, onClose
 
               {resettingId === acc.id && (
                 <div style={styles.form}>
+                  {restartsOnReset && (
+                    <div style={styles.restartWarn}>⚠️ {t('appAccounts.resetRestartWarn')}</div>
+                  )}
                   <input
                     type="password"
                     autoFocus
@@ -288,6 +294,10 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8, padding: '8px 10px', color: 'var(--aam-fg)', fontSize: 14,
   },
   fieldError: { color: '#c0392b', fontSize: 12 },
+  restartWarn: {
+    color: '#b7791f', background: 'rgba(220,160,60,0.14)',
+    padding: '8px 10px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.4,
+  },
   formButtons: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
   cancelBtn: {
     background: 'transparent', color: 'var(--aam-muted)',

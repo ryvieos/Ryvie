@@ -536,7 +536,13 @@ const Taskbar = React.memo(({ handleClick, appsConfig, onLoaded }) => {
             ) : (
               <div
                 onClick={() => handleClick(iconId)}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleClick(iconId)}
+                // Guard e.target === e.currentTarget : n'ouvrir QUE si l'icône elle-même
+                // est focalisée. Sinon un Enter tapé dans un modal porté (ex. champ mot de
+                // passe de « Gérer les comptes », rendu en portail donc enfant React de
+                // l'icône) remonterait ici et ouvrirait l'app par erreur.
+                onKeyDown={(e) => {
+                  if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) handleClick(iconId);
+                }}
                 role="button"
                 tabIndex={0}
                 aria-label={label}

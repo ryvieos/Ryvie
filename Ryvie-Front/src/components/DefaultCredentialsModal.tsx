@@ -54,7 +54,7 @@ const DefaultCredentialsModal: React.FC<Props> = ({ appName, email, username, pa
         <div style={styles.body}>
           <div style={styles.warn}>⚠️ {t('defaultCredentials.warning')}</div>
 
-          <Field labelKey="defaultCredentials.loginId" value={loginId} copyKey="id" />
+          {loginId && <Field labelKey="defaultCredentials.loginId" value={loginId} copyKey="id" />}
           {username && email && username !== email && (
             <Field labelKey="defaultCredentials.username" value={username} copyKey="user" />
           )}

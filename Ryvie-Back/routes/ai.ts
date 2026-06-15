@@ -96,4 +96,15 @@ router.delete('/ai/apps/:id/connect', verifyToken, isAdmin, async (req: any, res
   }
 });
 
+// PUT /api/ai/apps/:id/model — définir le modèle propre à une app (override).
+// Body { model } : vide/null → retire l'override (l'app reprend le modèle global).
+router.put('/ai/apps/:id/model', verifyToken, isAdmin, async (req: any, res: any) => {
+  try {
+    const result = await ai.setAppModel(req.params.id, (req.body || {}).model);
+    res.status(200).json(result);
+  } catch (error: any) {
+    fail(res, error);
+  }
+});
+
 export = router;

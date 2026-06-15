@@ -728,6 +728,16 @@ input:checked + .slider:before {
   flex-shrink: 0;
 }
 
+/* Sélecteur de modèle par app : compact, ne prend pas toute la largeur de la ligne. */
+.ai-app-model {
+  width: auto;
+  min-width: 160px;
+  max-width: 210px;
+  /* Marge à droite pour ne pas que le texte chevauche la flèche native du select. */
+  padding: 4px 28px 4px 10px;
+  font-size: 0.85em;
+}
+
 .ai-app-status {
   font-size: 0.78rem;
   font-weight: 600;

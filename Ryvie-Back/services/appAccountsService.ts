@@ -39,7 +39,7 @@ const VERIFY_FAIL_MSG =
 async function dockerExec(
   container: string,
   cmd: string[],
-  opts: { env?: string[]; workingDir?: string } = {}
+  opts: { env?: string[]; workingDir?: string; user?: string } = {}
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const c = docker.getContainer(container);
 
@@ -49,6 +49,9 @@ async function dockerExec(
     AttachStderr: true,
     Env: opts.env,
     WorkingDir: opts.workingDir,
+    // User optionnel : certains conteneurs doivent écrire des fichiers avec un
+    // propriétaire précis (ex. Hermes WebUI tourne en `hermeswebui`).
+    ...(opts.user ? { User: opts.user } : {}),
   });
 
   const stream = await exec.start({ hijack: true, stdin: false });
@@ -337,6 +340,48 @@ async function affineReset(
   }
 }
 
+// ─────────────────── Stratégie : hermes-webui (mot de passe unique) ─────────
+// Hermes WebUI s'authentifie par UN mot de passe (pas de multi-comptes), stocké
+// hashé dans settings.json (HERMES_WEBUI_STATE_DIR). On le (ré)écrit via la
+// fonction native save_settings({'_set_password': ...}) DANS le conteneur, en
+// tant qu'utilisateur `hermeswebui` (propriétaire du fichier). Le serveur cache
+// le hash en mémoire pour la durée du process → on redémarre le conteneur pour
+// qu'il relise le nouveau mot de passe. (Le mot de passe ne transite que par
+// l'environnement, jamais sur la ligne de commande.)
+async function hermesWebuiReset(
+  recipe: any,
+  _accountId: string,
+  newPassword: string
+): Promise<void> {
+  const container = recipe.container || 'app-hermes-webui';
+  const py =
+    'import os\n' +
+    'from api.config import save_settings\n' +
+    'save_settings({"_set_password": os.environ["NEW_PWD"]})\n' +
+    'print("DONE")';
+  const { stdout, stderr, exitCode } = await dockerExec(container, ['python3', '-c', py], {
+    workingDir: '/app',
+    user: recipe.user || 'hermeswebui',
+    env: [`NEW_PWD=${newPassword}`],
+  });
+  if (exitCode !== 0 || !/DONE/.test(stdout)) {
+    throw new Error(`hermes set-password échoué (exit ${exitCode}): ${(stderr || stdout).trim().slice(0, 200)}`);
+  }
+  // Le serveur webui cache le hash en mémoire → redémarrage du conteneur pour
+  // qu'il relise settings.json. On SUSPEND le broadcast realtime pendant le
+  // restart : sinon les événements Docker stop/start du conteneur remontent au
+  // frontend et déclenchent une réaction parasite (l'app s'ouvre dans un onglet).
+  const realtimeService = (global as any).realtimeService;
+  try {
+    if (realtimeService?.pauseBroadcast) realtimeService.pauseBroadcast();
+    await docker.getContainer(container).restart({ t: 5 });
+  } catch (e: any) {
+    throw new Error(`hermes: mot de passe écrit mais redémarrage du conteneur échoué: ${e.message}`);
+  } finally {
+    if (realtimeService?.resumeBroadcast) realtimeService.resumeBroadcast();
+  }
+}
+
 // ───────────────────────────── Helpers ────────────────────────────────────
 
 function parseAccountsJson(stdout: string): Account[] {
@@ -368,6 +413,9 @@ async function listAccountsByRecipe(recipe: any): Promise<Account[]> {
       return bcryptSqliteList(recipe);
     case 'affine-argon2':
       return affineList(recipe);
+    case 'hermes-webui':
+      // Auth par MOT DE PASSE unique (pas de multi-utilisateurs) → un seul « compte ».
+      return [{ id: 'admin', username: recipe.accountLabel || 'admin', isAdmin: true }];
     default:
       return [];
   }
@@ -630,7 +678,9 @@ async function getDefaultStatus(appId: string): Promise<DefaultStatus> {
   }
   const recipe = info.recipe;
   const def = recipe && recipe.default;
-  if (!def || (!def.email && !def.username)) return { hasDefault: false, changed: false };
+  // Apps « mot de passe seul » (ex. Hermes WebUI) : pas d'email/username mais un
+  // mot de passe par défaut + un login de vérification → on accepte aussi ce cas.
+  if (!def || (!def.email && !def.username && !def.password)) return { hasDefault: false, changed: false };
 
   // Détection par login (apps sans outils DB) : on tente une authentification
   // avec les identifiants par défaut ; succès = inchangé, échec = changé.
@@ -702,7 +752,10 @@ async function listAccounts(appId: string): Promise<ListResult> {
     case 'rails-devise':
     case 'bcrypt-sqlite':
     case 'affine-argon2':
-      return { supported: true, accounts: await listAccountsByRecipe(recipe) };
+    case 'hermes-webui':
+      // restartsOnReset : prévient l'UI qu'une réinitialisation redémarre l'app
+      // (ex. Hermes, dont le hash est caché en mémoire). Déclaré dans le manifeste.
+      return { supported: true, accounts: await listAccountsByRecipe(recipe), restartsOnReset: !!recipe.resetRestarts };
     case 'unsupported':
       return { supported: false, reason: recipe.reason || 'Réinitialisation non supportée.', accounts: [] };
     default: {
@@ -749,6 +802,8 @@ async function resetPassword(appId: string, accountId: string, newPassword: stri
       return bcryptSqliteReset(recipe, accountId, newPassword);
     case 'affine-argon2':
       return affineReset(recipe, accountId, newPassword);
+    case 'hermes-webui':
+      return hermesWebuiReset(recipe, accountId, newPassword);
     default: {
       const err: any = new Error(`Stratégie inconnue: ${recipe.strategy}`);
       err.status = 400;

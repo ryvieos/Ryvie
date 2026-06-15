@@ -218,7 +218,8 @@
     "mismatch": "Passwords do not match.",
     "confirm": "Reset",
     "resetSuccess": "Password reset successfully.",
-    "resetError": "Password reset failed."
+    "resetError": "Password reset failed.",
+    "resetRestartWarn": "Resetting the password restarts the app (a few seconds of downtime)."
   },
   "installIndicator": {
     "showProgress": "Show {appName} progress",
@@ -455,7 +456,7 @@
       "loadError": "Unable to load the AI settings.",
       "running": "Gateway running",
       "notRunning": "Gateway starting…",
-      "aliasNote": "Once saved, your apps see this model as a standard OpenAI model (e.g. “gpt-4o”, “ryvie-default”), whatever provider or actual model you picked. The gateway handles the translation.",
+      "aliasNote": "Once saved, your apps see this model as a standard OpenAI model (e.g. “gpt-4o”, “ryvie-ai”), whatever provider or actual model you picked. The gateway handles the translation.",
       "cliConnected": "Signed in · {email}",
       "cliNotConnected": "Not signed in",
       "cliNotInstalled": "Claude CLI is not installed on this machine",
@@ -477,6 +478,11 @@
       "statusOn": "Connected",
       "statusOff": "Off",
       "appError": "Unable to update the app connection.",
+      "appModelDefault": "Default model (global)",
+      "appModelTitle": "Model used by this app",
+      "appModelSaved": "App model updated.",
+      "appModelCustomPrompt": "Custom model name:",
+      "confirmModelTitle": "Change {app}'s model to “{model}”?",
       "confirmConnect": "Connect {app} to AI?",
       "confirmDisconnect": "Disconnect {app} from AI?",
       "confirmWarn": "⚠️ The app will restart; any running tasks/services will be interrupted.",

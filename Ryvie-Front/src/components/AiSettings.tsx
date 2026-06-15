@@ -13,7 +13,7 @@ interface Provider {
   models: string[];
   defaultBaseUrl: string;
 }
-interface AiApp { id: string; name: string; connected: boolean; restarts?: boolean; }
+interface AiApp { id: string; name: string; connected: boolean; restarts?: boolean; model?: string | null; }
 interface AiStatus {
   configured: boolean;
   provider: string | null;
@@ -50,6 +50,7 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
   const [customMode, setCustomMode] = React.useState(false);
   const [busyApps, setBusyApps] = React.useState<Set<string>>(new Set());
   const [confirmApp, setConfirmApp] = React.useState<AiApp | null>(null);
+  const [confirmModel, setConfirmModel] = React.useState<{ app: AiApp; model: string } | null>(null);
   const [confirmSave, setConfirmSave] = React.useState(false);
   const [toast, setToast] = React.useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
@@ -61,6 +62,10 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
   const [loginCode, setLoginCode] = React.useState('');
 
   const selectedProvider = providers.find((p) => p.id === provider);
+  // Fournisseur réellement ENREGISTRÉ (≠ sélection en cours dans le formulaire) :
+  // sert de base aux modèles proposés par app, indépendamment d'un changement non sauvé.
+  const activeProvider = providers.find((p) => p.id === status?.provider);
+  const appModelChoices = activeProvider?.models || [];
   // Options du menu déroulant de modèles : liste live si chargée, sinon suggestions
   // du fournisseur ; on y ajoute toujours le modèle courant s'il n'y figure pas.
   const baseModels = liveModels.length ? liveModels : (selectedProvider?.models || []);
@@ -268,6 +273,24 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
         await axios.post(`${serverUrl}/api/ai/apps/${app.id}/connect`, {}, { timeout: 120000, _noAuthRedirect: true } as any);
       }
       setApps((prev) => prev.map((a) => (a.id === app.id ? { ...a, connected: !a.connected } : a)));
+    } catch (e: any) {
+      setToast({ type: 'error', msg: e?.response?.data?.error || t('settings.ai.appError') });
+    } finally {
+      setBusyApps((prev) => { const n = new Set(prev); n.delete(app.id); return n; });
+    }
+  };
+
+  // Change le modèle PROPRE à une app (override). model vide → retour au modèle global.
+  const changeAppModel = async (app: AiApp, model: string) => {
+    setBusyApps((prev) => new Set(prev).add(app.id));
+    try {
+      await axios.put(
+        `${serverUrl}/api/ai/apps/${app.id}/model`,
+        { model: model || '' },
+        { timeout: 120000, _noAuthRedirect: true } as any
+      );
+      setApps((prev) => prev.map((a) => (a.id === app.id ? { ...a, model: model || null } : a)));
+      setToast({ type: 'success', msg: t('settings.ai.appModelSaved') });
     } catch (e: any) {
       setToast({ type: 'error', msg: e?.response?.data?.error || t('settings.ai.appError') });
     } finally {
@@ -497,6 +520,34 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
                     <span className="ai-app-name">{app.name}</span>
                   </div>
                   <div className="ai-app-right">
+                    {/* Modèle propre à l'app (override). Vide = modèle global. */}
+                    {app.connected && (
+                      <select
+                        className="setting-select ai-app-model"
+                        value={app.model || ''}
+                        disabled={busy}
+                        title={t('settings.ai.appModelTitle')}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          let chosen: string | null = v;
+                          if (v === '__custom__') {
+                            chosen = window.prompt(t('settings.ai.appModelCustomPrompt'), app.model || '');
+                            if (chosen === null) return; // annulé
+                            chosen = chosen.trim();
+                          }
+                          // Apps qui redémarrent → confirmation (comme connecter/déconnecter).
+                          if (app.restarts) setConfirmModel({ app, model: chosen });
+                          else changeAppModel(app, chosen);
+                        }}
+                      >
+                        <option value="">{t('settings.ai.appModelDefault')}</option>
+                        {appModelChoices.map((m) => <option key={m} value={m}>{m}</option>)}
+                        {app.model && !appModelChoices.includes(app.model) && (
+                          <option value={app.model}>{app.model}</option>
+                        )}
+                        <option value="__custom__">{t('settings.ai.customModel')}</option>
+                      </select>
+                    )}
                     {busy ? (
                       <span className="ai-app-spinner" aria-hidden />
                     ) : (
@@ -550,6 +601,43 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
               <button
                 className="toggle-button active"
                 onClick={() => { const a = confirmApp; setConfirmApp(null); toggleApp(a); }}
+              >
+                {t('settings.ai.proceed')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up de confirmation : changer le modèle d'une app qui redémarre */}
+      {confirmModel && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}
+          onClick={() => setConfirmModel(null)}
+        >
+          <div
+            style={{
+              background: '#fff', color: '#111', borderRadius: 12, padding: 24, maxWidth: 420,
+              width: '90%', boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginTop: 0 }}>
+              {t('settings.ai.confirmModelTitle')
+                .replace('{app}', confirmModel.app.name)
+                .replace('{model}', confirmModel.model || t('settings.ai.appModelDefault'))}
+            </h3>
+            <p style={{ color: '#b45309', fontSize: '0.92em' }}>{t('settings.ai.confirmWarn')}</p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+              <button className="toggle-button" onClick={() => setConfirmModel(null)}>
+                {t('settings.ai.cancel')}
+              </button>
+              <button
+                className="toggle-button active"
+                onClick={() => { const c = confirmModel; setConfirmModel(null); changeAppModel(c.app, c.model); }}
               >
                 {t('settings.ai.proceed')}
               </button>

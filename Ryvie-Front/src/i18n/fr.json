@@ -218,7 +218,8 @@
     "mismatch": "Les mots de passe ne correspondent pas.",
     "confirm": "Réinitialiser",
     "resetSuccess": "Mot de passe réinitialisé avec succès.",
-    "resetError": "Échec de la réinitialisation du mot de passe."
+    "resetError": "Échec de la réinitialisation du mot de passe.",
+    "resetRestartWarn": "Réinitialiser le mot de passe redémarre l'application (quelques secondes d'indisponibilité)."
   },
   "installIndicator": {
     "showProgress": "Afficher la progression de {appName}",
@@ -462,7 +463,7 @@
       "loadError": "Impossible de charger les réglages IA.",
       "running": "Passerelle active",
       "notRunning": "Passerelle en démarrage…",
-      "aliasNote": "Une fois enregistré, vos apps voient ce modèle comme un modèle OpenAI standard (ex. « gpt-4o », « ryvie-default »), quel que soit le fournisseur ou le modèle réellement choisi. C'est la passerelle qui traduit.",
+      "aliasNote": "Une fois enregistré, vos apps voient ce modèle comme un modèle OpenAI standard (ex. « gpt-4o », « ryvie-ai »), quel que soit le fournisseur ou le modèle réellement choisi. C'est la passerelle qui traduit.",
       "cliConnected": "Connecté · {email}",
       "cliNotConnected": "Non connecté",
       "cliNotInstalled": "Claude CLI n'est pas installé sur cette machine",
@@ -484,6 +485,11 @@
       "statusOn": "Connectée",
       "statusOff": "Désactivée",
       "appError": "Impossible de modifier la connexion de l'app.",
+      "appModelDefault": "Modèle par défaut (global)",
+      "appModelTitle": "Modèle utilisé par cette app",
+      "appModelSaved": "Modèle de l'app mis à jour.",
+      "appModelCustomPrompt": "Nom du modèle personnalisé :",
+      "confirmModelTitle": "Changer le modèle de {app} pour « {model} » ?",
       "confirmConnect": "Connecter {app} à l'IA ?",
       "confirmDisconnect": "Déconnecter {app} de l'IA ?",
       "confirmWarn": "⚠️ L'application va redémarrer, les tâches/services en cours seront interrompus.",
