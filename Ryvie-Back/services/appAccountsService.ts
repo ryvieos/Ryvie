@@ -23,6 +23,13 @@ const docker = new Docker();
 
 const BCRYPT_ROUNDS = 12;
 
+// Provisioning par API à l'install : l'app vient de démarrer et son API REST peut ne pas
+// être prête (connexion refusée, 5xx, réponse vide) au moment où l'on crée le compte par
+// défaut. On retente jusqu'à PROVISION_READY_TIMEOUT_MS avant d'abandonner.
+const PROVISION_READY_TIMEOUT_MS = 60000;
+const PROVISION_RETRY_DELAY_MS = 2000;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 // Message renvoyé si la vérification post-reset échoue : le nouveau mot de passe
 // n'authentifie pas réellement (format de hash inattendu, schéma modifié par une
 // MAJ de l'app…). On lève une erreur plutôt que d'annoncer un faux succès.
@@ -748,9 +755,41 @@ async function apiSignup(def: any, mainPort?: number): Promise<void> {
       ? step.okCodes : [200, 201, 204];
     const code = await apiCall(step, def, mainPort);
     if (!okCodes.includes(code)) {
-      throw new Error(`signup ${step?.path} → HTTP ${code}`);
+      const err: any = new Error(`signup ${step?.path} → HTTP ${code}`);
+      err.httpStatus = code; // permet à apiSignupResilient de distinguer 4xx définitif vs « pas prêt »
+      throw err;
     }
   }
+}
+
+// Variante résiliente de apiSignup pour l'INSTALL : retente la création du compte par
+// défaut tant que l'API de l'app n'est pas prête (connexion refusée, 5xx, réponse vide),
+// jusqu'à PROVISION_READY_TIMEOUT_MS. Idempotent : re-vérifie l'existence du compte (via
+// login) à chaque tour, donc s'arrête dès qu'une tentative précédente — ou l'app — l'a
+// créé. N'insiste PAS sur une erreur client définitive (4xx hors 408/429 : payload ou mot
+// de passe refusé → un retry n'y changerait rien).
+async function apiSignupResilient(def: any, mainPort?: number): Promise<void> {
+  const deadline = Date.now() + PROVISION_READY_TIMEOUT_MS;
+  let lastErr: any = null;
+  for (;;) {
+    // Idempotence + sonde de disponibilité : si le login passe, le compte existe → fini.
+    if (def.login) {
+      try { if (await loginVerify(def, mainPort)) return; } catch (_) { /* pas prêt */ }
+    }
+    try {
+      await apiSignup(def, mainPort);
+      return;
+    } catch (e: any) {
+      lastErr = e;
+      const code = e && e.httpStatus;
+      const definitiveClientError =
+        typeof code === 'number' && code >= 400 && code < 500 && code !== 408 && code !== 429;
+      if (definitiveClientError) throw e; // inutile de retenter
+    }
+    if (Date.now() >= deadline) break;
+    await sleep(PROVISION_RETRY_DELAY_MS);
+  }
+  throw lastErr || new Error('apiSignup: API de l\'app non prête après attente');
 }
 
 // Vérifie « le compte par défaut s'authentifie-t-il encore ? » via une tentative
@@ -840,7 +879,7 @@ async function provisionDefault(appId: string): Promise<void> {
   if (exists) return;
 
   if (mode === 'api') {
-    return apiSignup(def, info.mainPort);
+    return apiSignupResilient(def, info.mainPort);
   }
   if (mode === 'sql-update') {
     return bcryptSqliteUpdateAccount(recipe, def);
