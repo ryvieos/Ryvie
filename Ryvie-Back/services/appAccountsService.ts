@@ -347,6 +347,115 @@ async function affineReset(
   }
 }
 
+// ───────────────── Stratégie : bcrypt-postgres (Twenty CRM) ─────────────────
+// Comptes stockés dans Postgres avec un hash bcrypt (ex. Twenty : table
+// core."user", colonne "passwordHash"). On liste/lit/écrit via psql DANS le
+// conteneur de la base ; le hash bcrypt est généré côté backend (comme
+// bcrypt-sqlite). Le mot de passe ne transite jamais par la ligne de commande.
+// Le hash bcrypt et l'UUID écrits en base ne contiennent pas de quote simple
+// (alphabet $ . / b64 / tirets) → interpolation SQL sûre (même garantie qu'affine).
+
+const PG_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;            // schéma / table / colonne
+const PG_ACCOUNT_ID_RE = /^[A-Za-z0-9-]+$/;                // identifiant de compte (UUID)
+const BCRYPT_HASH_RE = /^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$/;
+
+// Renvoie `"schema"."table"` (idents validés) — `user` est un mot réservé → quoté.
+function pgTableRef(recipe: any): string {
+  const schema = recipe.schema || 'public';
+  const table = recipe.table || 'users';
+  if (!PG_IDENT_RE.test(schema) || !PG_IDENT_RE.test(table)) {
+    throw new Error('bcrypt-postgres: schéma ou table invalide');
+  }
+  return `"${schema}"."${table}"`;
+}
+
+// Noms de colonnes (validés). `password` = colonne du hash. Libellé du compte :
+// `username` si fourni, sinon concaténation firstName/lastName si fournis.
+function pgColumns(recipe: any): { id: string; email: string; password: string; first: string | null; last: string | null; username: string | null } {
+  const cols = recipe.columns || {};
+  const out = {
+    id: cols.id || 'id',
+    email: cols.email || 'email',
+    password: cols.password || 'password_hash',
+    first: cols.firstName || null,
+    last: cols.lastName || null,
+    username: cols.username || null,
+  };
+  for (const v of [out.id, out.email, out.password, out.first, out.last, out.username]) {
+    if (v && !PG_IDENT_RE.test(v)) throw new Error('bcrypt-postgres: nom de colonne invalide');
+  }
+  return out;
+}
+
+// argv psql en mode lecture (tuples seuls, séparateur `|`).
+function pgSelectArgv(recipe: any, sql: string): string[] {
+  const dbUser = (recipe.db && recipe.db.user) || 'postgres';
+  const dbName = (recipe.db && recipe.db.name) || 'postgres';
+  return ['psql', '-U', dbUser, '-d', dbName, '-t', '-A', '-F', '|', '-c', sql];
+}
+
+// argv psql en mode écriture (on lit le tag de commande « UPDATE 1 » sur stdout).
+function pgExecArgv(recipe: any, sql: string): string[] {
+  const dbUser = (recipe.db && recipe.db.user) || 'postgres';
+  const dbName = (recipe.db && recipe.db.name) || 'postgres';
+  return ['psql', '-U', dbUser, '-d', dbName, '-c', sql];
+}
+
+async function bcryptPostgresList(recipe: any): Promise<Account[]> {
+  const c = pgColumns(recipe);
+  const nameParts: string[] = [];
+  if (c.first) nameParts.push(`coalesce("${c.first}",'')`);
+  if (c.last) nameParts.push(`coalesce("${c.last}",'')`);
+  const nameSel = c.username
+    ? `"${c.username}"`
+    : nameParts.length
+      ? `trim(${nameParts.join(" || ' ' || ")})`
+      : `''`;
+  const sql = `SELECT "${c.id}", "${c.email}", ${nameSel} FROM ${pgTableRef(recipe)} ORDER BY "${c.email}"`;
+  const { stdout, stderr, exitCode } = await dockerExec(recipe.dbContainer, pgSelectArgv(recipe, sql));
+  if (exitCode !== 0) {
+    throw new Error(`bcrypt-postgres list a échoué (exit ${exitCode}): ${stderr.trim()}`);
+  }
+  return stdout
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id, email, name] = line.split('|');
+      return { id, email: email || undefined, username: (name || '').trim() || undefined } as Account;
+    });
+}
+
+async function bcryptPostgresReadHash(recipe: any, id: string): Promise<string> {
+  if (!PG_ACCOUNT_ID_RE.test(id)) return '';
+  const c = pgColumns(recipe);
+  const sql = `SELECT "${c.password}" FROM ${pgTableRef(recipe)} WHERE "${c.id}"='${id}'`;
+  const { stdout } = await dockerExec(recipe.dbContainer, pgSelectArgv(recipe, sql));
+  return stdout.trim();
+}
+
+async function bcryptPostgresReset(recipe: any, accountId: string, newPassword: string): Promise<void> {
+  if (!PG_ACCOUNT_ID_RE.test(accountId)) {
+    throw new Error('bcrypt-postgres: identifiant de compte invalide');
+  }
+  const c = pgColumns(recipe);
+  const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  if (!BCRYPT_HASH_RE.test(hash)) {
+    throw new Error('bcrypt-postgres: hash bcrypt généré invalide');
+  }
+  const sql = `UPDATE ${pgTableRef(recipe)} SET "${c.password}"='${hash}' WHERE "${c.id}"='${accountId}'`;
+  const { stdout, stderr, exitCode } = await dockerExec(recipe.dbContainer, pgExecArgv(recipe, sql));
+  if (exitCode !== 0 || !/UPDATE 1/.test(stdout)) {
+    throw new Error(`bcrypt-postgres reset a échoué (exit ${exitCode}): ${(stderr || stdout).trim().slice(0, 200)}`);
+  }
+  // Vérification post-reset : relit le hash stocké et le compare au mot de passe.
+  const stored = await bcryptPostgresReadHash(recipe, accountId);
+  const ok = !!stored && (await bcrypt.compare(newPassword, stored));
+  if (!ok) {
+    throw new Error(VERIFY_FAIL_MSG);
+  }
+}
+
 // ─────────────────── Stratégie : hermes-webui (mot de passe unique) ─────────
 // Hermes WebUI s'authentifie par UN mot de passe (pas de multi-comptes), stocké
 // hashé dans settings.json (HERMES_WEBUI_STATE_DIR). On le (ré)écrit via la
@@ -500,6 +609,8 @@ async function listAccountsByRecipe(recipe: any): Promise<Account[]> {
       return bcryptSqliteList(recipe);
     case 'affine-argon2':
       return affineList(recipe);
+    case 'bcrypt-postgres':
+      return bcryptPostgresList(recipe);
     case 'hermes-webui':
     case 'hermes-dashboard':
       // Auth par MOT DE PASSE unique (pas de multi-utilisateurs) → un seul « compte ».
@@ -553,6 +664,10 @@ async function verifyAccountPassword(recipe: any, account: Account, password: st
     }
     case 'bcrypt-sqlite': {
       const hash = await bcryptSqliteReadHash(recipe, account.id);
+      return !!hash && (await bcrypt.compare(password, hash));
+    }
+    case 'bcrypt-postgres': {
+      const hash = await bcryptPostgresReadHash(recipe, account.id);
       return !!hash && (await bcrypt.compare(password, hash));
     }
     case 'affine-argon2': {
@@ -840,6 +955,7 @@ async function listAccounts(appId: string): Promise<ListResult> {
     case 'rails-devise':
     case 'bcrypt-sqlite':
     case 'affine-argon2':
+    case 'bcrypt-postgres':
     case 'hermes-webui':
     case 'hermes-dashboard':
       // restartsOnReset : prévient l'UI qu'une réinitialisation redémarre l'app
@@ -891,6 +1007,8 @@ async function resetPassword(appId: string, accountId: string, newPassword: stri
       return bcryptSqliteReset(recipe, accountId, newPassword);
     case 'affine-argon2':
       return affineReset(recipe, accountId, newPassword);
+    case 'bcrypt-postgres':
+      return bcryptPostgresReset(recipe, accountId, newPassword);
     case 'hermes-webui':
       return hermesWebuiReset(recipe, accountId, newPassword);
     case 'hermes-dashboard':

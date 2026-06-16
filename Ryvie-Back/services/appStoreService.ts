@@ -1475,6 +1475,18 @@ LOCAL_IP=${localIP}
       console.warn(`[Update] ⚠️ Provisioning du compte par défaut de ${appId}:`, provError.message);
     }
 
+    // 6d. Bootstrap d'un secret d'app (ex. clé API n8n) PENDANT que le compte par
+    // défaut et son mot de passe sont encore valides → la connexion IA ultérieure ne
+    // dépend plus du mot de passe (l'utilisateur peut le changer avant de connecter
+    // l'IA). No-op si l'app ne déclare pas `ai.hooks.bootstrap`. Non bloquant.
+    currentStep = 'app-secret-bootstrap';
+    try {
+      const aiSvc = require('./aiService');
+      if (aiSvc.bootstrapAppSecret) await aiSvc.bootstrapAppSecret(appId);
+    } catch (bootErr: any) {
+      console.warn(`[Update] ⚠️ Bootstrap du secret d'app de ${appId}:`, bootErr.message);
+    }
+
     sendProgressUpdate(appId, 100, 'Installation terminée avec succès !', 'completed');
 
     // 7. Forcer la réconciliation du layout pour placer l'icône AVANT de modifier Caddy
