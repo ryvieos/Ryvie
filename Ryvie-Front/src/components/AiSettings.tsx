@@ -101,6 +101,22 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
   // Chargement initial unique.
   React.useEffect(() => { load(); }, [load]);
 
+  // Rafraîchit périodiquement la liste des apps connectables tant que la carte des
+  // réglages IA est ouverte : une app installée ou désinstallée apparaît/disparaît
+  // automatiquement, sans avoir à recharger la page. On saute le tick pendant une
+  // action en cours (connexion/déconnexion/sauvegarde) pour ne pas écraser l'état
+  // optimiste local. Les refs évitent de recréer l'intervalle à chaque action.
+  const busyRef = React.useRef(busyApps);
+  busyRef.current = busyApps;
+  const savingRef = React.useRef(saving);
+  savingRef.current = saving;
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      if (busyRef.current.size === 0 && !savingRef.current) load();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [load]);
+
   React.useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(null), 5000);

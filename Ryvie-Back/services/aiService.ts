@@ -559,6 +559,39 @@ async function connectApp(appId: string): Promise<any> {
   return { connected: true };
 }
 
+/**
+ * Bootstrap d'un secret d'app au moment de l'INSTALL, pendant que le compte par
+ * défaut (et son mot de passe) est encore valide. Exécute le hook
+ * `ai.hooks.bootstrap` de l'app (s'il existe) avec les identifiants du compte par
+ * défaut + le round-trip de secret (RYVIE_APP_SECRET / RYVIE_APP_SECRET_OUT). Le
+ * secret produit (ex. clé API n8n) est stocké chiffré dans appSecrets : la connexion
+ * IA ultérieure devient INDÉPENDANTE du mot de passe (l'utilisateur peut le changer
+ * avant de connecter l'IA). N'exige PAS qu'un fournisseur IA soit configuré.
+ * Best-effort : ne lève jamais (l'install ne doit pas échouer pour ça).
+ */
+async function bootstrapAppSecret(appId: string): Promise<void> {
+  let manifest: any = null;
+  try { manifest = await appManager.getAppManifest(appId); } catch (_) { return; }
+  const ai = manifest && manifest.ai;
+  if (!ai || !ai.hooks || !ai.hooks.bootstrap) return; // app sans hook bootstrap → no-op
+  const appDir = resolveAppDir(manifest, appId);
+  const def = manifest.accounts && manifest.accounts.default;
+  const vars: Record<string, string> = {
+    RYVIE_APP_ID: appId,
+    RYVIE_APP_DIR: appDir,
+    RYVIE_LOCAL_IP: getLocalIP(),
+  };
+  // Identifiants du compte par défaut (valides à l'install) → le hook se logue sans
+  // dépendre d'un mot de passe que l'utilisateur aurait déjà changé.
+  if (def && def.email) vars.RYVIE_APP_LOGIN_EMAIL = String(def.email);
+  if (def && def.password) vars.RYVIE_APP_LOGIN_PASSWORD = String(def.password);
+  try {
+    await runHook(ai.hooks.bootstrap, appDir, vars, appId);
+  } catch (e: any) {
+    console.warn(`[ai] bootstrapAppSecret(${appId}):`, e?.message);
+  }
+}
+
 /** Déconnecte une app : hook disconnect + retrait des variables IA + redémarrage. */
 async function disconnectApp(appId: string): Promise<any> {
   await deprovisionApp(appId);
@@ -731,6 +764,7 @@ module.exports = {
   setAppModel,
   connectApp,
   disconnectApp,
+  bootstrapAppSecret,
   purgeApp,
   testConnection,
   listProviderModels,
