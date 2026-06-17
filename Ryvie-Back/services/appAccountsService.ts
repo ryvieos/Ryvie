@@ -24,9 +24,10 @@ const docker = new Docker();
 const BCRYPT_ROUNDS = 12;
 
 // Provisioning par API à l'install : l'app vient de démarrer et son API REST peut ne pas
-// être prête (connexion refusée, 5xx, réponse vide) au moment où l'on crée le compte par
-// défaut. On retente jusqu'à PROVISION_READY_TIMEOUT_MS avant d'abandonner.
-const PROVISION_READY_TIMEOUT_MS = 60000;
+// être prête (connexion refusée, 5xx, réponse vide, ou — piège classique — le serveur web
+// répond déjà en HTML 404/200/429 AVANT que /rest/* soit monté) au moment où l'on crée le
+// compte par défaut. On retente jusqu'à PROVISION_READY_TIMEOUT_MS avant d'abandonner.
+const PROVISION_READY_TIMEOUT_MS = 120000;
 const PROVISION_RETRY_DELAY_MS = 2000;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -389,8 +390,7 @@ function pgColumns(recipe: any): { id: string; email: string; password: string; 
     username: cols.username || null,
   };
   for (const v of [out.id, out.email, out.password, out.first, out.last, out.username]) {
-    if (v && !PG_IDENT_RE.test(v)) throw new Error('bcrypt-postgres: nom de colonne invalide');
-  }
+    if (v && !PG_IDENT_RE.test(v)) throw new Error('bcrypt-postgres: nom de colonne invalide');  }
   return out;
 }
 
@@ -731,7 +731,16 @@ function buildBody(tpl: string, def: any): any {
   return JSON.parse(filled);
 }
 
-async function apiCall(spec: any, def: any, mainPort?: number): Promise<number> {
+// Résultat d'un appel API : le code HTTP NE SUFFIT PAS. Au démarrage, l'app peut renvoyer
+// du HTML (page d'erreur 404, éditeur 200, « too many requests » 429) tant que son API REST
+// n'est pas montée — un code 200/4xx sur un corps HTML n'est donc pas un vrai résultat API.
+interface ApiResult {
+  status: number;
+  isJson: boolean; // corps réellement JSON → l'API REST répond pour de vrai
+  isHtml: boolean; // corps HTML → serveur web up mais route API pas (encore) montée
+}
+
+async function apiCall(spec: any, def: any, mainPort?: number): Promise<ApiResult> {
   if (!spec || !spec.path) throw new Error('spec API incomplète (path requis)');
   const port = spec.port || mainPort;
   if (!port) throw new Error('port de l\'app inconnu pour l\'appel API');
@@ -742,9 +751,19 @@ async function apiCall(spec: any, def: any, mainPort?: number): Promise<number> 
     headers: { 'Content-Type': 'application/json', ...(spec.headers || {}) },
     data: buildBody(spec.body || '{}', def),
     timeout: 10000,
-    validateStatus: () => true, // on lit le code nous-mêmes
+    responseType: 'text',                 // corps brut → on décide JSON vs HTML nous-mêmes
+    transformResponse: [(d: any) => d],   // ne pas laisser axios parser/transformer
+    validateStatus: () => true,           // on lit le code nous-mêmes
   });
-  return res.status;
+  const ctype = String((res.headers && res.headers['content-type']) || '').toLowerCase();
+  const raw = typeof res.data === 'string' ? res.data : res.data == null ? '' : String(res.data);
+  const head = raw.trim().slice(0, 64).toLowerCase();
+  const isHtml = ctype.includes('text/html') || head.startsWith('<!doctype') || head.startsWith('<html');
+  let isJson = ctype.includes('application/json');
+  if (!isJson && !isHtml && (head.startsWith('{') || head.startsWith('['))) {
+    try { JSON.parse(raw); isJson = true; } catch (_) { /* pas du JSON */ }
+  }
+  return { status: res.status, isJson, isHtml };
 }
 
 // signup peut être un objet (1 appel) ou un tableau (wizard multi-étapes, ex. jellyfin).
@@ -753,10 +772,16 @@ async function apiSignup(def: any, mainPort?: number): Promise<void> {
   for (const step of steps) {
     const okCodes: number[] = Array.isArray(step?.okCodes) && step.okCodes.length
       ? step.okCodes : [200, 201, 204];
-    const code = await apiCall(step, def, mainPort);
-    if (!okCodes.includes(code)) {
-      const err: any = new Error(`signup ${step?.path} → HTTP ${code}`);
-      err.httpStatus = code; // permet à apiSignupResilient de distinguer 4xx définitif vs « pas prêt »
+    const r = await apiCall(step, def, mainPort);
+    // Corps HTML = route API pas encore montée (404/200/429 au boot) → PAS un vrai résultat
+    // de création. On lève SANS httpStatus → apiSignupResilient retentera (au lieu de croire
+    // à tort que c'est créé, ou d'abandonner sur un « 404 définitif » qui n'en est pas un).
+    if (r.isHtml) {
+      throw new Error(`signup ${step?.path} → HTML (API REST pas prête)`);
+    }
+    if (!okCodes.includes(r.status)) {
+      const err: any = new Error(`signup ${step?.path} → HTTP ${r.status}`);
+      err.httpStatus = r.status; // 4xx JSON réel → erreur cliente définitive (distinguée du « pas prêt »)
       throw err;
     }
   }
@@ -771,20 +796,33 @@ async function apiSignup(def: any, mainPort?: number): Promise<void> {
 async function apiSignupResilient(def: any, mainPort?: number): Promise<void> {
   const deadline = Date.now() + PROVISION_READY_TIMEOUT_MS;
   let lastErr: any = null;
+  let warnedNotReady = false;
   for (;;) {
-    // Idempotence + sonde de disponibilité : si le login passe, le compte existe → fini.
-    if (def.login) {
-      try { if (await loginVerify(def, mainPort)) return; } catch (_) { /* pas prêt */ }
-    }
-    try {
-      await apiSignup(def, mainPort);
-      return;
-    } catch (e: any) {
-      lastErr = e;
-      const code = e && e.httpStatus;
-      const definitiveClientError =
-        typeof code === 'number' && code >= 400 && code < 500 && code !== 408 && code !== 429;
-      if (definitiveClientError) throw e; // inutile de retenter
+    // 1) Sonder l'état RÉEL via une vraie réponse JSON (loginProbe distingue 'notready' =
+    //    HTML/refus de l'état du compte). Sans login déclaré, on suppose « à créer ».
+    const state = def.login ? await loginProbe(def, mainPort) : 'absent';
+    if (state === 'exists') return; // idempotent : compte déjà présent
+    if (state === 'notready') {
+      // API REST pas encore montée (corps HTML, connexion refusée, rate-limit 429…) → on attend.
+      if (!warnedNotReady) {
+        console.log('[appAccounts] API REST de l\'app pas encore prête, attente de sa disponibilité réelle...');
+        warnedNotReady = true;
+      }
+    } else {
+      // state === 'absent' : API prête ET compte réellement absent → on crée.
+      try {
+        await apiSignup(def, mainPort);
+        // 2) Vérifier que la création a VRAIMENT abouti (jamais se fier à un seul code OK).
+        if (!def.login) return;
+        if ((await loginProbe(def, mainPort)) === 'exists') return;
+        lastErr = new Error('signup a répondu OK mais le login ne passe pas (création non confirmée)');
+      } catch (e: any) {
+        lastErr = e;
+        const code = e && e.httpStatus;
+        const definitiveClientError =
+          typeof code === 'number' && code >= 400 && code < 500 && code !== 408 && code !== 429;
+        if (definitiveClientError) throw e; // 4xx JSON réel (payload/mot de passe) → inutile de retenter
+      }
     }
     if (Date.now() >= deadline) break;
     await sleep(PROVISION_RETRY_DELAY_MS);
@@ -792,20 +830,31 @@ async function apiSignupResilient(def: any, mainPort?: number): Promise<void> {
   throw lastErr || new Error('apiSignup: API de l\'app non prête après attente');
 }
 
-// Vérifie « le compte par défaut s'authentifie-t-il encore ? » via une tentative
-// de login sur l'API de l'app — générique, sans accès DB ni couplage au hash.
-// Adapté aux images sans outils (memos, n8n, jellyfin…). La recette déclare
-// `default.login: { container, url, method?, body, okCodes? }`.
-async function loginVerify(def: any, mainPort?: number): Promise<boolean> {
+// Sonde de login TRI-ÉTAT, robuste au démarrage de l'app (générique, sans accès DB) :
+//   'exists'   = réponse JSON de succès (okCodes) → le compte existe et s'authentifie
+//   'absent'   = réponse JSON d'échec (ex. 401 wrong credentials) → API prête, compte à créer
+//   'notready' = HTML / corps vide / connexion refusée → API REST PAS encore montée
+// Crucial : au boot, n8n (et autres) renvoient des réponses HTTP en text/html (404 route
+// non montée, 429 rate-limit) AVANT que /rest/* réponde vraiment ; se fier au seul code HTTP
+// produit des faux positifs (« login OK » sur du HTML → on croit le compte créé alors que non).
+async function loginProbe(def: any, mainPort?: number): Promise<'exists' | 'absent' | 'notready'> {
   const s = def.login || {};
-  if (!s.path) return false;
+  if (!s.path) return 'notready';
   const okCodes: number[] = Array.isArray(s.okCodes) && s.okCodes.length ? s.okCodes : [200];
   try {
-    const code = await apiCall(s, def, mainPort);
-    return okCodes.includes(code);
+    const r = await apiCall(s, def, mainPort);
+    if (r.isHtml) return 'notready';                 // page HTML → API pas prête
+    if (okCodes.includes(r.status)) return 'exists'; // vrai succès → compte présent
+    if (r.isJson) return 'absent';                   // vrai échec JSON (401…) → API prête, compte absent
+    return 'notready';                               // ni HTML ni JSON (vide) → prudence
   } catch (_) {
-    return false;
+    return 'notready';                               // connexion refusée / timeout
   }
+}
+
+// Compat : « le compte par défaut s'authentifie-t-il ? » — true UNIQUEMENT sur vrai succès JSON.
+async function loginVerify(def: any, mainPort?: number): Promise<boolean> {
+  return (await loginProbe(def, mainPort)) === 'exists';
 }
 
 // Transforme le compte embarqué d'une app bcrypt-sqlite (ex. mealie
@@ -851,7 +900,7 @@ async function bcryptSqliteUpdateAccount(recipe: any, def: any): Promise<void> {
   }
 }
 
-async function provisionDefault(appId: string): Promise<void> {
+async function provisionDefault(appId: string, opts?: { apiOnly?: boolean }): Promise<'created' | 'exists' | void> {
   const info = await getRecipe(appId);
   if (info === null || info.sso) return;
   const recipe = info.recipe;
@@ -860,6 +909,10 @@ async function provisionDefault(appId: string): Promise<void> {
 
   const mode = def.provision || 'shipped';
   if (mode === 'installScript' || mode === 'shipped') return; // compte déjà présent
+  // Auto-réparation (poller temps-réel) : ne traiter QUE le provisioning par API (le seul
+  // sensible au boot de l'API REST). Évite tout docker exec inutile (adapter/sql-update)
+  // quand le heal balaie toutes les apps `running`.
+  if (opts && opts.apiOnly && mode !== 'api') return;
 
   // Idempotent : ne (re)crée que si le compte par défaut est absent.
   // Vérif d'existence : par login (apps sans outils DB) sinon par listing DB.
@@ -876,10 +929,14 @@ async function provisionDefault(appId: string): Promise<void> {
       );
     } catch (_) { /* on tente quand même la création */ }
   }
-  if (exists) return;
+  if (exists) return 'exists';
+
+  console.log(`[appAccounts] provisionDefault(${appId}): compte par défaut absent → création (mode=${mode})...`);
 
   if (mode === 'api') {
-    return apiSignupResilient(def, info.mainPort);
+    await apiSignupResilient(def, info.mainPort);
+    console.log(`[appAccounts] provisionDefault(${appId}): compte par défaut créé et vérifié ✅`);
+    return 'created';
   }
   if (mode === 'sql-update') {
     return bcryptSqliteUpdateAccount(recipe, def);
