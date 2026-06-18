@@ -124,345 +124,6 @@ async function getRecipe(
   };
 }
 
-// ───────────────────────── Stratégie : rails-devise (docuseal) ─────────────
-
-const RAILS_LIST_RUBY =
-  'require "json"; ' +
-  'puts User.all.map { |u| { id: u.id.to_s, email: u.email, ' +
-  'isAdmin: (u.respond_to?(:admin?) ? !!u.admin? : (u.respond_to?(:role) ? u.role.to_s == "admin" : false)) } }.to_json';
-
-const RAILS_RESET_RUBY =
-  'u = User.find(ENV["RESET_ID"]); ' +
-  'u.password = ENV["RESET_PWD"]; ' +
-  'u.password_confirmation = ENV["RESET_PWD"] if u.respond_to?(:password_confirmation=); ' +
-  'u.save!; ' +
-  // Vérification post-reset : le nouveau mot de passe authentifie-t-il réellement ?
-  'puts "VERIFY=" + u.reload.valid_password?(ENV["RESET_PWD"]).to_s';
-
-async function railsList(recipe: any): Promise<Account[]> {
-  const workingDir = recipe.workingDir || '/app';
-  const { stdout, stderr, exitCode } = await dockerExec(
-    recipe.container,
-    ['rails', 'runner', RAILS_LIST_RUBY],
-    { workingDir }
-  );
-  if (exitCode !== 0) {
-    throw new Error(`rails list a échoué (exit ${exitCode}): ${stderr.trim()}`);
-  }
-  return parseAccountsJson(stdout);
-}
-
-async function railsReset(
-  recipe: any,
-  accountId: string,
-  newPassword: string
-): Promise<void> {
-  const workingDir = recipe.workingDir || '/app';
-  const { stdout, stderr, exitCode } = await dockerExec(
-    recipe.container,
-    ['rails', 'runner', RAILS_RESET_RUBY],
-    { workingDir, env: [`RESET_ID=${accountId}`, `RESET_PWD=${newPassword}`] }
-  );
-  if (exitCode !== 0) {
-    throw new Error(`rails reset a échoué (exit ${exitCode}): ${stderr.trim()}`);
-  }
-  if (!/VERIFY=true/.test(stdout)) {
-    throw new Error(VERIFY_FAIL_MSG);
-  }
-}
-
-// ──────────────────── Stratégie : bcrypt-sqlite (mealie) ───────────────────
-// Pas de binaire sqlite3 dans certaines images (ex. mealie) : on utilise
-// python3 (présent dans les apps Python) avec des requêtes paramétrées.
-
-function pyListScript(recipe: any): string {
-  const cols = recipe.columns || {};
-  const idC = cols.id || 'id';
-  const emailC = cols.email || 'email';
-  const userC = cols.username || 'username';
-  const adminC = cols.admin || null;
-  const table = recipe.table || 'users';
-  const adminSel = adminC ? `, "${adminC}"` : '';
-  return (
-    'import os,sqlite3,json\n' +
-    `c=sqlite3.connect(os.environ["DB_PATH"])\n` +
-    `rows=c.execute('SELECT "${idC}","${emailC}","${userC}"${adminSel} FROM "${table}"').fetchall()\n` +
-    'out=[]\n' +
-    'for r in rows:\n' +
-    '    out.append({"id":str(r[0]),"email":r[1],"username":r[2],"isAdmin":bool(r[3]) if len(r)>3 else False})\n' +
-    'print(json.dumps(out))'
-  );
-}
-
-function pyResetScript(recipe: any): string {
-  const cols = recipe.columns || {};
-  const idC = cols.id || 'id';
-  const pwdC = cols.password || 'password';
-  const table = recipe.table || 'users';
-  // clearOnReset : colonnes à remettre à zéro (ex. déverrouillage mealie)
-  const clear = recipe.clearOnReset || {};
-  let clearSql = '';
-  const clearVals: string[] = [];
-  for (const [col, val] of Object.entries(clear)) {
-    clearSql += `, "${col}"=?`;
-    clearVals.push(val === null ? 'None' : JSON.stringify(val));
-  }
-  const clearPy = clearVals.length
-    ? `,${clearVals.map((v) => (v === 'None' ? 'None' : v)).join(',')}`
-    : '';
-  return (
-    'import os,sqlite3\n' +
-    `c=sqlite3.connect(os.environ["DB_PATH"])\n` +
-    `c.execute('UPDATE "${table}" SET "${pwdC}"=?${clearSql} WHERE "${idC}"=?',` +
-    `(os.environ["NEW_HASH"]${clearPy},os.environ["ACCOUNT_ID"]))\n` +
-    'c.commit()\n' +
-    // Relit le hash réellement stocké pour vérification post-reset côté backend
-    `r=c.execute('SELECT "${pwdC}" FROM "${table}" WHERE "${idC}"=?',(os.environ["ACCOUNT_ID"],)).fetchone()\n` +
-    'print("STORED="+(r[0] if r and r[0] else ""))'
-  );
-}
-
-async function bcryptSqliteList(recipe: any): Promise<Account[]> {
-  const { stdout, stderr, exitCode } = await dockerExec(
-    recipe.container,
-    ['python3', '-c', pyListScript(recipe)],
-    { env: [`DB_PATH=${recipe.dbPath}`] }
-  );
-  if (exitCode !== 0) {
-    throw new Error(`sqlite list a échoué (exit ${exitCode}): ${stderr.trim()}`);
-  }
-  return parseAccountsJson(stdout);
-}
-
-async function bcryptSqliteReset(
-  recipe: any,
-  accountId: string,
-  newPassword: string
-): Promise<void> {
-  const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-  const { stdout, stderr, exitCode } = await dockerExec(
-    recipe.container,
-    ['python3', '-c', pyResetScript(recipe)],
-    {
-      env: [
-        `DB_PATH=${recipe.dbPath}`,
-        `ACCOUNT_ID=${accountId}`,
-        `NEW_HASH=${hash}`,
-      ],
-    }
-  );
-  if (exitCode !== 0 || !stdout.includes('STORED=')) {
-    throw new Error(`sqlite reset a échoué (exit ${exitCode}): ${stderr.trim()}`);
-  }
-  // Vérification post-reset : le hash stocké correspond-il au mot de passe ?
-  const stored = (stdout.split('STORED=')[1] || '').trim();
-  const ok = !!stored && (await bcrypt.compare(newPassword, stored));
-  if (!ok) {
-    throw new Error(VERIFY_FAIL_MSG);
-  }
-}
-
-// ───────────────────── Stratégie : affine-argon2 (affine) ──────────────────
-// Liste via lecture postgres (read-only). Reset : AFFiNE hache les mots de
-// passe en argon2id SANS secret/pepper (CryptoHelper.verifyPassword = argon2.verify
-// sans clé). On génère donc le hash DANS le conteneur affine (sa propre lib
-// @node-rs/argon2, paramètres identiques) puis on l'écrit directement en base.
-// Aucun identifiant admin requis.
-
-async function affineList(recipe: any): Promise<Account[]> {
-  const dbUser = (recipe.db && recipe.db.user) || 'affine';
-  const dbName = (recipe.db && recipe.db.name) || 'affine';
-  const { stdout, stderr, exitCode } = await dockerExec(recipe.dbContainer, [
-    'psql', '-U', dbUser, '-d', dbName, '-t', '-A', '-F', '|',
-    '-c', 'SELECT id, email, name FROM users',
-  ]);
-  if (exitCode !== 0) {
-    throw new Error(`affine list a échoué (exit ${exitCode}): ${stderr.trim()}`);
-  }
-  return stdout
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [id, email, name] = line.split('|');
-      return { id, email, username: name } as Account;
-    });
-}
-
-// Hash argon2 valide : pas de quote simple ni d'antislash (alphabet $ , = + / b64).
-const ARGON2_HASH_RE = /^\$argon2(id|i|d)\$[^']+$/;
-const AFFINE_UUID_RE = /^[A-Za-z0-9-]+$/;
-
-async function affineReset(
-  recipe: any,
-  accountId: string,
-  newPassword: string
-): Promise<void> {
-  const appContainer = recipe.appContainer || 'app-affine-web';
-  const dbUser = (recipe.db && recipe.db.user) || 'affine';
-  const dbName = (recipe.db && recipe.db.name) || 'affine';
-
-  if (!AFFINE_UUID_RE.test(accountId)) {
-    throw new Error('Identifiant de compte AFFiNE invalide');
-  }
-
-  // 1. Génère le hash argon2 avec la lib d'AFFiNE (mot de passe passé par env,
-  //    jamais sur la ligne de commande). Sortie = le hash encodé, rien d'autre.
-  const hashScript =
-    'const a=require("@node-rs/argon2");' +
-    'process.stdout.write(a.hashSync(process.env.RPWD));';
-  const hres = await dockerExec(appContainer, ['node', '-e', hashScript], {
-    env: [`RPWD=${newPassword}`],
-  });
-  const hash = hres.stdout.trim();
-  if (hres.exitCode !== 0 || !ARGON2_HASH_RE.test(hash)) {
-    throw new Error(
-      `affine: génération du hash argon2 échouée (exit ${hres.exitCode})`
-    );
-  }
-
-  // 2. Écrit le hash en base. Pas de shell (argv direct) → le `$` du hash n'est
-  //    pas interprété. Le hash et l'UUID ne contiennent jamais de quote simple,
-  //    donc le quoting SQL est sûr (et le mot de passe en clair n'apparaît pas).
-  const sql = `UPDATE users SET password='${hash}' WHERE id='${accountId}'`;
-  const ures = await dockerExec(recipe.dbContainer, [
-    'psql', '-U', dbUser, '-d', dbName, '-c', sql,
-  ]);
-  if (ures.exitCode !== 0 || !/UPDATE 1/.test(ures.stdout)) {
-    throw new Error(
-      `affine reset a échoué (exit ${ures.exitCode}): ${(ures.stderr || ures.stdout).trim().slice(0, 200)}`
-    );
-  }
-
-  // 3. Vérification post-reset : relit le hash stocké et le vérifie avec la
-  //    lib argon2 d'AFFiNE (la même que celle utilisée au login).
-  const rres = await dockerExec(recipe.dbContainer, [
-    'psql', '-U', dbUser, '-d', dbName, '-t', '-A', '-c',
-    `SELECT password FROM users WHERE id='${accountId}'`,
-  ]);
-  const storedHash = rres.stdout.trim();
-  if (rres.exitCode !== 0 || !ARGON2_HASH_RE.test(storedHash)) {
-    throw new Error(VERIFY_FAIL_MSG);
-  }
-  const vScript =
-    'const a=require("@node-rs/argon2");' +
-    'process.stdout.write(a.verifySync(process.env.RHASH, process.env.RPWD) ? "OK" : "NO");';
-  const vres = await dockerExec(appContainer, ['node', '-e', vScript], {
-    env: [`RHASH=${storedHash}`, `RPWD=${newPassword}`],
-  });
-  if (vres.exitCode !== 0 || !/OK/.test(vres.stdout)) {
-    throw new Error(VERIFY_FAIL_MSG);
-  }
-}
-
-// ───────────────── Stratégie : bcrypt-postgres (Twenty CRM) ─────────────────
-// Comptes stockés dans Postgres avec un hash bcrypt (ex. Twenty : table
-// core."user", colonne "passwordHash"). On liste/lit/écrit via psql DANS le
-// conteneur de la base ; le hash bcrypt est généré côté backend (comme
-// bcrypt-sqlite). Le mot de passe ne transite jamais par la ligne de commande.
-// Le hash bcrypt et l'UUID écrits en base ne contiennent pas de quote simple
-// (alphabet $ . / b64 / tirets) → interpolation SQL sûre (même garantie qu'affine).
-
-const PG_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;            // schéma / table / colonne
-const PG_ACCOUNT_ID_RE = /^[A-Za-z0-9-]+$/;                // identifiant de compte (UUID)
-const BCRYPT_HASH_RE = /^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$/;
-
-// Renvoie `"schema"."table"` (idents validés) — `user` est un mot réservé → quoté.
-function pgTableRef(recipe: any): string {
-  const schema = recipe.schema || 'public';
-  const table = recipe.table || 'users';
-  if (!PG_IDENT_RE.test(schema) || !PG_IDENT_RE.test(table)) {
-    throw new Error('bcrypt-postgres: schéma ou table invalide');
-  }
-  return `"${schema}"."${table}"`;
-}
-
-// Noms de colonnes (validés). `password` = colonne du hash. Libellé du compte :
-// `username` si fourni, sinon concaténation firstName/lastName si fournis.
-function pgColumns(recipe: any): { id: string; email: string; password: string; first: string | null; last: string | null; username: string | null } {
-  const cols = recipe.columns || {};
-  const out = {
-    id: cols.id || 'id',
-    email: cols.email || 'email',
-    password: cols.password || 'password_hash',
-    first: cols.firstName || null,
-    last: cols.lastName || null,
-    username: cols.username || null,
-  };
-  for (const v of [out.id, out.email, out.password, out.first, out.last, out.username]) {
-    if (v && !PG_IDENT_RE.test(v)) throw new Error('bcrypt-postgres: nom de colonne invalide');  }
-  return out;
-}
-
-// argv psql en mode lecture (tuples seuls, séparateur `|`).
-function pgSelectArgv(recipe: any, sql: string): string[] {
-  const dbUser = (recipe.db && recipe.db.user) || 'postgres';
-  const dbName = (recipe.db && recipe.db.name) || 'postgres';
-  return ['psql', '-U', dbUser, '-d', dbName, '-t', '-A', '-F', '|', '-c', sql];
-}
-
-// argv psql en mode écriture (on lit le tag de commande « UPDATE 1 » sur stdout).
-function pgExecArgv(recipe: any, sql: string): string[] {
-  const dbUser = (recipe.db && recipe.db.user) || 'postgres';
-  const dbName = (recipe.db && recipe.db.name) || 'postgres';
-  return ['psql', '-U', dbUser, '-d', dbName, '-c', sql];
-}
-
-async function bcryptPostgresList(recipe: any): Promise<Account[]> {
-  const c = pgColumns(recipe);
-  const nameParts: string[] = [];
-  if (c.first) nameParts.push(`coalesce("${c.first}",'')`);
-  if (c.last) nameParts.push(`coalesce("${c.last}",'')`);
-  const nameSel = c.username
-    ? `"${c.username}"`
-    : nameParts.length
-      ? `trim(${nameParts.join(" || ' ' || ")})`
-      : `''`;
-  const sql = `SELECT "${c.id}", "${c.email}", ${nameSel} FROM ${pgTableRef(recipe)} ORDER BY "${c.email}"`;
-  const { stdout, stderr, exitCode } = await dockerExec(recipe.dbContainer, pgSelectArgv(recipe, sql));
-  if (exitCode !== 0) {
-    throw new Error(`bcrypt-postgres list a échoué (exit ${exitCode}): ${stderr.trim()}`);
-  }
-  return stdout
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [id, email, name] = line.split('|');
-      return { id, email: email || undefined, username: (name || '').trim() || undefined } as Account;
-    });
-}
-
-async function bcryptPostgresReadHash(recipe: any, id: string): Promise<string> {
-  if (!PG_ACCOUNT_ID_RE.test(id)) return '';
-  const c = pgColumns(recipe);
-  const sql = `SELECT "${c.password}" FROM ${pgTableRef(recipe)} WHERE "${c.id}"='${id}'`;
-  const { stdout } = await dockerExec(recipe.dbContainer, pgSelectArgv(recipe, sql));
-  return stdout.trim();
-}
-
-async function bcryptPostgresReset(recipe: any, accountId: string, newPassword: string): Promise<void> {
-  if (!PG_ACCOUNT_ID_RE.test(accountId)) {
-    throw new Error('bcrypt-postgres: identifiant de compte invalide');
-  }
-  const c = pgColumns(recipe);
-  const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-  if (!BCRYPT_HASH_RE.test(hash)) {
-    throw new Error('bcrypt-postgres: hash bcrypt généré invalide');
-  }
-  const sql = `UPDATE ${pgTableRef(recipe)} SET "${c.password}"='${hash}' WHERE "${c.id}"='${accountId}'`;
-  const { stdout, stderr, exitCode } = await dockerExec(recipe.dbContainer, pgExecArgv(recipe, sql));
-  if (exitCode !== 0 || !/UPDATE 1/.test(stdout)) {
-    throw new Error(`bcrypt-postgres reset a échoué (exit ${exitCode}): ${(stderr || stdout).trim().slice(0, 200)}`);
-  }
-  // Vérification post-reset : relit le hash stocké et le compare au mot de passe.
-  const stored = await bcryptPostgresReadHash(recipe, accountId);
-  const ok = !!stored && (await bcrypt.compare(newPassword, stored));
-  if (!ok) {
-    throw new Error(VERIFY_FAIL_MSG);
-  }
-}
-
 // ─────────────────── Stratégie : hermes-webui (mot de passe unique) ─────────
 // Hermes WebUI s'authentifie par UN mot de passe (pas de multi-comptes), stocké
 // hashé dans settings.json (HERMES_WEBUI_STATE_DIR). On le (ré)écrit via la
@@ -585,6 +246,141 @@ async function hermesDashboardReset(
   }
 }
 
+// ─────────────── Stratégie générique : container-exec ──────────────────────
+// La logique de gestion des comptes vit DANS l'app : un script « fiche »
+// (ex. ryvie-accounts.mjs / ryvie-accounts.py) embarqué avec l'app, écrit dans
+// le langage de l'app et exécuté DANS son propre conteneur. Le core ne connaît
+// ni le schéma ni le format de hash : il lance la fiche et lit son résultat.
+// La fiche suit une convention de sous-commandes :
+//   <runtime> <script> list    → stdout = JSON [{id,email,username,isAdmin}]
+//   <runtime> <script> reset   → env RESET_ID/RESET_PWD ; stdout contient `expect` ("OK")
+//   <runtime> <script> verify  → env RESET_ID/RESET_PWD ; stdout contient "OK" si le mdp matche
+//
+// SÉCURITÉ : la fiche ne s'exécute QUE dans un conteneur appartenant à l'app
+// (préfixe `app-<appId>`), jamais dans le core ni avec le socket Docker. Une app
+// peut déjà tout faire dans son propre conteneur → aucun privilège ajouté.
+
+// Empêche une recette de viser le conteneur d'une AUTRE app ou un service système.
+function assertContainerBelongsToApp(container: string, appId: string): void {
+  const base = `app-${appId}`;
+  if (!container || (container !== base && !container.startsWith(base + '-'))) {
+    throw new Error(
+      `container-exec: le conteneur « ${container} » n'appartient pas à l'app « ${appId} »`
+    );
+  }
+}
+
+// Construit l'argv [...préfixe, script, subcommand]. Le préfixe est soit
+// `recipe.exec` (tableau, ex. ["rails","runner"]) soit `[recipe.runtime||'node']`
+// (ex. "python3", "node"). Tous les tokens sont validés (pas d'espaces ni de
+// métacaractères) — ils proviennent de la recette de l'app.
+const CE_TOKEN_RE = /^[A-Za-z0-9_./-]+$/;
+function containerExecArgv(recipe: any, sub: string): string[] {
+  const script = recipe.script;
+  if (!script) throw new Error('container-exec: `script` requis dans la recette');
+  const prefix: string[] = Array.isArray(recipe.exec) && recipe.exec.length
+    ? recipe.exec.map(String)
+    : [recipe.runtime || 'node'];
+  for (const tok of [...prefix, script]) {
+    if (!CE_TOKEN_RE.test(tok)) {
+      throw new Error(`container-exec: token de commande invalide: ${tok}`);
+    }
+  }
+  return [...prefix, script, sub];
+}
+
+// Env statique déclaré par la recette (ex. DB_PATH) forwardé à la fiche.
+function containerExecStaticEnv(recipe: any): string[] {
+  const env = recipe.env || {};
+  return Object.entries(env).map(([k, v]) => `${k}=${v == null ? '' : String(v)}`);
+}
+
+async function containerExecList(recipe: any, appId: string): Promise<Account[]> {
+  assertContainerBelongsToApp(recipe.container, appId);
+  const { stdout, stderr, exitCode } = await dockerExec(
+    recipe.container,
+    containerExecArgv(recipe, 'list'),
+    { env: containerExecStaticEnv(recipe), workingDir: recipe.workingDir, user: recipe.user }
+  );
+  if (exitCode !== 0) {
+    throw new Error(`container-exec list a échoué (exit ${exitCode}): ${stderr.trim().slice(0, 200)}`);
+  }
+  return parseAccountsJson(stdout);
+}
+
+async function containerExecReset(
+  recipe: any, appId: string, accountId: string, newPassword: string
+): Promise<void> {
+  assertContainerBelongsToApp(recipe.container, appId);
+  const expect = (recipe.reset && recipe.reset.expect) || 'OK';
+  const { stdout, stderr, exitCode } = await dockerExec(
+    recipe.container,
+    containerExecArgv(recipe, 'reset'),
+    {
+      env: [...containerExecStaticEnv(recipe), `RESET_ID=${accountId}`, `RESET_PWD=${newPassword}`],
+      workingDir: recipe.workingDir,
+      user: recipe.user,
+    }
+  );
+  // exit≠0 → la fiche a planté ; stdout sans `expect` → reset non confirmé par la fiche.
+  // (stderr peut contenir une trace, jamais le mot de passe — passé par env.)
+  if (exitCode !== 0) {
+    throw new Error(`container-exec reset a échoué (exit ${exitCode}): ${stderr.trim().slice(0, 200)}`);
+  }
+  if (!stdout.includes(expect)) {
+    throw new Error(VERIFY_FAIL_MSG);
+  }
+}
+
+// Vérifie un mot de passe via la sous-commande `verify` de la fiche (utilisé pour
+// le statut « compte par défaut inchangé ? » quand l'app n'a pas d'API de login).
+async function containerExecVerify(
+  recipe: any, appId: string, accountId: string, password: string
+): Promise<boolean> {
+  assertContainerBelongsToApp(recipe.container, appId);
+  try {
+    const { stdout } = await dockerExec(
+      recipe.container,
+      containerExecArgv(recipe, 'verify'),
+      {
+        env: [...containerExecStaticEnv(recipe), `RESET_ID=${accountId}`, `RESET_PWD=${password}`],
+        workingDir: recipe.workingDir,
+        user: recipe.user,
+      }
+    );
+    return /\bOK\b/.test(stdout);
+  } catch (_) {
+    return false;
+  }
+}
+
+// Crée (idempotent) le compte par défaut via la sous-commande `provision` de la
+// fiche. Utilisé par provisionDefault pour les apps container-exec dont le compte
+// par défaut n'est pas créé par leur install.sh (ex. docuseal). La fiche reçoit
+// DEFAULT_EMAIL/DEFAULT_USER/DEFAULT_PWD et doit imprimer "DONE".
+async function containerExecProvision(recipe: any, appId: string, def: any): Promise<void> {
+  assertContainerBelongsToApp(recipe.container, appId);
+  const { stdout, stderr, exitCode } = await dockerExec(
+    recipe.container,
+    containerExecArgv(recipe, 'provision'),
+    {
+      env: [
+        ...containerExecStaticEnv(recipe),
+        `DEFAULT_EMAIL=${def.email || ''}`,
+        `DEFAULT_USER=${def.username || ''}`,
+        `DEFAULT_PWD=${def.password || ''}`,
+      ],
+      workingDir: recipe.workingDir,
+      user: recipe.user,
+    }
+  );
+  if (exitCode !== 0 || !/\bDONE\b/.test(stdout)) {
+    throw new Error(
+      `container-exec provision échoué (exit ${exitCode}): ${(stderr || stdout).trim().slice(0, 200)}`
+    );
+  }
+}
+
 // ───────────────────────────── Helpers ────────────────────────────────────
 
 function parseAccountsJson(stdout: string): Account[] {
@@ -608,16 +404,10 @@ function minPasswordOk(pwd: string): boolean {
 }
 
 // Liste les comptes selon la stratégie (sans la logique supported/reason).
-async function listAccountsByRecipe(recipe: any): Promise<Account[]> {
+async function listAccountsByRecipe(recipe: any, appId: string): Promise<Account[]> {
   switch (recipe.strategy) {
-    case 'rails-devise':
-      return railsList(recipe);
-    case 'bcrypt-sqlite':
-      return bcryptSqliteList(recipe);
-    case 'affine-argon2':
-      return affineList(recipe);
-    case 'bcrypt-postgres':
-      return bcryptPostgresList(recipe);
+    case 'container-exec':
+      return containerExecList(recipe, appId);
     case 'hermes-webui':
     case 'hermes-dashboard':
       // Auth par MOT DE PASSE unique (pas de multi-utilisateurs) → un seul « compte ».
@@ -630,64 +420,10 @@ async function listAccountsByRecipe(recipe: any): Promise<Account[]> {
 // ─────────────── Vérification d'un mot de passe (sans modifier) ─────────────
 // Réutilisé par la détection « compte par défaut encore inchangé ? ».
 
-async function bcryptSqliteReadHash(recipe: any, id: string): Promise<string> {
-  const cols = recipe.columns || {};
-  const idC = cols.id || 'id';
-  const pwdC = cols.password || 'password';
-  const table = recipe.table || 'users';
-  const py =
-    'import os,sqlite3\n' +
-    'c=sqlite3.connect(os.environ["DB_PATH"])\n' +
-    `r=c.execute('SELECT "${pwdC}" FROM "${table}" WHERE "${idC}"=?',(os.environ["ID"],)).fetchone()\n` +
-    'print("HASH="+(r[0] if r and r[0] else ""))';
-  const { stdout } = await dockerExec(recipe.container, ['python3', '-c', py], {
-    env: [`DB_PATH=${recipe.dbPath}`, `ID=${id}`],
-  });
-  return (stdout.split('HASH=')[1] || '').trim();
-}
-
-async function affineReadHash(recipe: any, id: string): Promise<string> {
-  const dbUser = (recipe.db && recipe.db.user) || 'affine';
-  const dbName = (recipe.db && recipe.db.name) || 'affine';
-  if (!AFFINE_UUID_RE.test(id)) return '';
-  const { stdout } = await dockerExec(recipe.dbContainer, [
-    'psql', '-U', dbUser, '-d', dbName, '-t', '-A', '-c',
-    `SELECT password FROM users WHERE id='${id}'`,
-  ]);
-  return stdout.trim();
-}
-
-async function verifyAccountPassword(recipe: any, account: Account, password: string): Promise<boolean> {
+async function verifyAccountPassword(recipe: any, account: Account, password: string, appId: string): Promise<boolean> {
   switch (recipe.strategy) {
-    case 'rails-devise': {
-      const ruby =
-        'u = (ENV["VID"].empty? ? nil : User.find_by(id: ENV["VID"])) || User.find_by(email: ENV["VEMAIL"]); ' +
-        'puts "V=" + (u ? u.valid_password?(ENV["VPWD"]).to_s : "false")';
-      const { stdout } = await dockerExec(recipe.container, ['rails', 'runner', ruby], {
-        workingDir: recipe.workingDir || '/app',
-        env: [`VID=${account.id || ''}`, `VEMAIL=${account.email || ''}`, `VPWD=${password}`],
-      });
-      return /V=true/.test(stdout);
-    }
-    case 'bcrypt-sqlite': {
-      const hash = await bcryptSqliteReadHash(recipe, account.id);
-      return !!hash && (await bcrypt.compare(password, hash));
-    }
-    case 'bcrypt-postgres': {
-      const hash = await bcryptPostgresReadHash(recipe, account.id);
-      return !!hash && (await bcrypt.compare(password, hash));
-    }
-    case 'affine-argon2': {
-      const hash = await affineReadHash(recipe, account.id);
-      if (!hash || !ARGON2_HASH_RE.test(hash)) return false;
-      const vScript =
-        'const a=require("@node-rs/argon2");' +
-        'process.stdout.write(a.verifySync(process.env.RHASH, process.env.RPWD) ? "OK" : "NO");';
-      const { stdout } = await dockerExec(recipe.appContainer || 'app-affine-web', ['node', '-e', vScript], {
-        env: [`RHASH=${hash}`, `RPWD=${password}`],
-      });
-      return /OK/.test(stdout);
-    }
+    case 'container-exec':
+      return containerExecVerify(recipe, appId, account.id, password);
     default:
       return false;
   }
@@ -696,29 +432,6 @@ async function verifyAccountPassword(recipe: any, account: Account, password: st
 // ─────────────────── Provisioning du compte par défaut ─────────────────────
 // Idempotent : crée le compte `default.email` s'il n'existe pas encore, selon
 // `default.provision` (installScript/shipped = déjà présent ; adapter = création).
-
-async function railsCreateDefault(recipe: any, def: any): Promise<void> {
-  const ruby =
-    'email=ENV["EMAIL"]; pwd=ENV["PWD"]; uname=ENV["UNAME"]; ' +
-    'if User.find_by(email: email).nil?; ' +
-    '  base=User.first; ' +
-    '  acc=base ? base.account : (defined?(Account) ? Account.create!(name: "Ryvie") : nil); ' +
-    '  u=User.new(email: email); ' +
-    '  u.first_name=uname if u.respond_to?(:first_name=); ' +
-    '  u.last_name="Ryvie" if u.respond_to?(:last_name=); ' +
-    '  u.role=(base ? base.role : "admin") if u.respond_to?(:role=); ' +
-    '  (u.account=acc if acc) if u.respond_to?(:account=); ' +
-    '  u.password=pwd; u.password_confirmation=pwd if u.respond_to?(:password_confirmation=); ' +
-    '  u.save!; ' +
-    'end; puts "DONE"';
-  const { stdout, stderr, exitCode } = await dockerExec(recipe.container, ['rails', 'runner', ruby], {
-    workingDir: recipe.workingDir || '/app',
-    env: [`EMAIL=${def.email}`, `PWD=${def.password}`, `UNAME=${def.username || 'ryvie'}`],
-  });
-  if (exitCode !== 0 || !/DONE/.test(stdout)) {
-    throw new Error(`rails create default a échoué: ${(stderr || stdout).trim().slice(0, 200)}`);
-  }
-}
 
 // Appelle une API de l'app DEPUIS le backend, via son port publié sur l'hôte
 // (manifest.mainPort) — aucune dépendance aux outils du conteneur (curl/sh).
@@ -921,7 +634,7 @@ async function provisionDefault(appId: string, opts?: { apiOnly?: boolean }): Pr
     try { exists = await loginVerify(def, info.mainPort); } catch (_) { /* pas prêt */ }
   } else {
     try {
-      const accounts = await listAccountsByRecipe(recipe);
+      const accounts = await listAccountsByRecipe(recipe, appId);
       exists = accounts.some(
         (a) =>
           (a.email || '').toLowerCase() === def.email.toLowerCase() ||
@@ -943,8 +656,8 @@ async function provisionDefault(appId: string, opts?: { apiOnly?: boolean }): Pr
   }
   if (mode === 'adapter') {
     switch (recipe.strategy) {
-      case 'rails-devise':
-        return railsCreateDefault(recipe, def);
+      case 'container-exec':
+        return containerExecProvision(recipe, appId, def);
       default:
         console.warn(
           `[appAccounts] provisionDefault: création non implémentée pour la stratégie ${recipe.strategy} (${appId})`
@@ -992,7 +705,7 @@ async function getDefaultStatus(appId: string): Promise<DefaultStatus> {
 
   let accounts: Account[] = [];
   try {
-    accounts = await listAccountsByRecipe(recipe);
+    accounts = await listAccountsByRecipe(recipe, appId);
   } catch (_) {
     // App pas prête / erreur de lecture → on n'affiche rien (prudence).
     return { hasDefault: true, changed: true };
@@ -1009,7 +722,7 @@ async function getDefaultStatus(appId: string): Promise<DefaultStatus> {
 
   let stillDefault = false;
   try {
-    stillDefault = await verifyAccountPassword(recipe, acc, def.password);
+    stillDefault = await verifyAccountPassword(recipe, acc, def.password, appId);
   } catch (_) {
     stillDefault = false;
   }
@@ -1048,15 +761,12 @@ async function listAccounts(appId: string): Promise<ListResult> {
   }
 
   switch (recipe.strategy) {
-    case 'rails-devise':
-    case 'bcrypt-sqlite':
-    case 'affine-argon2':
-    case 'bcrypt-postgres':
+    case 'container-exec':
     case 'hermes-webui':
     case 'hermes-dashboard':
       // restartsOnReset : prévient l'UI qu'une réinitialisation redémarre l'app
       // (ex. Hermes, dont le hash est caché en mémoire). Déclaré dans le manifeste.
-      return { supported: true, accounts: await listAccountsByRecipe(recipe), restartsOnReset: !!recipe.resetRestarts };
+      return { supported: true, accounts: await listAccountsByRecipe(recipe, appId), restartsOnReset: !!recipe.resetRestarts };
     case 'unsupported':
       return { supported: false, reason: recipe.reason || 'Réinitialisation non supportée.', accounts: [] };
     default: {
@@ -1097,14 +807,8 @@ async function resetPassword(appId: string, accountId: string, newPassword: stri
   }
 
   switch (recipe.strategy) {
-    case 'rails-devise':
-      return railsReset(recipe, accountId, newPassword);
-    case 'bcrypt-sqlite':
-      return bcryptSqliteReset(recipe, accountId, newPassword);
-    case 'affine-argon2':
-      return affineReset(recipe, accountId, newPassword);
-    case 'bcrypt-postgres':
-      return bcryptPostgresReset(recipe, accountId, newPassword);
+    case 'container-exec':
+      return containerExecReset(recipe, appId, accountId, newPassword);
     case 'hermes-webui':
       return hermesWebuiReset(recipe, accountId, newPassword);
     case 'hermes-dashboard':
