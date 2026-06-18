@@ -186,7 +186,7 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
   const test = async () => {
     setTesting(true);
     try {
-      const res = await axios.post(`${serverUrl}/api/ai/test`, { model }, { timeout: 60000, _noAuthRedirect: true } as any);
+      const res = await axios.post(`${serverUrl}/api/ai/test`, { provider, model }, { timeout: 60000, _noAuthRedirect: true } as any);
       const tested = res.data?.model ? ` (${res.data.model})` : '';
       if (res.data?.ok) {
         // On ne montre PAS la réponse du modèle (variable, ex. « pong ») : seul

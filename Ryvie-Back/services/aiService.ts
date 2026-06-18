@@ -158,7 +158,9 @@ function buildConfigYaml(cfg: any): string {
   const p = PROVIDERS[cfg.provider];
   const base = cfg.baseUrl || providerDefaultBaseUrl(cfg.provider);
   const paramsBlock = (m: string): string => {
-    const lines = [`      model: ${p.prefix}/${m}`];
+    // `*` en début de scalaire = alias YAML → on quote la valeur passthrough.
+    const target = m === '*' ? `"${p.prefix}/*"` : `${p.prefix}/${m}`;
+    const lines = [`      model: ${target}`];
     if (p.needsKey) lines.push('      api_key: os.environ/PROVIDER_API_KEY');
     // Claude CLI : le shim Ryvie-Back valide la master key → on la passe comme api_key.
     else if (cfg.provider === 'claude-cli') lines.push('      api_key: os.environ/LITELLM_MASTER_KEY');
@@ -170,7 +172,9 @@ function buildConfigYaml(cfg: any): string {
   const addEntry = (name: string, target: string) => {
     if (seen.has(name)) return;
     seen.add(name);
-    entries.push(`  - model_name: ${name}\n    litellm_params:\n${paramsBlock(target)}`);
+    // Idem : `*` doit être quoté en YAML (sinon interprété comme alias).
+    const yamlName = name === '*' ? '"*"' : name;
+    entries.push(`  - model_name: ${yamlName}\n    litellm_params:\n${paramsBlock(target)}`);
   };
 
   // ⭐ Alias STABLE que les apps utilisent (RYVIE_MODEL_ALIAS) : il pointe toujours
@@ -201,6 +205,15 @@ function buildConfigYaml(cfg: any): string {
       addEntry(alias, cfg.model);
     }
   }
+
+  // Catch-all : route TOUT autre nom de modèle vers le fournisseur courant en
+  // passthrough (`<prefix>/*`). Indispensable pour tester un modèle précis (ex.
+  // « sonnet ») avant de l'enregistrer, et pour qu'une app puisse demander un
+  // modèle brut. Les entrées explicites ci-dessus restent prioritaires (LiteLLM
+  // ne retombe sur le wildcard que pour un nom non listé). Sans clé (claude-cli),
+  // c'est le shim Ryvie-Back qui reçoit le vrai nom et le passe à `claude --model`.
+  addEntry('*', '*');
+
   return [
     '# Généré par Ryvie — LiteLLM. Ne pas éditer à la main.',
     'model_list:',
@@ -717,12 +730,40 @@ async function listProviderModels(input: any = {}): Promise<any> {
  */
 async function testConnection(input: any = {}): Promise<any> {
   const cfg = loadConfig();
-  if (!cfg.provider) return { ok: false, error: 'Aucun fournisseur configuré' };
+  // Fournisseur à tester : celui SÉLECTIONNÉ dans le formulaire (input.provider)
+  // sinon l'enregistré. Permet de tester avant d'avoir cliqué « Enregistrer ».
+  const provider = (input && input.provider && String(input.provider).trim()) || cfg.provider;
+  if (!provider) return { ok: false, error: 'Aucun fournisseur configuré' };
   const masterKey = getMasterKey(cfg);
   // Modèle à tester : celui passé par le formulaire (sélection courante) sinon
-  // celui enregistré — pour tester EXACTEMENT ce que l'utilisateur a choisi,
-  // même avant d'avoir cliqué « Enregistrer » (LiteLLM route via `*`).
+  // celui enregistré.
   const testModel = (input && input.model && String(input.model).trim()) || cfg.model || 'gpt-4o-mini';
+
+  // Claude CLI : on teste DIRECTEMENT le shim local (relais vers le binaire `claude`),
+  // SANS passer par la passerelle LiteLLM. Raison : la passerelle reflète le fournisseur
+  // ENREGISTRÉ (souvent un autre, ex. Gemini) ; la router vers Claude CLI exigerait de
+  // l'enregistrer d'abord, ce qui basculerait toutes les apps connectées. Le test reste
+  // ainsi non destructif et valide réellement ce que l'utilisateur vient de sélectionner.
+  if (provider === 'claude-cli') {
+    const axios = require('axios');
+    const port = process.env.PORT || 3002;
+    try {
+      const res = await axios.post(
+        `http://127.0.0.1:${port}/api/ai/cli/v1/chat/completions`,
+        { model: testModel, messages: [{ role: 'user', content: 'ping' }], max_tokens: 5 },
+        { timeout: 60000, headers: { Authorization: `Bearer ${masterKey}`, 'Content-Type': 'application/json' }, validateStatus: () => true }
+      );
+      if (res.status === 200) {
+        const reply = res.data?.choices?.[0]?.message?.content || '';
+        return { ok: true, model: testModel, reply: String(reply).slice(0, 200) };
+      }
+      let msg = res.data?.error?.message || res.data?.error || `HTTP ${res.status}`;
+      if (typeof msg === 'object') msg = JSON.stringify(msg);
+      return { ok: false, status: res.status, model: testModel, error: String(msg).slice(0, 400) };
+    } catch (err: any) {
+      return { ok: false, model: testModel, error: `Claude CLI injoignable: ${err.message}` };
+    }
+  }
 
   // S'assurer que LiteLLM tourne (au cas où il aurait été arrêté).
   if (!litellm.isRunning()) {
