@@ -72,7 +72,7 @@
       "source_file": "Ryvie-Back/config/paths.ts",
       "source_location": "L1",
       "id": "config_paths",
-      "community": 42,
+      "community": 86,
       "norm_label": "paths.ts"
     },
     {
@@ -81,7 +81,7 @@
       "source_file": "Ryvie-Back/config/paths.ts",
       "source_location": "L3",
       "id": "config_paths_path",
-      "community": 42,
+      "community": 86,
       "norm_label": "path"
     },
     {
@@ -99,7 +99,7 @@
       "source_file": "Ryvie-Back/config/paths.ts",
       "source_location": "L20",
       "id": "config_paths_ai_key_file",
-      "community": 42,
+      "community": 86,
       "norm_label": "ai_key_file"
     },
     {
@@ -108,7 +108,7 @@
       "source_file": "Ryvie-Back/config/paths.ts",
       "source_location": "L21",
       "id": "config_paths_litellm_dir",
-      "community": 42,
+      "community": 86,
       "norm_label": "litellm_dir"
     },
     {
@@ -117,7 +117,7 @@
       "source_file": "Ryvie-Back/config/paths.ts",
       "source_location": "L22",
       "id": "config_paths_litellm_compose_file",
-      "community": 42,
+      "community": 86,
       "norm_label": "litellm_compose_file"
     },
     {
@@ -126,7 +126,7 @@
       "source_file": "Ryvie-Back/config/paths.ts",
       "source_location": "L23",
       "id": "config_paths_litellm_config_yaml",
-      "community": 42,
+      "community": 86,
       "norm_label": "litellm_config_yaml"
     },
     {
@@ -135,7 +135,7 @@
       "source_file": "Ryvie-Back/config/paths.ts",
       "source_location": "L24",
       "id": "config_paths_litellm_env_file",
-      "community": 42,
+      "community": 86,
       "norm_label": "litellm_env_file"
     },
     {
@@ -486,7 +486,7 @@
       "source_file": "Ryvie-Back/index.ts",
       "source_location": "L280",
       "id": "ryvie_back_index_startserver",
-      "community": 13,
+      "community": 192,
       "norm_label": "startserver()"
     },
     {
@@ -540,7 +540,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L33",
       "id": "middleware_auth_verifytoken",
-      "community": 38,
+      "community": 189,
       "norm_label": "verifytoken()"
     },
     {
@@ -549,7 +549,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L105",
       "id": "middleware_auth_isadmin",
-      "community": 34,
+      "community": 38,
       "norm_label": "isadmin()"
     },
     {
@@ -972,7 +972,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L1",
       "id": "routes_admin",
-      "community": 190,
+      "community": 52,
       "norm_label": "admin.ts"
     },
     {
@@ -981,7 +981,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L1",
       "id": "routes_admin_express",
-      "community": 190,
+      "community": 52,
       "norm_label": "express"
     },
     {
@@ -990,7 +990,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L2",
       "id": "routes_admin_ldap",
-      "community": 190,
+      "community": 52,
       "norm_label": "ldap"
     },
     {
@@ -999,7 +999,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L3",
       "id": "routes_admin_router",
-      "community": 190,
+      "community": 52,
       "norm_label": "router"
     },
     {
@@ -1008,7 +1008,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L4",
       "id": "routes_admin_verifytoken_isadmin",
-      "community": 190,
+      "community": 52,
       "norm_label": "{ verifytoken, isadmin }"
     },
     {
@@ -1017,7 +1017,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L5",
       "id": "routes_admin_ldapconfig",
-      "community": 190,
+      "community": 52,
       "norm_label": "ldapconfig"
     },
     {
@@ -1026,7 +1026,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L6",
       "id": "routes_admin_createsafeclient_getrole_parsednparts_escaperdnvalue_generateopaqueuid",
-      "community": 190,
+      "community": 52,
       "norm_label": "{ createsafeclient, getrole, parsednparts, escaperdnvalue, generateopaqueuid }"
     },
     {
@@ -1035,7 +1035,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L7",
       "id": "routes_admin_startapp",
-      "community": 190,
+      "community": 52,
       "norm_label": "{ startapp }"
     },
     {
@@ -1044,7 +1044,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L8",
       "id": "routes_admin_listinstalledapps",
-      "community": 190,
+      "community": 52,
       "norm_label": "{ listinstalledapps }"
     },
     {
@@ -1053,7 +1053,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L10",
       "id": "routes_admin_escapeldapfiltervalue",
-      "community": 190,
+      "community": 52,
       "norm_label": "escapeldapfiltervalue()"
     },
     {
@@ -1062,7 +1062,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L561",
       "id": "routes_admin_triggerldapsync",
-      "community": 190,
+      "community": 52,
       "norm_label": "triggerldapsync()"
     },
     {
@@ -1071,7 +1071,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L584",
       "id": "routes_admin_syncldapwithapps",
-      "community": 190,
+      "community": 52,
       "norm_label": "syncldapwithapps()"
     },
     {
@@ -1080,7 +1080,7 @@
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L744",
       "id": "routes_admin_updateuser",
-      "community": 190,
+      "community": 52,
       "norm_label": "updateuser()"
     },
     {
@@ -3154,37 +3154,19 @@
       "norm_label": "path"
     },
     {
-      "label": "{ execSync, exec }",
+      "label": "{ execSync }",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
       "source_location": "L3",
-      "id": "services_appmanagerservice_execsync_exec",
+      "id": "services_appmanagerservice_execsync",
       "community": 100,
-      "norm_label": "{ execsync, exec }"
-    },
-    {
-      "label": "{ promisify }",
-      "file_type": "code",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L4",
-      "id": "services_appmanagerservice_promisify",
-      "community": 100,
-      "norm_label": "{ promisify }"
-    },
-    {
-      "label": "execAsync",
-      "file_type": "code",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L5",
-      "id": "services_appmanagerservice_execasync",
-      "community": 100,
-      "norm_label": "execasync"
+      "norm_label": "{ execsync }"
     },
     {
       "label": "Docker",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L6",
+      "source_location": "L4",
       "id": "services_appmanagerservice_docker",
       "community": 100,
       "norm_label": "docker"
@@ -3193,25 +3175,16 @@
       "label": "{ MANIFESTS_DIR, APPS_DIR }",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L7",
+      "source_location": "L5",
       "id": "services_appmanagerservice_manifests_dir_apps_dir",
       "community": 100,
       "norm_label": "{ manifests_dir, apps_dir }"
     },
     {
-      "label": "{ getLocalIP }",
-      "file_type": "code",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L8",
-      "id": "services_appmanagerservice_getlocalip",
-      "community": 100,
-      "norm_label": "{ getlocalip }"
-    },
-    {
       "label": "listInstalledApps()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L18",
+      "source_location": "L15",
       "id": "services_appmanagerservice_listinstalledapps",
       "community": 100,
       "norm_label": "listinstalledapps()"
@@ -3220,7 +3193,7 @@
       "label": "getAppManifest()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L58",
+      "source_location": "L55",
       "id": "services_appmanagerservice_getappmanifest",
       "community": 100,
       "norm_label": "getappmanifest()"
@@ -3229,7 +3202,7 @@
       "label": "TEMPORARY_CONTAINERS",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L114",
+      "source_location": "L111",
       "id": "services_appmanagerservice_temporary_containers",
       "community": 100,
       "norm_label": "temporary_containers"
@@ -3238,7 +3211,7 @@
       "label": "isTemporaryContainer()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L125",
+      "source_location": "L122",
       "id": "services_appmanagerservice_istemporarycontainer",
       "community": 100,
       "norm_label": "istemporarycontainer()"
@@ -3247,7 +3220,7 @@
       "label": "getContainerState()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L132",
+      "source_location": "L129",
       "id": "services_appmanagerservice_getcontainerstate",
       "community": 100,
       "norm_label": "getcontainerstate()"
@@ -3256,7 +3229,7 @@
       "label": "getAppDockerStatus()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L182",
+      "source_location": "L179",
       "id": "services_appmanagerservice_getappdockerstatus",
       "community": 100,
       "norm_label": "getappdockerstatus()"
@@ -3265,7 +3238,7 @@
       "label": "startApp()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L284",
+      "source_location": "L281",
       "id": "services_appmanagerservice_startapp",
       "community": 100,
       "norm_label": "startapp()"
@@ -3274,7 +3247,7 @@
       "label": "stopApp()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L414",
+      "source_location": "L341",
       "id": "services_appmanagerservice_stopapp",
       "community": 100,
       "norm_label": "stopapp()"
@@ -3283,7 +3256,7 @@
       "label": "restartApp()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L487",
+      "source_location": "L414",
       "id": "services_appmanagerservice_restartapp",
       "community": 100,
       "norm_label": "restartapp()"
@@ -3292,7 +3265,7 @@
       "label": "getAppIcon()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L519",
+      "source_location": "L446",
       "id": "services_appmanagerservice_getappicon",
       "community": 100,
       "norm_label": "getappicon()"
@@ -3301,7 +3274,7 @@
       "label": "syncAppsWithDocker()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L536",
+      "source_location": "L463",
       "id": "services_appmanagerservice_syncappswithdocker",
       "community": 100,
       "norm_label": "syncappswithdocker()"
@@ -3546,7 +3519,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L269",
       "id": "services_appstoreservice_enrichappswithinstalledversions",
-      "community": 192,
+      "community": 24,
       "norm_label": "enrichappswithinstalledversions()"
     },
     {
@@ -3573,7 +3546,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L424",
       "id": "services_appstoreservice_loadappsfromfile",
-      "community": 192,
+      "community": 24,
       "norm_label": "loadappsfromfile()"
     },
     {
@@ -3582,7 +3555,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L441",
       "id": "services_appstoreservice_saveappstofile",
-      "community": 192,
+      "community": 24,
       "norm_label": "saveappstofile()"
     },
     {
@@ -3627,7 +3600,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L768",
       "id": "services_appstoreservice_enrichappswithicons",
-      "community": 192,
+      "community": 24,
       "norm_label": "enrichappswithicons()"
     },
     {
@@ -3636,7 +3609,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L792",
       "id": "services_appstoreservice_getapps",
-      "community": 192,
+      "community": 24,
       "norm_label": "getapps()"
     },
     {
@@ -3645,7 +3618,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L805",
       "id": "services_appstoreservice_getappbyid",
-      "community": 192,
+      "community": 24,
       "norm_label": "getappbyid()"
     },
     {
@@ -3672,7 +3645,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L866",
       "id": "services_appstoreservice_updateappfromstore",
-      "community": 192,
+      "community": 24,
       "norm_label": "updateappfromstore()"
     },
     {
@@ -3681,7 +3654,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L1809",
       "id": "services_appstoreservice_initialize",
-      "community": 192,
+      "community": 24,
       "norm_label": "initialize()"
     },
     {
@@ -3699,7 +3672,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L1895",
       "id": "services_appstoreservice_purgeappcompletely",
-      "community": 192,
+      "community": 24,
       "norm_label": "purgeappcompletely()"
     },
     {
@@ -3708,7 +3681,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L2051",
       "id": "services_appstoreservice_forcecleanupcancelledinstall",
-      "community": 192,
+      "community": 24,
       "norm_label": "forcecleanupcancelledinstall()"
     },
     {
@@ -3717,7 +3690,7 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L2156",
       "id": "services_appstoreservice_uninstallapp",
-      "community": 192,
+      "community": 24,
       "norm_label": "uninstallapp()"
     },
     {
@@ -5121,7 +5094,7 @@
       "source_file": "Ryvie-Back/services/ldapService.ts",
       "source_location": "L38",
       "id": "services_ldapservice_escaperdnvalue",
-      "community": 190,
+      "community": 52,
       "norm_label": "escaperdnvalue()"
     },
     {
@@ -5130,7 +5103,7 @@
       "source_file": "Ryvie-Back/services/ldapService.ts",
       "source_location": "L55",
       "id": "services_ldapservice_parsednparts",
-      "community": 190,
+      "community": 52,
       "norm_label": "parsednparts()"
     },
     {
@@ -5184,7 +5157,7 @@
       "source_file": "Ryvie-Back/services/ldapService.ts",
       "source_location": "L224",
       "id": "services_ldapservice_startldap",
-      "community": 52,
+      "community": 20,
       "norm_label": "startldap()"
     },
     {
@@ -5202,7 +5175,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L1",
       "id": "services_litellmservice",
-      "community": 42,
+      "community": 86,
       "norm_label": "litellmservice.ts"
     },
     {
@@ -5211,7 +5184,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L7",
       "id": "services_litellmservice_fs",
-      "community": 42,
+      "community": 86,
       "norm_label": "fs"
     },
     {
@@ -5220,7 +5193,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L8",
       "id": "services_litellmservice_path",
-      "community": 42,
+      "community": 86,
       "norm_label": "path"
     },
     {
@@ -5229,7 +5202,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L9",
       "id": "services_litellmservice_execsync",
-      "community": 42,
+      "community": 86,
       "norm_label": "{ execsync }"
     },
     {
@@ -5238,7 +5211,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L10",
       "id": "services_litellmservice_axios",
-      "community": 42,
+      "community": 86,
       "norm_label": "axios"
     },
     {
@@ -5247,7 +5220,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L11",
       "id": "services_litellmservice_composeupwithrecovery",
-      "community": 42,
+      "community": 86,
       "norm_label": "{ composeupwithrecovery }"
     },
     {
@@ -5256,7 +5229,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L12",
       "id": "services_litellmservice_litellm_dir_litellm_compose_file_litellm_config_yaml_litellm_env_file",
-      "community": 42,
+      "community": 86,
       "norm_label": "{\n  litellm_dir,\n  litellm_compose_file,\n  litellm_config_yaml,\n  litellm_env_file\n}"
     },
     {
@@ -5265,7 +5238,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L60",
       "id": "services_litellmservice_ensurenetwork",
-      "community": 42,
+      "community": 86,
       "norm_label": "ensurenetwork()"
     },
     {
@@ -5274,7 +5247,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L72",
       "id": "services_litellmservice_ensuredirs",
-      "community": 42,
+      "community": 86,
       "norm_label": "ensuredirs()"
     },
     {
@@ -5283,7 +5256,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L77",
       "id": "services_litellmservice_writecompose",
-      "community": 42,
+      "community": 86,
       "norm_label": "writecompose()"
     },
     {
@@ -5292,7 +5265,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L84",
       "id": "services_litellmservice_writeconfigyaml",
-      "community": 42,
+      "community": 86,
       "norm_label": "writeconfigyaml()"
     },
     {
@@ -5301,7 +5274,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L94",
       "id": "services_litellmservice_writeenv",
-      "community": 42,
+      "community": 86,
       "norm_label": "writeenv()"
     },
     {
@@ -5310,7 +5283,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L106",
       "id": "services_litellmservice_isconfigured",
-      "community": 42,
+      "community": 86,
       "norm_label": "isconfigured()"
     },
     {
@@ -5319,7 +5292,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L110",
       "id": "services_litellmservice_isrunning",
-      "community": 42,
+      "community": 86,
       "norm_label": "isrunning()"
     },
     {
@@ -5328,7 +5301,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L123",
       "id": "services_litellmservice_restart",
-      "community": 42,
+      "community": 86,
       "norm_label": "restart()"
     },
     {
@@ -5337,7 +5310,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L133",
       "id": "services_litellmservice_ensurerunning",
-      "community": 42,
+      "community": 86,
       "norm_label": "ensurerunning()"
     },
     {
@@ -5346,7 +5319,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L147",
       "id": "services_litellmservice_stop",
-      "community": 42,
+      "community": 86,
       "norm_label": "stop()"
     },
     {
@@ -5355,7 +5328,7 @@
       "source_file": "Ryvie-Back/services/litellmService.ts",
       "source_location": "L160",
       "id": "services_litellmservice_probe",
-      "community": 42,
+      "community": 86,
       "norm_label": "probe()"
     },
     {
@@ -6156,7 +6129,7 @@
       "source_file": "Ryvie-Back/services/reverseProxyService.ts",
       "source_location": "L824",
       "id": "services_reverseproxyservice_startcaddy",
-      "community": 20,
+      "community": 8,
       "norm_label": "startcaddy()"
     },
     {
@@ -6516,7 +6489,7 @@
       "source_file": "Ryvie-Back/services/updateCheckService.ts",
       "source_location": "L317",
       "id": "services_updatecheckservice_getlatestgithubtagviagit",
-      "community": 30,
+      "community": 22,
       "norm_label": "getlatestgithubtagviagit()"
     },
     {
@@ -6696,7 +6669,7 @@
       "source_file": "Ryvie-Back/services/updateService.ts",
       "source_location": "L35",
       "id": "services_updateservice_getcurrentryvieversion",
-      "community": 30,
+      "community": 22,
       "norm_label": "getcurrentryvieversion()"
     },
     {
@@ -6732,7 +6705,7 @@
       "source_file": "Ryvie-Back/services/updateService.ts",
       "source_location": "L105",
       "id": "services_updateservice_updateryvie",
-      "community": 30,
+      "community": 22,
       "norm_label": "updateryvie()"
     },
     {
@@ -7083,7 +7056,7 @@
       "source_file": "Ryvie-Back/utils/redisHealthCheck.ts",
       "source_location": "L1",
       "id": "utils_redishealthcheck",
-      "community": 13,
+      "community": 192,
       "norm_label": "redishealthcheck.ts"
     },
     {
@@ -7092,7 +7065,7 @@
       "source_file": "Ryvie-Back/utils/redisHealthCheck.ts",
       "source_location": "L2",
       "id": "utils_redishealthcheck_execsync",
-      "community": 13,
+      "community": 192,
       "norm_label": "{ execsync }"
     },
     {
@@ -7101,7 +7074,7 @@
       "source_file": "Ryvie-Back/utils/redisHealthCheck.ts",
       "source_location": "L8",
       "id": "utils_redishealthcheck_ensureredisrunning",
-      "community": 13,
+      "community": 192,
       "norm_label": "ensureredisrunning()"
     },
     {
@@ -7290,7 +7263,7 @@
       "source_file": "Ryvie-Back/utils/syncBackgrounds.ts",
       "source_location": "L1",
       "id": "utils_syncbackgrounds",
-      "community": 13,
+      "community": 192,
       "norm_label": "syncbackgrounds.ts"
     },
     {
@@ -7299,7 +7272,7 @@
       "source_file": "Ryvie-Back/utils/syncBackgrounds.ts",
       "source_location": "L1",
       "id": "utils_syncbackgrounds_fs",
-      "community": 13,
+      "community": 192,
       "norm_label": "fs"
     },
     {
@@ -7308,7 +7281,7 @@
       "source_file": "Ryvie-Back/utils/syncBackgrounds.ts",
       "source_location": "L2",
       "id": "utils_syncbackgrounds_path",
-      "community": 13,
+      "community": 192,
       "norm_label": "path"
     },
     {
@@ -7317,7 +7290,7 @@
       "source_file": "Ryvie-Back/utils/syncBackgrounds.ts",
       "source_location": "L3",
       "id": "utils_syncbackgrounds_backgrounds_dir_presets_dir",
-      "community": 13,
+      "community": 192,
       "norm_label": "{ backgrounds_dir, presets_dir }"
     },
     {
@@ -7326,7 +7299,7 @@
       "source_file": "Ryvie-Back/utils/syncBackgrounds.ts",
       "source_location": "L12",
       "id": "utils_syncbackgrounds_syncbackgrounds",
-      "community": 13,
+      "community": 192,
       "norm_label": "syncbackgrounds()"
     },
     {
@@ -7335,7 +7308,7 @@
       "source_file": "Ryvie-Back/utils/syncBackgrounds.ts",
       "source_location": "L72",
       "id": "utils_syncbackgrounds_watchbackgrounds",
-      "community": 13,
+      "community": 192,
       "norm_label": "watchbackgrounds()"
     },
     {
@@ -7524,7 +7497,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L1",
       "id": "ryvie_front_main",
-      "community": 14,
+      "community": 191,
       "norm_label": "main.js"
     },
     {
@@ -7533,7 +7506,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L2",
       "id": "ryvie_front_main_app_browserwindow_ipcmain_session_dialog",
-      "community": 14,
+      "community": 191,
       "norm_label": "{ app, browserwindow, ipcmain, session, dialog }"
     },
     {
@@ -7542,7 +7515,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L3",
       "id": "ryvie_front_main_path",
-      "community": 14,
+      "community": 191,
       "norm_label": "path"
     },
     {
@@ -7551,7 +7524,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L4",
       "id": "ryvie_front_main_fork",
-      "community": 14,
+      "community": 191,
       "norm_label": "{ fork }"
     },
     {
@@ -7560,7 +7533,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L5",
       "id": "ryvie_front_main_fs",
-      "community": 14,
+      "community": 191,
       "norm_label": "fs"
     },
     {
@@ -7569,7 +7542,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L6",
       "id": "ryvie_front_main_axios",
-      "community": 14,
+      "community": 191,
       "norm_label": "axios"
     },
     {
@@ -7578,7 +7551,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L7",
       "id": "ryvie_front_main_getserverurl",
-      "community": 14,
+      "community": 191,
       "norm_label": "{ getserverurl }"
     },
     {
@@ -7587,7 +7560,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L18",
       "id": "ryvie_front_main_activecontainers",
-      "community": 14,
+      "community": 191,
       "norm_label": "activecontainers"
     },
     {
@@ -7596,7 +7569,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L21",
       "id": "ryvie_front_main_pendingdownloads",
-      "community": 14,
+      "community": 191,
       "norm_label": "pendingdownloads"
     },
     {
@@ -7605,7 +7578,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L22",
       "id": "ryvie_front_main_pendinguploads",
-      "community": 14,
+      "community": 191,
       "norm_label": "pendinguploads"
     },
     {
@@ -7614,7 +7587,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L25",
       "id": "ryvie_front_main_userwindows",
-      "community": 14,
+      "community": 191,
       "norm_label": "userwindows"
     },
     {
@@ -7623,7 +7596,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L26",
       "id": "ryvie_front_main_usersessions",
-      "community": 14,
+      "community": 191,
       "norm_label": "usersessions"
     },
     {
@@ -7632,7 +7605,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L70",
       "id": "ryvie_front_main_createwindowforuser",
-      "community": 14,
+      "community": 191,
       "norm_label": "createwindowforuser()"
     },
     {
@@ -7641,7 +7614,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L244",
       "id": "ryvie_front_main_fetchusers",
-      "community": 14,
+      "community": 191,
       "norm_label": "fetchusers()"
     },
     {
@@ -7650,7 +7623,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L324",
       "id": "ryvie_front_main_startudpbackend",
-      "community": 14,
+      "community": 191,
       "norm_label": "startudpbackend()"
     },
     {
@@ -7659,7 +7632,7 @@
       "source_file": "Ryvie-Front/main.js",
       "source_location": "L407",
       "id": "ryvie_front_main_createloginwindow",
-      "community": 14,
+      "community": 191,
       "norm_label": "createloginwindow()"
     },
     {
@@ -8406,7 +8379,7 @@
       "source_file": "Ryvie-Front/src/components/AuthListener.tsx",
       "source_location": "L1",
       "id": "components_authlistener",
-      "community": 25,
+      "community": 19,
       "norm_label": "authlistener.tsx"
     },
     {
@@ -8415,7 +8388,7 @@
       "source_file": "Ryvie-Front/src/components/AuthListener.tsx",
       "source_location": "L9",
       "id": "components_authlistener_authlistener",
-      "community": 25,
+      "community": 19,
       "norm_label": "authlistener()"
     },
     {
@@ -8730,7 +8703,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L1",
       "id": "widgets_storagewidget",
-      "community": 12,
+      "community": 87,
       "norm_label": "storagewidget.tsx"
     },
     {
@@ -8739,7 +8712,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L18",
       "id": "widgets_storagewidget_storagedisk",
-      "community": 12,
+      "community": 87,
       "norm_label": "storagedisk"
     },
     {
@@ -8748,7 +8721,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L19",
       "id": "widgets_storagewidget_readstoragecache",
-      "community": 12,
+      "community": 87,
       "norm_label": "readstoragecache()"
     },
     {
@@ -8757,7 +8730,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L29",
       "id": "widgets_storagewidget_writestoragecache",
-      "community": 12,
+      "community": 87,
       "norm_label": "writestoragecache()"
     },
     {
@@ -8766,7 +8739,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L36",
       "id": "widgets_storagewidget_storagewidget",
-      "community": 12,
+      "community": 87,
       "norm_label": "storagewidget()"
     },
     {
@@ -9081,7 +9054,7 @@
       "source_file": "Ryvie-Front/src/config/urls.ts",
       "source_location": "L210",
       "id": "config_urls_setlocalip",
-      "community": 25,
+      "community": 14,
       "norm_label": "setlocalip()"
     },
     {
@@ -9162,7 +9135,7 @@
       "source_file": "Ryvie-Front/src/config/urls.ts",
       "source_location": "L336",
       "id": "config_urls_getserverurl",
-      "community": 14,
+      "community": 191,
       "norm_label": "getserverurl()"
     },
     {
@@ -9243,7 +9216,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L6",
       "id": "contexts_languagecontext_translations",
-      "community": 12,
+      "community": 87,
       "norm_label": "translations"
     },
     {
@@ -9252,7 +9225,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L8",
       "id": "contexts_languagecontext_languagecontexttype",
-      "community": 12,
+      "community": 87,
       "norm_label": "languagecontexttype"
     },
     {
@@ -9270,7 +9243,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L22",
       "id": "contexts_languagecontext_languageprovider",
-      "community": 12,
+      "community": 25,
       "norm_label": "languageprovider()"
     },
     {
@@ -9288,7 +9261,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L1",
       "id": "contexts_socketcontext",
-      "community": 37,
+      "community": 25,
       "norm_label": "socketcontext.tsx"
     },
     {
@@ -9297,7 +9270,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L8",
       "id": "contexts_socketcontext_socketcontextvalue",
-      "community": 37,
+      "community": 25,
       "norm_label": "socketcontextvalue"
     },
     {
@@ -9306,7 +9279,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L15",
       "id": "contexts_socketcontext_socketcontext",
-      "community": 37,
+      "community": 25,
       "norm_label": "socketcontext"
     },
     {
@@ -9324,7 +9297,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L25",
       "id": "contexts_socketcontext_socketproviderprops",
-      "community": 37,
+      "community": 25,
       "norm_label": "socketproviderprops"
     },
     {
@@ -9333,7 +9306,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L29",
       "id": "contexts_socketcontext_socketprovider",
-      "community": 37,
+      "community": 25,
       "norm_label": "socketprovider()"
     },
     {
@@ -10530,7 +10503,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L121",
       "id": "i18n_en_home_uninstall",
-      "community": 192,
+      "community": 24,
       "norm_label": "uninstall"
     },
     {
@@ -13806,7 +13779,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L538",
       "id": "i18n_en_settings_updateryvie",
-      "community": 30,
+      "community": 22,
       "norm_label": "updateryvie"
     },
     {
@@ -14391,7 +14364,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L61",
       "id": "i18n_fr_login_username",
-      "community": 70,
+      "community": 6,
       "norm_label": "username"
     },
     {
@@ -15156,7 +15129,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L150",
       "id": "i18n_fr_icon_error",
-      "community": 65,
+      "community": 42,
       "norm_label": "error"
     },
     {
@@ -15300,7 +15273,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L167",
       "id": "i18n_fr_defaultcredentials",
-      "community": 140,
+      "community": 190,
       "norm_label": "defaultcredentials"
     },
     {
@@ -15309,7 +15282,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L168",
       "id": "i18n_fr_defaultcredentials_title",
-      "community": 140,
+      "community": 190,
       "norm_label": "title"
     },
     {
@@ -15318,7 +15291,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L169",
       "id": "i18n_fr_defaultcredentials_warning",
-      "community": 140,
+      "community": 190,
       "norm_label": "warning"
     },
     {
@@ -15327,7 +15300,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L170",
       "id": "i18n_fr_defaultcredentials_loginid",
-      "community": 140,
+      "community": 190,
       "norm_label": "loginid"
     },
     {
@@ -15336,7 +15309,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L171",
       "id": "i18n_fr_defaultcredentials_username",
-      "community": 140,
+      "community": 190,
       "norm_label": "username"
     },
     {
@@ -15345,7 +15318,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L172",
       "id": "i18n_fr_defaultcredentials_password",
-      "community": 140,
+      "community": 190,
       "norm_label": "password"
     },
     {
@@ -15354,7 +15327,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L173",
       "id": "i18n_fr_defaultcredentials_copy",
-      "community": 140,
+      "community": 190,
       "norm_label": "copy"
     },
     {
@@ -15363,7 +15336,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L174",
       "id": "i18n_fr_defaultcredentials_copied",
-      "community": 140,
+      "community": 190,
       "norm_label": "copied"
     },
     {
@@ -15372,7 +15345,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L175",
       "id": "i18n_fr_defaultcredentials_open",
-      "community": 140,
+      "community": 190,
       "norm_label": "open"
     },
     {
@@ -15381,7 +15354,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L176",
       "id": "i18n_fr_defaultcredentials_close",
-      "community": 140,
+      "community": 190,
       "norm_label": "close"
     },
     {
@@ -16218,7 +16191,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L274",
       "id": "i18n_fr_storagewidget_status",
-      "community": 65,
+      "community": 42,
       "norm_label": "status"
     },
     {
@@ -16227,7 +16200,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L275",
       "id": "i18n_fr_status_healthy",
-      "community": 65,
+      "community": 42,
       "norm_label": "healthy"
     },
     {
@@ -16236,7 +16209,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L276",
       "id": "i18n_fr_status_warning",
-      "community": 65,
+      "community": 42,
       "norm_label": "warning"
     },
     {
@@ -16245,7 +16218,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L277",
       "id": "i18n_fr_status_critical",
-      "community": 65,
+      "community": 42,
       "norm_label": "critical"
     },
     {
@@ -16956,7 +16929,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L397",
       "id": "i18n_fr_onboarding_status",
-      "community": 65,
+      "community": 42,
       "norm_label": "status"
     },
     {
@@ -16965,7 +16938,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L398",
       "id": "i18n_fr_status_running",
-      "community": 65,
+      "community": 42,
       "norm_label": "running"
     },
     {
@@ -16974,7 +16947,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L399",
       "id": "i18n_fr_status_stopped",
-      "community": 65,
+      "community": 42,
       "norm_label": "stopped"
     },
     {
@@ -16983,7 +16956,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L400",
       "id": "i18n_fr_status_starting",
-      "community": 65,
+      "community": 42,
       "norm_label": "starting"
     },
     {
@@ -16992,7 +16965,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L401",
       "id": "i18n_fr_status_partial",
-      "community": 65,
+      "community": 42,
       "norm_label": "partial"
     },
     {
@@ -17001,7 +16974,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L402",
       "id": "i18n_fr_status_error",
-      "community": 65,
+      "community": 42,
       "norm_label": "error"
     },
     {
@@ -18342,7 +18315,7 @@
       "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
       "source_location": "L1",
       "id": "pages_authcallback",
-      "community": 25,
+      "community": 19,
       "norm_label": "authcallback.tsx"
     },
     {
@@ -18351,7 +18324,7 @@
       "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
       "source_location": "L5",
       "id": "pages_authcallback_authcallback",
-      "community": 25,
+      "community": 19,
       "norm_label": "authcallback()"
     },
     {
@@ -18360,7 +18333,7 @@
       "source_file": "Ryvie-Front/src/pages/Connexion.tsx",
       "source_location": "L1",
       "id": "pages_connexion",
-      "community": 25,
+      "community": 19,
       "norm_label": "connexion.tsx"
     },
     {
@@ -18369,7 +18342,7 @@
       "source_file": "Ryvie-Front/src/pages/Connexion.tsx",
       "source_location": "L12",
       "id": "pages_connexion_userlogin",
-      "community": 12,
+      "community": 19,
       "norm_label": "userlogin()"
     },
     {
@@ -18603,7 +18576,7 @@
       "source_file": "Ryvie-Front/src/pages/User.tsx",
       "source_location": "L1",
       "id": "pages_user",
-      "community": 25,
+      "community": 19,
       "norm_label": "user.tsx"
     },
     {
@@ -18612,7 +18585,7 @@
       "source_file": "Ryvie-Front/src/pages/User.tsx",
       "source_location": "L12",
       "id": "pages_user_user",
-      "community": 12,
+      "community": 19,
       "norm_label": "user()"
     },
     {
@@ -18675,7 +18648,7 @@
       "source_file": "Ryvie-Front/src/services/authService.ts",
       "source_location": "L34",
       "id": "services_authservice_getcurrentuser",
-      "community": 25,
+      "community": 85,
       "norm_label": "getcurrentuser()"
     },
     {
@@ -18711,7 +18684,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L1",
       "id": "types_index",
-      "community": 39,
+      "community": 14,
       "norm_label": "index.ts"
     },
     {
@@ -18747,7 +18720,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L41",
       "id": "types_index_netbirddata",
-      "community": 39,
+      "community": 14,
       "norm_label": "netbirddata"
     },
     {
@@ -18756,7 +18729,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L48",
       "id": "types_index_urlconfig",
-      "community": 39,
+      "community": 14,
       "norm_label": "urlconfig"
     },
     {
@@ -18765,7 +18738,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L53",
       "id": "types_index_baseurls",
-      "community": 39,
+      "community": 14,
       "norm_label": "baseurls"
     },
     {
@@ -18774,7 +18747,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L64",
       "id": "types_index_locationinfo",
-      "community": 39,
+      "community": 14,
       "norm_label": "locationinfo"
     },
     {
@@ -18783,7 +18756,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L70",
       "id": "types_index_accessmode",
-      "community": 39,
+      "community": 14,
       "norm_label": "accessmode"
     },
     {
@@ -18792,7 +18765,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L72",
       "id": "types_index_sessioninfo",
-      "community": 39,
+      "community": 14,
       "norm_label": "sessioninfo"
     },
     {
@@ -18801,7 +18774,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L79",
       "id": "types_index_userinfo",
-      "community": 39,
+      "community": 14,
       "norm_label": "userinfo"
     },
     {
@@ -18810,7 +18783,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L86",
       "id": "types_index_appstatus",
-      "community": 39,
+      "community": 14,
       "norm_label": "appstatus"
     },
     {
@@ -18819,7 +18792,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L91",
       "id": "types_index_serverinfo",
-      "community": 39,
+      "community": 14,
       "norm_label": "serverinfo"
     },
     {
@@ -18828,7 +18801,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L99",
       "id": "types_index_installprogress",
-      "community": 39,
+      "community": 14,
       "norm_label": "installprogress"
     },
     {
@@ -18837,7 +18810,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L107",
       "id": "types_index_apiresponse",
-      "community": 39,
+      "community": 14,
       "norm_label": "apiresponse"
     },
     {
@@ -18846,7 +18819,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L114",
       "id": "types_index_appinstallresponse",
-      "community": 39,
+      "community": 14,
       "norm_label": "appinstallresponse"
     },
     {
@@ -18855,7 +18828,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L121",
       "id": "types_index_appactionresponse",
-      "community": 39,
+      "community": 14,
       "norm_label": "appactionresponse"
     },
     {
@@ -18891,7 +18864,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L145",
       "id": "types_index_dragoffset",
-      "community": 39,
+      "community": 14,
       "norm_label": "dragoffset"
     },
     {
@@ -18900,7 +18873,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L150",
       "id": "types_index_dragposition",
-      "community": 39,
+      "community": 14,
       "norm_label": "dragposition"
     },
     {
@@ -18909,7 +18882,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L155",
       "id": "types_index_draggeditem",
-      "community": 39,
+      "community": 14,
       "norm_label": "draggeditem"
     },
     {
@@ -18918,7 +18891,7 @@
       "source_file": "Ryvie-Front/src/types/index.ts",
       "source_location": "L160",
       "id": "types_index_dragenddata",
-      "community": 39,
+      "community": 14,
       "norm_label": "dragenddata"
     },
     {
@@ -19017,7 +18990,7 @@
       "source_file": "Ryvie-Front/src/utils/detectAccessMode.ts",
       "source_location": "L191",
       "id": "utils_detectaccessmode_testserverconnectivity",
-      "community": 14,
+      "community": 25,
       "norm_label": "testserverconnectivity()"
     },
     {
@@ -19053,7 +19026,7 @@
       "source_file": "Ryvie-Front/src/utils/detectAccessMode.ts",
       "source_location": "L235",
       "id": "utils_detectaccessmode_connectryviesocket",
-      "community": 37,
+      "community": 191,
       "norm_label": "connectryviesocket()"
     },
     {
@@ -19062,7 +19035,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L1",
       "id": "utils_fallbackdetection",
-      "community": 14,
+      "community": 191,
       "norm_label": "fallbackdetection.ts"
     },
     {
@@ -19071,7 +19044,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L4",
       "id": "utils_fallbackdetection_accessmode",
-      "community": 14,
+      "community": 191,
       "norm_label": "accessmode"
     },
     {
@@ -19080,7 +19053,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L6",
       "id": "utils_fallbackdetection_detectaccessmoderobust",
-      "community": 14,
+      "community": 191,
       "norm_label": "detectaccessmoderobust()"
     },
     {
@@ -19089,7 +19062,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L28",
       "id": "utils_fallbackdetection_testsimpleconnectivity",
-      "community": 14,
+      "community": 191,
       "norm_label": "testsimpleconnectivity()"
     },
     {
@@ -19098,7 +19071,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L69",
       "id": "utils_fallbackdetection_testcorsconnectivity",
-      "community": 14,
+      "community": 191,
       "norm_label": "testcorsconnectivity()"
     },
     {
@@ -19107,7 +19080,7 @@
       "source_file": "Ryvie-Front/src/utils/fallbackDetection.ts",
       "source_location": "L95",
       "id": "utils_fallbackdetection_detectwithretry",
-      "community": 14,
+      "community": 191,
       "norm_label": "detectwithretry()"
     },
     {
@@ -19197,7 +19170,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L1",
       "id": "utils_platformutils",
-      "community": 37,
+      "community": 19,
       "norm_label": "platformutils.ts"
     },
     {
@@ -19215,7 +19188,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L5",
       "id": "utils_platformutils_isweb",
-      "community": 37,
+      "community": 19,
       "norm_label": "isweb()"
     },
     {
@@ -19224,7 +19197,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L9",
       "id": "utils_platformutils_ifelectron",
-      "community": 37,
+      "community": 19,
       "norm_label": "ifelectron()"
     },
     {
@@ -19233,7 +19206,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L17",
       "id": "utils_platformutils_ifweb",
-      "community": 37,
+      "community": 19,
       "norm_label": "ifweb()"
     },
     {
@@ -19242,7 +19215,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L25",
       "id": "utils_platformutils_windowmanager",
-      "community": 37,
+      "community": 19,
       "norm_label": "windowmanager"
     },
     {
@@ -19260,7 +19233,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L73",
       "id": "utils_platformutils_notificationmanager",
-      "community": 37,
+      "community": 19,
       "norm_label": "notificationmanager"
     },
     {
@@ -19269,7 +19242,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L1",
       "id": "utils_sessionmanager",
-      "community": 25,
+      "community": 19,
       "norm_label": "sessionmanager.ts"
     },
     {
@@ -19278,7 +19251,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L4",
       "id": "utils_sessionmanager_userdata",
-      "community": 25,
+      "community": 19,
       "norm_label": "userdata"
     },
     {
@@ -19287,7 +19260,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L12",
       "id": "utils_sessionmanager_sessioninfo",
-      "community": 25,
+      "community": 19,
       "norm_label": "sessioninfo"
     },
     {
@@ -19377,7 +19350,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L126",
       "id": "utils_sessionmanager_sessionmanager_getcurrentuseremail",
-      "community": 25,
+      "community": 19,
       "norm_label": ".getcurrentuseremail()"
     },
     {
@@ -19386,7 +19359,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L130",
       "id": "utils_sessionmanager_sessionmanager_getsessioninfo",
-      "community": 25,
+      "community": 19,
       "norm_label": ".getsessioninfo()"
     },
     {
@@ -19467,7 +19440,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L234",
       "id": "utils_sessionmanager_startsession",
-      "community": 25,
+      "community": 19,
       "norm_label": "startsession()"
     },
     {
@@ -19476,7 +19449,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L235",
       "id": "utils_sessionmanager_getsessioninfo",
-      "community": 25,
+      "community": 19,
       "norm_label": "getsessioninfo()"
     },
     {
@@ -19485,7 +19458,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L236",
       "id": "utils_sessionmanager_initializesession",
-      "community": 25,
+      "community": 19,
       "norm_label": "initializesession()"
     },
     {
@@ -19494,7 +19467,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L237",
       "id": "utils_sessionmanager_issessionactive",
-      "community": 25,
+      "community": 19,
       "norm_label": "issessionactive()"
     },
     {
@@ -19503,7 +19476,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L238",
       "id": "utils_sessionmanager_getcurrentuser",
-      "community": 25,
+      "community": 19,
       "norm_label": "getcurrentuser()"
     },
     {
@@ -19512,7 +19485,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L239",
       "id": "utils_sessionmanager_getcurrentuserrole",
-      "community": 25,
+      "community": 19,
       "norm_label": "getcurrentuserrole()"
     },
     {
@@ -19521,7 +19494,7 @@
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L240",
       "id": "utils_sessionmanager_endsession",
-      "community": 25,
+      "community": 19,
       "norm_label": "endsession()"
     },
     {
@@ -19827,7 +19800,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L1",
       "id": "ryvie_front_udpserver",
-      "community": 14,
+      "community": 191,
       "norm_label": "udpserver.js"
     },
     {
@@ -19836,7 +19809,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L1",
       "id": "ryvie_front_udpserver_io",
-      "community": 14,
+      "community": 191,
       "norm_label": "io"
     },
     {
@@ -19845,7 +19818,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L2",
       "id": "ryvie_front_udpserver_getserverurl",
-      "community": 14,
+      "community": 191,
       "norm_label": "{ getserverurl }"
     },
     {
@@ -19854,7 +19827,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L5",
       "id": "ryvie_front_udpserver_args",
-      "community": 14,
+      "community": 191,
       "norm_label": "args"
     },
     {
@@ -19863,7 +19836,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L9",
       "id": "ryvie_front_udpserver_serverurl",
-      "community": 14,
+      "community": 191,
       "norm_label": "serverurl"
     },
     {
@@ -19872,7 +19845,7 @@
       "source_file": "Ryvie-Front/udpServer.js",
       "source_location": "L13",
       "id": "ryvie_front_udpserver_socket",
-      "community": 14,
+      "community": 191,
       "norm_label": "socket"
     },
     {
@@ -22136,7 +22109,7 @@
         "kind": "file"
       },
       "id": "scripts_update_and_restart",
-      "community": 197,
+      "community": 26,
       "norm_label": "update-and-restart.sh"
     },
     {
@@ -22149,7 +22122,7 @@
         "kind": "bash_entrypoint"
       },
       "id": "opt_ryvie_scripts_update_and_restart_sh__entry",
-      "community": 197,
+      "community": 26,
       "norm_label": "update-and-restart.sh script"
     },
     {
@@ -22162,7 +22135,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_log",
-      "community": 197,
+      "community": 26,
       "norm_label": "log()"
     },
     {
@@ -22175,7 +22148,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_update_status",
-      "community": 197,
+      "community": 26,
       "norm_label": "update_status()"
     },
     {
@@ -22188,7 +22161,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_cleanup",
-      "community": 197,
+      "community": 26,
       "norm_label": "cleanup()"
     },
     {
@@ -22201,7 +22174,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_rollback",
-      "community": 197,
+      "community": 26,
       "norm_label": "rollback()"
     },
     {
@@ -22214,7 +22187,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_perform_health_check",
-      "community": 197,
+      "community": 26,
       "norm_label": "perform_health_check()"
     },
     {
@@ -23735,7 +23708,7 @@
       "source_file": "I18N_SUMMARY.md",
       "source_location": "L1",
       "id": "i18n_summary",
-      "community": 12,
+      "community": 87,
       "norm_label": "i18n_summary.md"
     },
     {
@@ -25931,7 +25904,7 @@
       "source_file": "TRADUCTION_GUIDE.md",
       "source_location": "L1",
       "id": "traduction_guide",
-      "community": 12,
+      "community": 87,
       "norm_label": "traduction_guide.md"
     },
     {
@@ -31362,15 +31335,6 @@
       "norm_label": "verifier que le theme est charge"
     },
     {
-      "label": "{ execSync }",
-      "file_type": "code",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L3",
-      "community": 100,
-      "norm_label": "{ execsync }",
-      "id": "services_appmanagerservice_execsync"
-    },
-    {
       "label": "railsList()",
       "file_type": "code",
       "source_file": "Ryvie-Back/services/appAccountsService.ts",
@@ -33517,7 +33481,7 @@
       "file_type": "code",
       "source_file": "Ryvie-Back/routes/admin.ts",
       "source_location": "L6",
-      "community": 190,
+      "community": 52,
       "norm_label": "{ createsafeclient, getrole, parsednparts, escaperdnvalue }",
       "id": "routes_admin_createsafeclient_getrole_parsednparts_escaperdnvalue"
     },
@@ -33915,7 +33879,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "dev/prod mode guide",
       "id": "devprod_guide"
     },
@@ -34240,7 +34204,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "pm2 ecosystem config",
       "id": "ecosystemconfigjs_config"
     },
@@ -34279,7 +34243,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "settings page",
       "id": "settings_page"
     },
@@ -34318,7 +34282,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "welcome page",
       "id": "welcome_page"
     },
@@ -34331,7 +34295,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "login page",
       "id": "login_page"
     },
@@ -34344,7 +34308,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "language context",
       "id": "languagecontext_context"
     },
@@ -34357,7 +34321,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "french translations",
       "id": "frjson_translation"
     },
@@ -34370,7 +34334,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "english translations",
       "id": "enjson_translation"
     },
@@ -34396,7 +34360,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "production build script",
       "id": "prodsh_script"
     },
@@ -34461,7 +34425,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "pm2 process manager",
       "id": "pm2_manager"
     },
@@ -35202,7 +35166,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "update system documentation",
       "id": "updatesystem_doc"
     },
@@ -35228,7 +35192,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 197,
+      "community": 26,
       "norm_label": "storage json contracts",
       "id": "storagecontracts_doc"
     },
@@ -35293,7 +35257,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "update monitor html page",
       "id": "updatemonitor_html"
     },
@@ -35332,7 +35296,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "startup tracker service",
       "id": "startuptracker_service"
     },
@@ -35397,7 +35361,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "health route",
       "id": "healthroute_route"
     },
@@ -35436,7 +35400,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "backend entry point (index.ts)",
       "id": "indexts_entrypoint"
     },
@@ -35449,7 +35413,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "update modal component",
       "id": "updatemodal_component"
     },
@@ -35462,7 +35426,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "global update modal component",
       "id": "globalupdatemodal_component"
     },
@@ -35501,7 +35465,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 197,
+      "community": 26,
       "norm_label": "update and restart script",
       "id": "updateandrestart_script"
     },
@@ -35514,7 +35478,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "update monitor template server",
       "id": "updatemonitortemplate_script"
     },
@@ -35540,7 +35504,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 197,
+      "community": 26,
       "norm_label": "rollback script",
       "id": "rollback_script"
     },
@@ -35553,7 +35517,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 191,
+      "community": 26,
       "norm_label": "development start script",
       "id": "devsh_script"
     },
@@ -35670,7 +35634,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 197,
+      "community": 26,
       "norm_label": "btrfs filesystem",
       "id": "btrfs_concept"
     },
@@ -43985,31 +43949,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L5",
-      "weight": 1.0,
-      "source": "services_appmanagerservice",
-      "target": "services_appmanagerservice_execasync",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
       "source_location": "L3",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "services_appmanagerservice",
       "target": "services_appmanagerservice_execsync"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "services_appmanagerservice",
-      "target": "services_appmanagerservice_execsync_exec",
-      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -44065,16 +44009,6 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L8",
-      "weight": 1.0,
-      "source": "services_appmanagerservice",
-      "target": "services_appmanagerservice_getlocalip",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
       "source_location": "L110",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -44110,16 +44044,6 @@
       "confidence_score": 1.0,
       "source": "services_appmanagerservice",
       "target": "services_appmanagerservice_path"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "services_appmanagerservice",
-      "target": "services_appmanagerservice_promisify",
-      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -44185,45 +44109,12 @@
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L8",
-      "weight": 1.0,
-      "source": "services_appmanagerservice",
-      "target": "utils_network",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L8",
-      "weight": 1.0,
-      "source": "services_appmanagerservice",
-      "target": "utils_network_getlocalip",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
       "source_file": "Ryvie-Back/services/dockerService.ts",
       "source_location": "L5",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "services_dockerservice",
       "target": "services_appmanagerservice"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Back/services/appManagerService.ts",
-      "source_location": "L332",
-      "weight": 1.0,
-      "source": "services_appmanagerservice_startapp",
-      "target": "services_appmanagerservice_execasync",
-      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -45818,9 +45709,9 @@
       "source_file": "Ryvie-Back/services/appStoreService.ts",
       "source_location": "L2176",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_appstoreservice_uninstallapp",
-      "target": "services_appstoreservice_purgeappcompletely"
+      "target": "services_appstoreservice_purgeappcompletely",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",

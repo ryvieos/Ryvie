@@ -895,7 +895,53 @@ async function updateAppFromStore(appId) {
         console.warn(`[Update] ⚠️ Erreur lors de la lecture du manifest:`, manifestError.message);
       }
     }
-    
+
+    // 0bis. Détecter une installation précédente CASSÉE / INCOMPLÈTE et nettoyer avant de réinstaller.
+    //   Symptôme typique : une tentative d'install a échoué et laissé des containers bloqués en "created"
+    //   (jamais démarrés), ou un dossier partiel sans manifest. Dans ce cas, install.sh n'est pas rejoué
+    //   (l'app est vue à tort comme une mise à jour) et l'install reste bancale.
+    //   Garde-fous data-safe : on ne purge JAMAIS un déploiement avec un container running (vraie mise à
+    //   jour) ni une app simplement arrêtée (containers "exited" = a déjà tourné → données légitimes).
+    try {
+      const deployment = inspectAppDeployment(appId);
+      const hasRunning = deployment.running > 0;
+      const appDirPath = path.join(APPS_DIR, appId);
+
+      let needsPreCleanup = false;
+      let reason = '';
+
+      if (deployment.created > 0 && !hasRunning && deployment.exited === 0) {
+        // Containers créés mais jamais démarrés, et aucun container ayant déjà tourné → install cassée
+        needsPreCleanup = true;
+        reason = `${deployment.created} container(s) bloqué(s) en "created"`;
+      } else if (!existingManifest && deployment.total > 0 && !hasRunning) {
+        // Nouvelle install mais restes de containers d'une tentative ratée (sans manifest valide)
+        needsPreCleanup = true;
+        reason = `${deployment.total} container(s) résiduel(s) sans manifest`;
+      } else if (!existingManifest) {
+        // Nouvelle install : purger un éventuel dossier partiel laissé par un download interrompu
+        try {
+          await fs.access(appDirPath);
+          needsPreCleanup = true;
+          reason = 'dossier partiel sans manifest';
+        } catch {
+          // Pas de dossier résiduel → rien à nettoyer
+        }
+      }
+
+      if (needsPreCleanup) {
+        console.log(`[Update] 🧹 Installation précédente incomplète détectée (${reason}) → nettoyage avant réinstallation...`);
+        sendProgressUpdate(appId, 1, 'Nettoyage d\'une installation précédente incomplète...', 'init');
+        await purgeAppCompletely(appId);
+        // Forcer le chemin "nouvelle installation" : install.sh sera rejoué sur un état propre
+        existingManifest = null;
+        console.log(`[Update] ✅ État résiduel nettoyé, réinstallation depuis zéro`);
+      }
+    } catch (preCleanupError: any) {
+      console.warn(`[Update] ⚠️ Échec de la détection/nettoyage pré-installation:`, preCleanupError.message);
+      // Non bloquant : on continue l'installation normalement
+    }
+
     // 1. Créer un snapshot SEULEMENT si c'est une mise à jour (app déjà installée)
     if (existingManifest) {
       currentStep = 'snapshot-creation';
@@ -1803,6 +1849,200 @@ async function initialize() {
 }
 
 // Exports pour être utilisés par updateCheckService et updateService
+
+/**
+ * Inspecte l'état réel des containers Docker d'une app via le label de projet compose.
+ * Sert à détecter une installation précédente cassée (containers bloqués en "created")
+ * sans toucher à une app valide (running) ou simplement arrêtée (exited).
+ *
+ * @returns {{ total: number, running: number, created: number, exited: number, states: string[] }}
+ */
+function inspectAppDeployment(appId) {
+  const projectLabel = appId.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  let raw = '';
+  try {
+    raw = execSync(
+      `docker ps -a --filter "label=com.docker.compose.project=${projectLabel}" --format "{{.State}}"`,
+      { encoding: 'utf8', stdio: 'pipe' }
+    ).trim();
+    // Fallback sur le nom si aucun container via le label
+    if (!raw) {
+      raw = execSync(
+        `docker ps -a --filter "name=app-${projectLabel}" --format "{{.State}}"`,
+        { encoding: 'utf8', stdio: 'pipe' }
+      ).trim();
+    }
+  } catch {
+    return { total: 0, running: 0, created: 0, exited: 0, states: [] };
+  }
+
+  const states = raw ? raw.split('\n').map(s => s.trim()).filter(Boolean) : [];
+  const running = states.filter(s => s === 'running' || s === 'restarting').length;
+  const created = states.filter(s => s === 'created').length;
+  const exited = states.filter(s => s === 'exited' || s === 'dead').length;
+  return { total: states.length, running, created, exited, states };
+}
+
+/**
+ * Purge complète et idempotente de toutes les traces d'une app (containers, volumes,
+ * dossier source, manifest, entrée apps-versions.json), puis régénère les manifests
+ * et rafraîchit le catalogue. Utilisé pour :
+ * - le nettoyage d'une installation annulée (forceCleanupCancelledInstall, nouvelle install)
+ * - le nettoyage AVANT réinstallation quand une tentative précédente a laissé un état cassé
+ *
+ * ⚠️ Destructif : ne JAMAIS appeler sur une app valide en cours d'exécution.
+ */
+async function purgeAppCompletely(appId) {
+  const appDir = path.join(APPS_DIR, appId);
+
+  // 0. Tuer les processus Docker éventuellement restés actifs pour cette app
+  try {
+    execSync(`pkill -9 -f "docker.*${appId}" 2>/dev/null || true`, { stdio: 'inherit' });
+    execSync(`pkill -9 -f "docker.*compose.*${appId}" 2>/dev/null || true`, { stdio: 'inherit' });
+    execSync(`pkill -9 -f "docker.*pull.*${appId}" 2>/dev/null || true`, { stdio: 'inherit' });
+  } catch (e) {
+    // Ignore
+  }
+
+  console.log(`[PurgeApp] 🗑️ Nettoyage complet de ${appId}...`);
+
+  // 1. Arrêter tous les containers Docker (par nom de projet)
+  console.log(`[PurgeApp] 🐳 Arrêt des containers Docker...`);
+  try {
+    execSync(`docker compose -p ${appId} down -v --remove-orphans 2>/dev/null || true`, { stdio: 'inherit' });
+  } catch (e) {
+    // Ignore
+  }
+
+  // Si le dossier existe avec un docker-compose.yml, arrêter aussi via le dossier
+  try {
+    const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
+    for (const file of composeFiles) {
+      const composePath = path.join(appDir, file);
+      try {
+        await fs.access(composePath);
+        console.log(`[PurgeApp] 📄 Arrêt via ${file}...`);
+        execSync(`cd "${appDir}" && docker compose down -v --remove-orphans 2>/dev/null || true`, { stdio: 'inherit' });
+        break;
+      } catch {}
+    }
+  } catch (e) {
+    // Ignore
+  }
+
+  // 2. Supprimer les containers orphelins restants (ex: bloqués en "created")
+  try {
+    const projectLabel = appId.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    let leftoverIds = execSync(
+      `docker ps -a --filter "label=com.docker.compose.project=${projectLabel}" --format "{{.ID}}"`,
+      { encoding: 'utf8', stdio: 'pipe' }
+    ).trim();
+    if (!leftoverIds) {
+      leftoverIds = execSync(
+        `docker ps -a --filter "name=app-${projectLabel}" --format "{{.ID}}"`,
+        { encoding: 'utf8', stdio: 'pipe' }
+      ).trim();
+    }
+    if (leftoverIds) {
+      for (const cid of leftoverIds.split('\n').filter(id => id.trim())) {
+        try { execSync(`docker rm -f ${cid} 2>/dev/null || true`, { stdio: 'inherit' }); } catch {}
+      }
+    }
+  } catch (e) {
+    // Ignore
+  }
+
+  // 3. Supprimer tous les volumes Docker liés à cette app
+  console.log(`[PurgeApp] 🗑️ Suppression des volumes Docker...`);
+  try {
+    const volumesOutput = execSync(`docker volume ls -q --filter "name=${appId}"`, { encoding: 'utf8' }).trim();
+    if (volumesOutput) {
+      const volumes = volumesOutput.split('\n').filter(vol => vol.trim());
+      for (const volume of volumes) {
+        try {
+          execSync(`docker volume rm ${volume} 2>/dev/null || true`, { stdio: 'inherit' });
+        } catch {}
+      }
+    }
+  } catch (e) {
+    // Ignore
+  }
+
+  // 4. Supprimer le dossier de l'application
+  console.log(`[PurgeApp] 🗑️ Suppression du dossier ${appDir}...`);
+  try {
+    execSync(`sudo rm -rf "${appDir}" 2>/dev/null || true`, { stdio: 'inherit' });
+  } catch (e) {
+    // Ignore
+  }
+
+  // 5. Supprimer le manifest
+  const manifestDir = path.join(MANIFESTS_DIR, appId);
+  console.log(`[PurgeApp] 🗑️ Suppression du manifest ${manifestDir}...`);
+  try {
+    execSync(`sudo rm -rf "${manifestDir}" 2>/dev/null || true`, { stdio: 'inherit' });
+  } catch (e) {
+    // Ignore
+  }
+
+  // 6. Supprimer l'entrée dans apps-versions.json
+  console.log(`[PurgeApp] 🔄 Nettoyage de apps-versions.json...`);
+  try {
+    let installedVersions = {};
+    try {
+      const raw = await fs.readFile(APPS_VERSIONS_FILE, 'utf8');
+      installedVersions = JSON.parse(raw);
+    } catch {}
+
+    if (installedVersions[appId]) {
+      delete installedVersions[appId];
+      await fs.writeFile(APPS_VERSIONS_FILE, JSON.stringify(installedVersions, null, 2));
+    }
+  } catch (e) {
+    // Ignore
+  }
+
+  // 7. Régénérer les manifests
+  console.log(`[PurgeApp] 🔄 Régénération des manifests...`);
+  try {
+    const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
+    execSync(`node ${manifestScript}`, { stdio: 'inherit' });
+  } catch (e) {
+    // Ignore
+  }
+
+  // 8. Actualiser le catalogue
+  console.log(`[PurgeApp] 🔄 Actualisation du catalogue...`);
+  try {
+    const localApps = await loadAppsFromFile();
+    if (Array.isArray(localApps)) {
+      const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(localApps);
+      await saveAppsToFile(enrichedApps);
+    }
+  } catch (e) {
+    // Ignore
+  }
+
+  // 9. Diffuser les nouveaux statuts via Socket.IO
+  try {
+    const dockerService = require('./dockerService');
+    if (dockerService.clearAppStatusCache) {
+      dockerService.clearAppStatusCache();
+    }
+
+    const io = (global as any).io;
+    if (io) {
+      const apps = await dockerService.getAppStatus();
+      io.emit('apps-status-update', apps);
+      io.emit('appsStatusUpdate', apps);
+    }
+  } catch (e) {
+    // Ignore
+  }
+
+  console.log(`[PurgeApp] ✅ Nettoyage complet de ${appId} terminé`);
+}
+
 /**
  * Nettoyage complet et immédiat d'une installation annulée
  * - Pour une NOUVELLE INSTALLATION : Supprime tout
@@ -1894,122 +2134,8 @@ async function forceCleanupCancelledInstall(appId) {
     }
     
     // 3. Pour une NOUVELLE INSTALLATION ou si le rollback a échoué : Nettoyage complet
-    console.log(`[ForceCleanup] 🗑️ Nettoyage complet de ${appId}...`);
-    
-    // Arrêter tous les containers Docker (par nom de projet)
-    console.log(`[ForceCleanup] 🐳 Arrêt des containers Docker...`);
-    try {
-      execSync(`docker compose -p ${appId} down -v --remove-orphans 2>/dev/null || true`, { stdio: 'inherit' });
-    } catch (e) {
-      // Ignore
-    }
-    
-    // Si le dossier existe avec un docker-compose.yml, arrêter aussi via le dossier
-    try {
-      const composeFiles = ['docker-compose.yml', 'docker-compose.yaml'];
-      for (const file of composeFiles) {
-        const composePath = path.join(appDir, file);
-        try {
-          await fs.access(composePath);
-          console.log(`[ForceCleanup] 📄 Arrêt via ${file}...`);
-          execSync(`cd "${appDir}" && docker compose down -v --remove-orphans 2>/dev/null || true`, { stdio: 'inherit' });
-          break;
-        } catch {}
-      }
-    } catch (e) {
-      // Ignore
-    }
-    
-    // Supprimer tous les volumes Docker liés à cette app
-    console.log(`[ForceCleanup] 🗑️ Suppression des volumes Docker...`);
-    try {
-      const volumesOutput = execSync(`docker volume ls -q --filter "name=${appId}"`, { encoding: 'utf8' }).trim();
-      if (volumesOutput) {
-        const volumes = volumesOutput.split('\n').filter(vol => vol.trim());
-        for (const volume of volumes) {
-          try {
-            execSync(`docker volume rm ${volume} 2>/dev/null || true`, { stdio: 'inherit' });
-          } catch {}
-        }
-      }
-    } catch (e) {
-      // Ignore
-    }
-    
-    // Supprimer le dossier de l'application
-    console.log(`[ForceCleanup] 🗑️ Suppression du dossier ${appDir}...`);
-    try {
-      execSync(`sudo rm -rf "${appDir}" 2>/dev/null || true`, { stdio: 'inherit' });
-    } catch (e) {
-      // Ignore
-    }
-    
-    // Supprimer le manifest
-    const manifestDir = path.join(MANIFESTS_DIR, appId);
-    console.log(`[ForceCleanup] 🗑️ Suppression du manifest ${manifestDir}...`);
-    try {
-      execSync(`sudo rm -rf "${manifestDir}" 2>/dev/null || true`, { stdio: 'inherit' });
-    } catch (e) {
-      // Ignore
-    }
-    
-    // 7. Supprimer l'entrée dans apps-versions.json
-    console.log(`[ForceCleanup] 🔄 Nettoyage de apps-versions.json...`);
-    try {
-      let installedVersions = {};
-      try {
-        const raw = await fs.readFile(APPS_VERSIONS_FILE, 'utf8');
-        installedVersions = JSON.parse(raw);
-      } catch {}
-      
-      if (installedVersions[appId]) {
-        delete installedVersions[appId];
-        await fs.writeFile(APPS_VERSIONS_FILE, JSON.stringify(installedVersions, null, 2));
-      }
-    } catch (e) {
-      // Ignore
-    }
-    
-    // 8. Régénérer les manifests
-    console.log(`[ForceCleanup] 🔄 Régénération des manifests...`);
-    try {
-      const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
-      execSync(`node ${manifestScript}`, { stdio: 'inherit' });
-    } catch (e) {
-      // Ignore
-    }
-    
-    // 9. Actualiser le catalogue
-    console.log(`[ForceCleanup] 🔄 Actualisation du catalogue...`);
-    try {
-      const localApps = await loadAppsFromFile();
-      if (Array.isArray(localApps)) {
-        const { apps: enrichedApps } = await enrichAppsWithInstalledVersions(localApps);
-        await saveAppsToFile(enrichedApps);
-      }
-    } catch (e) {
-      // Ignore
-    }
-    
-    // 10. Diffuser les nouveaux statuts via Socket.IO
-    try {
-      const dockerService = require('./dockerService');
-      if (dockerService.clearAppStatusCache) {
-        dockerService.clearAppStatusCache();
-      }
-      
-      const io = (global as any).io;
-      if (io) {
-        const apps = await dockerService.getAppStatus();
-        io.emit('apps-status-update', apps);
-        io.emit('appsStatusUpdate', apps);
-      }
-    } catch (e) {
-      // Ignore
-    }
-    
-    console.log(`[ForceCleanup] ✅ Nettoyage complet de ${appId} terminé`);
-    
+    await purgeAppCompletely(appId);
+
     return {
       success: true,
       message: `Installation de ${appId} annulée et nettoyée complètement`
@@ -2043,21 +2169,36 @@ async function uninstallApp(appId) {
       console.log(`[Uninstall] Dossier de l'app depuis le manifest: ${appDir}`);
     } catch (manifestError: any) {
       console.warn(`[Uninstall] ⚠️ Impossible de lire le manifest de ${appId}:`, manifestError.message);
+      // Installation cassée/incomplète : manifest absent ou corrompu (ex: containers bloqués en
+      // "created" jamais démarrés). On ne peut pas faire un uninstall "propre" basé sur le manifest,
+      // mais l'utilisateur doit tout de même pouvoir nettoyer les traces résiduelles → purge complète.
+      console.log(`[Uninstall] 🧹 Manifest introuvable → purge complète des traces résiduelles de ${appId}...`);
+      await purgeAppCompletely(appId);
+      if (process.send) {
+        process.send({ type: 'emit-uninstalled', appId: appId });
+      }
       return {
-        success: false,
-        message: `L'application ${appId} n'est pas installée ou le manifest est introuvable`
+        success: true,
+        message: `Application ${appId} (installation incomplète) nettoyée`
       };
     }
-    
+
     // 2. Vérifier que le dossier existe
     try {
       await fs.access(appDir);
       console.log(`[Uninstall] Dossier de l'app vérifié: ${appDir}`);
     } catch {
       console.warn(`[Uninstall] ⚠️ Dossier ${appDir} introuvable`);
+      // Manifest présent mais dossier source disparu : installation cassée. Purge complète pour
+      // supprimer les éventuels containers/volumes/manifest résiduels et débloquer la réinstallation.
+      console.log(`[Uninstall] 🧹 Dossier source manquant → purge complète des traces résiduelles de ${appId}...`);
+      await purgeAppCompletely(appId);
+      if (process.send) {
+        process.send({ type: 'emit-uninstalled', appId: appId });
+      }
       return {
-        success: false,
-        message: `Le dossier de l'application ${appId} n'existe pas: ${appDir}`
+        success: true,
+        message: `Application ${appId} (dossier source manquant) nettoyée`
       };
     }
 
