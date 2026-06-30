@@ -1,8 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 const Docker = require('dockerode');
 const { MANIFESTS_DIR, APPS_DIR } = require('../config/paths');
+const { getLocalIP } = require('../utils/network');
 
 const docker = new Docker();
 
@@ -285,8 +288,78 @@ async function startApp(appId) {
       throw new Error(`App ${appId} non trouvée`);
     }
 
-    console.log(`[appManager] Démarrage de tous les containers de ${appId} (app-${appId}-*)`);
-    
+    // Le bouton "Démarrer" REBUILD l'app via `docker compose up -d --build` :
+    // au-delà d'un simple démarrage, cela relance la construction des images, ce qui
+    // permet de réparer une app cassée (image corrompue, build interrompu, conteneurs
+    // bloqués en "created"). Si aucun docker-compose n'est trouvé, on retombe sur le
+    // démarrage simple des conteneurs existants (cf. plus bas).
+    const appDir = manifest.sourceDir || path.join(APPS_SOURCE_DIR, appId);
+    const composeRel = manifest.dockerComposePath || 'docker-compose.yml';
+    const workingDir = composeRel.includes('/')
+      ? path.join(appDir, path.dirname(composeRel))
+      : appDir;
+    const composeFileName = path.basename(composeRel);
+    const composeFullPath = path.join(workingDir, composeFileName);
+
+    if (fs.existsSync(composeFullPath)) {
+      // S'assurer que le .env existe (LOCAL_IP), comme lors de l'installation.
+      try {
+        const envPath = path.join(appDir, '.env');
+        if (!fs.existsSync(envPath)) {
+          const localIP = getLocalIP();
+          fs.writeFileSync(
+            envPath,
+            `# Fichier .env généré automatiquement par Ryvie\n# IP locale du serveur\nLOCAL_IP=${localIP}\n`
+          );
+          console.log(`[appManager] ✅ .env recréé pour ${appId} (LOCAL_IP=${localIP})`);
+        }
+      } catch (envError: any) {
+        console.warn(`[appManager] ⚠️ Impossible de garantir le .env de ${appId}:`, envError.message);
+      }
+
+      console.log(`[appManager] 🔨 Rebuild + démarrage de ${appId} (docker compose -f ${composeFileName} up -d --build)...`);
+
+      // Pause du monitoring realtime pendant l'opération Docker (cohérent avec l'install) :
+      // évite les requêtes Docker concurrentes qui provoquent des races pendant le up.
+      const realtimeService = (global as any).realtimeService;
+      if (realtimeService?.pauseBroadcast) {
+        realtimeService.pauseBroadcast();
+      }
+
+      try {
+        // exec async (et non execSync) pour NE PAS bloquer l'event loop du serveur
+        // pendant le build, qui peut durer plusieurs minutes.
+        await execAsync(`docker compose -f ${composeFileName} up -d --build`, {
+          cwd: workingDir,
+          timeout: 300000,            // 5 minutes max
+          maxBuffer: 1024 * 1024 * 50 // 50 Mo de logs de build
+        });
+        console.log(`[appManager] ✅ ${appId} reconstruit et démarré`);
+      } finally {
+        if (realtimeService?.resumeBroadcast) {
+          realtimeService.resumeBroadcast();
+        }
+      }
+
+      // Invalider le cache de statut pour refléter l'état immédiatement (require paresseux
+      // car dockerService dépend déjà de ce module → évite un cycle de require).
+      try {
+        const dockerService = require('./dockerService');
+        if (dockerService.clearAppStatusCache) {
+          dockerService.clearAppStatusCache();
+        }
+      } catch {}
+
+      return {
+        success: true,
+        message: `${manifest.name} reconstruit et démarré`,
+        rebuilt: true
+      };
+    }
+
+    // ---- Fallback : aucun docker-compose → démarrage simple des conteneurs existants ----
+    console.log(`[appManager] ℹ️ Pas de docker-compose pour ${appId}, démarrage simple des conteneurs (app-${appId}-*)`);
+
     const containers = await docker.listContainers({ all: true });
     const appContainers = containers.filter(c => {
       const containerName = c.Names[0]?.replace('/', '') || '';
@@ -298,10 +371,10 @@ async function startApp(appId) {
     });
 
     console.log(`[appManager] ${appContainers.length} container(s) trouvé(s) pour ${appId}`);
-    
+
     let startedCount = 0;
     let errorCount = 0;
-    
+
     for (const container of appContainers) {
       const containerName = container.Names[0]?.replace('/', '');
       if (container.State !== 'running') {
@@ -318,13 +391,13 @@ async function startApp(appId) {
         console.log(`[appManager] Container ${containerName} déjà démarré`);
       }
     }
-    
-    const message = errorCount > 0 
+
+    const message = errorCount > 0
       ? `${manifest.name} démarré partiellement (${startedCount} container(s), ${errorCount} erreur(s))`
       : `${manifest.name} démarré avec succès (${startedCount} container(s))`;
-    
-    return { 
-      success: errorCount === 0, 
+
+    return {
+      success: errorCount === 0,
       message: message,
       startedCount,
       errorCount
