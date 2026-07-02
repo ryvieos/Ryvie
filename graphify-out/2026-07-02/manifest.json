@@ -345,13 +345,13 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/i18n/en.json": {
-    "mtime": 1782982551.6216223,
-    "ast_hash": "ee3c28bf679f2e5795629f3494ad2ad2",
+    "mtime": 1782981997.7192578,
+    "ast_hash": "ce2b27fd07c9b73f7776c80c388ec734",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/i18n/fr.json": {
-    "mtime": 1782982547.1896353,
-    "ast_hash": "9056645cc796ccd9751c0b9c71a8d3a0",
+    "mtime": 1782981996.2952623,
+    "ast_hash": "740987c324bea006a30667c860d27fbd",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/icons/index.d.ts": {
@@ -405,8 +405,8 @@
     "semantic_hash": "df580890a256cb163a4d7c5e114c8478"
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/Settings.tsx": {
-    "mtime": 1782982786.5129519,
-    "ast_hash": "f0810d2f84fcb8af5e429d60abdff9ef",
+    "mtime": 1782981990.3232806,
+    "ast_hash": "dba21e285d4adb36b989d1c57e20a6b8",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/StorageSettings.tsx": {

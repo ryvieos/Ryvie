@@ -3,7 +3,7 @@ import '../styles/Settings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy } from '@fortawesome/free-solid-svg-icons';
+import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy, faNetworkWired, faLaptop, faCircle, faSync, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { isElectron } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getFrontendUrl } = urlsConfig;
@@ -229,6 +229,14 @@ const Settings = () => {
   const [setupKey, setSetupKey] = useState(null);
   const [showSetupKey, setShowSetupKey] = useState(false);
   const [copiedSetupKey, setCopiedSetupKey] = useState(false);
+  // OS sélectionné pour les commandes de connexion d'un appareil au Ryvie
+  const [connectOs, setConnectOs] = useState('linux');
+  const [copiedConnectCmd, setCopiedConnectCmd] = useState(false);
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  // État pour les appareils du réseau VPN Ryvie (peers NetBird)
+  const [vpnPeers, setVpnPeers] = useState(null);
+  const [vpnPeersLoading, setVpnPeersLoading] = useState(false);
+  const [vpnPeersError, setVpnPeersError] = useState(null);
   const [prefsLoaded, setPrefsLoaded] = useState(false); // préférences utilisateur chargées
   // Rôle de l'utilisateur pour contrôler l'accès aux boutons
   const [userRole, setUserRole] = useState('User');
@@ -243,6 +251,33 @@ const Settings = () => {
   const [updateInProgress, setUpdateInProgress] = useState(null); // 'ryvie' ou nom de l'app
   // Utiliser le contexte global pour la mise à jour
   const { startUpdate } = useUpdate();
+
+  // Charger les appareils du réseau VPN Ryvie (peers NetBird)
+  const loadVpnPeers = async () => {
+    setVpnPeersLoading(true);
+    setVpnPeersError(null);
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      const response = await axios.get(`${serverUrl}/api/settings/vpn-peers`);
+      if (response.data && Array.isArray(response.data.peers)) {
+        setVpnPeers(response.data.peers);
+      } else {
+        setVpnPeers([]);
+      }
+    } catch (error: any) {
+      console.log('[Settings] Impossible de charger les peers VPN:', error);
+      setVpnPeersError(error?.response?.data?.error || 'Erreur de récupération des appareils');
+      setVpnPeers([]);
+    } finally {
+      setVpnPeersLoading(false);
+    }
+  };
+
+  // Charger automatiquement les appareils du réseau VPN au montage
+  useEffect(() => {
+    loadVpnPeers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // Restaurer la session depuis les paramètres URL si preserve_session=true
@@ -3140,12 +3175,12 @@ const Settings = () => {
         </div>
       </section>
 
-      {/* Section Setup Key (Admin uniquement) */}
+      {/* Section Clé de connexion Ryvie Connect (Admin uniquement) */}
       {isAdmin && setupKey && (
         <section className="settings-section">
           <h2>
             <FontAwesomeIcon icon={faPlug} style={{ marginRight: '8px' }} />
-            {t('settings.setupKeyTitle')}
+            {t('settings.ryvieConnectKeyTitle')}
           </h2>
           <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
             {t('settings.setupKeyDescription')}
@@ -3260,6 +3295,157 @@ const Settings = () => {
                 </div>
               </div>
             </div>
+          )}
+        </section>
+      )}
+
+      {/* Section Ajouter un nouvel appareil manuellement (Admin uniquement) */}
+      {isAdmin && setupKey && (
+        <section className="settings-section">
+          <h2>
+            <FontAwesomeIcon icon={faLaptop} style={{ marginRight: '8px' }} />
+            {t('settings.addDeviceTitle')}
+          </h2>
+          <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
+            {t('settings.connectDeviceDescription')}
+          </p>
+
+          {!showAddDevice ? (
+            <div style={{ textAlign: 'center', padding: '20px' }}>
+              <button
+                onClick={() => setShowAddDevice(true)}
+                style={{
+                  padding: '12px 24px',
+                  background: '#1976d2',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = '#1565c0'}
+                onMouseOut={(e) => e.currentTarget.style.background = '#1976d2'}
+              >
+                <FontAwesomeIcon icon={faLaptop} />
+                {t('settings.addDeviceShow')}
+              </button>
+            </div>
+          ) : (
+          <div className="settings-grid">
+            <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+              {(() => {
+                const NB_MGMT = 'https://netbird.ryvie.fr';
+                // Retirer le suffixe "-<IP tunnel>" pour ne garder que la vraie clé NetBird
+                const cleanKey = String(setupKey || '').replace(/-\d{1,3}(\.\d{1,3}){3}$/, '');
+                const upCmd = `netbird up --management-url ${NB_MGMT} --setup-key ${cleanKey}`;
+                const osList = [
+                  { id: 'linux', label: 'Linux' },
+                  { id: 'mac', label: 'macOS' },
+                  { id: 'windows', label: 'Windows' }
+                ];
+                const commands: { [k: string]: string } = {
+                  linux: `curl -fsSL https://pkgs.netbird.io/install.sh | sh\n${upCmd}`,
+                  mac: `brew install netbirdio/tap/netbird\n${upCmd}`,
+                  windows: `winget install NetBird.NetBird\n${upCmd}`
+                };
+                const currentCmd = commands[connectOs] || commands.linux;
+                return (
+                  <div>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                      {osList.map(os => (
+                        <button
+                          key={os.id}
+                          onClick={() => setConnectOs(os.id)}
+                          style={{
+                            padding: '6px 16px',
+                            background: connectOs === os.id ? '#1976d2' : '#fff',
+                            color: connectOs === os.id ? '#fff' : '#555',
+                            border: connectOs === os.id ? '1px solid #1976d2' : '1px solid #ddd',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {os.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{ position: 'relative' }}>
+                      <pre style={{
+                        margin: 0,
+                        background: '#0f172a',
+                        color: '#e2e8f0',
+                        padding: '14px 16px',
+                        borderRadius: '8px',
+                        fontSize: '12.5px',
+                        fontFamily: 'monospace',
+                        overflowX: 'auto',
+                        whiteSpace: 'pre',
+                        lineHeight: 1.6
+                      }}>
+{currentCmd}
+                      </pre>
+                      <button
+                        onClick={async () => {
+                          try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                              await navigator.clipboard.writeText(currentCmd);
+                            } else {
+                              const ta = document.createElement('textarea');
+                              ta.value = currentCmd;
+                              ta.style.position = 'fixed';
+                              ta.style.left = '-999999px';
+                              document.body.appendChild(ta);
+                              ta.select();
+                              document.execCommand('copy');
+                              document.body.removeChild(ta);
+                            }
+                            setCopiedConnectCmd(true);
+                            setTimeout(() => setCopiedConnectCmd(false), 2000);
+                          } catch (err) {
+                            console.error('Erreur lors de la copie:', err);
+                          }
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          padding: '6px 10px',
+                          background: copiedConnectCmd ? '#4caf50' : 'rgba(255,255,255,0.12)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                        title={t('settings.copy')}
+                      >
+                        <FontAwesomeIcon icon={copiedConnectCmd ? faCheck : faCopy} />
+                        {copiedConnectCmd ? t('settings.copied') : t('settings.copy')}
+                      </button>
+                    </div>
+
+                    <div style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
+                      {t('settings.connectDeviceHint')}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
           )}
         </section>
       )}
@@ -3403,6 +3589,112 @@ const Settings = () => {
           )}
         </section>
       )}
+
+      {/* Appareils du réseau VPN Ryvie (peers NetBird) */}
+      <section className="settings-section">
+        <h2>
+          <FontAwesomeIcon icon={faNetworkWired} style={{ marginRight: '8px' }} />
+          {t('settings.vpnPeersTitle')}
+        </h2>
+        <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
+          {t('settings.vpnPeersDescription')}
+        </p>
+
+        <div className="settings-grid">
+          <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+              <button
+                onClick={loadVpnPeers}
+                disabled={vpnPeersLoading}
+                style={{
+                  padding: '8px 14px',
+                  background: '#fff',
+                  color: '#1976d2',
+                  border: '1px solid #1976d2',
+                  borderRadius: '6px',
+                  cursor: vpnPeersLoading ? 'default' : 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  opacity: vpnPeersLoading ? 0.6 : 1
+                }}
+              >
+                <FontAwesomeIcon icon={vpnPeersLoading ? faSpinner : faSync} spin={vpnPeersLoading} />
+                {t('settings.vpnPeersRefresh')}
+              </button>
+            </div>
+
+            {vpnPeersLoading && (!vpnPeers || vpnPeers.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
+                <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
+                {t('settings.vpnPeersLoading')}
+              </div>
+            ) : vpnPeersError ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#d32f2f' }}>
+                {vpnPeersError}
+              </div>
+            ) : vpnPeers && vpnPeers.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                {vpnPeers.map((peer: any) => {
+                  const isConnected = /connected/i.test(peer.status);
+                  return (
+                    <div
+                      key={peer.fqdn || peer.ip}
+                      style={{
+                        padding: '14px 16px',
+                        background: '#f8f9fa',
+                        borderRadius: '8px',
+                        border: '1px solid #e0e0e0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '10px',
+                        background: isConnected ? 'rgba(76,175,80,0.12)' : 'rgba(158,158,158,0.12)',
+                        color: isConnected ? '#4caf50' : '#9e9e9e',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <FontAwesomeIcon icon={faLaptop} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }} title={peer.fqdn}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{peer.hostname || peer.fqdn}</span>
+                          {peer.self && (
+                            <span style={{ flexShrink: 0, fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#1976d2', background: 'rgba(25,118,210,0.12)', borderRadius: '6px', padding: '2px 6px' }}>
+                              {t('settings.vpnPeerSelf')}
+                            </span>
+                          )}
+                        </div>
+                        {peer.ip && (
+                          <div style={{ fontSize: '13px', color: '#1976d2', fontFamily: 'monospace' }}>{peer.ip}</div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '12px', color: isConnected ? '#4caf50' : '#9e9e9e', fontWeight: 500 }}>
+                          <FontAwesomeIcon icon={faCircle} style={{ fontSize: '8px' }} />
+                          {isConnected ? t('settings.vpnPeerConnected') : t('settings.vpnPeerDisconnected')}
+                          {peer.latency && peer.latency !== '0s' && <span style={{ color: '#999' }}>· {peer.latency}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
+                {t('settings.vpnPeersEmpty')}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Modal Détail du Stockage */}
       {showStorageDetail && (

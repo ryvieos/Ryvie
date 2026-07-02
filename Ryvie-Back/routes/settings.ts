@@ -628,4 +628,121 @@ router.get('/settings/ryvie-domains', verifyToken, isAdmin, (req: any, res: any)
   }
 });
 
+// GET /api/settings/vpn-peers - Lister les appareils (peers) du réseau VPN Ryvie/NetBird
+// Accessible à tout utilisateur authentifié (pas seulement les admins) : c'est une simple
+// visibilité des appareils du réseau, sans information sensible (pas de clé de setup).
+router.get('/settings/vpn-peers', verifyToken, async (req: any, res: any) => {
+  try {
+    const { exec } = require('child_process');
+    const util = require('util');
+    const execPromise = util.promisify(exec);
+
+    let stdout = '';
+    try {
+      ({ stdout } = await execPromise('netbird status -d', { timeout: 10000 }));
+    } catch (err: any) {
+      return res.status(503).json({
+        success: false,
+        error: 'Impossible de récupérer le statut NetBird',
+        details: err.message,
+        peers: []
+      });
+    }
+
+    // Parse de la section "Peers detail:" :
+    //  - l'en-tête d'un peer est une ligne avec UNE seule espace de tête et se terminant par ':'
+    //  - les lignes de détail commencent par au moins deux espaces (NetBird IP, Status, etc.)
+    const lines = stdout.split(/\r?\n/);
+    const peers: any[] = [];
+    let current: any = null;
+
+    for (const line of lines) {
+      const header = line.match(/^ (\S[^:]*):\s*$/); // 1 espace + hostname + ':'
+      if (header) {
+        if (current) peers.push(current);
+        const fqdn = header[1];
+        current = {
+          fqdn,
+          hostname: fqdn.split('.')[0],
+          ip: null,
+          status: 'Unknown',
+          connectionType: null,
+          lastHandshake: null,
+          latency: null
+        };
+        continue;
+      }
+      if (!current) continue;
+
+      let m;
+      if ((m = line.match(/NetBird IP:\s*(\S+)/))) { current.ip = (m[1] || '').replace(/\/\d+$/, ''); continue; }
+      if ((m = line.match(/^\s*Status:\s*(\S+)/))) { current.status = m[1]; continue; }
+      if ((m = line.match(/Connection type:\s*(.+?)\s*$/))) {
+        current.connectionType = m[1] === '-' ? null : m[1];
+        continue;
+      }
+      if ((m = line.match(/Last WireGuard handshake:\s*(.+?)\s*$/))) {
+        current.lastHandshake = m[1] === '-' ? null : m[1];
+        continue;
+      }
+      if ((m = line.match(/Latency:\s*(.+?)\s*$/))) {
+        current.latency = m[1];
+        continue;
+      }
+    }
+    if (current) peers.push(current);
+
+    // Extraire les infos de la box locale (le Ryvie lui-même) depuis le résumé de fin de
+    // sortie : ce sont des lignes en colonne 0 (sans espace de tête), donc jamais capturées
+    // comme peers ci-dessus. On l'ajoute comme "self" pour qu'il apparaisse dans la liste.
+    let selfPeer: any = null;
+    const selfFqdnMatch = stdout.match(/^FQDN:\s*(\S+)/m);
+    const selfIpMatch = stdout.match(/^NetBird IP:\s*(\S+)/m);
+    if (selfFqdnMatch || selfIpMatch) {
+      const fqdn = selfFqdnMatch ? selfFqdnMatch[1] : 'ryvie';
+      selfPeer = {
+        fqdn,
+        hostname: fqdn.split('.')[0],
+        ip: selfIpMatch ? selfIpMatch[1].replace(/\/\d+$/, '') : null,
+        status: 'Connected',
+        self: true,
+        connectionType: null,
+        lastHandshake: null,
+        latency: null
+      };
+    }
+
+    // Ignorer les nœuds d'infrastructure NetBird (relais/routage du réseau de production),
+    // qui ne sont pas de vrais appareils utilisateurs : hostnames "netbirdprod-node-*".
+    const isInfra = (p: any) => /^netbirdprod/i.test(String(p.hostname || p.fqdn || ''));
+    let filtered = peers.filter(p => !isInfra(p));
+
+    // Ne pas dupliquer la box locale si elle apparaît aussi dans la liste des peers
+    if (selfPeer) {
+      filtered = filtered.filter(p => p.ip !== selfPeer.ip && p.fqdn !== selfPeer.fqdn);
+    }
+
+    // Peers connectés en premier, puis tri alphabétique par nom
+    filtered.sort((a, b) => {
+      const ca = /connected/i.test(a.status) ? 0 : 1;
+      const cb = /connected/i.test(b.status) ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      return String(a.hostname).localeCompare(String(b.hostname));
+    });
+
+    // La box locale toujours en tête
+    const finalPeers = selfPeer ? [selfPeer, ...filtered] : filtered;
+
+    res.json({
+      success: true,
+      count: finalPeers.length,
+      connected: finalPeers.filter(p => /connected/i.test(p.status)).length,
+      peers: finalPeers
+    });
+  } catch (error: any) {
+    console.error('[settings] Erreur lors de la récupération des peers VPN:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur', details: error.message, peers: [] });
+  }
+});
+
 export = router;
