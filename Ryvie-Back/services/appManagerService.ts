@@ -94,6 +94,12 @@ async function getAppManifest(appDirName) {
         if (ryvieAppConfig && ryvieAppConfig.ai) {
           manifest.ai = ryvieAppConfig.ai;
         }
+
+        // Recopier le bloc `configEditor:` (fichiers de config éditables depuis
+        // l'UI Ryvie), utilisé par configEditorService pour l'édition zéro-terminal.
+        if (ryvieAppConfig && ryvieAppConfig.configEditor) {
+          manifest.configEditor = ryvieAppConfig.configEditor;
+        }
       } catch (yamlError: any) {
         console.warn(`[appManager] Impossible de lire ryvie-app.yml pour ${appDirName}:`, yamlError.message);
       }

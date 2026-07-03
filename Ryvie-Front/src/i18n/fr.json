@@ -157,6 +157,7 @@
     "uninstall": "Désinstaller",
     "manageAccounts": "Gérer les comptes",
     "settings": "Réglages",
+    "editConfig": "Configuration avancée",
     "resetAccess": "Réinitialiser l'accès",
     "resetAccessTitle": "Réinitialiser l'accès à {appName} ?",
     "resetAccessMessage": "Le compte propriétaire sera réinitialisé (vos données sont conservées). Vous devrez recréer un compte à la prochaine ouverture.",
@@ -220,6 +221,19 @@
     "resetSuccess": "Mot de passe réinitialisé avec succès.",
     "resetError": "Échec de la réinitialisation du mot de passe.",
     "resetRestartWarn": "Réinitialiser le mot de passe redémarre l'application (quelques secondes d'indisponibilité)."
+  },
+  "configEditor": {
+    "title": "Configuration avancée",
+    "loading": "Chargement de la configuration…",
+    "loadError": "Impossible de charger la configuration.",
+    "empty": "Aucun fichier de configuration éditable pour cette app.",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saved": "Configuration enregistrée.",
+    "savedRestarted": "Configuration enregistrée, application redémarrée.",
+    "saveError": "Échec de l'enregistrement de la configuration.",
+    "restartWarn": "Enregistrer redémarre l'application (quelques secondes d'indisponibilité).",
+    "savedHint": "Le fichier sera enregistré. Redémarrez l'app si nécessaire pour appliquer."
   },
   "installIndicator": {
     "showProgress": "Afficher la progression de {appName}",

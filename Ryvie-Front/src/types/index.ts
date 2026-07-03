@@ -24,6 +24,7 @@ export interface AppConfig {
   hasAccounts?: boolean;
   hasDefaultAccount?: boolean;
   hasOwnerReset?: boolean;
+  hasConfigEditor?: boolean;
 }
 
 export interface AppManifest {

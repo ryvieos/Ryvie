@@ -330,6 +330,26 @@ async function containerExecReset(
   if (!stdout.includes(expect)) {
     throw new Error(VERIFY_FAIL_MSG);
   }
+
+  // Certaines apps cachent leurs identifiants en mémoire (ex. Home Assistant) : le
+  // nouveau mot de passe n'est écrit que dans le stockage et n'est pris en compte au
+  // login qu'après un redémarrage. `resetRestarts: true` dans la recette demande de
+  // recréer/relancer le conteneur. On SUSPEND le broadcast realtime pendant le restart
+  // (sinon les événements Docker stop/start remontent au frontend → réaction parasite).
+  if (recipe.resetRestarts) {
+    const realtimeService = (global as any).realtimeService;
+    try {
+      if (realtimeService?.pauseBroadcast) realtimeService.pauseBroadcast();
+      await docker.getContainer(recipe.container).restart({ t: 10 });
+    } catch (e: any) {
+      throw new Error(
+        `mot de passe écrit mais redémarrage du conteneur échoué: ${e.message}. ` +
+        `Redémarrez l'app manuellement pour appliquer le nouveau mot de passe.`
+      );
+    } finally {
+      if (realtimeService?.resumeBroadcast) realtimeService.resumeBroadcast();
+    }
+  }
 }
 
 // Vérifie un mot de passe via la sous-commande `verify` de la fiche (utilisé pour
@@ -701,6 +721,19 @@ async function getDefaultStatus(appId: string): Promise<DefaultStatus> {
     try { ok = await loginVerify(def, info.mainPort); } catch (_) { ok = false; }
     if (!ok) return { hasDefault: true, changed: true };
     return { hasDefault: true, changed: false, email: def.email, username: def.username, password: def.password };
+  }
+
+  // Apps « mot de passe seul » (pas d'email ni username, ex. OpenClaw) : le compte
+  // unique n'a rien à matcher par email/username → on vérifie directement le mot de
+  // passe par défaut via la stratégie (fiche `verify`) sur le premier compte listé.
+  if (!def.email && !def.username && def.password) {
+    let ok = false;
+    try {
+      const accts = await listAccountsByRecipe(recipe, appId);
+      if (accts[0]) ok = await verifyAccountPassword(recipe, accts[0], def.password, appId);
+    } catch (_) { ok = false; }
+    if (!ok) return { hasDefault: true, changed: true };
+    return { hasDefault: true, changed: false, password: def.password };
   }
 
   let accounts: Account[] = [];

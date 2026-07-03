@@ -157,6 +157,7 @@
     "uninstall": "Uninstall",
     "manageAccounts": "Manage accounts",
     "settings": "Settings",
+    "editConfig": "Advanced configuration",
     "resetAccess": "Reset access",
     "resetAccessTitle": "Reset {appName} access?",
     "resetAccessMessage": "The owner account will be reset (your data is kept). You will need to set up a new account on next open.",
@@ -220,6 +221,19 @@
     "resetSuccess": "Password reset successfully.",
     "resetError": "Password reset failed.",
     "resetRestartWarn": "Resetting the password restarts the app (a few seconds of downtime)."
+  },
+  "configEditor": {
+    "title": "Advanced configuration",
+    "loading": "Loading configuration…",
+    "loadError": "Unable to load the configuration.",
+    "empty": "No editable configuration file for this app.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Configuration saved.",
+    "savedRestarted": "Configuration saved, app restarted.",
+    "saveError": "Failed to save the configuration.",
+    "restartWarn": "Saving restarts the app (a few seconds of downtime).",
+    "savedHint": "The file will be saved. Restart the app if needed to apply."
   },
   "installIndicator": {
     "showProgress": "Show {appName} progress",
