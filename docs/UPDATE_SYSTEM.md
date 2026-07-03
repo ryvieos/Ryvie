@@ -348,3 +348,70 @@ Utilisateur clique "Mettre à jour"
   │  puis POST /cleanup            │
   └─────────────────────────────────┘
 ```
+
+---
+
+## Publier une nouvelle version
+
+Le système de mise à jour télécharge le tarball d'un **tag GitHub**. Pour publier :
+
+1. **Développer et tester** en mode dev/prod, puis committer.
+2. **Créer et pousser un tag** :
+   ```bash
+   git tag v0.1.5
+   git push origin v0.1.5
+   ```
+3. **Créer la release** sur GitHub :
+   - Interface web : `https://github.com/ryvieos/Ryvie/releases/new`
+   - Ou via GitHub CLI : `gh release create v0.1.5 --title "v0.1.5" --notes "Notes de version"`
+
+> GitHub génère automatiquement l'asset « Source code (tar.gz) » que Ryvie télécharge (`api.github.com/repos/ryvieos/Ryvie/tarball/<tag>`).
+> Un `GITHUB_TOKEN` (dans `Ryvie-Back/.env`) est optionnel mais évite les limites de débit de l'API.
+
+---
+
+## Rollback manuel
+
+Si une mise à jour pose problème après redémarrage, restaurer un snapshot BTRFS :
+
+```bash
+# Lister les snapshots disponibles
+ls -lh /data/.snapshots/
+
+# Restaurer un snapshot
+sudo /opt/Ryvie/scripts/rollback.sh --set /data/.snapshots/ryvie_YYYYMMDD_HHMMSS
+
+# Redémarrer les services
+pm2 reload all
+```
+
+---
+
+## Commandes utiles
+
+```bash
+# Version actuellement installée
+grep '"version"' /opt/Ryvie/package.json
+
+# Logs de mise à jour
+pm2 logs ryvie-backend-prod | grep -i update
+
+# Snapshots disponibles
+ls -lh /data/.snapshots/
+```
+
+---
+
+## Dépannage
+
+| Symptôme | Pistes |
+|---|---|
+| **Échec au téléchargement** | Vérifier la connexion internet, l'existence de la release sur GitHub, et les logs : `pm2 logs ryvie-backend-prod --err`. |
+| **Échec du build (`prod.sh`)** | Vérifier les dépendances (`npm ci` dans `Ryvie-Back` et `Ryvie-Front`) et les logs de build. Le rollback automatique doit restaurer l'état précédent. |
+| **Le système ne redémarre pas** | Vérifier PM2 (`pm2 list`, `pm2 logs`). Au besoin, rollback manuel (voir ci-dessus). |
+
+### Ressources
+
+- [GitHub Releases API](https://docs.github.com/en/rest/releases/releases)
+- [Semantic Versioning](https://semver.org/)
+- [Btrfs Snapshots](https://btrfs.wiki.kernel.org/index.php/SysadminGuide#Snapshots)
