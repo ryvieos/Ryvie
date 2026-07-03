@@ -185,6 +185,15 @@ const StorageSettings = () => {
   const [migrationState, setMigrationState] = useState<any>(null);
   const [stoppingMigration, setStoppingMigration] = useState(false);
 
+  // Docker/containerd move
+  const [dockerLocation, setDockerLocation] = useState<any>(null);
+  const [showDockerMoveModal, setShowDockerMoveModal] = useState(false);
+  const [dockerMoveTarget, setDockerMoveTarget] = useState<string>('');
+  const [dockerMoveGrow, setDockerMoveGrow] = useState(false);
+  const [dockerMovePrechecks, setDockerMovePrechecks] = useState<any>(null);
+  const [dockerMovePrechecking, setDockerMovePrechecking] = useState(false);
+  const [dockerMoveState, setDockerMoveState] = useState<any>(null);
+
   // Helper: strip emojis from strings for consistent UI DA
   const stripEmojis = (str) => {
     if (!str) return '';
@@ -319,12 +328,27 @@ const StorageSettings = () => {
         }
       });
 
+      // Écouter les logs du déplacement Docker
+      socket.on('docker-move-log', (logEntry) => {
+        setLogs(prev => [...prev, logEntry]);
+      });
+
+      // Écouter la progression du déplacement Docker
+      socket.on('docker-move-progress', (state) => {
+        setDockerMoveState(state);
+        if (state.status === 'completed') {
+          setTimeout(() => { loadDockerLocation(); loadInventory(); }, 2000);
+        }
+      });
+
       // Nettoyage à la destruction du composant
       return () => {
         console.log('[StorageSettings] Déconnexion Socket.IO');
         socket.off('mdraid-log');
         socket.off('mdraid-resync-progress');
         socket.off('mdraid-migration-progress');
+        socket.off('docker-move-log');
+        socket.off('docker-move-progress');
         socket.disconnect();
       };
     }
@@ -991,6 +1015,115 @@ const StorageSettings = () => {
       addLog(`Grow failed: ${msg}`, 'error');
     }
   };
+
+  // ==================== DOCKER / CONTAINERD MOVE ====================
+
+  // Charge l'emplacement actuel de Docker + un éventuel déplacement en cours
+  const loadDockerLocation = useCallback(async () => {
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const [locResp, statusResp] = await Promise.all([
+        axios.get(`${serverUrl}/api/storage/docker-location`, { timeout: 15000 }),
+        axios.get(`${serverUrl}/api/storage/docker-move-status`, { timeout: 15000 }).catch(() => null)
+      ]);
+      if (locResp.data.success) setDockerLocation(locResp.data);
+      if (statusResp?.data?.success && statusResp.data.move?.id) {
+        setDockerMoveState(statusResp.data.move);
+      }
+    } catch (e) { /* silencieux */ }
+  }, []);
+
+  // Points de montage candidats (dérivés des disques), hors emplacement Docker actuel
+  const getCandidateMounts = useCallback((): string[] => {
+    const current = dockerLocation?.currentMount;
+    const set = new Set<string>();
+    (disks || []).forEach((disk: any) => {
+      (disk.children || []).forEach((ch: any) => {
+        (ch.mountpoints || []).forEach((mp: string) => {
+          if (mp && mp.startsWith('/') && mp !== current) set.add(mp);
+        });
+      });
+      (disk.mountpoints || []).forEach((mp: string) => {
+        if (mp && mp.startsWith('/') && mp !== current) set.add(mp);
+      });
+    });
+    return Array.from(set).sort();
+  }, [disks, dockerLocation]);
+
+  // Lance les pré-vérifications pour une cible donnée
+  const runDockerMovePrechecks = async (targetMount: string, grow: boolean) => {
+    setDockerMovePrechecking(true);
+    setDockerMovePrechecks(null);
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const resp = await axios.post(`${serverUrl}/api/storage/docker-move-prechecks`, {
+        targetMount, growRequested: grow
+      }, { timeout: 60000 });
+      setDockerMovePrechecks(resp.data);
+    } catch (error) {
+      const msg = error.response?.data?.error || error.message;
+      setDockerMovePrechecks({ success: false, canProceed: false, reasons: [msg] });
+    } finally {
+      setDockerMovePrechecking(false);
+    }
+  };
+
+  // Exécute le déplacement de Docker + containerd
+  const executeDockerMove = async () => {
+    setShowDockerMoveModal(false);
+    setExecutionStatus('running');
+    setLogs([]);
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      const resp = await axios.post(`${serverUrl}/api/storage/docker-move`, {
+        targetMount: dockerMoveTarget, growRequested: dockerMoveGrow
+      }, { timeout: 30000 });
+      if (resp.data.success) {
+        addLog('Déplacement Docker démarré', 'success');
+        const st = await axios.get(`${serverUrl}/api/storage/docker-move-status`, { timeout: 10000 });
+        if (st.data.success && st.data.move) setDockerMoveState(st.data.move);
+      } else {
+        addLog(`Échec: ${resp.data.error}`, 'error');
+        setExecutionStatus('error');
+      }
+    } catch (error) {
+      const msg = error.response?.data?.error || error.message;
+      addLog(`Erreur déplacement Docker: ${msg}`, 'error');
+      setExecutionStatus('error');
+    }
+  };
+
+  // Demande l'arrêt du déplacement Docker
+  const stopDockerMove = async () => {
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      await axios.post(`${serverUrl}/api/storage/docker-move-stop`, {}, { timeout: 10000 });
+    } catch (error) {
+      addLog(`Arrêt impossible: ${error.response?.data?.error || error.message}`, 'warning');
+    }
+  };
+
+  // Réinitialise l'état du déplacement Docker (masque la carte terminée/erreur)
+  const resetDockerMove = async () => {
+    try {
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+      await axios.post(`${serverUrl}/api/storage/docker-move-reset`, {}, { timeout: 10000 });
+      setDockerMoveState(null);
+      loadDockerLocation();
+    } catch (error) {
+      addLog(`Reset impossible: ${error.response?.data?.error || error.message}`, 'warning');
+    }
+  };
+
+  // Charger l'emplacement Docker au montage (et reprendre un déplacement en cours)
+  useEffect(() => {
+    loadDockerLocation();
+  }, [loadDockerLocation]);
 
   // Check if the array can be grown (members larger than used dev size)
   const checkCanGrow = useCallback(async () => {
@@ -1727,6 +1860,86 @@ const StorageSettings = () => {
                 </div>
               )}
 
+              {/* ==================== DOCKER MOVE SECTION ==================== */}
+              <div className="targets-section">
+                <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.dockerMove')}</h2>
+                <p className="section-subtitle">{t('storageSettings.dockerMoveDesc')}</p>
+
+                {dockerLocation && (
+                  <div style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>
+                    <div>{t('storageSettings.dockerCurrentLocation')} : <strong>{dockerLocation.dockerRootDir}</strong>
+                      {dockerLocation.currentMount ? ` (${dockerLocation.currentMount})` : ''}</div>
+                  </div>
+                )}
+
+                {/* Déplacement en cours / terminé */}
+                {dockerMoveState && dockerMoveState.id && dockerMoveState.status !== 'idle' ? (
+                  <div className="migration-timeline">
+                    <div style={{ marginBottom: '1rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                        <strong>{t('storageSettings.globalProgress')}</strong>
+                        <span style={{ fontWeight: 'bold', color: '#2196f3' }}>{dockerMoveState.globalProgress}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '12px', background: '#e0e0e0', borderRadius: '6px', overflow: 'hidden' }}>
+                        <div style={{ width: `${dockerMoveState.globalProgress}%`, height: '100%', background: 'linear-gradient(90deg, #2196f3, #1976d2)', transition: 'width 0.5s ease' }} />
+                      </div>
+                    </div>
+
+                    {dockerMoveState.rebootExpected && (
+                      <div className="storage-alert storage-alert-warning" style={{ marginBottom: '0.75rem' }}>
+                        <FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.dockerMoveRebooting')}
+                      </div>
+                    )}
+
+                    {(dockerMoveState.steps || []).map((step: any, idx: number) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.35rem 0' }}>
+                        <span style={{
+                          width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
+                          background: step.status === 'completed' ? '#10b981'
+                            : step.status === 'running' ? '#2196f3'
+                            : step.status === 'error' ? '#ef4444'
+                            : step.status === 'skipped' ? '#9ca3af' : '#d1d5db'
+                        }} />
+                        <span style={{ flex: 1 }}>{step.name}{step.message ? ` — ${step.message}` : ''}</span>
+                        {step.status === 'running' && <FontAwesomeIcon icon={faSpinner} spin />}
+                      </div>
+                    ))}
+
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                      {dockerMoveState.status === 'running' && !dockerMoveState.rebootExpected && (
+                        <button className="btn-secondary" onClick={stopDockerMove}>{t('storageSettings.stop')}</button>
+                      )}
+                      {(dockerMoveState.status === 'completed' || dockerMoveState.status === 'error' || dockerMoveState.status === 'stopped') && (
+                        <button className="btn-secondary" onClick={resetDockerMove}>{t('storageSettings.dismiss')}</button>
+                      )}
+                    </div>
+                    {dockerMoveState.status === 'error' && dockerMoveState.error && (
+                      <div className="storage-alert storage-alert-error" style={{ marginTop: '0.5rem' }}>{dockerMoveState.error}</div>
+                    )}
+                    {dockerMoveState.status === 'completed' && (
+                      <div className="storage-alert storage-alert-success" style={{ marginTop: '0.5rem' }}>{t('storageSettings.dockerMoveDone')}</div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.5rem' }}>
+                    <button
+                      className="btn-create-raid"
+                      style={{ background: '#6366f1' }}
+                      disabled={!!resyncProgress || (migrationState && migrationState.status === 'running')}
+                      onClick={() => {
+                        setDockerMoveTarget('');
+                        setDockerMoveGrow(false);
+                        setDockerMovePrechecks(null);
+                        loadDockerLocation();
+                        setShowDockerMoveModal(true);
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.dockerMove')}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* ==================== MIGRATION / CONFIGURATION SECTION ==================== */}
               <div className="targets-section">
                 <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.autoMigrate')}</h2>
@@ -2328,6 +2541,71 @@ const StorageSettings = () => {
               <button className="btn-secondary" onClick={() => setShowGrowModal(false)}>{t('storageSettings.cancel')}</button>
               <button className="btn-danger" style={{ background: '#10b981' }} onClick={executeGrowArray}>
                 <FontAwesomeIcon icon={faExpand} /> {t('storageSettings.growArray')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Docker move modal */}
+      {showDockerMoveModal && (
+        <div className="modal-overlay" onClick={() => setShowDockerMoveModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2><FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.dockerMove')}</h2>
+
+            <div className="modal-section">
+              <p style={{ margin: '0 0 0.5rem' }}>{t('storageSettings.dockerCurrentLocation')} : <strong>{dockerLocation?.dockerRootDir}</strong></p>
+              <h3>{t('storageSettings.dockerMoveSelectTarget')}</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {getCandidateMounts().map((mp) => (
+                  <button
+                    key={mp}
+                    className={`disk-toggle ${dockerMoveTarget === mp ? 'selected' : ''}`}
+                    style={{ padding: '0.4rem 0.9rem', borderRadius: '6px', cursor: 'pointer',
+                      border: dockerMoveTarget === mp ? '2px solid #6366f1' : '1px solid #ccc',
+                      background: dockerMoveTarget === mp ? '#eef2ff' : '#fff' }}
+                    onClick={() => { setDockerMoveTarget(mp); runDockerMovePrechecks(mp, dockerMoveGrow); }}
+                  >{mp}</button>
+                ))}
+                {getCandidateMounts().length === 0 && (
+                  <span style={{ color: '#888' }}>{t('storageSettings.dockerMoveNoTarget')}</span>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-section">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={dockerMoveGrow}
+                  onChange={(e) => { setDockerMoveGrow(e.target.checked); if (dockerMoveTarget) runDockerMovePrechecks(dockerMoveTarget, e.target.checked); }} />
+                {t('storageSettings.dockerMoveGrow')}
+              </label>
+            </div>
+
+            {dockerMovePrechecking && (
+              <div className="modal-section"><FontAwesomeIcon icon={faSpinner} spin /> {t('storageSettings.dockerMoveChecking')}</div>
+            )}
+
+            {dockerMovePrechecks && !dockerMovePrechecking && (
+              <div className="modal-section" style={{ background: '#f8f9fa', padding: '1rem', borderRadius: '6px' }}>
+                <div>{t('storageSettings.dockerMoveRequired')} : <strong>{formatBytes(dockerMovePrechecks.requiredBytes || 0)}</strong> — {t('storageSettings.dockerMoveAvailable')} : <strong>{formatBytes(dockerMovePrechecks.availableBytes || 0)}</strong></div>
+                {dockerMovePrechecks.growPlan && dockerMovePrechecks.growPlan.rebootWillBeRequired && (
+                  <div className="storage-alert storage-alert-warning" style={{ marginTop: '0.5rem' }}>{t('storageSettings.dockerMoveRebootWarning')}</div>
+                )}
+                {dockerMovePrechecks.reasons && dockerMovePrechecks.reasons.length > 0 && (
+                  <ul style={{ color: '#ef4444', margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
+                    {dockerMovePrechecks.reasons.map((r: string, i: number) => <li key={i}>{r}</li>)}
+                  </ul>
+                )}
+                <div className="storage-alert storage-alert-warning" style={{ marginTop: '0.5rem' }}>{t('storageSettings.dockerMoveDowntime')}</div>
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowDockerMoveModal(false)}>{t('storageSettings.cancel')}</button>
+              <button className="btn-danger" style={{ background: '#6366f1' }}
+                disabled={!dockerMovePrechecks || !dockerMovePrechecks.canProceed || dockerMovePrechecking}
+                onClick={executeDockerMove}>
+                <FontAwesomeIcon icon={faExchangeAlt} /> {t('storageSettings.dockerMoveConfirm')}
               </button>
             </div>
           </div>

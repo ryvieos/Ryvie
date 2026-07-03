@@ -6048,5 +6048,844 @@ router.post('/storage/mdraid-auto-migrate', authenticateTokenOrFirstTime, async 
   }
 });
 
+// ============================================================================
+// DOCKER / CONTAINERD DATA-ROOT MOVE
+// Déplace le data-root Docker + containerd d'une partition/disque vers une autre
+// (avec agrandissement optionnel de la partition cible). Copie complète (rsync
+// -aHAX --numeric-ids) qui préserve images/conteneurs/volumes nommés. Orchestration
+// idempotente, persistée, reprenable après un reboot (agrandir une partition racine
+// montée nécessite un reboot pour relire la table de partition).
+// ============================================================================
+
+interface DockerMoveStep {
+  id: string;
+  name: string;
+  status: 'pending' | 'running' | 'completed' | 'error' | 'skipped';
+  progress: number;
+  message: string;
+}
+
+interface DockerMoveState {
+  id: string | null;
+  status: 'running' | 'completed' | 'error' | 'idle' | 'stopped';
+  // Emplacements
+  sourceDockerDir: string;
+  sourceContainerdDir: string;
+  targetMount: string;
+  targetDockerDir: string;
+  targetContainerdDir: string;
+  // Agrandissement
+  growRequested: boolean;
+  targetDisk: string | null;
+  targetPartNum: number | null;
+  partTable: 'msdos' | 'gpt' | null;
+  targetIsRoot: boolean;
+  // Reprise / reboot
+  resumePhase: string;
+  rebootExpected: boolean;
+  rebootCount: number;
+  // Vérification
+  preEngineId: string | null;
+  preContainerCount: number | null;
+  // Progression (aligné sur MigrationState)
+  currentStep: number;
+  totalSteps: number;
+  steps: DockerMoveStep[];
+  globalProgress: number;
+  error: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  stopRequested?: boolean;
+}
+
+const DOCKER_MOVE_STATE_FILE = `${RYVIE_STATE_DIR}/docker-move-state.json`;
+
+function emptyDockerMoveState(): DockerMoveState {
+  return {
+    id: null, status: 'idle',
+    sourceDockerDir: '/data/docker', sourceContainerdDir: '/data/containerd',
+    targetMount: '', targetDockerDir: '', targetContainerdDir: '',
+    growRequested: false, targetDisk: null, targetPartNum: null, partTable: null, targetIsRoot: false,
+    resumePhase: 'START', rebootExpected: false, rebootCount: 0,
+    preEngineId: null, preContainerCount: null,
+    currentStep: -1, totalSteps: 0, steps: [], globalProgress: 0,
+    error: null, startedAt: null, completedAt: null, stopRequested: false
+  };
+}
+
+let dockerMoveState: DockerMoveState = emptyDockerMoveState();
+
+// Sentinelle: un step demande un reboot; la boucle s'arrête sans marquer d'erreur.
+class RebootRequested extends Error {}
+
+async function persistDockerMoveState(state: DockerMoveState): Promise<void> {
+  try {
+    const fs = require('fs');
+    await ensureDirExists(RYVIE_STATE_DIR);
+    const tmpFile = `/tmp/docker-move-state-${Date.now()}.json`;
+    fs.writeFileSync(tmpFile, JSON.stringify(state, null, 2));
+    await executeCommand('sudo', ['-n', 'cp', tmpFile, DOCKER_MOVE_STATE_FILE]);
+    fs.unlinkSync(tmpFile);
+  } catch (e: any) {
+    console.error('Failed to persist docker-move state:', e.message);
+  }
+}
+
+function loadDockerMoveStateSync(): DockerMoveState | null {
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(DOCKER_MOVE_STATE_FILE)) return null;
+    return JSON.parse(fs.readFileSync(DOCKER_MOVE_STATE_FILE, 'utf8'));
+  } catch (e: any) {
+    return null;
+  }
+}
+
+function logDM(message: string, type = 'info'): void {
+  console.log(`[docker-move] [${type}] ${message}`);
+  if (io) io.emit('docker-move-log', { timestamp: new Date().toISOString(), type, message });
+}
+
+function emitDockerMove(): void {
+  if (io) io.emit('docker-move-progress', dockerMoveState);
+  persistDockerMoveState(dockerMoveState).catch(() => {});
+}
+
+function setStepDM(id: string, updates: Partial<DockerMoveStep>): void {
+  const idx = dockerMoveState.steps.findIndex(s => s.id === id);
+  if (idx === -1) return;
+  Object.assign(dockerMoveState.steps[idx], updates);
+  dockerMoveState.currentStep = idx;
+  let completed = 0;
+  for (const s of dockerMoveState.steps) {
+    if (s.status === 'completed' || s.status === 'skipped') completed++;
+    else if (s.status === 'running') completed += s.progress / 100;
+  }
+  dockerMoveState.globalProgress = dockerMoveState.totalSteps > 0
+    ? Math.round((completed / dockerMoveState.totalSteps) * 100) : 0;
+  emitDockerMove();
+}
+
+function checkStopRequestedDM(): boolean {
+  if (dockerMoveState.stopRequested) {
+    logDM('Arrêt demandé par l\'utilisateur — interruption après le step courant', 'warning');
+    dockerMoveState.status = 'stopped';
+    dockerMoveState.error = 'Déplacement arrêté par l\'utilisateur';
+    dockerMoveState.completedAt = new Date().toISOString();
+    emitDockerMove();
+    return true;
+  }
+  return false;
+}
+
+// --- Helpers device/partition --------------------------------------------
+
+function dmSplitDevice(part: string): { disk: string; partNum: number } | null {
+  let m = part.match(/^(\/dev\/(?:nvme\d+n\d+|mmcblk\d+))p(\d+)$/);
+  if (m) return { disk: m[1], partNum: parseInt(m[2]) };
+  m = part.match(/^(\/dev\/[a-z]+?)(\d+)$/);
+  if (m) return { disk: m[1], partNum: parseInt(m[2]) };
+  return null;
+}
+
+function dmPartPath(disk: string, num: number): string {
+  return /(?:nvme\d+n\d+|mmcblk\d+)$/.test(disk) ? `${disk}p${num}` : `${disk}${num}`;
+}
+
+// Source device d'un point de montage (nettoie le suffixe subvol btrfs `[/@rootfs]`)
+async function dmMountSource(mount: string): Promise<string | null> {
+  const r = await executeCommand('findmnt', ['-no', 'SOURCE', mount]);
+  if (r.exitCode !== 0) return null;
+  const raw = r.stdout.trim().split('\n')[0].trim();
+  if (!raw) return null;
+  return raw.replace(/\[.*\]$/, '');
+}
+
+// du -sb (octets) d'un répertoire, 0 si absent
+async function dmDirBytes(dir: string): Promise<number> {
+  const r = await executeCommand('sudo', ['-n', 'du', '-sb', dir]);
+  if (r.exitCode !== 0) return 0;
+  const n = parseInt(r.stdout.trim().split(/\s+/)[0]);
+  return isNaN(n) ? 0 : n;
+}
+
+// Octets disponibles sur un point de montage
+async function dmMountAvail(mount: string): Promise<number> {
+  const r = await executeCommand('findmnt', ['-bno', 'AVAIL', mount]);
+  if (r.exitCode !== 0) return 0;
+  const n = parseInt(r.stdout.trim().split('\n')[0]);
+  return isNaN(n) ? 0 : n;
+}
+
+interface PartedInfo {
+  table: 'msdos' | 'gpt' | string;
+  diskSize: number;
+  partitions: { num: number; start: number; end: number; size: number; fs: string; name: string; flags: string }[];
+}
+
+// Parse `parted -m -s <disk> unit B print` (format machine, octets)
+async function dmPartedInfo(disk: string): Promise<PartedInfo | null> {
+  const r = await executeCommand('sudo', ['-n', 'parted', '-m', '-s', disk, 'unit', 'B', 'print']);
+  if (r.exitCode !== 0) return null;
+  const lines = r.stdout.split(';\n').map(l => l.trim()).filter(Boolean);
+  let table = ''; let diskSize = 0;
+  const partitions: PartedInfo['partitions'] = [];
+  for (const line of lines) {
+    if (line === 'BYT') continue;
+    const f = line.split(':');
+    if (f[0] === disk) {
+      diskSize = parseInt((f[1] || '').replace('B', '')) || 0;
+      table = f[5] || '';
+    } else if (/^\d+$/.test(f[0])) {
+      partitions.push({
+        num: parseInt(f[0]),
+        start: parseInt((f[1] || '').replace('B', '')) || 0,
+        end: parseInt((f[2] || '').replace('B', '')) || 0,
+        size: parseInt((f[3] || '').replace('B', '')) || 0,
+        fs: f[4] || '', name: f[5] || '', flags: f[6] || ''
+      });
+    }
+  }
+  if (!table) return null;
+  return { table: table as any, diskSize, partitions };
+}
+
+// Analyse la faisabilité de l'agrandissement de la partition cible.
+// Retourne { supported, reason, swapPartNum, swapSize } ; supported=false => on peut
+// quand même déplacer Docker, mais sans agrandir.
+async function dmAnalyzeGrow(disk: string, partNum: number): Promise<{
+  supported: boolean; reason: string; alreadyMax: boolean;
+  swapPartNum: number | null; swapSize: number; table: string;
+}> {
+  const info = await dmPartedInfo(disk);
+  if (!info) return { supported: false, reason: 'Lecture de la table de partition impossible', alreadyMax: false, swapPartNum: null, swapSize: 0, table: '' };
+  const target = info.partitions.find(p => p.num === partNum);
+  if (!target) return { supported: false, reason: 'Partition cible introuvable', alreadyMax: false, swapPartNum: null, swapSize: 0, table: info.table };
+  const MiB = 1024 * 1024;
+  // Partitions situées après la cible
+  const after = info.partitions.filter(p => p.start > target.start).sort((a, b) => a.start - b.start);
+  const freeTail = info.diskSize - target.end;
+  if (after.length === 0) {
+    // Cible = dernière partition
+    if (freeTail < 64 * MiB) return { supported: true, reason: 'Déjà au maximum', alreadyMax: true, swapPartNum: null, swapSize: 0, table: info.table };
+    return { supported: true, reason: '', alreadyMax: false, swapPartNum: null, swapSize: 0, table: info.table };
+  }
+  const next = after[0];
+  const isSwap = /swap/i.test(next.fs) || /swap/i.test(next.name);
+  const nextIsLast = after.length === 1;
+  if (isSwap && nextIsLast && info.table === 'gpt') {
+    return { supported: true, reason: '', alreadyMax: false, swapPartNum: next.num, swapSize: next.size, table: info.table };
+  }
+  if (isSwap && info.table !== 'gpt') {
+    return { supported: false, reason: 'Déplacement du swap non supporté sur table msdos (risque partition étendue)', alreadyMax: false, swapPartNum: next.num, swapSize: next.size, table: info.table };
+  }
+  return { supported: false, reason: 'Une partition non-swap suit la cible — agrandissement non sûr', alreadyMax: false, swapPartNum: null, swapSize: 0, table: info.table };
+}
+
+// --- Steps -----------------------------------------------------------------
+
+// Agrandit la partition cible (relocalise le swap en fin de disque si nécessaire).
+async function dmGrowPartition(): Promise<void> {
+  const st = dockerMoveState;
+  setStepDM('grow-partition', { status: 'running', message: 'Analyse de la partition cible...', progress: 10 });
+  const disk = st.targetDisk!; const partNum = st.targetPartNum!;
+  const MiB = 1024 * 1024;
+  const analysis = await dmAnalyzeGrow(disk, partNum);
+  st.partTable = (analysis.table === 'msdos' || analysis.table === 'gpt') ? analysis.table : st.partTable;
+  if (!analysis.supported) throw new Error(`Agrandissement impossible: ${analysis.reason}`);
+  if (analysis.alreadyMax) {
+    logDM('Partition déjà à la taille maximale — agrandissement ignoré', 'info');
+    setStepDM('grow-partition', { status: 'skipped', message: 'Déjà au maximum', progress: 100 });
+    return;
+  }
+
+  const info = await dmPartedInfo(disk);
+  if (!info) throw new Error('Lecture parted impossible');
+  const target = info.partitions.find(p => p.num === partNum)!;
+
+  if (analysis.swapPartNum !== null && analysis.swapSize > 0) {
+    // Relocalisation du swap (GPT, swap juste après la cible et dernière partition)
+    const swapPart = dmPartPath(disk, analysis.swapPartNum);
+    // Idempotence: si la partition swap actuelle commence déjà juste après une cible agrandie, ne rien faire
+    logDM(`Déplacement du swap ${swapPart} en fin de disque...`, 'info');
+    setStepDM('grow-partition', { message: 'Déplacement du swap...', progress: 25 });
+    await executeCommand('sudo', ['-n', 'swapoff', swapPart]);
+    // Retirer la ligne swap de /etc/fstab (par UUID du device)
+    try {
+      const uuidR = await executeCommand('sudo', ['-n', 'blkid', '-o', 'value', '-s', 'UUID', swapPart]);
+      const oldUuid = uuidR.stdout.trim();
+      if (oldUuid) {
+        const fstab = await executeCommand('cat', ['/etc/fstab']);
+        const fs = require('fs');
+        const filtered = fstab.stdout.split('\n').filter(l => !l.includes(oldUuid)).join('\n') + '\n';
+        const tmp = '/tmp/fstab.dm.new';
+        fs.writeFileSync(tmp, filtered);
+        await executeCommand('sudo', ['-n', 'cp', tmp, '/etc/fstab']);
+        fs.unlinkSync(tmp);
+      }
+    } catch (e: any) { logDM(`Avert. nettoyage fstab swap: ${e.message}`, 'warning'); }
+    // Supprimer l'ancienne partition swap
+    await executeCommandStrict('sudo', ['-n', 'sgdisk', '-d', String(analysis.swapPartNum), disk], 'sgdisk delete swap');
+    // Agrandir la cible en laissant swapSize à la fin
+    const newTargetEndMiB = Math.floor((info.diskSize - analysis.swapSize) / MiB) - 1;
+    setStepDM('grow-partition', { message: 'Agrandissement de la partition...', progress: 55 });
+    await executeCommandStrict('sudo', ['-n', 'parted', '-s', disk, 'resizepart', String(partNum), `${newTargetEndMiB}MiB`], 'resizepart');
+    // Recréer le swap en fin de disque (type 8200)
+    await executeCommandStrict('sudo', ['-n', 'sgdisk', '-n', `${analysis.swapPartNum}:${newTargetEndMiB + 1}MiB:0`, '-t', `${analysis.swapPartNum}:8200`, '-c', `${analysis.swapPartNum}:swap`, disk], 'sgdisk recreate swap');
+    await executeCommand('sudo', ['-n', 'partprobe', disk]);
+    await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
+    const newSwap = dmPartPath(disk, analysis.swapPartNum);
+    await executeCommandStrict('sudo', ['-n', 'mkswap', newSwap], 'mkswap');
+    await executeCommand('sudo', ['-n', 'swapon', newSwap]);
+    // Réécrire fstab avec le nouvel UUID
+    try {
+      const uuidR = await executeCommand('sudo', ['-n', 'blkid', '-o', 'value', '-s', 'UUID', newSwap]);
+      const newUuid = uuidR.stdout.trim();
+      if (newUuid) {
+        const fstab = await executeCommand('cat', ['/etc/fstab']);
+        const fs = require('fs');
+        const content = fstab.stdout.replace(/\n+$/, '\n') + `UUID=${newUuid} none swap sw 0 0\n`;
+        const tmp = '/tmp/fstab.dm2.new';
+        fs.writeFileSync(tmp, content);
+        await executeCommand('sudo', ['-n', 'cp', tmp, '/etc/fstab']);
+        fs.unlinkSync(tmp);
+      }
+    } catch (e: any) { logDM(`Avert. écriture fstab swap: ${e.message}`, 'warning'); }
+    logDM('✓ Swap relocalisé en fin de disque', 'success');
+  } else {
+    // Cible = dernière partition, juste agrandir à 100%
+    // Idempotence: si déjà quasi à la taille disque, sauter
+    if (info.diskSize - target.end < 64 * MiB) {
+      setStepDM('grow-partition', { status: 'skipped', message: 'Déjà au maximum', progress: 100 });
+      return;
+    }
+    setStepDM('grow-partition', { message: 'Agrandissement de la partition...', progress: 55 });
+    await executeCommandStrict('sudo', ['-n', 'parted', '-s', disk, 'resizepart', String(partNum), '100%'], 'resizepart');
+  }
+  await executeCommand('sudo', ['-n', 'partprobe', disk]);
+  await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
+  logDM('✓ Partition agrandie', 'success');
+  setStepDM('grow-partition', { status: 'completed', message: 'Partition agrandie', progress: 100 });
+}
+
+// Fait relire la nouvelle taille de partition au noyau ; reboot si nécessaire (racine montée).
+async function dmGrowReread(): Promise<void> {
+  const st = dockerMoveState;
+  setStepDM('grow-reread', { status: 'running', message: 'Relecture de la table de partition...', progress: 30 });
+  const disk = st.targetDisk!; const partNum = st.targetPartNum!;
+  const part = dmPartPath(disk, partNum);
+  await executeCommand('sudo', ['-n', 'partx', '-u', disk]);
+  await executeCommand('sudo', ['-n', 'partprobe', disk]);
+  await executeCommand('sudo', ['-n', 'udevadm', 'settle', '--timeout=10']);
+
+  // Taille attendue (parted) vs vue noyau (/sys)
+  const info = await dmPartedInfo(disk);
+  const target = info?.partitions.find(p => p.num === partNum);
+  const expectedSectors = target ? Math.floor(target.size / 512) : 0;
+  const partBase = part.replace('/dev/', '');
+  const sysR = await executeCommand('cat', [`/sys/class/block/${partBase}/size`]);
+  const kernelSectors = parseInt(sysR.stdout.trim()) || 0;
+  // Tolérance 1% (arrondis parted/512o)
+  const upToDate = expectedSectors > 0 && kernelSectors >= expectedSectors * 0.99;
+
+  if (upToDate) {
+    logDM('✓ Table de partition relue par le noyau (pas de reboot nécessaire)', 'success');
+    setStepDM('grow-reread', { status: 'completed', message: 'Table relue', progress: 100 });
+    return;
+  }
+
+  if (!st.targetIsRoot) {
+    // Partition non montée en racine mais relecture échouée : réessai unique
+    throw new Error('Le noyau n\'a pas relu la nouvelle taille de partition (cible non racine)');
+  }
+
+  // Racine montée : reboot requis, reprise automatique au boot
+  if (st.rebootCount >= 1) {
+    throw new Error('La taille de partition n\'est toujours pas visible après un reboot — abandon');
+  }
+  logDM('Reboot nécessaire pour relire la table de partition (partition racine montée). Reprise automatique après redémarrage.', 'warning');
+  st.resumePhase = 'GROW_AWAIT_REBOOT';
+  st.rebootExpected = true;
+  st.rebootCount = (st.rebootCount || 0) + 1;
+  setStepDM('grow-reread', { status: 'running', message: 'Redémarrage en cours... reprise automatique', progress: 50 });
+  await persistDockerMoveState(st);
+  setTimeout(async () => {
+    try { await executeCommand('sudo', ['-n', 'reboot']); } catch (e: any) { console.error('reboot failed', e); }
+  }, 5000);
+  throw new RebootRequested('reboot scheduled');
+}
+
+// Agrandit le système de fichiers btrfs de la cible (online).
+async function dmGrowBtrfs(): Promise<void> {
+  const st = dockerMoveState;
+  setStepDM('grow-btrfs', { status: 'running', message: 'Agrandissement du système de fichiers...', progress: 40 });
+  const r = await executeCommand('sudo', ['-n', 'btrfs', 'filesystem', 'resize', 'max', st.targetMount]);
+  if (r.exitCode !== 0 && !/nothing to do|no change/i.test(r.stderr)) {
+    throw new Error(`btrfs resize a échoué: ${r.stderr.trim()}`);
+  }
+  logDM(`✓ Système de fichiers ${st.targetMount} agrandi`, 'success');
+  setStepDM('grow-btrfs', { status: 'completed', message: 'Système de fichiers agrandi', progress: 100 });
+}
+
+async function dmPrepareTarget(): Promise<void> {
+  const st = dockerMoveState;
+  setStepDM('move-prepare', { status: 'running', message: 'Préparation des répertoires cibles...', progress: 50 });
+  await executeCommand('sudo', ['-n', 'mkdir', '-p', st.targetDockerDir, st.targetContainerdDir]);
+  setStepDM('move-prepare', { status: 'completed', message: 'Répertoires prêts', progress: 100 });
+}
+
+async function dmStopServices(): Promise<void> {
+  const st = dockerMoveState;
+  setStepDM('move-stop', { status: 'running', message: 'Capture de l\'état Docker...', progress: 20 });
+  // Capturer engine-id + nb conteneurs AVANT arrêt (pour la vérification)
+  try {
+    const idR = await executeCommand('sudo', ['-n', 'docker', 'info', '--format', '{{.ID}}']);
+    if (idR.exitCode === 0) st.preEngineId = idR.stdout.trim();
+    const psR = await executeCommand('sudo', ['-n', 'docker', 'ps', '-aq']);
+    if (psR.exitCode === 0) st.preContainerCount = psR.stdout.trim() ? psR.stdout.trim().split('\n').length : 0;
+  } catch (e: any) {}
+  setStepDM('move-stop', { message: 'Arrêt de Docker & containerd...', progress: 60 });
+  await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
+  await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
+  await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
+  logDM('✓ Docker & containerd arrêtés', 'success');
+  setStepDM('move-stop', { status: 'completed', message: 'Services arrêtés', progress: 100 });
+}
+
+async function dmRsync(src: string, dst: string, label: string): Promise<void> {
+  logDM(`Copie ${src} → ${dst} ...`, 'info');
+  const r = await executeCommand('sudo', ['-n', 'rsync', '-aHAX', '--numeric-ids', '--delete', `${src}/`, `${dst}/`]);
+  if (r.exitCode !== 0) throw new Error(`rsync ${label} a échoué (code ${r.exitCode}): ${r.stderr.trim().slice(-500)}`);
+}
+
+async function dmCopy(): Promise<void> {
+  const st = dockerMoveState;
+  setStepDM('move-copy', { status: 'running', message: 'Copie de /docker (rsync)...', progress: 10 });
+  await dmRsync(st.sourceDockerDir, st.targetDockerDir, 'docker');
+  setStepDM('move-copy', { message: 'Copie de /containerd (rsync)...', progress: 60 });
+  await dmRsync(st.sourceContainerdDir, st.targetContainerdDir, 'containerd');
+  // Vérification grossière de la copie
+  const srcBytes = await dmDirBytes(st.sourceDockerDir) + await dmDirBytes(st.sourceContainerdDir);
+  const dstBytes = await dmDirBytes(st.targetDockerDir) + await dmDirBytes(st.targetContainerdDir);
+  if (srcBytes > 0 && dstBytes < srcBytes * 0.9) {
+    throw new Error(`Copie incomplète: source ${srcBytes} o vs cible ${dstBytes} o`);
+  }
+  logDM('✓ Données copiées', 'success');
+  setStepDM('move-copy', { status: 'completed', message: 'Données copiées', progress: 100 });
+}
+
+async function dmWriteConfig(): Promise<void> {
+  const st = dockerMoveState;
+  setStepDM('move-config', { status: 'running', message: 'Sauvegarde et mise à jour de la configuration...', progress: 30 });
+  const fs = require('fs');
+  // Sauvegardes (une seule fois)
+  const backupIfAbsent = async (path: string) => {
+    const bak = `${path}.ryvie-bak`;
+    const check = await executeCommand('sudo', ['-n', 'test', '-f', bak]);
+    if (check.exitCode !== 0) await executeCommand('sudo', ['-n', 'cp', path, bak]);
+  };
+  await backupIfAbsent('/etc/docker/daemon.json');
+  await backupIfAbsent('/etc/containerd/config.toml');
+
+  // daemon.json : mise à jour de data-root
+  const djR = await executeCommand('sudo', ['-n', 'cat', '/etc/docker/daemon.json']);
+  let daemon: any = {};
+  try { daemon = JSON.parse(djR.stdout || '{}'); } catch (e: any) { daemon = {}; }
+  daemon['data-root'] = st.targetDockerDir;
+  const tmpDj = '/tmp/daemon.json.dm';
+  fs.writeFileSync(tmpDj, JSON.stringify(daemon, null, 2) + '\n');
+  await executeCommand('sudo', ['-n', 'cp', tmpDj, '/etc/docker/daemon.json']);
+  fs.unlinkSync(tmpDj);
+
+  // config.toml : mise à jour de root = "..."
+  const ctR = await executeCommand('sudo', ['-n', 'cat', '/etc/containerd/config.toml']);
+  let toml = ctR.stdout || '';
+  if (/^\s*root\s*=\s*".*"/m.test(toml)) {
+    toml = toml.replace(/^\s*root\s*=\s*".*"/m, `root = "${st.targetContainerdDir}"`);
+  } else {
+    toml = `root = "${st.targetContainerdDir}"\n` + toml;
+  }
+  const tmpCt = '/tmp/config.toml.dm';
+  fs.writeFileSync(tmpCt, toml);
+  await executeCommand('sudo', ['-n', 'cp', tmpCt, '/etc/containerd/config.toml']);
+  fs.unlinkSync(tmpCt);
+
+  logDM(`✓ Config mise à jour (data-root → ${st.targetDockerDir}, containerd root → ${st.targetContainerdDir})`, 'success');
+  setStepDM('move-config', { status: 'completed', message: 'Configuration mise à jour', progress: 100 });
+}
+
+async function dmStartServices(): Promise<void> {
+  setStepDM('move-start', { status: 'running', message: 'Redémarrage de containerd...', progress: 30 });
+  await executeCommand('sudo', ['-n', 'systemctl', 'start', 'containerd']);
+  await executeCommand('sleep', ['2']);
+  setStepDM('move-start', { message: 'Redémarrage de Docker...', progress: 60 });
+  await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker.socket']);
+  await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']);
+  await executeCommand('sleep', ['3']);
+  // Assurer le réseau ryvie
+  const netR = await executeCommand('sudo', ['-n', 'docker', 'network', 'inspect', 'ryvie-network']);
+  if (netR.exitCode !== 0) {
+    await executeCommand('sudo', ['-n', 'docker', 'network', 'create', 'ryvie-network']);
+  }
+  logDM('✓ Docker & containerd redémarrés', 'success');
+  setStepDM('move-start', { status: 'completed', message: 'Services redémarrés', progress: 100 });
+}
+
+async function dmRollbackConfig(): Promise<void> {
+  logDM('↩ Rollback: restauration de la configuration d\'origine...', 'warning');
+  await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker.socket']);
+  await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'docker']);
+  await executeCommand('sudo', ['-n', 'systemctl', 'stop', 'containerd']);
+  await executeCommand('sudo', ['-n', 'cp', '/etc/docker/daemon.json.ryvie-bak', '/etc/docker/daemon.json']);
+  await executeCommand('sudo', ['-n', 'cp', '/etc/containerd/config.toml.ryvie-bak', '/etc/containerd/config.toml']);
+  await executeCommand('sudo', ['-n', 'systemctl', 'start', 'containerd']);
+  await executeCommand('sleep', ['2']);
+  await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker.socket']);
+  await executeCommand('sudo', ['-n', 'systemctl', 'start', 'docker']);
+  logDM('↩ Rollback effectué — Docker repointe sur l\'ancien data-root (intact)', 'warning');
+}
+
+async function dmVerify(): Promise<void> {
+  const st = dockerMoveState;
+  setStepDM('move-verify', { status: 'running', message: 'Vérification du nouveau data-root...', progress: 40 });
+  const rootR = await executeCommand('sudo', ['-n', 'docker', 'info', '--format', '{{.DockerRootDir}}']);
+  const newRoot = rootR.stdout.trim();
+  const idR = await executeCommand('sudo', ['-n', 'docker', 'info', '--format', '{{.ID}}']);
+  const engineId = idR.stdout.trim();
+  const psR = await executeCommand('sudo', ['-n', 'docker', 'ps', '-aq']);
+  const containerCount = psR.stdout.trim() ? psR.stdout.trim().split('\n').length : 0;
+
+  const ok = rootR.exitCode === 0 &&
+    newRoot === st.targetDockerDir &&
+    (st.preEngineId === null || engineId === st.preEngineId) &&
+    (st.preContainerCount === null || containerCount >= st.preContainerCount);
+
+  if (!ok) {
+    logDM(`✗ Vérification échouée: root=${newRoot} (attendu ${st.targetDockerDir}), engine=${engineId}/${st.preEngineId}, conteneurs=${containerCount}/${st.preContainerCount}`, 'error');
+    await dmRollbackConfig();
+    throw new Error(`Vérification échouée — rollback effectué (Docker root: ${newRoot})`);
+  }
+  logDM(`✓ Vérifié: data-root=${newRoot}, engine-id inchangé, ${containerCount} conteneurs`, 'success');
+  setStepDM('move-verify', { status: 'completed', message: 'Vérifié', progress: 100 });
+}
+
+async function dmCleanupOld(): Promise<void> {
+  const st = dockerMoveState;
+  setStepDM('move-cleanup', { status: 'running', message: 'Suppression de l\'ancien emplacement...', progress: 40 });
+  for (const dir of [st.sourceDockerDir, st.sourceContainerdDir]) {
+    const exists = await executeCommand('sudo', ['-n', 'test', '-d', dir]);
+    if (exists.exitCode !== 0) continue;
+    // Tenter suppression de sous-volume btrfs, sinon rm -rf
+    const sv = await executeCommand('sudo', ['-n', 'btrfs', 'subvolume', 'delete', dir]);
+    if (sv.exitCode !== 0) {
+      await executeCommand('sudo', ['-n', 'rm', '-rf', dir]);
+    }
+    logDM(`✓ Ancien ${dir} supprimé`, 'success');
+  }
+  setStepDM('move-cleanup', { status: 'completed', message: 'Ancien emplacement supprimé', progress: 100 });
+}
+
+const DM_HANDLERS: { [id: string]: () => Promise<void> } = {
+  'grow-partition': dmGrowPartition,
+  'grow-reread': dmGrowReread,
+  'grow-btrfs': dmGrowBtrfs,
+  'move-prepare': dmPrepareTarget,
+  'move-stop': dmStopServices,
+  'move-copy': dmCopy,
+  'move-config': dmWriteConfig,
+  'move-start': dmStartServices,
+  'move-verify': dmVerify,
+  'move-cleanup': dmCleanupOld,
+};
+
+function buildDockerMoveSteps(growRequested: boolean): DockerMoveStep[] {
+  const defs: { id: string; name: string }[] = [];
+  if (growRequested) {
+    defs.push({ id: 'grow-partition', name: 'Agrandir la partition cible' });
+    defs.push({ id: 'grow-reread', name: 'Relire la table de partition' });
+    defs.push({ id: 'grow-btrfs', name: 'Agrandir le système de fichiers' });
+  }
+  defs.push({ id: 'move-prepare', name: 'Préparer la cible' });
+  defs.push({ id: 'move-stop', name: 'Arrêter Docker & containerd' });
+  defs.push({ id: 'move-copy', name: 'Copier les données (rsync)' });
+  defs.push({ id: 'move-config', name: 'Mettre à jour la configuration' });
+  defs.push({ id: 'move-start', name: 'Redémarrer Docker & containerd' });
+  defs.push({ id: 'move-verify', name: 'Vérifier' });
+  defs.push({ id: 'move-cleanup', name: 'Supprimer l\'ancien emplacement' });
+  return defs.map(d => ({ id: d.id, name: d.name, status: 'pending', progress: 0, message: '' }));
+}
+
+// Orchestration autonome — appelée par l'endpoint POST et par la reprise au boot.
+async function runDockerMove(): Promise<void> {
+  const st = dockerMoveState;
+  try {
+    for (const step of st.steps) {
+      if (step.status === 'completed' || step.status === 'skipped') continue;
+      if (checkStopRequestedDM()) return;
+      st.resumePhase = step.id;
+      const handler = DM_HANDLERS[step.id];
+      if (!handler) { setStepDM(step.id, { status: 'skipped', message: 'Handler manquant', progress: 100 }); continue; }
+      await handler();
+    }
+    st.status = 'completed';
+    st.globalProgress = 100;
+    st.resumePhase = 'DONE';
+    st.completedAt = new Date().toISOString();
+    logDM('=== Déplacement Docker terminé avec succès ===', 'success');
+    emitDockerMove();
+  } catch (e: any) {
+    if (e instanceof RebootRequested) return; // état déjà persisté, reboot programmé
+    console.error('[docker-move] fatal:', e);
+    logDM(`Erreur fatale: ${e.message}`, 'error');
+    const cur = st.steps[st.currentStep];
+    if (cur) Object.assign(cur, { status: 'error', message: e.message });
+    st.status = 'error';
+    st.error = e.message;
+    st.completedAt = new Date().toISOString();
+    emitDockerMove();
+  }
+}
+
+// Reprise au démarrage (parallèle à celle du RAID, état séparé).
+(() => {
+  const restored = loadDockerMoveStateSync();
+  if (!restored || !restored.id) return;
+  dockerMoveState = restored;
+  if (restored.status !== 'running') {
+    console.log(`[docker-move] État restauré: ${restored.id} (${restored.status})`);
+    return;
+  }
+  if (restored.rebootExpected === true) {
+    restored.rebootExpected = false; // consommer le flag (une seule reprise)
+    persistDockerMoveState(restored).catch(() => {});
+    console.log(`[docker-move] Reprise après reboot attendu à la phase ${restored.resumePhase}`);
+    setTimeout(() => { runDockerMove(); }, 8000); // laisser io/mounts/docker se stabiliser
+  } else {
+    restored.status = 'error';
+    restored.error = 'Backend redémarré de façon inattendue pendant le déplacement — relancer pour reprendre.';
+    restored.completedAt = new Date().toISOString();
+    persistDockerMoveState(restored).catch(() => {});
+  }
+})();
+
+// --- Endpoints -------------------------------------------------------------
+
+/**
+ * GET /api/storage/docker-location
+ * Emplacement actuel de Docker/containerd + état des services.
+ */
+router.get('/storage/docker-location', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  try {
+    const rootR = await executeCommand('sudo', ['-n', 'docker', 'info', '--format', '{{.DockerRootDir}}']);
+    const djR = await executeCommand('sudo', ['-n', 'cat', '/etc/docker/daemon.json']);
+    let daemonDataRoot: string | null = null;
+    try { daemonDataRoot = (JSON.parse(djR.stdout || '{}'))['data-root'] || null; } catch (e: any) {}
+    const ctR = await executeCommand('sudo', ['-n', 'cat', '/etc/containerd/config.toml']);
+    const tomlMatch = (ctR.stdout || '').match(/^\s*root\s*=\s*"(.*)"/m);
+    const dockerActive = (await executeCommand('systemctl', ['is-active', 'docker'])).stdout.trim() === 'active';
+    const containerdActive = (await executeCommand('systemctl', ['is-active', 'containerd'])).stdout.trim() === 'active';
+    // Point de montage hébergeant le data-root
+    const dockerRootDir = rootR.exitCode === 0 ? rootR.stdout.trim() : (daemonDataRoot || '/var/lib/docker');
+    const mntR = await executeCommand('findmnt', ['-no', 'TARGET', '--target', dockerRootDir]);
+    res.json({
+      success: true,
+      dockerRootDir,
+      containerdRoot: tomlMatch ? tomlMatch[1] : '/var/lib/containerd',
+      daemonJsonDataRoot: daemonDataRoot,
+      currentMount: mntR.exitCode === 0 ? mntR.stdout.trim() : null,
+      dockerActive, containerdActive
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Calcule les répertoires cibles à partir du point de montage choisi.
+function dmComputeTargetDirs(targetMount: string): { docker: string; containerd: string } {
+  if (targetMount === '/') return { docker: '/var/lib/docker', containerd: '/var/lib/containerd' };
+  const base = targetMount.replace(/\/$/, '');
+  return { docker: `${base}/docker`, containerd: `${base}/containerd` };
+}
+
+// Validation partagée (utilisée par prechecks ET par le POST docker-move).
+async function dmValidate(targetMount: string, growRequested: boolean): Promise<{
+  canProceed: boolean; reasons: string[];
+  sourceDockerDir: string; sourceContainerdDir: string;
+  requiredBytes: number; availableBytes: number;
+  targetDisk: string | null; targetPartNum: number | null; targetIsRoot: boolean;
+  growPlan: { supported: boolean; reason: string; rebootWillBeRequired: boolean; swapRelocation: boolean; alreadyMax: boolean } | null;
+}> {
+  const reasons: string[] = [];
+  // Source actuelle
+  const rootR = await executeCommand('sudo', ['-n', 'docker', 'info', '--format', '{{.DockerRootDir}}']);
+  const sourceDockerDir = rootR.exitCode === 0 && rootR.stdout.trim() ? rootR.stdout.trim() : '/data/docker';
+  const ctR = await executeCommand('sudo', ['-n', 'cat', '/etc/containerd/config.toml']);
+  const tomlMatch = (ctR.stdout || '').match(/^\s*root\s*=\s*"(.*)"/m);
+  const sourceContainerdDir = tomlMatch ? tomlMatch[1] : '/data/containerd';
+
+  // Cible montée ?
+  const srcDev = await dmMountSource(targetMount);
+  if (!srcDev) reasons.push(`Le point de montage ${targetMount} n'est pas monté`);
+
+  // Cible == source ?
+  const srcMntR = await executeCommand('findmnt', ['-no', 'TARGET', '--target', sourceDockerDir]);
+  const currentMount = srcMntR.exitCode === 0 ? srcMntR.stdout.trim() : null;
+  if (currentMount && currentMount === targetMount) reasons.push(`La cible ${targetMount} héberge déjà le data-root actuel`);
+
+  // Espace
+  const requiredBytes = await dmDirBytes(sourceDockerDir) + await dmDirBytes(sourceContainerdDir);
+  const availableBytes = await dmMountAvail(targetMount);
+  if (requiredBytes > 0 && availableBytes < requiredBytes * 1.15) {
+    reasons.push(`Espace insuffisant sur ${targetMount}: ${Math.round(availableBytes / 1e9)} Go dispo, ~${Math.round(requiredBytes * 1.15 / 1e9)} Go requis`);
+  }
+
+  // Analyse device/partition + grow
+  let targetDisk: string | null = null, targetPartNum: number | null = null, targetIsRoot = false;
+  let growPlan = null;
+  if (srcDev) {
+    const split = dmSplitDevice(srcDev);
+    if (split) { targetDisk = split.disk; targetPartNum = split.partNum; }
+    targetIsRoot = targetMount === '/';
+    if (growRequested) {
+      if (!split) {
+        growPlan = { supported: false, reason: 'Device cible non partitionnable (RAID/LVM ?)', rebootWillBeRequired: false, swapRelocation: false, alreadyMax: false };
+      } else {
+        const a = await dmAnalyzeGrow(split.disk, split.partNum);
+        growPlan = {
+          supported: a.supported, reason: a.reason,
+          rebootWillBeRequired: a.supported && !a.alreadyMax && targetIsRoot,
+          swapRelocation: a.swapPartNum !== null,
+          alreadyMax: a.alreadyMax
+        };
+        if (!a.supported) reasons.push(`Agrandissement impossible: ${a.reason}`);
+      }
+    }
+  }
+
+  return {
+    canProceed: reasons.length === 0, reasons,
+    sourceDockerDir, sourceContainerdDir,
+    requiredBytes, availableBytes,
+    targetDisk, targetPartNum, targetIsRoot, growPlan
+  };
+}
+
+/**
+ * POST /api/storage/docker-move-prechecks
+ * Body: { targetMount: string, growRequested?: boolean }
+ */
+router.post('/storage/docker-move-prechecks', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  try {
+    const { targetMount, growRequested = false } = req.body || {};
+    if (!targetMount || typeof targetMount !== 'string') {
+      return res.status(400).json({ success: false, error: 'targetMount requis' });
+    }
+    const v = await dmValidate(targetMount, !!growRequested);
+    const dirs = dmComputeTargetDirs(targetMount);
+    res.json({
+      success: true,
+      canProceed: v.canProceed,
+      reasons: v.reasons,
+      requiredBytes: v.requiredBytes,
+      availableBytes: v.availableBytes,
+      targetDockerDir: dirs.docker,
+      targetContainerdDir: dirs.containerd,
+      growPlan: v.growPlan,
+      note: 'La reprise après reboot dépend de PM2 en mode production (pm2 resurrect).'
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/storage/docker-move
+ * Body: { targetMount: string, growRequested?: boolean, targetDockerDir?, targetContainerdDir? }
+ */
+router.post('/storage/docker-move', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  try {
+    if (dockerMoveState.status === 'running') {
+      return res.status(409).json({ success: false, error: 'Un déplacement est déjà en cours' });
+    }
+    const { targetMount, growRequested = false, targetDockerDir, targetContainerdDir } = req.body || {};
+    if (!targetMount || typeof targetMount !== 'string') {
+      return res.status(400).json({ success: false, error: 'targetMount requis' });
+    }
+    const v = await dmValidate(targetMount, !!growRequested);
+    if (!v.canProceed) {
+      return res.status(400).json({ success: false, error: 'Pré-vérifications échouées', reasons: v.reasons });
+    }
+    const dirs = dmComputeTargetDirs(targetMount);
+    const willGrow = !!growRequested && !!(v.growPlan && v.growPlan.supported && !v.growPlan.alreadyMax);
+
+    dockerMoveState = emptyDockerMoveState();
+    dockerMoveState.id = `dmove-${Date.now()}`;
+    dockerMoveState.status = 'running';
+    dockerMoveState.sourceDockerDir = v.sourceDockerDir;
+    dockerMoveState.sourceContainerdDir = v.sourceContainerdDir;
+    dockerMoveState.targetMount = targetMount;
+    dockerMoveState.targetDockerDir = targetDockerDir || dirs.docker;
+    dockerMoveState.targetContainerdDir = targetContainerdDir || dirs.containerd;
+    dockerMoveState.growRequested = willGrow;
+    dockerMoveState.targetDisk = v.targetDisk;
+    dockerMoveState.targetPartNum = v.targetPartNum;
+    dockerMoveState.targetIsRoot = v.targetIsRoot;
+    dockerMoveState.steps = buildDockerMoveSteps(willGrow);
+    dockerMoveState.totalSteps = dockerMoveState.steps.length;
+    dockerMoveState.startedAt = new Date().toISOString();
+    dockerMoveState.resumePhase = 'START';
+    emitDockerMove();
+
+    res.json({ success: true, moveId: dockerMoveState.id, message: 'Déplacement démarré' });
+    runDockerMove();
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/storage/docker-move-status
+ */
+router.get('/storage/docker-move-status', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  res.json({ success: true, move: dockerMoveState });
+});
+
+/**
+ * POST /api/storage/docker-move-stop
+ */
+router.post('/storage/docker-move-stop', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  if (dockerMoveState.status !== 'running') {
+    return res.status(400).json({ success: false, error: 'Aucun déplacement en cours' });
+  }
+  // Refuser l'arrêt une fois la config écrite (sinon Docker resterait sur un état half-applied)
+  const configDone = dockerMoveState.steps.find(s => s.id === 'move-config' && (s.status === 'completed' || s.status === 'running'));
+  if (configDone) {
+    return res.status(409).json({ success: false, error: 'Trop tard pour arrêter (configuration en cours d\'application) — laisser terminer' });
+  }
+  dockerMoveState.stopRequested = true;
+  logDM('Arrêt demandé — interruption après le step courant', 'warning');
+  res.json({ success: true, message: 'Arrêt demandé' });
+});
+
+/**
+ * POST /api/storage/docker-move-reset
+ */
+router.post('/storage/docker-move-reset', authenticateTokenOrFirstTime, async (req: any, res: any) => {
+  if (dockerMoveState.status === 'running' && dockerMoveState.rebootExpected) {
+    return res.status(409).json({ success: false, error: 'Reprise après reboot en attente — reset impossible' });
+  }
+  try {
+    const fs = require('fs');
+    if (fs.existsSync(DOCKER_MOVE_STATE_FILE)) {
+      await executeCommand('sudo', ['-n', 'rm', '-f', DOCKER_MOVE_STATE_FILE]);
+    }
+    dockerMoveState = emptyDockerMoveState();
+    if (io) io.emit('docker-move-progress', dockerMoveState);
+    res.json({ success: true, message: 'État réinitialisé' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export = router;
 module.exports.setSocketIO = setSocketIO;

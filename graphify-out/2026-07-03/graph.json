@@ -63,7 +63,7 @@
       "source_file": "Ryvie-Back/config/ldap.ts",
       "source_location": "L1",
       "id": "config_ldap",
-      "community": 52,
+      "community": 48,
       "norm_label": "ldap.ts"
     },
     {
@@ -540,7 +540,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L33",
       "id": "middleware_auth_verifytoken",
-      "community": 192,
+      "community": 34,
       "norm_label": "verifytoken()"
     },
     {
@@ -1458,7 +1458,7 @@
       "source_file": "Ryvie-Back/routes/auth.ts",
       "source_location": "L92",
       "id": "routes_auth_proceed",
-      "community": 85,
+      "community": 52,
       "norm_label": "proceed()"
     },
     {
@@ -2556,7 +2556,7 @@
       "source_file": "Ryvie-Back/routes/users.ts",
       "source_location": "L1",
       "id": "routes_users",
-      "community": 192,
+      "community": 52,
       "norm_label": "users.ts"
     },
     {
@@ -2565,7 +2565,7 @@
       "source_file": "Ryvie-Back/routes/users.ts",
       "source_location": "L1",
       "id": "routes_users_express",
-      "community": 192,
+      "community": 52,
       "norm_label": "express"
     },
     {
@@ -2574,7 +2574,7 @@
       "source_file": "Ryvie-Back/routes/users.ts",
       "source_location": "L2",
       "id": "routes_users_router",
-      "community": 192,
+      "community": 52,
       "norm_label": "router"
     },
     {
@@ -2583,7 +2583,7 @@
       "source_file": "Ryvie-Back/routes/users.ts",
       "source_location": "L3",
       "id": "routes_users_verifytoken",
-      "community": 192,
+      "community": 52,
       "norm_label": "{ verifytoken }"
     },
     {
@@ -2592,7 +2592,7 @@
       "source_file": "Ryvie-Back/routes/users.ts",
       "source_location": "L4",
       "id": "routes_users_listuserswithroles_listuserspublic",
-      "community": 192,
+      "community": 52,
       "norm_label": "{ listuserswithroles, listuserspublic }"
     },
     {
@@ -5490,7 +5490,7 @@
       "source_file": "Ryvie-Back/services/ldapService.ts",
       "source_location": "L169",
       "id": "services_ldapservice_listuserspublic",
-      "community": 52,
+      "community": 49,
       "norm_label": "listuserspublic()"
     },
     {
@@ -5688,7 +5688,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L1",
       "id": "services_oidcservice",
-      "community": 9,
+      "community": 38,
       "norm_label": "oidcservice.ts"
     },
     {
@@ -5697,7 +5697,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L6",
       "id": "services_oidcservice_oidcconfig",
-      "community": 9,
+      "community": 38,
       "norm_label": "oidcconfig"
     },
     {
@@ -5706,7 +5706,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L13",
       "id": "services_oidcservice_config",
-      "community": 9,
+      "community": 38,
       "norm_label": "config"
     },
     {
@@ -5715,7 +5715,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L26",
       "id": "services_oidcservice_getissuerfromorigin",
-      "community": 9,
+      "community": 38,
       "norm_label": "getissuerfromorigin()"
     },
     {
@@ -5724,7 +5724,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L37",
       "id": "services_oidcservice_simpleresponse",
-      "community": 9,
+      "community": 38,
       "norm_label": "simpleresponse"
     },
     {
@@ -5733,7 +5733,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L53",
       "id": "services_oidcservice_localkeycloakrequest",
-      "community": 9,
+      "community": 38,
       "norm_label": "localkeycloakrequest()"
     },
     {
@@ -5742,7 +5742,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L103",
       "id": "services_oidcservice_getbackendredirecturi",
-      "community": 9,
+      "community": 38,
       "norm_label": "getbackendredirecturi()"
     },
     {
@@ -5751,7 +5751,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L125",
       "id": "services_oidcservice_getoidcconfig",
-      "community": 9,
+      "community": 38,
       "norm_label": "getoidcconfig()"
     },
     {
@@ -5760,7 +5760,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L153",
       "id": "services_oidcservice_generateauthurl",
-      "community": 9,
+      "community": 38,
       "norm_label": "generateauthurl()"
     },
     {
@@ -5769,7 +5769,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L172",
       "id": "services_oidcservice_exchangecodefortokens",
-      "community": 9,
+      "community": 38,
       "norm_label": "exchangecodefortokens()"
     },
     {
@@ -5778,7 +5778,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L230",
       "id": "services_oidcservice_getuserinfo",
-      "community": 9,
+      "community": 38,
       "norm_label": "getuserinfo()"
     },
     {
@@ -5787,7 +5787,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L256",
       "id": "services_oidcservice_refreshaccesstoken",
-      "community": 9,
+      "community": 38,
       "norm_label": "refreshaccesstoken()"
     },
     {
@@ -5796,7 +5796,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L268",
       "id": "services_oidcservice_generatestate",
-      "community": 9,
+      "community": 38,
       "norm_label": "generatestate()"
     },
     {
@@ -5805,7 +5805,7 @@
       "source_file": "Ryvie-Back/services/oidcService.ts",
       "source_location": "L272",
       "id": "services_oidcservice_generatenonce",
-      "community": 9,
+      "community": 38,
       "norm_label": "generatenonce()"
     },
     {
@@ -6894,7 +6894,7 @@
       "source_file": "Ryvie-Back/services/updateCheckService.ts",
       "source_location": "L523",
       "id": "services_updatecheckservice_checkstorecatalogupdate",
-      "community": 22,
+      "community": 190,
       "norm_label": "checkstorecatalogupdate()"
     },
     {
@@ -7083,7 +7083,7 @@
       "source_file": "Ryvie-Back/services/updateService.ts",
       "source_location": "L431",
       "id": "services_updateservice_updatestorecatalog",
-      "community": 30,
+      "community": 190,
       "norm_label": "updatestorecatalog()"
     },
     {
@@ -8748,7 +8748,7 @@
       "source_file": "Ryvie-Front/src/components/CachedRoutes.tsx",
       "source_location": "L1",
       "id": "components_cachedroutes",
-      "community": 19,
+      "community": 198,
       "norm_label": "cachedroutes.tsx"
     },
     {
@@ -8757,7 +8757,7 @@
       "source_file": "Ryvie-Front/src/components/CachedRoutes.tsx",
       "source_location": "L8",
       "id": "components_cachedroutes_cachedroutes",
-      "community": 19,
+      "community": 198,
       "norm_label": "cachedroutes()"
     },
     {
@@ -8802,7 +8802,7 @@
       "source_file": "Ryvie-Front/src/components/GlobalUpdateModal.tsx",
       "source_location": "L1",
       "id": "components_globalupdatemodal",
-      "community": 34,
+      "community": 198,
       "norm_label": "globalupdatemodal.tsx"
     },
     {
@@ -8811,7 +8811,7 @@
       "source_file": "Ryvie-Front/src/components/GlobalUpdateModal.tsx",
       "source_location": "L6",
       "id": "components_globalupdatemodal_globalupdatemodal",
-      "community": 34,
+      "community": 198,
       "norm_label": "globalupdatemodal()"
     },
     {
@@ -8910,7 +8910,7 @@
       "source_file": "Ryvie-Front/src/components/OnboardingOverlay.tsx",
       "source_location": "L1",
       "id": "components_onboardingoverlay",
-      "community": 12,
+      "community": 19,
       "norm_label": "onboardingoverlay.tsx"
     },
     {
@@ -8919,7 +8919,7 @@
       "source_file": "Ryvie-Front/src/components/OnboardingOverlay.tsx",
       "source_location": "L10",
       "id": "components_onboardingoverlay_onboardingpage",
-      "community": 12,
+      "community": 19,
       "norm_label": "onboardingpage"
     },
     {
@@ -8928,7 +8928,7 @@
       "source_file": "Ryvie-Front/src/components/OnboardingOverlay.tsx",
       "source_location": "L17",
       "id": "components_onboardingoverlay_onboardingoverlayprops",
-      "community": 12,
+      "community": 19,
       "norm_label": "onboardingoverlayprops"
     },
     {
@@ -8937,7 +8937,7 @@
       "source_file": "Ryvie-Front/src/components/OnboardingOverlay.tsx",
       "source_location": "L21",
       "id": "components_onboardingoverlay_onboardingoverlay",
-      "community": 12,
+      "community": 19,
       "norm_label": "onboardingoverlay()"
     },
     {
@@ -9054,7 +9054,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L1",
       "id": "widgets_storagewidget",
-      "community": 12,
+      "community": 87,
       "norm_label": "storagewidget.tsx"
     },
     {
@@ -9063,7 +9063,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L18",
       "id": "widgets_storagewidget_storagedisk",
-      "community": 12,
+      "community": 87,
       "norm_label": "storagedisk"
     },
     {
@@ -9072,7 +9072,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L19",
       "id": "widgets_storagewidget_readstoragecache",
-      "community": 12,
+      "community": 87,
       "norm_label": "readstoragecache()"
     },
     {
@@ -9081,7 +9081,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L29",
       "id": "widgets_storagewidget_writestoragecache",
-      "community": 12,
+      "community": 87,
       "norm_label": "writestoragecache()"
     },
     {
@@ -9090,7 +9090,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/StorageWidget.tsx",
       "source_location": "L36",
       "id": "widgets_storagewidget_storagewidget",
-      "community": 12,
+      "community": 87,
       "norm_label": "storagewidget()"
     },
     {
@@ -9567,7 +9567,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L6",
       "id": "contexts_languagecontext_translations",
-      "community": 12,
+      "community": 87,
       "norm_label": "translations"
     },
     {
@@ -9576,7 +9576,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L8",
       "id": "contexts_languagecontext_languagecontexttype",
-      "community": 12,
+      "community": 87,
       "norm_label": "languagecontexttype"
     },
     {
@@ -9594,7 +9594,7 @@
       "source_file": "Ryvie-Front/src/contexts/LanguageContext.tsx",
       "source_location": "L22",
       "id": "contexts_languagecontext_languageprovider",
-      "community": 12,
+      "community": 198,
       "norm_label": "languageprovider()"
     },
     {
@@ -9612,7 +9612,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L1",
       "id": "contexts_socketcontext",
-      "community": 19,
+      "community": 198,
       "norm_label": "socketcontext.tsx"
     },
     {
@@ -9621,7 +9621,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L8",
       "id": "contexts_socketcontext_socketcontextvalue",
-      "community": 19,
+      "community": 198,
       "norm_label": "socketcontextvalue"
     },
     {
@@ -9630,7 +9630,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L15",
       "id": "contexts_socketcontext_socketcontext",
-      "community": 19,
+      "community": 198,
       "norm_label": "socketcontext"
     },
     {
@@ -9648,7 +9648,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L25",
       "id": "contexts_socketcontext_socketproviderprops",
-      "community": 19,
+      "community": 198,
       "norm_label": "socketproviderprops"
     },
     {
@@ -9657,7 +9657,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L29",
       "id": "contexts_socketcontext_socketprovider",
-      "community": 19,
+      "community": 198,
       "norm_label": "socketprovider()"
     },
     {
@@ -9666,7 +9666,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L1",
       "id": "contexts_updatecontext",
-      "community": 34,
+      "community": 198,
       "norm_label": "updatecontext.tsx"
     },
     {
@@ -9675,7 +9675,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L3",
       "id": "contexts_updatecontext_updatecontexttype",
-      "community": 34,
+      "community": 198,
       "norm_label": "updatecontexttype"
     },
     {
@@ -9684,7 +9684,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L11",
       "id": "contexts_updatecontext_updatecontext",
-      "community": 34,
+      "community": 198,
       "norm_label": "updatecontext"
     },
     {
@@ -9693,7 +9693,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L13",
       "id": "contexts_updatecontext_updateprovider",
-      "community": 34,
+      "community": 198,
       "norm_label": "updateprovider()"
     },
     {
@@ -9702,7 +9702,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L37",
       "id": "contexts_updatecontext_useupdate",
-      "community": 34,
+      "community": 198,
       "norm_label": "useupdate()"
     },
     {
@@ -9819,7 +9819,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L1",
       "id": "i18n_en",
-      "community": 148,
+      "community": 36,
       "norm_label": "en.json"
     },
     {
@@ -10197,7 +10197,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L45",
       "id": "i18n_en_firsttimesetup_emailplaceholder",
-      "community": 146,
+      "community": 5,
       "norm_label": "emailplaceholder"
     },
     {
@@ -10215,7 +10215,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L47",
       "id": "i18n_en_firsttimesetup_confirmpasswordplaceholder",
-      "community": 146,
+      "community": 5,
       "norm_label": "confirmpasswordplaceholder"
     },
     {
@@ -10224,7 +10224,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L48",
       "id": "i18n_en_firsttimesetup_createbutton",
-      "community": 146,
+      "community": 5,
       "norm_label": "createbutton"
     },
     {
@@ -10233,7 +10233,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L49",
       "id": "i18n_en_firsttimesetup_creating",
-      "community": 146,
+      "community": 5,
       "norm_label": "creating"
     },
     {
@@ -10332,7 +10332,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L61",
       "id": "i18n_en_login_username",
-      "community": 146,
+      "community": 5,
       "norm_label": "username"
     },
     {
@@ -10341,7 +10341,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L62",
       "id": "i18n_en_login_usernameplaceholder",
-      "community": 146,
+      "community": 5,
       "norm_label": "usernameplaceholder"
     },
     {
@@ -10350,7 +10350,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L63",
       "id": "i18n_en_login_password",
-      "community": 146,
+      "community": 5,
       "norm_label": "password"
     },
     {
@@ -10359,7 +10359,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L64",
       "id": "i18n_en_login_passwordplaceholder",
-      "community": 146,
+      "community": 5,
       "norm_label": "passwordplaceholder"
     },
     {
@@ -10440,7 +10440,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L73",
       "id": "i18n_en_login_allfieldsrequired",
-      "community": 146,
+      "community": 5,
       "norm_label": "allfieldsrequired"
     },
     {
@@ -10494,7 +10494,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L79",
       "id": "i18n_en_login_serverunavailable",
-      "community": 146,
+      "community": 5,
       "norm_label": "serverunavailable"
     },
     {
@@ -11727,7 +11727,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L224",
       "id": "i18n_en_installindicator",
-      "community": 12,
+      "community": 36,
       "norm_label": "installindicator"
     },
     {
@@ -11736,7 +11736,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L225",
       "id": "i18n_en_installindicator_showprogress",
-      "community": 12,
+      "community": 36,
       "norm_label": "showprogress"
     },
     {
@@ -11745,7 +11745,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L226",
       "id": "i18n_en_installindicator_installing",
-      "community": 12,
+      "community": 36,
       "norm_label": "installing"
     },
     {
@@ -11754,7 +11754,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L227",
       "id": "i18n_en_installindicator_updating",
-      "community": 12,
+      "community": 36,
       "norm_label": "updating"
     },
     {
@@ -11763,7 +11763,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L228",
       "id": "i18n_en_installindicator_finalizing",
-      "community": 12,
+      "community": 36,
       "norm_label": "finalizing"
     },
     {
@@ -11772,7 +11772,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L229",
       "id": "i18n_en_installindicator_hide",
-      "community": 12,
+      "community": 36,
       "norm_label": "hide"
     },
     {
@@ -13198,19 +13198,10 @@
       "norm_label": "enabledpill"
     },
     {
-      "label": "disabledHint",
-      "file_type": "code",
-      "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L434",
-      "id": "i18n_en_ai_disabledhint",
-      "community": 88,
-      "norm_label": "disabledhint"
-    },
-    {
       "label": "provider",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L435",
+      "source_location": "L434",
       "id": "i18n_en_ai_provider",
       "community": 88,
       "norm_label": "provider"
@@ -13219,7 +13210,7 @@
       "label": "selectProvider",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L436",
+      "source_location": "L435",
       "id": "i18n_en_ai_selectprovider",
       "community": 88,
       "norm_label": "selectprovider"
@@ -13228,7 +13219,7 @@
       "label": "apiKey",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L437",
+      "source_location": "L436",
       "id": "i18n_en_ai_apikey",
       "community": 88,
       "norm_label": "apikey"
@@ -13237,7 +13228,7 @@
       "label": "apiKeyPlaceholder",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L438",
+      "source_location": "L437",
       "id": "i18n_en_ai_apikeyplaceholder",
       "community": 88,
       "norm_label": "apikeyplaceholder"
@@ -13246,7 +13237,7 @@
       "label": "keyStored",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L439",
+      "source_location": "L438",
       "id": "i18n_en_ai_keystored",
       "community": 88,
       "norm_label": "keystored"
@@ -13255,7 +13246,7 @@
       "label": "baseUrl",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L440",
+      "source_location": "L439",
       "id": "i18n_en_ai_baseurl",
       "community": 88,
       "norm_label": "baseurl"
@@ -13264,7 +13255,7 @@
       "label": "model",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L441",
+      "source_location": "L440",
       "id": "i18n_en_ai_model",
       "community": 88,
       "norm_label": "model"
@@ -13273,7 +13264,7 @@
       "label": "modelPlaceholder",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L442",
+      "source_location": "L441",
       "id": "i18n_en_ai_modelplaceholder",
       "community": 88,
       "norm_label": "modelplaceholder"
@@ -13282,7 +13273,7 @@
       "label": "modelHint",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L443",
+      "source_location": "L442",
       "id": "i18n_en_ai_modelhint",
       "community": 88,
       "norm_label": "modelhint"
@@ -13291,7 +13282,7 @@
       "label": "loadModels",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L444",
+      "source_location": "L443",
       "id": "i18n_en_ai_loadmodels",
       "community": 88,
       "norm_label": "loadmodels"
@@ -13300,7 +13291,7 @@
       "label": "modelsLoaded",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L445",
+      "source_location": "L444",
       "id": "i18n_en_ai_modelsloaded",
       "community": 88,
       "norm_label": "modelsloaded"
@@ -13309,7 +13300,7 @@
       "label": "modelsAvailable",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L446",
+      "source_location": "L445",
       "id": "i18n_en_ai_modelsavailable",
       "community": 88,
       "norm_label": "modelsavailable"
@@ -13318,7 +13309,7 @@
       "label": "pickModel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L447",
+      "source_location": "L446",
       "id": "i18n_en_ai_pickmodel",
       "community": 88,
       "norm_label": "pickmodel"
@@ -13327,7 +13318,7 @@
       "label": "customModel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L448",
+      "source_location": "L447",
       "id": "i18n_en_ai_custommodel",
       "community": 88,
       "norm_label": "custommodel"
@@ -13336,7 +13327,7 @@
       "label": "modelsError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L449",
+      "source_location": "L448",
       "id": "i18n_en_ai_modelserror",
       "community": 88,
       "norm_label": "modelserror"
@@ -13345,7 +13336,7 @@
       "label": "save",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L450",
+      "source_location": "L449",
       "id": "i18n_en_ai_save",
       "community": 88,
       "norm_label": "save"
@@ -13354,7 +13345,7 @@
       "label": "saving",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L451",
+      "source_location": "L450",
       "id": "i18n_en_ai_saving",
       "community": 88,
       "norm_label": "saving"
@@ -13363,7 +13354,7 @@
       "label": "test",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L452",
+      "source_location": "L451",
       "id": "i18n_en_ai_test",
       "community": 88,
       "norm_label": "test"
@@ -13372,7 +13363,7 @@
       "label": "testing",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L453",
+      "source_location": "L452",
       "id": "i18n_en_ai_testing",
       "community": 88,
       "norm_label": "testing"
@@ -13381,7 +13372,7 @@
       "label": "testOk",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L454",
+      "source_location": "L453",
       "id": "i18n_en_ai_testok",
       "community": 88,
       "norm_label": "testok"
@@ -13390,7 +13381,7 @@
       "label": "testFail",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L455",
+      "source_location": "L454",
       "id": "i18n_en_ai_testfail",
       "community": 88,
       "norm_label": "testfail"
@@ -13399,7 +13390,7 @@
       "label": "saved",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L456",
+      "source_location": "L455",
       "id": "i18n_en_ai_saved",
       "community": 88,
       "norm_label": "saved"
@@ -13408,7 +13399,7 @@
       "label": "savedPending",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L457",
+      "source_location": "L456",
       "id": "i18n_en_ai_savedpending",
       "community": 88,
       "norm_label": "savedpending"
@@ -13417,7 +13408,7 @@
       "label": "savedShort",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L458",
+      "source_location": "L457",
       "id": "i18n_en_ai_savedshort",
       "community": 88,
       "norm_label": "savedshort"
@@ -13426,7 +13417,7 @@
       "label": "saveWarn",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L459",
+      "source_location": "L458",
       "id": "i18n_en_ai_savewarn",
       "community": 88,
       "norm_label": "savewarn"
@@ -13435,7 +13426,7 @@
       "label": "confirmSaveTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L460",
+      "source_location": "L459",
       "id": "i18n_en_ai_confirmsavetitle",
       "community": 88,
       "norm_label": "confirmsavetitle"
@@ -13444,7 +13435,7 @@
       "label": "saveError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L461",
+      "source_location": "L460",
       "id": "i18n_en_ai_saveerror",
       "community": 88,
       "norm_label": "saveerror"
@@ -13453,7 +13444,7 @@
       "label": "loadError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L462",
+      "source_location": "L461",
       "id": "i18n_en_ai_loaderror",
       "community": 88,
       "norm_label": "loaderror"
@@ -13462,7 +13453,7 @@
       "label": "running",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L463",
+      "source_location": "L462",
       "id": "i18n_en_ai_running",
       "community": 88,
       "norm_label": "running"
@@ -13471,7 +13462,7 @@
       "label": "notRunning",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L464",
+      "source_location": "L463",
       "id": "i18n_en_ai_notrunning",
       "community": 88,
       "norm_label": "notrunning"
@@ -13480,7 +13471,7 @@
       "label": "aliasNote",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L465",
+      "source_location": "L464",
       "id": "i18n_en_ai_aliasnote",
       "community": 88,
       "norm_label": "aliasnote"
@@ -13489,7 +13480,7 @@
       "label": "cliConnected",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L466",
+      "source_location": "L465",
       "id": "i18n_en_ai_cliconnected",
       "community": 88,
       "norm_label": "cliconnected"
@@ -13498,7 +13489,7 @@
       "label": "cliNotConnected",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L467",
+      "source_location": "L466",
       "id": "i18n_en_ai_clinotconnected",
       "community": 88,
       "norm_label": "clinotconnected"
@@ -13507,7 +13498,7 @@
       "label": "cliNotInstalled",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L468",
+      "source_location": "L467",
       "id": "i18n_en_ai_clinotinstalled",
       "community": 88,
       "norm_label": "clinotinstalled"
@@ -13516,7 +13507,7 @@
       "label": "cliChecking",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L469",
+      "source_location": "L468",
       "id": "i18n_en_ai_clichecking",
       "community": 88,
       "norm_label": "clichecking"
@@ -13525,7 +13516,7 @@
       "label": "cliConnect",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L470",
+      "source_location": "L469",
       "id": "i18n_en_ai_cliconnect",
       "community": 88,
       "norm_label": "cliconnect"
@@ -13534,7 +13525,7 @@
       "label": "cliStarting",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L471",
+      "source_location": "L470",
       "id": "i18n_en_ai_clistarting",
       "community": 88,
       "norm_label": "clistarting"
@@ -13543,7 +13534,7 @@
       "label": "cliLoginIntro",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L472",
+      "source_location": "L471",
       "id": "i18n_en_ai_cliloginintro",
       "community": 88,
       "norm_label": "cliloginintro"
@@ -13552,7 +13543,7 @@
       "label": "cliOpenLink",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L473",
+      "source_location": "L472",
       "id": "i18n_en_ai_cliopenlink",
       "community": 88,
       "norm_label": "cliopenlink"
@@ -13561,7 +13552,7 @@
       "label": "cliCodePlaceholder",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L474",
+      "source_location": "L473",
       "id": "i18n_en_ai_clicodeplaceholder",
       "community": 88,
       "norm_label": "clicodeplaceholder"
@@ -13570,7 +13561,7 @@
       "label": "cliValidate",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L475",
+      "source_location": "L474",
       "id": "i18n_en_ai_clivalidate",
       "community": 88,
       "norm_label": "clivalidate"
@@ -13579,7 +13570,7 @@
       "label": "cliLoginOk",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L476",
+      "source_location": "L475",
       "id": "i18n_en_ai_cliloginok",
       "community": 88,
       "norm_label": "cliloginok"
@@ -13588,7 +13579,7 @@
       "label": "cliLoginError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L477",
+      "source_location": "L476",
       "id": "i18n_en_ai_cliloginerror",
       "community": 88,
       "norm_label": "cliloginerror"
@@ -13597,7 +13588,7 @@
       "label": "cliDisconnect",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L478",
+      "source_location": "L477",
       "id": "i18n_en_ai_clidisconnect",
       "community": 88,
       "norm_label": "clidisconnect"
@@ -13606,7 +13597,7 @@
       "label": "cliLogoutOk",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L479",
+      "source_location": "L478",
       "id": "i18n_en_ai_clilogoutok",
       "community": 88,
       "norm_label": "clilogoutok"
@@ -13615,7 +13606,7 @@
       "label": "cliLogoutError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L480",
+      "source_location": "L479",
       "id": "i18n_en_ai_clilogouterror",
       "community": 88,
       "norm_label": "clilogouterror"
@@ -13624,7 +13615,7 @@
       "label": "connectedApps",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L481",
+      "source_location": "L480",
       "id": "i18n_en_ai_connectedapps",
       "community": 88,
       "norm_label": "connectedapps"
@@ -13633,7 +13624,7 @@
       "label": "configureFirst",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L482",
+      "source_location": "L481",
       "id": "i18n_en_ai_configurefirst",
       "community": 88,
       "norm_label": "configurefirst"
@@ -13642,7 +13633,7 @@
       "label": "noApps",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L483",
+      "source_location": "L482",
       "id": "i18n_en_ai_noapps",
       "community": 88,
       "norm_label": "noapps"
@@ -13651,7 +13642,7 @@
       "label": "statusOn",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L484",
+      "source_location": "L483",
       "id": "i18n_en_ai_statuson",
       "community": 88,
       "norm_label": "statuson"
@@ -13660,7 +13651,7 @@
       "label": "statusOff",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L485",
+      "source_location": "L484",
       "id": "i18n_en_ai_statusoff",
       "community": 88,
       "norm_label": "statusoff"
@@ -13669,7 +13660,7 @@
       "label": "appError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L486",
+      "source_location": "L485",
       "id": "i18n_en_ai_apperror",
       "community": 88,
       "norm_label": "apperror"
@@ -13678,7 +13669,7 @@
       "label": "appModelDefault",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L487",
+      "source_location": "L486",
       "id": "i18n_en_ai_appmodeldefault",
       "community": 88,
       "norm_label": "appmodeldefault"
@@ -13687,7 +13678,7 @@
       "label": "appModelTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L488",
+      "source_location": "L487",
       "id": "i18n_en_ai_appmodeltitle",
       "community": 88,
       "norm_label": "appmodeltitle"
@@ -13696,7 +13687,7 @@
       "label": "appModelSaved",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L489",
+      "source_location": "L488",
       "id": "i18n_en_ai_appmodelsaved",
       "community": 88,
       "norm_label": "appmodelsaved"
@@ -13705,7 +13696,7 @@
       "label": "appModelCustomPrompt",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L490",
+      "source_location": "L489",
       "id": "i18n_en_ai_appmodelcustomprompt",
       "community": 88,
       "norm_label": "appmodelcustomprompt"
@@ -13714,7 +13705,7 @@
       "label": "confirmModelTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L491",
+      "source_location": "L490",
       "id": "i18n_en_ai_confirmmodeltitle",
       "community": 88,
       "norm_label": "confirmmodeltitle"
@@ -13723,7 +13714,7 @@
       "label": "confirmConnect",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L492",
+      "source_location": "L491",
       "id": "i18n_en_ai_confirmconnect",
       "community": 88,
       "norm_label": "confirmconnect"
@@ -13732,7 +13723,7 @@
       "label": "confirmDisconnect",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L493",
+      "source_location": "L492",
       "id": "i18n_en_ai_confirmdisconnect",
       "community": 88,
       "norm_label": "confirmdisconnect"
@@ -13741,7 +13732,7 @@
       "label": "confirmWarn",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L494",
+      "source_location": "L493",
       "id": "i18n_en_ai_confirmwarn",
       "community": 88,
       "norm_label": "confirmwarn"
@@ -13750,7 +13741,7 @@
       "label": "proceed",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L495",
+      "source_location": "L494",
       "id": "i18n_en_ai_proceed",
       "community": 88,
       "norm_label": "proceed"
@@ -13759,7 +13750,7 @@
       "label": "cancel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L496",
+      "source_location": "L495",
       "id": "i18n_en_ai_cancel",
       "community": 88,
       "norm_label": "cancel"
@@ -13768,7 +13759,7 @@
       "label": "sessionDuration",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L498",
+      "source_location": "L497",
       "id": "i18n_en_settings_sessionduration",
       "community": 1,
       "norm_label": "sessionduration"
@@ -13777,7 +13768,7 @@
       "label": "sessionDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L499",
+      "source_location": "L498",
       "id": "i18n_en_settings_sessiondescription",
       "community": 1,
       "norm_label": "sessiondescription"
@@ -13786,7 +13777,7 @@
       "label": "dataEncryption",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L500",
+      "source_location": "L499",
       "id": "i18n_en_settings_dataencryption",
       "community": 1,
       "norm_label": "dataencryption"
@@ -13795,7 +13786,7 @@
       "label": "twoFactorAuth",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L501",
+      "source_location": "L500",
       "id": "i18n_en_settings_twofactorauth",
       "community": 1,
       "norm_label": "twofactorauth"
@@ -13804,7 +13795,7 @@
       "label": "preferences",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L502",
+      "source_location": "L501",
       "id": "i18n_en_settings_preferences",
       "community": 1,
       "norm_label": "preferences"
@@ -13813,7 +13804,7 @@
       "label": "enableNotifications",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L503",
+      "source_location": "L502",
       "id": "i18n_en_settings_enablenotifications",
       "community": 1,
       "norm_label": "enablenotifications"
@@ -13822,7 +13813,7 @@
       "label": "autoThemeSystem",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L504",
+      "source_location": "L503",
       "id": "i18n_en_settings_autothemesystem",
       "community": 1,
       "norm_label": "autothemesystem"
@@ -13831,7 +13822,7 @@
       "label": "accessModeDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L505",
+      "source_location": "L504",
       "id": "i18n_en_settings_accessmodedescription",
       "community": 1,
       "norm_label": "accessmodedescription"
@@ -13840,7 +13831,7 @@
       "label": "privateLocal",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L506",
+      "source_location": "L505",
       "id": "i18n_en_settings_privatelocal",
       "community": 1,
       "norm_label": "privatelocal"
@@ -13849,7 +13840,7 @@
       "label": "updatesSection",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L507",
+      "source_location": "L506",
       "id": "i18n_en_settings_updatessection",
       "community": 1,
       "norm_label": "updatessection"
@@ -13858,7 +13849,7 @@
       "label": "currentVersion",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L508",
+      "source_location": "L507",
       "id": "i18n_en_settings_currentversion",
       "community": 1,
       "norm_label": "currentversion"
@@ -13867,7 +13858,7 @@
       "label": "latestVersion",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L509",
+      "source_location": "L508",
       "id": "i18n_en_settings_latestversion",
       "community": 1,
       "norm_label": "latestversion"
@@ -13876,7 +13867,7 @@
       "label": "storageConfig",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L510",
+      "source_location": "L509",
       "id": "i18n_en_settings_storageconfig",
       "community": 1,
       "norm_label": "storageconfig"
@@ -13885,7 +13876,7 @@
       "label": "openRaidAssistant",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L511",
+      "source_location": "L510",
       "id": "i18n_en_settings_openraidassistant",
       "community": 4,
       "norm_label": "openraidassistant"
@@ -13894,7 +13885,7 @@
       "label": "storageChoice",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L512",
+      "source_location": "L511",
       "id": "i18n_en_settings_storagechoice",
       "community": 1,
       "norm_label": "storagechoice"
@@ -13903,7 +13894,7 @@
       "label": "primaryStorage",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L513",
+      "source_location": "L512",
       "id": "i18n_en_settings_primarystorage",
       "community": 1,
       "norm_label": "primarystorage"
@@ -13912,7 +13903,7 @@
       "label": "localServer",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L514",
+      "source_location": "L513",
       "id": "i18n_en_settings_localserver",
       "community": 1,
       "norm_label": "localserver"
@@ -13921,7 +13912,7 @@
       "label": "detectedDisks",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L515",
+      "source_location": "L514",
       "id": "i18n_en_settings_detecteddisks",
       "community": 1,
       "norm_label": "detecteddisks"
@@ -13930,7 +13921,7 @@
       "label": "sizeLabel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L516",
+      "source_location": "L515",
       "id": "i18n_en_settings_sizelabel",
       "community": 1,
       "norm_label": "sizelabel"
@@ -13939,7 +13930,7 @@
       "label": "roleLabel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L517",
+      "source_location": "L516",
       "id": "i18n_en_settings_rolelabel",
       "community": 1,
       "norm_label": "rolelabel"
@@ -13948,7 +13939,7 @@
       "label": "systemLabel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L518",
+      "source_location": "L517",
       "id": "i18n_en_settings_systemlabel",
       "community": 1,
       "norm_label": "systemlabel"
@@ -13957,7 +13948,7 @@
       "label": "publicAddresses",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L519",
+      "source_location": "L518",
       "id": "i18n_en_settings_publicaddresses",
       "community": 1,
       "norm_label": "publicaddresses"
@@ -13966,7 +13957,7 @@
       "label": "publicAddressesDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L520",
+      "source_location": "L519",
       "id": "i18n_en_settings_publicaddressesdescription",
       "community": 1,
       "norm_label": "publicaddressesdescription"
@@ -13975,7 +13966,7 @@
       "label": "discoverAddresses",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L521",
+      "source_location": "L520",
       "id": "i18n_en_settings_discoveraddresses",
       "community": 1,
       "norm_label": "discoveraddresses"
@@ -13984,7 +13975,7 @@
       "label": "vpnPeersTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L522",
+      "source_location": "L521",
       "id": "i18n_en_settings_vpnpeerstitle",
       "community": 1,
       "norm_label": "vpnpeerstitle"
@@ -13993,7 +13984,7 @@
       "label": "vpnPeersDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L523",
+      "source_location": "L522",
       "id": "i18n_en_settings_vpnpeersdescription",
       "community": 1,
       "norm_label": "vpnpeersdescription"
@@ -14002,7 +13993,7 @@
       "label": "vpnPeersShow",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L524",
+      "source_location": "L523",
       "id": "i18n_en_settings_vpnpeersshow",
       "community": 1,
       "norm_label": "vpnpeersshow"
@@ -14011,7 +14002,7 @@
       "label": "vpnPeersRefresh",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L525",
+      "source_location": "L524",
       "id": "i18n_en_settings_vpnpeersrefresh",
       "community": 1,
       "norm_label": "vpnpeersrefresh"
@@ -14020,7 +14011,7 @@
       "label": "vpnPeersLoading",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L526",
+      "source_location": "L525",
       "id": "i18n_en_settings_vpnpeersloading",
       "community": 1,
       "norm_label": "vpnpeersloading"
@@ -14029,7 +14020,7 @@
       "label": "vpnPeersEmpty",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L527",
+      "source_location": "L526",
       "id": "i18n_en_settings_vpnpeersempty",
       "community": 1,
       "norm_label": "vpnpeersempty"
@@ -14038,7 +14029,7 @@
       "label": "vpnPeerConnected",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L528",
+      "source_location": "L527",
       "id": "i18n_en_settings_vpnpeerconnected",
       "community": 1,
       "norm_label": "vpnpeerconnected"
@@ -14047,7 +14038,7 @@
       "label": "vpnPeerDisconnected",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L529",
+      "source_location": "L528",
       "id": "i18n_en_settings_vpnpeerdisconnected",
       "community": 1,
       "norm_label": "vpnpeerdisconnected"
@@ -14056,7 +14047,7 @@
       "label": "vpnPeerSelf",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L530",
+      "source_location": "L529",
       "id": "i18n_en_settings_vpnpeerself",
       "community": 1,
       "norm_label": "vpnpeerself"
@@ -14065,7 +14056,7 @@
       "label": "connectDeviceTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L531",
+      "source_location": "L530",
       "id": "i18n_en_settings_connectdevicetitle",
       "community": 1,
       "norm_label": "connectdevicetitle"
@@ -14074,7 +14065,7 @@
       "label": "connectDeviceDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L532",
+      "source_location": "L531",
       "id": "i18n_en_settings_connectdevicedescription",
       "community": 1,
       "norm_label": "connectdevicedescription"
@@ -14083,7 +14074,7 @@
       "label": "connectDeviceHint",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L533",
+      "source_location": "L532",
       "id": "i18n_en_settings_connectdevicehint",
       "community": 1,
       "norm_label": "connectdevicehint"
@@ -14092,7 +14083,7 @@
       "label": "ryvieConnectKeyTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L534",
+      "source_location": "L533",
       "id": "i18n_en_settings_ryvieconnectkeytitle",
       "community": 1,
       "norm_label": "ryvieconnectkeytitle"
@@ -14101,7 +14092,7 @@
       "label": "addDeviceTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L535",
+      "source_location": "L534",
       "id": "i18n_en_settings_adddevicetitle",
       "community": 1,
       "norm_label": "adddevicetitle"
@@ -14110,7 +14101,7 @@
       "label": "addDeviceShow",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L536",
+      "source_location": "L535",
       "id": "i18n_en_settings_adddeviceshow",
       "community": 1,
       "norm_label": "adddeviceshow"
@@ -14119,16 +14110,16 @@
       "label": "language",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L537",
+      "source_location": "L536",
       "id": "i18n_en_settings_language",
-      "community": 146,
+      "community": 5,
       "norm_label": "language"
     },
     {
       "label": "languageChanged",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L538",
+      "source_location": "L537",
       "id": "i18n_en_settings_languagechanged",
       "community": 1,
       "norm_label": "languagechanged"
@@ -14137,7 +14128,7 @@
       "label": "languageError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L539",
+      "source_location": "L538",
       "id": "i18n_en_settings_languageerror",
       "community": 1,
       "norm_label": "languageerror"
@@ -14146,7 +14137,7 @@
       "label": "theme",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L540",
+      "source_location": "L539",
       "id": "i18n_en_settings_theme",
       "community": 1,
       "norm_label": "theme"
@@ -14155,7 +14146,7 @@
       "label": "darkMode",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L541",
+      "source_location": "L540",
       "id": "i18n_en_settings_darkmode",
       "community": 1,
       "norm_label": "darkmode"
@@ -14164,7 +14155,7 @@
       "label": "lightMode",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L542",
+      "source_location": "L541",
       "id": "i18n_en_settings_lightmode",
       "community": 1,
       "norm_label": "lightmode"
@@ -14173,7 +14164,7 @@
       "label": "autoTheme",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L543",
+      "source_location": "L542",
       "id": "i18n_en_settings_autotheme",
       "community": 1,
       "norm_label": "autotheme"
@@ -14182,7 +14173,7 @@
       "label": "storage",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L544",
+      "source_location": "L543",
       "id": "i18n_en_settings_storage",
       "community": 1,
       "norm_label": "storage"
@@ -14191,10 +14182,19 @@
       "label": "storageUsed",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L545",
+      "source_location": "L544",
       "id": "i18n_en_settings_storageused",
       "community": 1,
       "norm_label": "storageused"
+    },
+    {
+      "label": "totalStorage",
+      "file_type": "code",
+      "source_file": "Ryvie-Front/src/i18n/en.json",
+      "source_location": "L545",
+      "id": "i18n_en_settings_totalstorage",
+      "community": 1,
+      "norm_label": "totalstorage"
     },
     {
       "label": "fr.json",
@@ -14202,7 +14202,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L1",
       "id": "i18n_fr",
-      "community": 191,
+      "community": 140,
       "norm_label": "fr.json"
     },
     {
@@ -14463,7 +14463,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L31",
       "id": "i18n_fr_errors",
-      "community": 191,
+      "community": 140,
       "norm_label": "errors"
     },
     {
@@ -14472,7 +14472,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L32",
       "id": "i18n_fr_errors_tryagain",
-      "community": 191,
+      "community": 140,
       "norm_label": "tryagain"
     },
     {
@@ -14481,7 +14481,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L33",
       "id": "i18n_fr_errors_networkerror",
-      "community": 191,
+      "community": 140,
       "norm_label": "networkerror"
     },
     {
@@ -14490,7 +14490,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L34",
       "id": "i18n_fr_errors_servererror",
-      "community": 191,
+      "community": 140,
       "norm_label": "servererror"
     },
     {
@@ -14499,7 +14499,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L35",
       "id": "i18n_fr_errors_unknownerror",
-      "community": 191,
+      "community": 140,
       "norm_label": "unknownerror"
     },
     {
@@ -14733,7 +14733,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L63",
       "id": "i18n_fr_login_password",
-      "community": 6,
+      "community": 70,
       "norm_label": "password"
     },
     {
@@ -14823,7 +14823,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L73",
       "id": "i18n_fr_login_allfieldsrequired",
-      "community": 70,
+      "community": 6,
       "norm_label": "allfieldsrequired"
     },
     {
@@ -14841,7 +14841,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L75",
       "id": "i18n_fr_login_servererror",
-      "community": 191,
+      "community": 140,
       "norm_label": "servererror"
     },
     {
@@ -16578,7 +16578,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L280",
       "id": "i18n_fr_cpuramwidget",
-      "community": 197,
+      "community": 140,
       "norm_label": "cpuramwidget"
     },
     {
@@ -16587,7 +16587,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L281",
       "id": "i18n_fr_cpuramwidget_title",
-      "community": 197,
+      "community": 140,
       "norm_label": "title"
     },
     {
@@ -16596,7 +16596,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L282",
       "id": "i18n_fr_cpuramwidget_open",
-      "community": 197,
+      "community": 140,
       "norm_label": "open"
     },
     {
@@ -16605,7 +16605,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L283",
       "id": "i18n_fr_cpuramwidget_cpu",
-      "community": 197,
+      "community": 140,
       "norm_label": "cpu"
     },
     {
@@ -16614,7 +16614,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L284",
       "id": "i18n_fr_cpuramwidget_ram",
-      "community": 197,
+      "community": 140,
       "norm_label": "ram"
     },
     {
@@ -17343,7 +17343,7 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L405",
       "id": "i18n_fr_actions_open",
-      "community": 197,
+      "community": 140,
       "norm_label": "open"
     },
     {
@@ -17644,19 +17644,10 @@
       "norm_label": "enabledpill"
     },
     {
-      "label": "disabledHint",
-      "file_type": "code",
-      "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L441",
-      "id": "i18n_fr_ai_disabledhint",
-      "community": 93,
-      "norm_label": "disabledhint"
-    },
-    {
       "label": "provider",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L442",
+      "source_location": "L441",
       "id": "i18n_fr_ai_provider",
       "community": 93,
       "norm_label": "provider"
@@ -17665,7 +17656,7 @@
       "label": "selectProvider",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L443",
+      "source_location": "L442",
       "id": "i18n_fr_ai_selectprovider",
       "community": 93,
       "norm_label": "selectprovider"
@@ -17674,7 +17665,7 @@
       "label": "apiKey",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L444",
+      "source_location": "L443",
       "id": "i18n_fr_ai_apikey",
       "community": 93,
       "norm_label": "apikey"
@@ -17683,7 +17674,7 @@
       "label": "apiKeyPlaceholder",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L445",
+      "source_location": "L444",
       "id": "i18n_fr_ai_apikeyplaceholder",
       "community": 93,
       "norm_label": "apikeyplaceholder"
@@ -17692,7 +17683,7 @@
       "label": "keyStored",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L446",
+      "source_location": "L445",
       "id": "i18n_fr_ai_keystored",
       "community": 93,
       "norm_label": "keystored"
@@ -17701,7 +17692,7 @@
       "label": "baseUrl",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L447",
+      "source_location": "L446",
       "id": "i18n_fr_ai_baseurl",
       "community": 93,
       "norm_label": "baseurl"
@@ -17710,7 +17701,7 @@
       "label": "model",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L448",
+      "source_location": "L447",
       "id": "i18n_fr_ai_model",
       "community": 93,
       "norm_label": "model"
@@ -17719,7 +17710,7 @@
       "label": "modelPlaceholder",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L449",
+      "source_location": "L448",
       "id": "i18n_fr_ai_modelplaceholder",
       "community": 93,
       "norm_label": "modelplaceholder"
@@ -17728,7 +17719,7 @@
       "label": "modelHint",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L450",
+      "source_location": "L449",
       "id": "i18n_fr_ai_modelhint",
       "community": 93,
       "norm_label": "modelhint"
@@ -17737,7 +17728,7 @@
       "label": "loadModels",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L451",
+      "source_location": "L450",
       "id": "i18n_fr_ai_loadmodels",
       "community": 93,
       "norm_label": "loadmodels"
@@ -17746,7 +17737,7 @@
       "label": "modelsLoaded",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L452",
+      "source_location": "L451",
       "id": "i18n_fr_ai_modelsloaded",
       "community": 93,
       "norm_label": "modelsloaded"
@@ -17755,7 +17746,7 @@
       "label": "modelsAvailable",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L453",
+      "source_location": "L452",
       "id": "i18n_fr_ai_modelsavailable",
       "community": 93,
       "norm_label": "modelsavailable"
@@ -17764,7 +17755,7 @@
       "label": "pickModel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L454",
+      "source_location": "L453",
       "id": "i18n_fr_ai_pickmodel",
       "community": 93,
       "norm_label": "pickmodel"
@@ -17773,7 +17764,7 @@
       "label": "customModel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L455",
+      "source_location": "L454",
       "id": "i18n_fr_ai_custommodel",
       "community": 93,
       "norm_label": "custommodel"
@@ -17782,7 +17773,7 @@
       "label": "modelsError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L456",
+      "source_location": "L455",
       "id": "i18n_fr_ai_modelserror",
       "community": 93,
       "norm_label": "modelserror"
@@ -17791,7 +17782,7 @@
       "label": "save",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L457",
+      "source_location": "L456",
       "id": "i18n_fr_ai_save",
       "community": 93,
       "norm_label": "save"
@@ -17800,7 +17791,7 @@
       "label": "saving",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L458",
+      "source_location": "L457",
       "id": "i18n_fr_ai_saving",
       "community": 93,
       "norm_label": "saving"
@@ -17809,7 +17800,7 @@
       "label": "test",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L459",
+      "source_location": "L458",
       "id": "i18n_fr_ai_test",
       "community": 93,
       "norm_label": "test"
@@ -17818,7 +17809,7 @@
       "label": "testing",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L460",
+      "source_location": "L459",
       "id": "i18n_fr_ai_testing",
       "community": 93,
       "norm_label": "testing"
@@ -17827,7 +17818,7 @@
       "label": "testOk",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L461",
+      "source_location": "L460",
       "id": "i18n_fr_ai_testok",
       "community": 93,
       "norm_label": "testok"
@@ -17836,7 +17827,7 @@
       "label": "testFail",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L462",
+      "source_location": "L461",
       "id": "i18n_fr_ai_testfail",
       "community": 93,
       "norm_label": "testfail"
@@ -17845,7 +17836,7 @@
       "label": "saved",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L463",
+      "source_location": "L462",
       "id": "i18n_fr_ai_saved",
       "community": 93,
       "norm_label": "saved"
@@ -17854,7 +17845,7 @@
       "label": "savedPending",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L464",
+      "source_location": "L463",
       "id": "i18n_fr_ai_savedpending",
       "community": 93,
       "norm_label": "savedpending"
@@ -17863,7 +17854,7 @@
       "label": "savedShort",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L465",
+      "source_location": "L464",
       "id": "i18n_fr_ai_savedshort",
       "community": 93,
       "norm_label": "savedshort"
@@ -17872,7 +17863,7 @@
       "label": "saveWarn",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L466",
+      "source_location": "L465",
       "id": "i18n_fr_ai_savewarn",
       "community": 93,
       "norm_label": "savewarn"
@@ -17881,7 +17872,7 @@
       "label": "confirmSaveTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L467",
+      "source_location": "L466",
       "id": "i18n_fr_ai_confirmsavetitle",
       "community": 93,
       "norm_label": "confirmsavetitle"
@@ -17890,7 +17881,7 @@
       "label": "saveError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L468",
+      "source_location": "L467",
       "id": "i18n_fr_ai_saveerror",
       "community": 93,
       "norm_label": "saveerror"
@@ -17899,7 +17890,7 @@
       "label": "loadError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L469",
+      "source_location": "L468",
       "id": "i18n_fr_ai_loaderror",
       "community": 93,
       "norm_label": "loaderror"
@@ -17908,7 +17899,7 @@
       "label": "running",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L470",
+      "source_location": "L469",
       "id": "i18n_fr_ai_running",
       "community": 93,
       "norm_label": "running"
@@ -17917,7 +17908,7 @@
       "label": "notRunning",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L471",
+      "source_location": "L470",
       "id": "i18n_fr_ai_notrunning",
       "community": 93,
       "norm_label": "notrunning"
@@ -17926,7 +17917,7 @@
       "label": "aliasNote",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L472",
+      "source_location": "L471",
       "id": "i18n_fr_ai_aliasnote",
       "community": 93,
       "norm_label": "aliasnote"
@@ -17935,7 +17926,7 @@
       "label": "cliConnected",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L473",
+      "source_location": "L472",
       "id": "i18n_fr_ai_cliconnected",
       "community": 93,
       "norm_label": "cliconnected"
@@ -17944,7 +17935,7 @@
       "label": "cliNotConnected",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L474",
+      "source_location": "L473",
       "id": "i18n_fr_ai_clinotconnected",
       "community": 93,
       "norm_label": "clinotconnected"
@@ -17953,7 +17944,7 @@
       "label": "cliNotInstalled",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L475",
+      "source_location": "L474",
       "id": "i18n_fr_ai_clinotinstalled",
       "community": 93,
       "norm_label": "clinotinstalled"
@@ -17962,7 +17953,7 @@
       "label": "cliChecking",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L476",
+      "source_location": "L475",
       "id": "i18n_fr_ai_clichecking",
       "community": 93,
       "norm_label": "clichecking"
@@ -17971,7 +17962,7 @@
       "label": "cliConnect",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L477",
+      "source_location": "L476",
       "id": "i18n_fr_ai_cliconnect",
       "community": 93,
       "norm_label": "cliconnect"
@@ -17980,7 +17971,7 @@
       "label": "cliStarting",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L478",
+      "source_location": "L477",
       "id": "i18n_fr_ai_clistarting",
       "community": 93,
       "norm_label": "clistarting"
@@ -17989,7 +17980,7 @@
       "label": "cliLoginIntro",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L479",
+      "source_location": "L478",
       "id": "i18n_fr_ai_cliloginintro",
       "community": 93,
       "norm_label": "cliloginintro"
@@ -17998,7 +17989,7 @@
       "label": "cliOpenLink",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L480",
+      "source_location": "L479",
       "id": "i18n_fr_ai_cliopenlink",
       "community": 93,
       "norm_label": "cliopenlink"
@@ -18007,7 +17998,7 @@
       "label": "cliCodePlaceholder",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L481",
+      "source_location": "L480",
       "id": "i18n_fr_ai_clicodeplaceholder",
       "community": 93,
       "norm_label": "clicodeplaceholder"
@@ -18016,7 +18007,7 @@
       "label": "cliValidate",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L482",
+      "source_location": "L481",
       "id": "i18n_fr_ai_clivalidate",
       "community": 93,
       "norm_label": "clivalidate"
@@ -18025,7 +18016,7 @@
       "label": "cliLoginOk",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L483",
+      "source_location": "L482",
       "id": "i18n_fr_ai_cliloginok",
       "community": 93,
       "norm_label": "cliloginok"
@@ -18034,7 +18025,7 @@
       "label": "cliLoginError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L484",
+      "source_location": "L483",
       "id": "i18n_fr_ai_cliloginerror",
       "community": 93,
       "norm_label": "cliloginerror"
@@ -18043,7 +18034,7 @@
       "label": "cliDisconnect",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L485",
+      "source_location": "L484",
       "id": "i18n_fr_ai_clidisconnect",
       "community": 93,
       "norm_label": "clidisconnect"
@@ -18052,7 +18043,7 @@
       "label": "cliLogoutOk",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L486",
+      "source_location": "L485",
       "id": "i18n_fr_ai_clilogoutok",
       "community": 93,
       "norm_label": "clilogoutok"
@@ -18061,7 +18052,7 @@
       "label": "cliLogoutError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L487",
+      "source_location": "L486",
       "id": "i18n_fr_ai_clilogouterror",
       "community": 93,
       "norm_label": "clilogouterror"
@@ -18070,7 +18061,7 @@
       "label": "connectedApps",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L488",
+      "source_location": "L487",
       "id": "i18n_fr_ai_connectedapps",
       "community": 93,
       "norm_label": "connectedapps"
@@ -18079,7 +18070,7 @@
       "label": "configureFirst",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L489",
+      "source_location": "L488",
       "id": "i18n_fr_ai_configurefirst",
       "community": 93,
       "norm_label": "configurefirst"
@@ -18088,7 +18079,7 @@
       "label": "noApps",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L490",
+      "source_location": "L489",
       "id": "i18n_fr_ai_noapps",
       "community": 93,
       "norm_label": "noapps"
@@ -18097,7 +18088,7 @@
       "label": "statusOn",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L491",
+      "source_location": "L490",
       "id": "i18n_fr_ai_statuson",
       "community": 93,
       "norm_label": "statuson"
@@ -18106,7 +18097,7 @@
       "label": "statusOff",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L492",
+      "source_location": "L491",
       "id": "i18n_fr_ai_statusoff",
       "community": 93,
       "norm_label": "statusoff"
@@ -18115,7 +18106,7 @@
       "label": "appError",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L493",
+      "source_location": "L492",
       "id": "i18n_fr_ai_apperror",
       "community": 93,
       "norm_label": "apperror"
@@ -18124,7 +18115,7 @@
       "label": "appModelDefault",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L494",
+      "source_location": "L493",
       "id": "i18n_fr_ai_appmodeldefault",
       "community": 93,
       "norm_label": "appmodeldefault"
@@ -18133,7 +18124,7 @@
       "label": "appModelTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L495",
+      "source_location": "L494",
       "id": "i18n_fr_ai_appmodeltitle",
       "community": 93,
       "norm_label": "appmodeltitle"
@@ -18142,7 +18133,7 @@
       "label": "appModelSaved",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L496",
+      "source_location": "L495",
       "id": "i18n_fr_ai_appmodelsaved",
       "community": 93,
       "norm_label": "appmodelsaved"
@@ -18151,7 +18142,7 @@
       "label": "appModelCustomPrompt",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L497",
+      "source_location": "L496",
       "id": "i18n_fr_ai_appmodelcustomprompt",
       "community": 93,
       "norm_label": "appmodelcustomprompt"
@@ -18160,7 +18151,7 @@
       "label": "confirmModelTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L498",
+      "source_location": "L497",
       "id": "i18n_fr_ai_confirmmodeltitle",
       "community": 93,
       "norm_label": "confirmmodeltitle"
@@ -18169,7 +18160,7 @@
       "label": "confirmConnect",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L499",
+      "source_location": "L498",
       "id": "i18n_fr_ai_confirmconnect",
       "community": 93,
       "norm_label": "confirmconnect"
@@ -18178,7 +18169,7 @@
       "label": "confirmDisconnect",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L500",
+      "source_location": "L499",
       "id": "i18n_fr_ai_confirmdisconnect",
       "community": 93,
       "norm_label": "confirmdisconnect"
@@ -18187,7 +18178,7 @@
       "label": "confirmWarn",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L501",
+      "source_location": "L500",
       "id": "i18n_fr_ai_confirmwarn",
       "community": 93,
       "norm_label": "confirmwarn"
@@ -18196,7 +18187,7 @@
       "label": "proceed",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L502",
+      "source_location": "L501",
       "id": "i18n_fr_ai_proceed",
       "community": 93,
       "norm_label": "proceed"
@@ -18205,7 +18196,7 @@
       "label": "cancel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L503",
+      "source_location": "L502",
       "id": "i18n_fr_ai_cancel",
       "community": 93,
       "norm_label": "cancel"
@@ -18214,7 +18205,7 @@
       "label": "sessionDuration",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L505",
+      "source_location": "L504",
       "id": "i18n_fr_settings_sessionduration",
       "community": 0,
       "norm_label": "sessionduration"
@@ -18223,7 +18214,7 @@
       "label": "sessionDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L506",
+      "source_location": "L505",
       "id": "i18n_fr_settings_sessiondescription",
       "community": 0,
       "norm_label": "sessiondescription"
@@ -18232,7 +18223,7 @@
       "label": "dataEncryption",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L507",
+      "source_location": "L506",
       "id": "i18n_fr_settings_dataencryption",
       "community": 0,
       "norm_label": "dataencryption"
@@ -18241,7 +18232,7 @@
       "label": "twoFactorAuth",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L508",
+      "source_location": "L507",
       "id": "i18n_fr_settings_twofactorauth",
       "community": 0,
       "norm_label": "twofactorauth"
@@ -18250,7 +18241,7 @@
       "label": "preferences",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L509",
+      "source_location": "L508",
       "id": "i18n_fr_settings_preferences",
       "community": 0,
       "norm_label": "preferences"
@@ -18259,7 +18250,7 @@
       "label": "enableNotifications",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L510",
+      "source_location": "L509",
       "id": "i18n_fr_settings_enablenotifications",
       "community": 0,
       "norm_label": "enablenotifications"
@@ -18268,7 +18259,7 @@
       "label": "autoThemeSystem",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L511",
+      "source_location": "L510",
       "id": "i18n_fr_settings_autothemesystem",
       "community": 0,
       "norm_label": "autothemesystem"
@@ -18277,7 +18268,7 @@
       "label": "accessModeDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L512",
+      "source_location": "L511",
       "id": "i18n_fr_settings_accessmodedescription",
       "community": 0,
       "norm_label": "accessmodedescription"
@@ -18286,7 +18277,7 @@
       "label": "privateLocal",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L513",
+      "source_location": "L512",
       "id": "i18n_fr_settings_privatelocal",
       "community": 0,
       "norm_label": "privatelocal"
@@ -18295,7 +18286,7 @@
       "label": "updatesSection",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L514",
+      "source_location": "L513",
       "id": "i18n_fr_settings_updatessection",
       "community": 0,
       "norm_label": "updatessection"
@@ -18304,7 +18295,7 @@
       "label": "currentVersion",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L515",
+      "source_location": "L514",
       "id": "i18n_fr_settings_currentversion",
       "community": 0,
       "norm_label": "currentversion"
@@ -18313,7 +18304,7 @@
       "label": "latestVersion",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L516",
+      "source_location": "L515",
       "id": "i18n_fr_settings_latestversion",
       "community": 0,
       "norm_label": "latestversion"
@@ -18322,7 +18313,7 @@
       "label": "storageConfig",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L517",
+      "source_location": "L516",
       "id": "i18n_fr_settings_storageconfig",
       "community": 0,
       "norm_label": "storageconfig"
@@ -18331,7 +18322,7 @@
       "label": "openRaidAssistant",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L518",
+      "source_location": "L517",
       "id": "i18n_fr_settings_openraidassistant",
       "community": 0,
       "norm_label": "openraidassistant"
@@ -18340,7 +18331,7 @@
       "label": "storageChoice",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L519",
+      "source_location": "L518",
       "id": "i18n_fr_settings_storagechoice",
       "community": 0,
       "norm_label": "storagechoice"
@@ -18349,7 +18340,7 @@
       "label": "primaryStorage",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L520",
+      "source_location": "L519",
       "id": "i18n_fr_settings_primarystorage",
       "community": 0,
       "norm_label": "primarystorage"
@@ -18358,7 +18349,7 @@
       "label": "localServer",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L521",
+      "source_location": "L520",
       "id": "i18n_fr_settings_localserver",
       "community": 0,
       "norm_label": "localserver"
@@ -18367,7 +18358,7 @@
       "label": "detectedDisks",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L522",
+      "source_location": "L521",
       "id": "i18n_fr_settings_detecteddisks",
       "community": 0,
       "norm_label": "detecteddisks"
@@ -18376,7 +18367,7 @@
       "label": "sizeLabel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L523",
+      "source_location": "L522",
       "id": "i18n_fr_settings_sizelabel",
       "community": 0,
       "norm_label": "sizelabel"
@@ -18385,7 +18376,7 @@
       "label": "roleLabel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L524",
+      "source_location": "L523",
       "id": "i18n_fr_settings_rolelabel",
       "community": 0,
       "norm_label": "rolelabel"
@@ -18394,7 +18385,7 @@
       "label": "systemLabel",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L525",
+      "source_location": "L524",
       "id": "i18n_fr_settings_systemlabel",
       "community": 0,
       "norm_label": "systemlabel"
@@ -18403,7 +18394,7 @@
       "label": "publicAddresses",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L526",
+      "source_location": "L525",
       "id": "i18n_fr_settings_publicaddresses",
       "community": 0,
       "norm_label": "publicaddresses"
@@ -18412,7 +18403,7 @@
       "label": "publicAddressesDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L527",
+      "source_location": "L526",
       "id": "i18n_fr_settings_publicaddressesdescription",
       "community": 0,
       "norm_label": "publicaddressesdescription"
@@ -18421,7 +18412,7 @@
       "label": "discoverAddresses",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L528",
+      "source_location": "L527",
       "id": "i18n_fr_settings_discoveraddresses",
       "community": 0,
       "norm_label": "discoveraddresses"
@@ -18430,7 +18421,7 @@
       "label": "vpnPeersTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L529",
+      "source_location": "L528",
       "id": "i18n_fr_settings_vpnpeerstitle",
       "community": 0,
       "norm_label": "vpnpeerstitle"
@@ -18439,7 +18430,7 @@
       "label": "vpnPeersDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L530",
+      "source_location": "L529",
       "id": "i18n_fr_settings_vpnpeersdescription",
       "community": 0,
       "norm_label": "vpnpeersdescription"
@@ -18448,7 +18439,7 @@
       "label": "vpnPeersShow",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L531",
+      "source_location": "L530",
       "id": "i18n_fr_settings_vpnpeersshow",
       "community": 0,
       "norm_label": "vpnpeersshow"
@@ -18457,7 +18448,7 @@
       "label": "vpnPeersRefresh",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L532",
+      "source_location": "L531",
       "id": "i18n_fr_settings_vpnpeersrefresh",
       "community": 0,
       "norm_label": "vpnpeersrefresh"
@@ -18466,7 +18457,7 @@
       "label": "vpnPeersLoading",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L533",
+      "source_location": "L532",
       "id": "i18n_fr_settings_vpnpeersloading",
       "community": 0,
       "norm_label": "vpnpeersloading"
@@ -18475,7 +18466,7 @@
       "label": "vpnPeersEmpty",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L534",
+      "source_location": "L533",
       "id": "i18n_fr_settings_vpnpeersempty",
       "community": 0,
       "norm_label": "vpnpeersempty"
@@ -18484,7 +18475,7 @@
       "label": "vpnPeerConnected",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L535",
+      "source_location": "L534",
       "id": "i18n_fr_settings_vpnpeerconnected",
       "community": 0,
       "norm_label": "vpnpeerconnected"
@@ -18493,7 +18484,7 @@
       "label": "vpnPeerDisconnected",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L536",
+      "source_location": "L535",
       "id": "i18n_fr_settings_vpnpeerdisconnected",
       "community": 0,
       "norm_label": "vpnpeerdisconnected"
@@ -18502,7 +18493,7 @@
       "label": "vpnPeerSelf",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L537",
+      "source_location": "L536",
       "id": "i18n_fr_settings_vpnpeerself",
       "community": 0,
       "norm_label": "vpnpeerself"
@@ -18511,7 +18502,7 @@
       "label": "connectDeviceTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L538",
+      "source_location": "L537",
       "id": "i18n_fr_settings_connectdevicetitle",
       "community": 0,
       "norm_label": "connectdevicetitle"
@@ -18520,7 +18511,7 @@
       "label": "connectDeviceDescription",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L539",
+      "source_location": "L538",
       "id": "i18n_fr_settings_connectdevicedescription",
       "community": 0,
       "norm_label": "connectdevicedescription"
@@ -18529,7 +18520,7 @@
       "label": "connectDeviceHint",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L540",
+      "source_location": "L539",
       "id": "i18n_fr_settings_connectdevicehint",
       "community": 0,
       "norm_label": "connectdevicehint"
@@ -18538,7 +18529,7 @@
       "label": "ryvieConnectKeyTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L541",
+      "source_location": "L540",
       "id": "i18n_fr_settings_ryvieconnectkeytitle",
       "community": 0,
       "norm_label": "ryvieconnectkeytitle"
@@ -18547,7 +18538,7 @@
       "label": "addDeviceTitle",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L542",
+      "source_location": "L541",
       "id": "i18n_fr_settings_adddevicetitle",
       "community": 0,
       "norm_label": "adddevicetitle"
@@ -18556,7 +18547,7 @@
       "label": "addDeviceShow",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L543",
+      "source_location": "L542",
       "id": "i18n_fr_settings_adddeviceshow",
       "community": 0,
       "norm_label": "adddeviceshow"
@@ -18565,7 +18556,7 @@
       "label": "language",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L544",
+      "source_location": "L543",
       "id": "i18n_fr_settings_language",
       "community": 6,
       "norm_label": "language"
@@ -18574,10 +18565,19 @@
       "label": "languageChanged",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L545",
+      "source_location": "L544",
       "id": "i18n_fr_settings_languagechanged",
       "community": 0,
       "norm_label": "languagechanged"
+    },
+    {
+      "label": "languageError",
+      "file_type": "code",
+      "source_file": "Ryvie-Front/src/i18n/fr.json",
+      "source_location": "L545",
+      "id": "i18n_fr_settings_languageerror",
+      "community": 0,
+      "norm_label": "languageerror"
     },
     {
       "label": "index.d.ts",
@@ -18594,7 +18594,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L1",
       "id": "src_index",
-      "community": 19,
+      "community": 198,
       "norm_label": "index.tsx"
     },
     {
@@ -18603,7 +18603,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L29",
       "id": "src_index_protectedroute",
-      "community": 19,
+      "community": 198,
       "norm_label": "protectedroute()"
     },
     {
@@ -18612,7 +18612,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L39",
       "id": "src_index_app",
-      "community": 19,
+      "community": 198,
       "norm_label": "app()"
     },
     {
@@ -18621,7 +18621,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L163",
       "id": "src_index_rootelement",
-      "community": 19,
+      "community": 198,
       "norm_label": "rootelement"
     },
     {
@@ -18630,7 +18630,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L167",
       "id": "src_index_root",
-      "community": 19,
+      "community": 198,
       "norm_label": "root"
     },
     {
@@ -18702,7 +18702,7 @@
       "source_file": "Ryvie-Front/src/pages/FirstTimeSetup.tsx",
       "source_location": "L1",
       "id": "pages_firsttimesetup",
-      "community": 19,
+      "community": 12,
       "norm_label": "firsttimesetup.tsx"
     },
     {
@@ -18711,7 +18711,7 @@
       "source_file": "Ryvie-Front/src/pages/FirstTimeSetup.tsx",
       "source_location": "L10",
       "id": "pages_firsttimesetup_firsttimesetup",
-      "community": 146,
+      "community": 12,
       "norm_label": "firsttimesetup()"
     },
     {
@@ -18864,7 +18864,7 @@
       "source_file": "Ryvie-Front/src/pages/ServerRestarting.tsx",
       "source_location": "L1",
       "id": "pages_serverrestarting",
-      "community": 19,
+      "community": 12,
       "norm_label": "serverrestarting.tsx"
     },
     {
@@ -19377,7 +19377,7 @@
       "source_file": "Ryvie-Front/src/utils/detectAccessMode.ts",
       "source_location": "L235",
       "id": "utils_detectaccessmode_connectryviesocket",
-      "community": 19,
+      "community": 198,
       "norm_label": "connectryviesocket()"
     },
     {
@@ -22460,7 +22460,7 @@
         "kind": "file"
       },
       "id": "scripts_update_and_restart",
-      "community": 189,
+      "community": 26,
       "norm_label": "update-and-restart.sh"
     },
     {
@@ -22473,7 +22473,7 @@
         "kind": "bash_entrypoint"
       },
       "id": "opt_ryvie_scripts_update_and_restart_sh__entry",
-      "community": 189,
+      "community": 26,
       "norm_label": "update-and-restart.sh script"
     },
     {
@@ -22486,7 +22486,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_log",
-      "community": 189,
+      "community": 26,
       "norm_label": "log()"
     },
     {
@@ -22499,7 +22499,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_update_status",
-      "community": 189,
+      "community": 26,
       "norm_label": "update_status()"
     },
     {
@@ -22512,7 +22512,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_cleanup",
-      "community": 189,
+      "community": 26,
       "norm_label": "cleanup()"
     },
     {
@@ -22525,7 +22525,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_rollback",
-      "community": 189,
+      "community": 26,
       "norm_label": "rollback()"
     },
     {
@@ -22538,7 +22538,7 @@
         "kind": "bash_function"
       },
       "id": "scripts_update_and_restart_perform_health_check",
-      "community": 189,
+      "community": 26,
       "norm_label": "perform_health_check()"
     },
     {
@@ -24059,7 +24059,7 @@
       "source_file": "I18N_SUMMARY.md",
       "source_location": "L1",
       "id": "i18n_summary",
-      "community": 12,
+      "community": 87,
       "norm_label": "i18n_summary.md"
     },
     {
@@ -26255,7 +26255,7 @@
       "source_file": "TRADUCTION_GUIDE.md",
       "source_location": "L1",
       "id": "traduction_guide",
-      "community": 12,
+      "community": 87,
       "norm_label": "traduction_guide.md"
     },
     {
@@ -30723,141 +30723,6 @@
       "norm_label": "7. critere de succes"
     },
     {
-      "label": "RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L1",
-      "id": "docs_resilience_reprise_diagnostic",
-      "community": 38,
-      "norm_label": "resilience_reprise_diagnostic.md"
-    },
-    {
-      "label": "R\u00e9silience & reprise \u2014 Diagnostic \u00ab cloud incassable \u00bb",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L1",
-      "id": "docs_resilience_reprise_diagnostic_r\u00e9silience_reprise_diagnostic_cloud_incassable",
-      "community": 38,
-      "norm_label": "resilience & reprise \u2014 diagnostic \u00ab cloud incassable \u00bb"
-    },
-    {
-      "label": "1. O\u00f9 vit r\u00e9ellement l'\u00e9tat (carte de la donn\u00e9e)",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L12",
-      "id": "docs_resilience_reprise_diagnostic_1_o\u00f9_vit_r\u00e9ellement_l_\u00e9tat_carte_de_la_donn\u00e9e",
-      "community": 38,
-      "norm_label": "1. ou vit reellement l'etat (carte de la donnee)"
-    },
-    {
-      "label": "La donn\u00e9e m\u00e9tier est en **bind-mount** sous `/data` (donc portable)",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L17",
-      "id": "docs_resilience_reprise_diagnostic_la_donn\u00e9e_m\u00e9tier_est_en_bind_mount_sous_data_donc_portable",
-      "community": 38,
-      "norm_label": "la donnee metier est en **bind-mount** sous `/data` (donc portable)"
-    },
-    {
-      "label": "Ce qui reste en **volumes Docker nomm\u00e9s** = jetable / r\u00e9g\u00e9n\u00e9rable",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L32",
-      "id": "docs_resilience_reprise_diagnostic_ce_qui_reste_en_volumes_docker_nomm\u00e9s_jetable_r\u00e9g\u00e9n\u00e9rable",
-      "community": 38,
-      "norm_label": "ce qui reste en **volumes docker nommes** = jetable / regenerable"
-    },
-    {
-      "label": "Cons\u00e9quence directe",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L43",
-      "id": "docs_resilience_reprise_diagnostic_cons\u00e9quence_directe",
-      "community": 38,
-      "norm_label": "consequence directe"
-    },
-    {
-      "label": "2. Fronti\u00e8re migr\u00e9 / r\u00e9g\u00e9n\u00e9r\u00e9",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L56",
-      "id": "docs_resilience_reprise_diagnostic_2_fronti\u00e8re_migr\u00e9_r\u00e9g\u00e9n\u00e9r\u00e9",
-      "community": 38,
-      "norm_label": "2. frontiere migre / regenere"
-    },
-    {
-      "label": "3. Ce que fait d\u00e9j\u00e0 la reprise automatique",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L66",
-      "id": "docs_resilience_reprise_diagnostic_3_ce_que_fait_d\u00e9j\u00e0_la_reprise_automatique",
-      "community": 38,
-      "norm_label": "3. ce que fait deja la reprise automatique"
-    },
-    {
-      "label": "4. Sc\u00e9nario 1 \u2014 supprimer `/opt/Ryvie` et le remettre",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L92",
-      "id": "docs_resilience_reprise_diagnostic_4_sc\u00e9nario_1_supprimer_opt_ryvie_et_le_remettre",
-      "community": 38,
-      "norm_label": "4. scenario 1 \u2014 supprimer `/opt/ryvie` et le remettre"
-    },
-    {
-      "label": "5. Sc\u00e9nario 2 \u2014 restaurer `/data`, laisser `/opt` tout relancer",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L123",
-      "id": "docs_resilience_reprise_diagnostic_5_sc\u00e9nario_2_restaurer_data_laisser_opt_tout_relancer",
-      "community": 38,
-      "norm_label": "5. scenario 2 \u2014 restaurer `/data`, laisser `/opt` tout relancer"
-    },
-    {
-      "label": "6. \u00c9tat hors `/data` **et** hors `/opt` (\u00e0 assumer)",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L146",
-      "id": "docs_resilience_reprise_diagnostic_6_\u00e9tat_hors_data_et_hors_opt_\u00e0_assumer",
-      "community": 38,
-      "norm_label": "6. etat hors `/data` **et** hors `/opt` (a assumer)"
-    },
-    {
-      "label": "7. Verdict",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L159",
-      "id": "docs_resilience_reprise_diagnostic_7_verdict",
-      "community": 38,
-      "norm_label": "7. verdict"
-    },
-    {
-      "label": "Br\u00e8ches \u00e0 combler",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L165",
-      "id": "docs_resilience_reprise_diagnostic_br\u00e8ches_\u00e0_combler",
-      "community": 38,
-      "norm_label": "breches a combler"
-    },
-    {
-      "label": "Fuites d'\u00e9tat \u00e0 traiter (non bloquantes)",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L176",
-      "id": "docs_resilience_reprise_diagnostic_fuites_d_\u00e9tat_\u00e0_traiter_non_bloquantes",
-      "community": 38,
-      "norm_label": "fuites d'etat a traiter (non bloquantes)"
-    },
-    {
-      "label": "Ordre de reprise recommand\u00e9 (runbook cible)",
-      "file_type": "document",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L183",
-      "id": "docs_resilience_reprise_diagnostic_ordre_de_reprise_recommand\u00e9_runbook_cible",
-      "community": 38,
-      "norm_label": "ordre de reprise recommande (runbook cible)"
-    },
-    {
       "label": "STORAGE_MIGRATION_STRATEGY.md",
       "file_type": "document",
       "source_file": "docs/STORAGE_MIGRATION_STRATEGY.md",
@@ -31819,24 +31684,6 @@
       "id": "themes_readme_v\u00e9rifier_que_le_th\u00e8me_est_charg\u00e9",
       "community": 143,
       "norm_label": "verifier que le theme est charge"
-    },
-    {
-      "label": "totalStorage",
-      "file_type": "code",
-      "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L545",
-      "community": 1,
-      "norm_label": "totalstorage",
-      "id": "i18n_en_settings_totalstorage"
-    },
-    {
-      "label": "languageError",
-      "file_type": "code",
-      "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L545",
-      "community": 0,
-      "norm_label": "languageerror",
-      "id": "i18n_fr_settings_languageerror"
     },
     {
       "label": "capacity",
@@ -34973,7 +34820,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 9,
+      "community": 38,
       "norm_label": "oidc service",
       "id": "oidcservice_service"
     },
@@ -35116,7 +34963,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "settings page",
       "id": "settings_page"
     },
@@ -35142,7 +34989,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 146,
+      "community": 5,
       "norm_label": "first time setup page",
       "id": "firsttimesetup_page"
     },
@@ -35155,7 +35002,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "welcome page",
       "id": "welcome_page"
     },
@@ -35168,7 +35015,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "login page",
       "id": "login_page"
     },
@@ -35181,7 +35028,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "language context",
       "id": "languagecontext_context"
     },
@@ -35194,7 +35041,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "french translations",
       "id": "frjson_translation"
     },
@@ -35207,7 +35054,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 12,
+      "community": 87,
       "norm_label": "english translations",
       "id": "enjson_translation"
     },
@@ -36182,7 +36029,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 13,
+      "community": 26,
       "norm_label": "realtime service",
       "id": "realtimeservice_service"
     },
@@ -36312,7 +36159,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 34,
+      "community": 198,
       "norm_label": "update context",
       "id": "updatecontext_context"
     },
@@ -36338,7 +36185,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 189,
+      "community": 26,
       "norm_label": "update and restart script",
       "id": "updateandrestart_script"
     },
@@ -43343,9 +43190,9 @@
       "source_file": "Ryvie-Back/services/aiService.ts",
       "source_location": "L814",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_aiservice",
-      "target": "services_aiservice_setenabled"
+      "target": "services_aiservice_setenabled",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -43660,9 +43507,9 @@
       "source_file": "Ryvie-Back/services/aiService.ts",
       "source_location": "L804",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_aiservice_ensurerunning",
-      "target": "services_aiservice_loadconfig"
+      "target": "services_aiservice_loadconfig",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -43770,9 +43617,9 @@
       "source_file": "Ryvie-Back/services/aiService.ts",
       "source_location": "L815",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_aiservice_setenabled",
-      "target": "services_aiservice_loadconfig"
+      "target": "services_aiservice_loadconfig",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -43858,9 +43705,9 @@
       "source_file": "Ryvie-Back/services/aiService.ts",
       "source_location": "L817",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_aiservice_setenabled",
-      "target": "services_aiservice_saveconfig"
+      "target": "services_aiservice_saveconfig",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -44353,9 +44200,9 @@
       "source_file": "Ryvie-Back/services/aiService.ts",
       "source_location": "L821",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_aiservice_setenabled",
-      "target": "services_aiservice_getstatus"
+      "target": "services_aiservice_getstatus",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -44419,9 +44266,9 @@
       "source_file": "Ryvie-Back/services/aiService.ts",
       "source_location": "L827",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_aiservice_setenabled",
-      "target": "services_aiservice_applylitellmconfig"
+      "target": "services_aiservice_applylitellmconfig",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -44463,9 +44310,9 @@
       "source_file": "Ryvie-Back/services/aiService.ts",
       "source_location": "L830",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "services_aiservice_setenabled",
-      "target": "services_aiservice_ensurerunning"
+      "target": "services_aiservice_ensurerunning",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -68483,21 +68330,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "Ryvie-Front/src/i18n/en.json",
-      "source_location": "L434",
-      "weight": 1.0,
-      "source": "i18n_en_settings_ai",
-      "target": "i18n_en_ai_disabledhint",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L432",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "i18n_en_settings_ai",
-      "target": "i18n_en_ai_disabledpill"
+      "target": "i18n_en_ai_disabledpill",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -68505,9 +68342,9 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L433",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "i18n_en_settings_ai",
-      "target": "i18n_en_ai_enabledpill"
+      "target": "i18n_en_ai_enabledpill",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -68515,9 +68352,9 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L431",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "i18n_en_settings_ai",
-      "target": "i18n_en_ai_enablehint"
+      "target": "i18n_en_ai_enablehint",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -68525,9 +68362,9 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L430",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "i18n_en_settings_ai",
-      "target": "i18n_en_ai_enablelabel"
+      "target": "i18n_en_ai_enablelabel",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -75744,21 +75581,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "Ryvie-Front/src/i18n/fr.json",
-      "source_location": "L441",
-      "weight": 1.0,
-      "source": "i18n_fr_settings_ai",
-      "target": "i18n_fr_ai_disabledhint",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L439",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "i18n_fr_settings_ai",
-      "target": "i18n_fr_ai_disabledpill"
+      "target": "i18n_fr_ai_disabledpill",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -75766,9 +75593,9 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L440",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "i18n_fr_settings_ai",
-      "target": "i18n_fr_ai_enabledpill"
+      "target": "i18n_fr_ai_enabledpill",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -75776,9 +75603,9 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L438",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "i18n_fr_settings_ai",
-      "target": "i18n_fr_ai_enablehint"
+      "target": "i18n_fr_ai_enablehint",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -75786,9 +75613,9 @@
       "source_file": "Ryvie-Front/src/i18n/fr.json",
       "source_location": "L437",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "i18n_fr_settings_ai",
-      "target": "i18n_fr_ai_enablelabel"
+      "target": "i18n_fr_ai_enablelabel",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -92194,146 +92021,6 @@
       "confidence_score": 1.0,
       "source": "docs_raid_migration_checklist_ryvie_checklist_de_verification_post_migration_raid",
       "target": "docs_raid_migration_checklist_7_critere_de_succes"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L1",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic",
-      "target": "docs_resilience_reprise_diagnostic_r\u00e9silience_reprise_diagnostic_cloud_incassable",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L12",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_r\u00e9silience_reprise_diagnostic_cloud_incassable",
-      "target": "docs_resilience_reprise_diagnostic_1_o\u00f9_vit_r\u00e9ellement_l_\u00e9tat_carte_de_la_donn\u00e9e",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L56",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_r\u00e9silience_reprise_diagnostic_cloud_incassable",
-      "target": "docs_resilience_reprise_diagnostic_2_fronti\u00e8re_migr\u00e9_r\u00e9g\u00e9n\u00e9r\u00e9",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L66",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_r\u00e9silience_reprise_diagnostic_cloud_incassable",
-      "target": "docs_resilience_reprise_diagnostic_3_ce_que_fait_d\u00e9j\u00e0_la_reprise_automatique",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L92",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_r\u00e9silience_reprise_diagnostic_cloud_incassable",
-      "target": "docs_resilience_reprise_diagnostic_4_sc\u00e9nario_1_supprimer_opt_ryvie_et_le_remettre",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L123",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_r\u00e9silience_reprise_diagnostic_cloud_incassable",
-      "target": "docs_resilience_reprise_diagnostic_5_sc\u00e9nario_2_restaurer_data_laisser_opt_tout_relancer",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L146",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_r\u00e9silience_reprise_diagnostic_cloud_incassable",
-      "target": "docs_resilience_reprise_diagnostic_6_\u00e9tat_hors_data_et_hors_opt_\u00e0_assumer",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L159",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_r\u00e9silience_reprise_diagnostic_cloud_incassable",
-      "target": "docs_resilience_reprise_diagnostic_7_verdict",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L32",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_1_o\u00f9_vit_r\u00e9ellement_l_\u00e9tat_carte_de_la_donn\u00e9e",
-      "target": "docs_resilience_reprise_diagnostic_ce_qui_reste_en_volumes_docker_nomm\u00e9s_jetable_r\u00e9g\u00e9n\u00e9rable",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L43",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_1_o\u00f9_vit_r\u00e9ellement_l_\u00e9tat_carte_de_la_donn\u00e9e",
-      "target": "docs_resilience_reprise_diagnostic_cons\u00e9quence_directe",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L17",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_1_o\u00f9_vit_r\u00e9ellement_l_\u00e9tat_carte_de_la_donn\u00e9e",
-      "target": "docs_resilience_reprise_diagnostic_la_donn\u00e9e_m\u00e9tier_est_en_bind_mount_sous_data_donc_portable",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L165",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_7_verdict",
-      "target": "docs_resilience_reprise_diagnostic_br\u00e8ches_\u00e0_combler",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L176",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_7_verdict",
-      "target": "docs_resilience_reprise_diagnostic_fuites_d_\u00e9tat_\u00e0_traiter_non_bloquantes",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/RESILIENCE_REPRISE_DIAGNOSTIC.md",
-      "source_location": "L183",
-      "weight": 1.0,
-      "source": "docs_resilience_reprise_diagnostic_7_verdict",
-      "target": "docs_resilience_reprise_diagnostic_ordre_de_reprise_recommand\u00e9_runbook_cible",
-      "confidence_score": 1.0
     },
     {
       "relation": "contains",

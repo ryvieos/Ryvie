@@ -1933,6 +1933,10 @@ const Settings = () => {
                 <span>{t('settings.applications')}</span>
                 <strong>{stats.totalApps}</strong>
               </div>
+              <div className="stat-item">
+                <span>{t('settings.connectedDevices')}</span>
+                <strong>{vpnPeers ? vpnPeers.filter((p: any) => /connected/i.test(p.status)).length : 0}</strong>
+              </div>
             </div>
           </div>
 
@@ -2198,6 +2202,112 @@ const Settings = () => {
           )}
           </>
         )}
+      </section>
+
+      {/* Section Appareils du réseau de votre Ryvie - déplacée juste après la gestion des apps */}
+      <section className="settings-section">
+        <h2>
+          <FontAwesomeIcon icon={faNetworkWired} style={{ marginRight: '8px' }} />
+          {t('settings.vpnPeersTitle')}
+        </h2>
+        <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
+          {t('settings.vpnPeersDescription')}
+        </p>
+
+        <div className="settings-grid">
+          <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+              <button
+                onClick={loadVpnPeers}
+                disabled={vpnPeersLoading}
+                style={{
+                  padding: '8px 14px',
+                  background: '#fff',
+                  color: '#1976d2',
+                  border: '1px solid #1976d2',
+                  borderRadius: '6px',
+                  cursor: vpnPeersLoading ? 'default' : 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  opacity: vpnPeersLoading ? 0.6 : 1
+                }}
+              >
+                <FontAwesomeIcon icon={vpnPeersLoading ? faSpinner : faSync} spin={vpnPeersLoading} />
+                {t('settings.vpnPeersRefresh')}
+              </button>
+            </div>
+
+            {vpnPeersLoading && (!vpnPeers || vpnPeers.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
+                <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
+                {t('settings.vpnPeersLoading')}
+              </div>
+            ) : vpnPeersError ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#d32f2f' }}>
+                {vpnPeersError}
+              </div>
+            ) : vpnPeers && vpnPeers.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                {vpnPeers.map((peer: any) => {
+                  const isConnected = /connected/i.test(peer.status);
+                  return (
+                    <div
+                      key={peer.fqdn || peer.ip}
+                      style={{
+                        padding: '14px 16px',
+                        background: '#f8f9fa',
+                        borderRadius: '8px',
+                        border: '1px solid #e0e0e0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '10px',
+                        background: isConnected ? 'rgba(76,175,80,0.12)' : 'rgba(158,158,158,0.12)',
+                        color: isConnected ? '#4caf50' : '#9e9e9e',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <FontAwesomeIcon icon={faLaptop} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }} title={peer.fqdn}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{peer.hostname || peer.fqdn}</span>
+                          {peer.self && (
+                            <span style={{ flexShrink: 0, fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#1976d2', background: 'rgba(25,118,210,0.12)', borderRadius: '6px', padding: '2px 6px' }}>
+                              {t('settings.vpnPeerSelf')}
+                            </span>
+                          )}
+                        </div>
+                        {peer.ip && (
+                          <div style={{ fontSize: '13px', color: '#1976d2', fontFamily: 'monospace' }}>{peer.ip}</div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '12px', color: isConnected ? '#4caf50' : '#9e9e9e', fontWeight: 500 }}>
+                          <FontAwesomeIcon icon={faCircle} style={{ fontSize: '8px' }} />
+                          {isConnected ? t('settings.vpnPeerConnected') : t('settings.vpnPeerDisconnected')}
+                          {peer.latency && peer.latency !== '0s' && <span style={{ color: '#999' }}>· {peer.latency}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
+                {t('settings.vpnPeersEmpty')}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       {/* Section Langue */}
@@ -3591,111 +3701,6 @@ const Settings = () => {
       )}
 
       {/* Appareils du réseau VPN Ryvie (peers NetBird) */}
-      <section className="settings-section">
-        <h2>
-          <FontAwesomeIcon icon={faNetworkWired} style={{ marginRight: '8px' }} />
-          {t('settings.vpnPeersTitle')}
-        </h2>
-        <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
-          {t('settings.vpnPeersDescription')}
-        </p>
-
-        <div className="settings-grid">
-          <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-              <button
-                onClick={loadVpnPeers}
-                disabled={vpnPeersLoading}
-                style={{
-                  padding: '8px 14px',
-                  background: '#fff',
-                  color: '#1976d2',
-                  border: '1px solid #1976d2',
-                  borderRadius: '6px',
-                  cursor: vpnPeersLoading ? 'default' : 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  opacity: vpnPeersLoading ? 0.6 : 1
-                }}
-              >
-                <FontAwesomeIcon icon={vpnPeersLoading ? faSpinner : faSync} spin={vpnPeersLoading} />
-                {t('settings.vpnPeersRefresh')}
-              </button>
-            </div>
-
-            {vpnPeersLoading && (!vpnPeers || vpnPeers.length === 0) ? (
-              <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
-                <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
-                {t('settings.vpnPeersLoading')}
-              </div>
-            ) : vpnPeersError ? (
-              <div style={{ textAlign: 'center', padding: '24px', color: '#d32f2f' }}>
-                {vpnPeersError}
-              </div>
-            ) : vpnPeers && vpnPeers.length > 0 ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
-                {vpnPeers.map((peer: any) => {
-                  const isConnected = /connected/i.test(peer.status);
-                  return (
-                    <div
-                      key={peer.fqdn || peer.ip}
-                      style={{
-                        padding: '14px 16px',
-                        background: '#f8f9fa',
-                        borderRadius: '8px',
-                        border: '1px solid #e0e0e0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px'
-                      }}
-                    >
-                      <div style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '10px',
-                        background: isConnected ? 'rgba(76,175,80,0.12)' : 'rgba(158,158,158,0.12)',
-                        color: isConnected ? '#4caf50' : '#9e9e9e',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}>
-                        <FontAwesomeIcon icon={faLaptop} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }} title={peer.fqdn}>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{peer.hostname || peer.fqdn}</span>
-                          {peer.self && (
-                            <span style={{ flexShrink: 0, fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#1976d2', background: 'rgba(25,118,210,0.12)', borderRadius: '6px', padding: '2px 6px' }}>
-                              {t('settings.vpnPeerSelf')}
-                            </span>
-                          )}
-                        </div>
-                        {peer.ip && (
-                          <div style={{ fontSize: '13px', color: '#1976d2', fontFamily: 'monospace' }}>{peer.ip}</div>
-                        )}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '12px', color: isConnected ? '#4caf50' : '#9e9e9e', fontWeight: 500 }}>
-                          <FontAwesomeIcon icon={faCircle} style={{ fontSize: '8px' }} />
-                          {isConnected ? t('settings.vpnPeerConnected') : t('settings.vpnPeerDisconnected')}
-                          {peer.latency && peer.latency !== '0s' && <span style={{ color: '#999' }}>· {peer.latency}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
-                {t('settings.vpnPeersEmpty')}
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
       {/* Modal Détail du Stockage */}
       {showStorageDetail && (
         <div 
