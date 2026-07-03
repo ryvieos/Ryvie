@@ -672,11 +672,16 @@ router.get('/settings/vpn-peers', verifyToken, async (req: any, res: any) => {
         };
         continue;
       }
+      // Toute ligne en colonne 0 (sans espace de tête) marque la fin du bloc peer
+      // courant : c'est le résumé de la box locale (OS, FQDN, NetBird IP…). Sans ce
+      // garde-fou, la ligne "NetBird IP:" du résumé écrase l'IP du dernier peer avec
+      // celle du Ryvie, ce qui le faisait ensuite supprimer comme doublon.
+      if (/^\S/.test(line)) { if (current) peers.push(current); current = null; continue; }
       if (!current) continue;
 
       let m;
-      if ((m = line.match(/NetBird IP:\s*(\S+)/))) { current.ip = (m[1] || '').replace(/\/\d+$/, ''); continue; }
-      if ((m = line.match(/^\s*Status:\s*(\S+)/))) { current.status = m[1]; continue; }
+      if ((m = line.match(/^\s+NetBird IP:\s*(\S+)/))) { current.ip = (m[1] || '').replace(/\/\d+$/, ''); continue; }
+      if ((m = line.match(/^\s+Status:\s*(\S+)/))) { current.status = m[1]; continue; }
       if ((m = line.match(/Connection type:\s*(.+?)\s*$/))) {
         current.connectionType = m[1] === '-' ? null : m[1];
         continue;

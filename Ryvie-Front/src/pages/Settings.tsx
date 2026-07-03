@@ -3,7 +3,8 @@ import '../styles/Settings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy, faNetworkWired, faLaptop, faCircle, faSync, faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy, faNetworkWired, faLaptop, faCircle, faSpinner, faDesktop, faMobileScreen, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
+import { faApple, faWindows, faLinux, faAndroid } from '@fortawesome/free-brands-svg-icons';
 import { isElectron } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getFrontendUrl } = urlsConfig;
@@ -237,6 +238,51 @@ const Settings = () => {
   const [vpnPeers, setVpnPeers] = useState(null);
   const [vpnPeersLoading, setVpnPeersLoading] = useState(false);
   const [vpnPeersError, setVpnPeersError] = useState(null);
+  // Icônes d'appareils choisies manuellement (clé = fqdn), persistées en localStorage
+  const [deviceIconOverrides, setDeviceIconOverrides] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('ryvie-device-icons') || '{}'); } catch { return {}; }
+  });
+  // Adresses IP révélées à la demande (clé = fqdn) ; masquées par défaut
+  const [revealedIps, setRevealedIps] = useState<Record<string, boolean>>({});
+  const toggleRevealIp = (peer: any) => {
+    setRevealedIps(prev => ({ ...prev, [peer.fqdn]: !prev[peer.fqdn] }));
+  };
+  // Ordre de rotation au clic + mapping type -> icône FontAwesome
+  const DEVICE_TYPES = ['laptop', 'desktop', 'phone', 'mac', 'windows', 'linux'];
+  const deviceIconFor = (type: string) => {
+    switch (type) {
+      case 'phone': return faMobileScreen;
+      case 'mac': return faApple;
+      case 'windows': return faWindows;
+      case 'linux': return faLinux;
+      case 'android': return faAndroid;
+      case 'desktop': return faDesktop;
+      default: return faLaptop;
+    }
+  };
+  // Détection heuristique du type d'appareil à partir du nom d'hôte
+  const detectDeviceType = (peer: any) => {
+    const name = String(peer?.hostname || peer?.fqdn || '').toLowerCase();
+    if (/(iphone|ipad|android|pixel|galaxy|phone|mobile|oneplus|xiaomi|huawei)/.test(name)) return 'phone';
+    if (/(macbook|imac|mac-|macmini|-mac|mbp|osx|darwin|apple)/.test(name)) return 'mac';
+    if (/(windows|win-|-win|pc-|desktop-|laptop-win)/.test(name)) return 'windows';
+    if (/(linux|ubuntu|debian|fedora|arch|manjaro|raspberry|rpi)/.test(name)) return 'linux';
+    if (/(server|nas|ryvie|box|desktop)/.test(name)) return 'desktop';
+    return 'laptop';
+  };
+  // Type effectif d'un peer (override manuel prioritaire sur l'heuristique)
+  const deviceTypeOf = (peer: any) => deviceIconOverrides[peer?.fqdn] || detectDeviceType(peer);
+  // Passer au type d'icône suivant au clic et persister
+  const cycleDeviceIcon = (peer: any) => {
+    const current = deviceTypeOf(peer);
+    const idx = DEVICE_TYPES.indexOf(current);
+    const next = DEVICE_TYPES[(idx + 1) % DEVICE_TYPES.length];
+    setDeviceIconOverrides(prev => {
+      const updated = { ...prev, [peer.fqdn]: next };
+      try { localStorage.setItem('ryvie-device-icons', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  };
   const [prefsLoaded, setPrefsLoaded] = useState(false); // préférences utilisateur chargées
   // Rôle de l'utilisateur pour contrôler l'accès aux boutons
   const [userRole, setUserRole] = useState('User');
@@ -253,29 +299,33 @@ const Settings = () => {
   const { startUpdate } = useUpdate();
 
   // Charger les appareils du réseau VPN Ryvie (peers NetBird)
-  const loadVpnPeers = async () => {
-    setVpnPeersLoading(true);
+  const loadVpnPeers = async (silent = false) => {
+    if (!silent) setVpnPeersLoading(true);
     setVpnPeersError(null);
     try {
       const serverUrl = getServerUrl(accessMode);
       const response = await axios.get(`${serverUrl}/api/settings/vpn-peers`);
       if (response.data && Array.isArray(response.data.peers)) {
         setVpnPeers(response.data.peers);
-      } else {
+      } else if (!silent) {
         setVpnPeers([]);
       }
     } catch (error: any) {
       console.log('[Settings] Impossible de charger les peers VPN:', error);
-      setVpnPeersError(error?.response?.data?.error || 'Erreur de récupération des appareils');
-      setVpnPeers([]);
+      if (!silent) {
+        setVpnPeersError(error?.response?.data?.error || 'Erreur de récupération des appareils');
+        setVpnPeers([]);
+      }
     } finally {
-      setVpnPeersLoading(false);
+      if (!silent) setVpnPeersLoading(false);
     }
   };
 
-  // Charger automatiquement les appareils du réseau VPN au montage
+  // Charger au montage puis rafraîchir automatiquement toutes les 10 s (silencieux)
   useEffect(() => {
     loadVpnPeers();
+    const intervalId = setInterval(() => loadVpnPeers(true), 10000);
+    return () => clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1933,9 +1983,23 @@ const Settings = () => {
                 <span>{t('settings.applications')}</span>
                 <strong>{stats.totalApps}</strong>
               </div>
-              <div className="stat-item">
-                <span>{t('settings.connectedDevices')}</span>
-                <strong>{vpnPeers ? vpnPeers.filter((p: any) => /connected/i.test(p.status)).length : 0}</strong>
+            </div>
+          </div>
+
+          {/* Appareils connectés au réseau Ryvie */}
+          <div className="stat-card devices">
+            <h3>{t('settings.connectedDevices')}</h3>
+            <div className="devices-stat" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+              <div style={{
+                width: '44px', height: '44px', borderRadius: '12px',
+                background: 'rgba(25,118,210,0.12)', color: '#1976d2',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}>
+                <FontAwesomeIcon icon={faNetworkWired} />
+              </div>
+              <div>
+                <strong style={{ fontSize: '28px', lineHeight: 1 }}>{vpnPeers ? vpnPeers.filter((p: any) => /connected/i.test(p.status)).length : 0}</strong>
+                <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>{t('settings.connectedDevicesHint')}</div>
               </div>
             </div>
           </div>
@@ -2216,30 +2280,6 @@ const Settings = () => {
 
         <div className="settings-grid">
           <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-              <button
-                onClick={loadVpnPeers}
-                disabled={vpnPeersLoading}
-                style={{
-                  padding: '8px 14px',
-                  background: '#fff',
-                  color: '#1976d2',
-                  border: '1px solid #1976d2',
-                  borderRadius: '6px',
-                  cursor: vpnPeersLoading ? 'default' : 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  opacity: vpnPeersLoading ? 0.6 : 1
-                }}
-              >
-                <FontAwesomeIcon icon={vpnPeersLoading ? faSpinner : faSync} spin={vpnPeersLoading} />
-                {t('settings.vpnPeersRefresh')}
-              </button>
-            </div>
-
             {vpnPeersLoading && (!vpnPeers || vpnPeers.length === 0) ? (
               <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
                 <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
@@ -2266,18 +2306,22 @@ const Settings = () => {
                         gap: '12px'
                       }}
                     >
-                      <div style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '10px',
-                        background: isConnected ? 'rgba(76,175,80,0.12)' : 'rgba(158,158,158,0.12)',
-                        color: isConnected ? '#4caf50' : '#9e9e9e',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}>
-                        <FontAwesomeIcon icon={faLaptop} />
+                      <div
+                        onClick={() => cycleDeviceIcon(peer)}
+                        title={t('settings.vpnPeerChangeIcon')}
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '10px',
+                          background: isConnected ? 'rgba(76,175,80,0.12)' : 'rgba(158,158,158,0.12)',
+                          color: isConnected ? '#4caf50' : '#9e9e9e',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          cursor: 'pointer'
+                        }}>
+                        <FontAwesomeIcon icon={deviceIconFor(deviceTypeOf(peer))} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: '14px', fontWeight: 600, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }} title={peer.fqdn}>
@@ -2289,7 +2333,15 @@ const Settings = () => {
                           )}
                         </div>
                         {peer.ip && (
-                          <div style={{ fontSize: '13px', color: '#1976d2', fontFamily: 'monospace' }}>{peer.ip}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', fontSize: '13px', color: '#1976d2', fontFamily: 'monospace' }}>
+                            <span>{revealedIps[peer.fqdn] ? peer.ip : '••••••••••'}</span>
+                            <FontAwesomeIcon
+                              icon={revealedIps[peer.fqdn] ? faEyeSlash : faEye}
+                              onClick={() => toggleRevealIp(peer)}
+                              title={revealedIps[peer.fqdn] ? t('settings.vpnPeerHideIp') : t('settings.vpnPeerShowIp')}
+                              style={{ cursor: 'pointer', color: '#999', fontSize: '12px' }}
+                            />
+                          </div>
                         )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '12px', color: isConnected ? '#4caf50' : '#9e9e9e', fontWeight: 500 }}>
                           <FontAwesomeIcon icon={faCircle} style={{ fontSize: '8px' }} />
@@ -3700,7 +3752,6 @@ const Settings = () => {
         </section>
       )}
 
-      {/* Appareils du réseau VPN Ryvie (peers NetBird) */}
       {/* Modal Détail du Stockage */}
       {showStorageDetail && (
         <div 
