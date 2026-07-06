@@ -1,100 +1,172 @@
 <p align="center">
-  <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="180" />
+ <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="160" />
 </p>
+
+<h1 align="center">Ryvie</h1>
+
 <p align="center">
-  <img width="1920" height="1080" alt="Pitch cyber summit" src="https://github.com/user-attachments/assets/c432252e-0cf7-46d4-8b3b-8a5e0344003d" />
+ <b>Votre cloud personnel, chez vous.</b><br/>
+ <sub>Un OS auto-hébergé (source-available) qui transforme un VPS ou une machine physique en cloud privé : vos apps, vos fichiers, vos données. Gratuitement, sous votre contrôle.</sub><br/>
+ <sub><i>The source-available, self-hosted personal cloud OS. Deploy on a VPS or a physical machine, own your apps, files and data.</i></sub>
+</p>
+
+<p align="center">
+ <a href="https://github.com/ryvieos/Ryvie/releases"><img alt="Version" src="https://img.shields.io/github/package-json/v/ryvieos/Ryvie?color=6366f1&label=version" /></a>
+ <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-RSAL%20v1.1-blue" /></a>
+ <a href="https://github.com/ryvieos/Ryvie/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/ryvieos/Ryvie?style=flat&color=f5c518" /></a>
+ <a href="https://github.com/ryvieos/Ryvie/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/ryvieos/Ryvie?style=flat" /></a>
+ <a href="https://github.com/ryvieos/Ryvie/issues"><img alt="Issues" src="https://img.shields.io/github/issues/ryvieos/Ryvie" /></a>
+ <a href="https://github.com/ryvieos/Ryvie/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/ryvieos/Ryvie" /></a>
+ <a href="CONTRIBUTING.md"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" /></a>
+ <a href="https://ryvie.fr"><img alt="Website" src="https://img.shields.io/badge/site-ryvie.fr-6366f1" /></a>
+</p>
+
+<p align="center">
+ <a href="https://ryvie.fr"> Site</a> ·
+ <a href="https://ryvie.fr/docs"> Documentation</a> ·
+ <a href="https://ryvie.fr"> Télécharger</a> ·
+ <a href="https://github.com/ryvieos/Ryvie/issues"> Signaler un bug</a> ·
+ <a href="CONTRIBUTING.md"> Contribuer</a>
+</p>
+
+<p align="center">
+ <img width="900" alt="Ryvie" src="https://github.com/user-attachments/assets/c432252e-0cf7-46d4-8b3b-8a5e0344003d" />
+</p>
+
+<p align="center">
+ <i>⭐ Si Ryvie vous plaît, mettez une étoile : ça aide vraiment le projet à gagner en visibilité !</i>
 </p>
 
 ---
 
-## 🌟 Présentation
+## Sommaire
 
-**Ryvie** est un **OS + une plateforme** qui transforme n'importe quelle machine (mini‑PC, serveur, etc.) en un **cloud personnel** puissant et simple à utiliser.
+- [Pourquoi Ryvie ?](#-pourquoi-ryvie-)
+- [Fonctionnalités](#-fonctionnalités)
+- [Installation](#-installation)
+- [Stack technique](#-stack-technique)
+- [Architecture](#-architecture)
+- [Prérequis](#-prérequis)
+- [Contribuer](#-contribuer)
+- [Licence](#-licence)
+- [Équipe](#-équipe)
 
-L'objectif est d'offrir une page d'accueil de type **"launcher"** (style iOS 📱) pour lancer et administrer vos services (apps Docker) en toute fluidité :
+---
 
-- **🖥️ Launcher en grille** : Organisation intuitive des apps + widgets personnalisables.
-- **📦 Gestion centralisée** : Détection automatique des apps (manifests, icônes, ports).
-- **🎨 Préférences utilisateur** : Customisation complète (layout, fond d’écran, thèmes).
-- **🌐 Connexion P2P intégrée** : Accès distant sécurisé sans configuration réseau complexe.
-- **🔒 Accès flexible** : Mode local ou distant selon vos besoins (public/privé).
+## ✨ Pourquoi Ryvie ?
+
+Les clouds classiques (Google Drive, iCloud, Dropbox…) sont pratiques mais **louent l'accès à vos propres données** et les hébergent sur des serveurs que vous ne contrôlez pas. Ryvie inverse la logique :
+
+- **Votre propre serveur, sans ligne de commande.** Installez des dizaines d'apps et services open source (photos, drive, CRM, automatisation…) en un clic, sans jamais toucher au terminal.
+- **Vos données restent chez vous.** Sur votre matériel, chiffrées, jamais revendues.
+- **Simple comme un smartphone.** Un launcher en grille, pas une console d'admin Linux.
+- **Multi-utilisateurs avec droits.** Créez des comptes pour votre famille ou votre équipe, chacun avec ses accès et permissions, grâce au SSO centralisé.
+- **Accessible partout.** Tunnel VPN privé intégré (Netbird) et génération d'adresse publique, sans ouvrir de ports ni configurer votre box.
+- **Déployable où vous voulez.** Sur un VPS ou une machine physique chez vous, via l'OS Ryvie.
+
+> Ryvie, c'est la puissance d'un serveur auto-hébergé avec la simplicité d'un smartphone.
 
 ---
 
 ## 🚀 Fonctionnalités
 
-- **Grid Launcher** : Interface responsive, drag & drop, et widgets (météo, CPU/RAM, stockage...).
-- **P2P Ready** : Accès à vos données partout dans le monde, simplement.
-- **App Catalog** : Détection dynamique des applications via manifests générés.
-- **Cloud Sync** : Sauvegarde de vos préférences par utilisateur côté backend.
-- **Real-time Monitoring** : Backend réactif via Socket.IO pour un état du système toujours à jour.
+| Fonctionnalité | Description |
+|---|---|
+| **Launcher en grille** | Interface responsive façon smartphone : drag & drop, dossiers, widgets (météo, CPU/RAM, stockage). |
+| **App Store auto-hébergé** | Des dizaines d'apps et services open source installables en un clic, sans ligne de commande (détection auto des manifests, icônes, ports). |
+| **Gestion multi-utilisateurs** | Plusieurs comptes avec rôles et permissions ; SSO centralisé (Keycloak + LDAP) partagé par toutes vos apps. |
+| **Accès à distance + IP publique** | Tunnel VPN privé (Netbird) et génération d'adresse publique pour exposer vos apps, sans ouvrir de port ni configurer votre box. |
+| **Stockage RAID géré** | Création/migration de RAID (mdadm), suivi SMART, extension à chaud, déplacement de Docker entre disques/partitions, le tout depuis l'interface. |
+| **Passerelle IA privée** | Un fournisseur LLM (LiteLLM) connecté une fois, partagé par vos apps, votre clé jamais exposée. Désactivable pour économiser de la RAM. |
+| **Monitoring temps réel** | État du système en direct via Socket.IO. |
+| **Personnalisation** | Thèmes, fond d'écran et disposition, par utilisateur. |
+| **Déploiement flexible** | Sur un VPS ou une machine physique, via l'OS Ryvie. |
 
 ---
 
-## 💻 Installation (utilisateur final)
+## 💻 Installation
 
-> 📖 **Tutoriel d’installation complet : [ryvie.fr/docs](https://ryvie.fr/docs)**
+> **Tutoriel complet : [ryvie.fr/docs](https://ryvie.fr/docs)**
 
-1. **Télécharger et installer l’OS Ryvie** 💿
-   - Téléchargez l’image/installeur fourni.
-   - Installez l’OS sur la machine hôte.
-
-2. **Télécharger le client Ryvie Desktop** 📥
-   - Rendez-vous sur [ryvie.fr](https://ryvie.fr).
-   - Téléchargez le **client Ryvie Desktop** adapté à votre système.
-   - Connectez-vous à votre instance.
-
-3. **Accéder à l’interface** 🎉
-   - Gérez vos apps, organisez votre grille et personnalisez votre espace !
+1. **Installer l'OS Ryvie.** Téléchargez l'image depuis [ryvie.fr](https://ryvie.fr) et installez-la sur un VPS ou une machine physique (mini-PC, serveur, vieux PC…).
+2. **Installer le client Ryvie Desktop.** Disponible pour macOS, Windows et Linux sur [ryvie.fr](https://ryvie.fr).
+3. **Se connecter.** Ouvrez le client, connectez-vous à votre instance, et gérez vos apps, votre grille et votre espace.
 
 ---
 
-## 🏗️ Développement & Architecture
+## 🛠️ Stack technique
 
-### Architecture du Repo 🛠️
-
-<p align="center">
-  <img width="5194" height="4220" alt="isoflow-export-2026-01-07T21_11_21 841Z" src="https://github.com/user-attachments/assets/f3cb3336-77f4-47c9-86b0-de1c49169243" />
+<p>
+ <img alt="React" src="https://img.shields.io/badge/React_18-20232a?logo=react&logoColor=61dafb" />
+ <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white" />
+ <img alt="Node.js" src="https://img.shields.io/badge/Node.js-339933?logo=node.js&logoColor=white" />
+ <img alt="Express" src="https://img.shields.io/badge/Express-000?logo=express&logoColor=white" />
+ <img alt="Electron" src="https://img.shields.io/badge/Electron-47848f?logo=electron&logoColor=white" />
+ <img alt="Socket.IO" src="https://img.shields.io/badge/Socket.IO-010101?logo=socket.io&logoColor=white" />
+ <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ed?logo=docker&logoColor=white" />
+ <img alt="Keycloak" src="https://img.shields.io/badge/Keycloak-4d4d4d?logo=keycloak&logoColor=white" />
+ <img alt="Caddy" src="https://img.shields.io/badge/Caddy-1f88c0?logo=caddy&logoColor=white" />
 </p>
 
-- **Backend** (`Ryvie-Back/`) : API Express, Socket.IO, authentification LDAP + JWT.
-- **Frontend** (`Ryvie-Front/`) : React 18 + Electron pour une expérience fluide.
-- **Données** (`/data/`) : Configuration, manifests d'apps et stockage utilisateur.
+---
 
-### 📋 Prérequis
-- **CPU** : 4 cœurs minimum 
-- **RAM** : 8 Go minimum (**16 Go recommandé**) 
-- **Stockage** : 50 Go minimum 
+## 🏗️ Architecture
+
+<p align="center">
+ <img width="900" alt="Architecture Ryvie" src="https://github.com/user-attachments/assets/f3cb3336-77f4-47c9-86b0-de1c49169243" />
+</p>
+
+- **Backend** (`Ryvie-Back/`) : API Express + Socket.IO, orchestration Docker, SSO (Keycloak/LDAP), stockage RAID, passerelle IA.
+- **Frontend** (`Ryvie-Front/`) : React 18 + Electron pour une expérience desktop fluide.
+- **Données** (`/data/`) : configuration, manifests d'apps et stockage utilisateur (bind-mounts portables).
+- **Reverse proxy** : Caddy (routage des apps, TLS, same-origin).
 
 ---
 
-## 🤝 Contributing
+## 📋 Prérequis
 
-Les contributions sont les bienvenues ! ❤️
+| Ressource | Minimum | Recommandé |
+|---|---|---|
+| **CPU** | 4 cœurs | 4+ cœurs |
+| **RAM** | 8 Go | 16 Go |
+| **Stockage** | 50 Go | SSD/NVMe + disque(s) pour `/data` |
 
-**Avant de contribuer**, veuillez lire notre [Guide de contribution](CONTRIBUTING.md) et signer notre [CLA](CLA.md).
+---
 
-- **📋 [Guide de contribution](CONTRIBUTING.md)** : Instructions complètes pour contribuer au projet
-- **✍️ [CLA](CLA.md)** : Contributor License Agreement (requis pour toutes les contributions)
-- **🐛 Issues** : Signalez un bug ou proposez une idée avec un maximum de détails
-- **🔀 Pull requests** : Créez une branche dédiée et expliquez clairement vos modifications
+## 🤝 Contribuer
 
-Le CLA protège à la fois vous (vous conservez la propriété de votre code) et Ryvie (nous pouvons maintenir et faire évoluer le projet). Le processus de signature est automatisé via notre bot CLA Assistant.
+Les contributions sont les bienvenues !
+
+**Avant de contribuer**, lisez le [Guide de contribution](CONTRIBUTING.md) et signez le [CLA](CLA.md) (processus automatisé via le bot CLA Assistant).
+
+- **[Guide de contribution](CONTRIBUTING.md)** : comment mettre en place l'environnement et proposer des changements.
+- **[CLA](CLA.md)** : Contributor License Agreement (requis pour toute contribution).
+- **Issues** : signalez un bug ou proposez une idée avec un maximum de détails.
+- **Pull requests** : créez une branche dédiée et expliquez clairement vos modifications.
+
+Le CLA protège à la fois vous (vous conservez la propriété de votre code) et le projet (maintenance et évolution).
+
+---
+
+## 📄 Licence
+
+Distribué sous la **Ryvie Source-Available License (RSAL) v1.1**. Voir [`LICENSE`](LICENSE) pour les détails.
 
 ---
 
 ## ⚠️ Disclaimer
 
-Ce projet est fourni **"tel quel"**, sans garantie d'aucune sorte. L'équipe Ryvie ne pourra pas être tenue responsable des dommages, pertes de données ou indisponibilités résultant de l'utilisation de la plateforme.
+Ce projet est fourni **« tel quel »**, sans garantie d'aucune sorte. L'équipe Ryvie ne pourra être tenue responsable des dommages, pertes de données ou indisponibilités résultant de l'utilisation de la plateforme.
 
 ---
 
-## 👥 Authors
+## 👥 Équipe
 
-* **Jules Maisonnave** ([@maisonnavejul](https://github.com/maisonnavejul)) - *Initial work & Lead Development* 
-* **Driss Bendahan** ([@thegreenprogrammer](https://github.com/thegreenprogrammer)) - *Infrastructure & DevOps* 
-* **Paul Quiquempois** ([@Loghin01](https://github.com/Loghin01)) - *Development & CI/CD* 
+- **Jules Maisonnave** ([@maisonnavejul](https://github.com/maisonnavejul)) · *Initial work & Lead Development*
+- **Driss Bendahan** ([@thegreenprogrammer](https://github.com/thegreenprogrammer)) · *Infrastructure & DevOps*
+- **Paul Quiquempois** ([@Loghin01](https://github.com/Loghin01)) · *Development & CI/CD*
 
 <p align="center">
-  Fait avec ❤️ par l'équipe Ryvie.
+ <sub>Fait avec ❤️ par l'équipe Ryvie · <a href="https://ryvie.fr">ryvie.fr</a></sub><br/>
+ <sub>Une étoile fait toute la différence pour la visibilité du projet.</sub>
 </p>

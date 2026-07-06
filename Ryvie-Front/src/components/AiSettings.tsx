@@ -20,6 +20,7 @@ interface AiStatus {
   model: string | null;
   baseUrl: string;
   hasKey: boolean;
+  enabled?: boolean;
   running: boolean;
   appBaseUrl: string | null;
 }
@@ -43,6 +44,7 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
   const [baseUrl, setBaseUrl] = React.useState('');
   const [model, setModel] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const [togglingEnabled, setTogglingEnabled] = React.useState(false);
   const [savedFlash, setSavedFlash] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
   const [loadingModels, setLoadingModels] = React.useState(false);
@@ -110,9 +112,11 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
   busyRef.current = busyApps;
   const savingRef = React.useRef(saving);
   savingRef.current = saving;
+  const togglingRef = React.useRef(togglingEnabled);
+  togglingRef.current = togglingEnabled;
   React.useEffect(() => {
     const id = setInterval(() => {
-      if (busyRef.current.size === 0 && !savingRef.current) load();
+      if (busyRef.current.size === 0 && !savingRef.current && !togglingRef.current) load();
     }, 5000);
     return () => clearInterval(id);
   }, [load]);
@@ -155,6 +159,23 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
       if (!silent) setToast({ type: 'error', msg: e?.response?.data?.error || t('settings.ai.modelsError') });
     } finally {
       setLoadingModels(false);
+    }
+  };
+
+  // Activer/désactiver le fournisseur IA (arrête/redémarre LiteLLM pour libérer la RAM).
+  // Mise à jour optimiste : l'interrupteur bascule immédiatement, puis on réconcilie
+  // avec la réponse serveur (docker compose down/up peut prendre quelques secondes).
+  const toggleEnabled = async (next: boolean) => {
+    setTogglingEnabled(true);
+    setStatus((prev) => (prev ? { ...prev, enabled: next } : prev)); // bascule immédiate
+    try {
+      const res = await axios.put(`${serverUrl}/api/ai/enabled`, { enabled: next }, { timeout: 120000, _noAuthRedirect: true } as any);
+      if (res.data) setStatus(res.data);
+    } catch (e: any) {
+      setStatus((prev) => (prev ? { ...prev, enabled: !next } : prev)); // retour arrière si échec
+      setToast({ type: 'error', msg: e?.response?.data?.error || t('settings.ai.loadError') });
+    } finally {
+      setTogglingEnabled(false);
     }
   };
 
@@ -324,6 +345,7 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
   }
 
   const configured = !!status?.configured;
+  const enabled = status?.enabled !== false;
 
   return (
     <div className="settings-grid">
@@ -331,14 +353,27 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
       <div className="settings-card">
         <h3 className="ai-card-head">
           <span>🤖 {t('settings.ai.title')}</span>
-          {configured && (
-            <span className={`ai-gateway-pill ${status?.running ? 'on' : 'off'}`}>
-              <span className="ai-gateway-dot" />
-              {status?.running ? t('settings.ai.running') : t('settings.ai.notRunning')}
-            </span>
-          )}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            {configured && (
+              <span className={`ai-gateway-pill ${enabled && status?.running ? 'on' : 'off'}`}>
+                <span className="ai-gateway-dot" />
+                {!enabled ? t('settings.ai.disabledPill') : (status?.running ? t('settings.ai.running') : t('settings.ai.notRunning'))}
+              </span>
+            )}
+            <label className="switch" title={t('settings.ai.enableHint')}>
+              <input
+                type="checkbox"
+                checked={enabled}
+                disabled={togglingEnabled}
+                onChange={() => toggleEnabled(!enabled)}
+              />
+              <span className="slider"></span>
+            </label>
+          </span>
         </h3>
-        <p className="setting-hint" style={{ marginBottom: 12 }}>{t('settings.ai.description')}</p>
+        <p className="setting-hint" style={{ marginBottom: 12 }}>
+          {enabled ? t('settings.ai.description') : t('settings.ai.disabledHint')}
+        </p>
 
         {toast && (
           <div className={`status-message ${toast.type === 'success' ? 'success' : 'error'}`} style={{ marginBottom: 12 }}>
@@ -346,6 +381,7 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
           </div>
         )}
 
+        {enabled && (<>
         <div className="setting-item">
           <label>{t('settings.ai.provider')}</label>
           <select className="setting-select" value={provider} onChange={(e) => onProviderChange(e.target.value)}>
@@ -508,9 +544,11 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
             <span>{t('settings.ai.aliasNote')}</span>
           </p>
         )}
+        </>)}
       </div>
 
       {/* Carte apps connectées */}
+      {enabled && (
       <div className="settings-card">
         <h3>
           {t('settings.ai.connectedApps')}
@@ -587,6 +625,7 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
           </div>
         )}
       </div>
+      )}
 
       {/* Pop-up de confirmation : connecter/déconnecter redémarre l'app */}
       {confirmApp && (

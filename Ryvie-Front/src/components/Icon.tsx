@@ -4,7 +4,6 @@ import { useDrag } from 'react-dnd';
 import axios from '../utils/setupAxios';
 import urlsConfig from '../config/urls';
 import { useLanguage } from '../contexts/LanguageContext';
-import AppAccountsModal from './AppAccountsModal';
 import AppSettingsModal from './AppSettingsModal';
 
 const { getServerUrl } = urlsConfig;
@@ -55,17 +54,21 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   // Résultat d'un reset d'accès en attente d'affichage (montré quand le spinner s'arrête)
   const resetResultRef = React.useRef<any>(null);
   const [confirmModal, setConfirmModal] = React.useState({ show: false, type: '', title: '', message: '', onConfirm: null });
-  const [accountsModalOpen, setAccountsModalOpen] = React.useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = React.useState(false);
 
   // L'app gère-t-elle des comptes internes réinitialisables ? (non-SSO + recette)
   const canManageAccounts = appConfig.sso !== true && !!appConfig.hasAccounts;
   // L'app propose-t-elle une réinitialisation d'accès native (CLI, ex. n8n) ?
   const canResetOwner = appConfig.sso !== true && !!appConfig.hasOwnerReset;
-  // Réglages (adresse publique) : pas pour les apps Ryvie dont l'exposition est native
+  // L'app expose-t-elle des fichiers de config éditables ? (édition YAML zéro-terminal)
+  const canEditConfig = !!appConfig.hasConfigEditor;
+  // Onglet « Adresse publique » : pas pour les apps Ryvie dont l'exposition est native
   const EXPOSURE_NATIVE_APPS = ['rdrive', 'rpictures', 'rtransfer', 'rdrop'];
-  const canOpenSettings = !!appConfig.id &&
+  const showExposure = !!appConfig.id &&
     !EXPOSURE_NATIVE_APPS.includes(String(appConfig.id).toLowerCase().replace(/^ryvie-/, ''));
+  // Fenêtre « Réglages » (onglets : adresse publique / comptes / config avancée) :
+  // affichée dès qu'au moins un onglet est disponible.
+  const canOpenSettings = showExposure || canManageAccounts || canEditConfig;
   
   React.useEffect(() => {
     setImgSrc(src);
@@ -663,22 +666,15 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
       {/* Modal de confirmation */}
       <ConfirmModalPortal />
 
-      {/* Modal de gestion des comptes de l'app (admin, apps non-SSO) */}
-      {accountsModalOpen && (
-        <AppAccountsModal
-          appId={appConfig.id || id}
-          appName={appConfig.name || id}
-          accessMode={accessMode}
-          onClose={() => setAccountsModalOpen(false)}
-        />
-      )}
-
-      {/* Modal de réglages de l'app (admin) : adresse publique */}
+      {/* Modal Réglages de l'app (admin) : onglets adresse publique / comptes / config */}
       {settingsModalOpen && (
         <AppSettingsModal
           appId={appConfig.id || id}
           appName={appConfig.name || id}
           accessMode={accessMode}
+          showExposure={showExposure}
+          hasAccounts={canManageAccounts}
+          hasConfigEditor={canEditConfig}
           onClose={() => setSettingsModalOpen(false)}
           onExposureStart={handleExposureStart}
           onExposureSettled={handleExposureSettled}
@@ -778,28 +774,6 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
                 </span>
                 <span>{t('icon.restart')}</span>
               </div>
-              {canManageAccounts && (
-                <>
-                  <div className="context-menu-separator" role="separator" />
-                  <div
-                    className="context-menu-item"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setActiveContextMenu(null);
-                      setAccountsModalOpen(true);
-                    }}
-                  >
-                    <span className="context-menu-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" focusable="false">
-                        <circle cx="12" cy="8" r="4" strokeWidth="2" />
-                        <path d="M4 21c0-4 4-6 8-6s8 2 8 6" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                    <span>{t('icon.manageAccounts')}</span>
-                  </div>
-                </>
-              )}
               {canResetOwner && (
                 <>
                   <div className="context-menu-separator" role="separator" />

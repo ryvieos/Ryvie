@@ -3,7 +3,8 @@ import '../styles/Settings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy } from '@fortawesome/free-solid-svg-icons';
+import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy, faNetworkWired, faLaptop, faCircle, faSpinner, faDesktop, faMobileScreen, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
+import { faApple, faWindows, faLinux, faAndroid } from '@fortawesome/free-brands-svg-icons';
 import { isElectron } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getFrontendUrl } = urlsConfig;
@@ -229,6 +230,59 @@ const Settings = () => {
   const [setupKey, setSetupKey] = useState(null);
   const [showSetupKey, setShowSetupKey] = useState(false);
   const [copiedSetupKey, setCopiedSetupKey] = useState(false);
+  // OS sélectionné pour les commandes de connexion d'un appareil au Ryvie
+  const [connectOs, setConnectOs] = useState('linux');
+  const [copiedConnectCmd, setCopiedConnectCmd] = useState(false);
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  // État pour les appareils du réseau VPN Ryvie (peers NetBird)
+  const [vpnPeers, setVpnPeers] = useState(null);
+  const [vpnPeersLoading, setVpnPeersLoading] = useState(false);
+  const [vpnPeersError, setVpnPeersError] = useState(null);
+  // Icônes d'appareils choisies manuellement (clé = fqdn), persistées en localStorage
+  const [deviceIconOverrides, setDeviceIconOverrides] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('ryvie-device-icons') || '{}'); } catch { return {}; }
+  });
+  // Adresses IP révélées à la demande (clé = fqdn) ; masquées par défaut
+  const [revealedIps, setRevealedIps] = useState<Record<string, boolean>>({});
+  const toggleRevealIp = (peer: any) => {
+    setRevealedIps(prev => ({ ...prev, [peer.fqdn]: !prev[peer.fqdn] }));
+  };
+  // Ordre de rotation au clic + mapping type -> icône FontAwesome
+  const DEVICE_TYPES = ['laptop', 'desktop', 'phone', 'mac', 'windows', 'linux'];
+  const deviceIconFor = (type: string) => {
+    switch (type) {
+      case 'phone': return faMobileScreen;
+      case 'mac': return faApple;
+      case 'windows': return faWindows;
+      case 'linux': return faLinux;
+      case 'android': return faAndroid;
+      case 'desktop': return faDesktop;
+      default: return faLaptop;
+    }
+  };
+  // Détection heuristique du type d'appareil à partir du nom d'hôte
+  const detectDeviceType = (peer: any) => {
+    const name = String(peer?.hostname || peer?.fqdn || '').toLowerCase();
+    if (/(iphone|ipad|android|pixel|galaxy|phone|mobile|oneplus|xiaomi|huawei)/.test(name)) return 'phone';
+    if (/(macbook|imac|mac-|macmini|-mac|mbp|osx|darwin|apple)/.test(name)) return 'mac';
+    if (/(windows|win-|-win|pc-|desktop-|laptop-win)/.test(name)) return 'windows';
+    if (/(linux|ubuntu|debian|fedora|arch|manjaro|raspberry|rpi)/.test(name)) return 'linux';
+    if (/(server|nas|ryvie|box|desktop)/.test(name)) return 'desktop';
+    return 'laptop';
+  };
+  // Type effectif d'un peer (override manuel prioritaire sur l'heuristique)
+  const deviceTypeOf = (peer: any) => deviceIconOverrides[peer?.fqdn] || detectDeviceType(peer);
+  // Passer au type d'icône suivant au clic et persister
+  const cycleDeviceIcon = (peer: any) => {
+    const current = deviceTypeOf(peer);
+    const idx = DEVICE_TYPES.indexOf(current);
+    const next = DEVICE_TYPES[(idx + 1) % DEVICE_TYPES.length];
+    setDeviceIconOverrides(prev => {
+      const updated = { ...prev, [peer.fqdn]: next };
+      try { localStorage.setItem('ryvie-device-icons', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  };
   const [prefsLoaded, setPrefsLoaded] = useState(false); // préférences utilisateur chargées
   // Rôle de l'utilisateur pour contrôler l'accès aux boutons
   const [userRole, setUserRole] = useState('User');
@@ -243,6 +297,37 @@ const Settings = () => {
   const [updateInProgress, setUpdateInProgress] = useState(null); // 'ryvie' ou nom de l'app
   // Utiliser le contexte global pour la mise à jour
   const { startUpdate } = useUpdate();
+
+  // Charger les appareils du réseau VPN Ryvie (peers NetBird)
+  const loadVpnPeers = async (silent = false) => {
+    if (!silent) setVpnPeersLoading(true);
+    setVpnPeersError(null);
+    try {
+      const serverUrl = getServerUrl(accessMode);
+      const response = await axios.get(`${serverUrl}/api/settings/vpn-peers`);
+      if (response.data && Array.isArray(response.data.peers)) {
+        setVpnPeers(response.data.peers);
+      } else if (!silent) {
+        setVpnPeers([]);
+      }
+    } catch (error: any) {
+      console.log('[Settings] Impossible de charger les peers VPN:', error);
+      if (!silent) {
+        setVpnPeersError(error?.response?.data?.error || 'Erreur de récupération des appareils');
+        setVpnPeers([]);
+      }
+    } finally {
+      if (!silent) setVpnPeersLoading(false);
+    }
+  };
+
+  // Charger au montage puis rafraîchir automatiquement toutes les 10 s (silencieux)
+  useEffect(() => {
+    loadVpnPeers();
+    const intervalId = setInterval(() => loadVpnPeers(true), 10000);
+    return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // Restaurer la session depuis les paramètres URL si preserve_session=true
@@ -1901,6 +1986,24 @@ const Settings = () => {
             </div>
           </div>
 
+          {/* Appareils connectés au réseau Ryvie */}
+          <div className="stat-card devices">
+            <h3>{t('settings.connectedDevices')}</h3>
+            <div className="devices-stat" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+              <div style={{
+                width: '44px', height: '44px', borderRadius: '12px',
+                background: 'rgba(25,118,210,0.12)', color: '#1976d2',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}>
+                <FontAwesomeIcon icon={faNetworkWired} />
+              </div>
+              <div>
+                <strong style={{ fontSize: '28px', lineHeight: 1 }}>{vpnPeers ? vpnPeers.filter((p: any) => /connected/i.test(p.status)).length : 0}</strong>
+                <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>{t('settings.connectedDevicesHint')}</div>
+              </div>
+            </div>
+          </div>
+
           {/* Statut de la duplication RAID */}
           <div className="stat-card backup">
             <h3>{t('settings.duplication')}</h3>
@@ -2163,6 +2266,100 @@ const Settings = () => {
           )}
           </>
         )}
+      </section>
+
+      {/* Section Appareils du réseau de votre Ryvie - déplacée juste après la gestion des apps */}
+      <section className="settings-section">
+        <h2>
+          <FontAwesomeIcon icon={faNetworkWired} style={{ marginRight: '8px' }} />
+          {t('settings.vpnPeersTitle')}
+        </h2>
+        <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
+          {t('settings.vpnPeersDescription')}
+        </p>
+
+        <div className="settings-grid">
+          <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+            {vpnPeersLoading && (!vpnPeers || vpnPeers.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
+                <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
+                {t('settings.vpnPeersLoading')}
+              </div>
+            ) : vpnPeersError ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#d32f2f' }}>
+                {vpnPeersError}
+              </div>
+            ) : vpnPeers && vpnPeers.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                {vpnPeers.map((peer: any) => {
+                  const isConnected = /connected/i.test(peer.status);
+                  return (
+                    <div
+                      key={peer.fqdn || peer.ip}
+                      style={{
+                        padding: '14px 16px',
+                        background: '#f8f9fa',
+                        borderRadius: '8px',
+                        border: '1px solid #e0e0e0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px'
+                      }}
+                    >
+                      <div
+                        onClick={() => cycleDeviceIcon(peer)}
+                        title={t('settings.vpnPeerChangeIcon')}
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '10px',
+                          background: isConnected ? 'rgba(76,175,80,0.12)' : 'rgba(158,158,158,0.12)',
+                          color: isConnected ? '#4caf50' : '#9e9e9e',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          cursor: 'pointer'
+                        }}>
+                        <FontAwesomeIcon icon={deviceIconFor(deviceTypeOf(peer))} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }} title={peer.fqdn}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{peer.hostname || peer.fqdn}</span>
+                          {peer.self && (
+                            <span style={{ flexShrink: 0, fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#1976d2', background: 'rgba(25,118,210,0.12)', borderRadius: '6px', padding: '2px 6px' }}>
+                              {t('settings.vpnPeerSelf')}
+                            </span>
+                          )}
+                        </div>
+                        {peer.ip && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', fontSize: '13px', color: '#1976d2', fontFamily: 'monospace' }}>
+                            <span>{revealedIps[peer.fqdn] ? peer.ip : '••••••••••'}</span>
+                            <FontAwesomeIcon
+                              icon={revealedIps[peer.fqdn] ? faEyeSlash : faEye}
+                              onClick={() => toggleRevealIp(peer)}
+                              title={revealedIps[peer.fqdn] ? t('settings.vpnPeerHideIp') : t('settings.vpnPeerShowIp')}
+                              style={{ cursor: 'pointer', color: '#999', fontSize: '12px' }}
+                            />
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '12px', color: isConnected ? '#4caf50' : '#9e9e9e', fontWeight: 500 }}>
+                          <FontAwesomeIcon icon={faCircle} style={{ fontSize: '8px' }} />
+                          {isConnected ? t('settings.vpnPeerConnected') : t('settings.vpnPeerDisconnected')}
+                          {peer.latency && peer.latency !== '0s' && <span style={{ color: '#999' }}>· {peer.latency}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
+                {t('settings.vpnPeersEmpty')}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       {/* Section Langue */}
@@ -3140,12 +3337,12 @@ const Settings = () => {
         </div>
       </section>
 
-      {/* Section Setup Key (Admin uniquement) */}
+      {/* Section Clé de connexion Ryvie Connect (Admin uniquement) */}
       {isAdmin && setupKey && (
         <section className="settings-section">
           <h2>
             <FontAwesomeIcon icon={faPlug} style={{ marginRight: '8px' }} />
-            {t('settings.setupKeyTitle')}
+            {t('settings.ryvieConnectKeyTitle')}
           </h2>
           <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
             {t('settings.setupKeyDescription')}
@@ -3260,6 +3457,157 @@ const Settings = () => {
                 </div>
               </div>
             </div>
+          )}
+        </section>
+      )}
+
+      {/* Section Ajouter un nouvel appareil manuellement (Admin uniquement) */}
+      {isAdmin && setupKey && (
+        <section className="settings-section">
+          <h2>
+            <FontAwesomeIcon icon={faLaptop} style={{ marginRight: '8px' }} />
+            {t('settings.addDeviceTitle')}
+          </h2>
+          <p className="setting-description" style={{ marginBottom: '16px', color: '#666' }}>
+            {t('settings.connectDeviceDescription')}
+          </p>
+
+          {!showAddDevice ? (
+            <div style={{ textAlign: 'center', padding: '20px' }}>
+              <button
+                onClick={() => setShowAddDevice(true)}
+                style={{
+                  padding: '12px 24px',
+                  background: '#1976d2',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = '#1565c0'}
+                onMouseOut={(e) => e.currentTarget.style.background = '#1976d2'}
+              >
+                <FontAwesomeIcon icon={faLaptop} />
+                {t('settings.addDeviceShow')}
+              </button>
+            </div>
+          ) : (
+          <div className="settings-grid">
+            <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+              {(() => {
+                const NB_MGMT = 'https://netbird.ryvie.fr';
+                // Retirer le suffixe "-<IP tunnel>" pour ne garder que la vraie clé NetBird
+                const cleanKey = String(setupKey || '').replace(/-\d{1,3}(\.\d{1,3}){3}$/, '');
+                const upCmd = `netbird up --management-url ${NB_MGMT} --setup-key ${cleanKey}`;
+                const osList = [
+                  { id: 'linux', label: 'Linux' },
+                  { id: 'mac', label: 'macOS' },
+                  { id: 'windows', label: 'Windows' }
+                ];
+                const commands: { [k: string]: string } = {
+                  linux: `curl -fsSL https://pkgs.netbird.io/install.sh | sh\n${upCmd}`,
+                  mac: `brew install netbirdio/tap/netbird\n${upCmd}`,
+                  windows: `winget install NetBird.NetBird\n${upCmd}`
+                };
+                const currentCmd = commands[connectOs] || commands.linux;
+                return (
+                  <div>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                      {osList.map(os => (
+                        <button
+                          key={os.id}
+                          onClick={() => setConnectOs(os.id)}
+                          style={{
+                            padding: '6px 16px',
+                            background: connectOs === os.id ? '#1976d2' : '#fff',
+                            color: connectOs === os.id ? '#fff' : '#555',
+                            border: connectOs === os.id ? '1px solid #1976d2' : '1px solid #ddd',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {os.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{ position: 'relative' }}>
+                      <pre style={{
+                        margin: 0,
+                        background: '#0f172a',
+                        color: '#e2e8f0',
+                        padding: '14px 16px',
+                        borderRadius: '8px',
+                        fontSize: '12.5px',
+                        fontFamily: 'monospace',
+                        overflowX: 'auto',
+                        whiteSpace: 'pre',
+                        lineHeight: 1.6
+                      }}>
+{currentCmd}
+                      </pre>
+                      <button
+                        onClick={async () => {
+                          try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                              await navigator.clipboard.writeText(currentCmd);
+                            } else {
+                              const ta = document.createElement('textarea');
+                              ta.value = currentCmd;
+                              ta.style.position = 'fixed';
+                              ta.style.left = '-999999px';
+                              document.body.appendChild(ta);
+                              ta.select();
+                              document.execCommand('copy');
+                              document.body.removeChild(ta);
+                            }
+                            setCopiedConnectCmd(true);
+                            setTimeout(() => setCopiedConnectCmd(false), 2000);
+                          } catch (err) {
+                            console.error('Erreur lors de la copie:', err);
+                          }
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          padding: '6px 10px',
+                          background: copiedConnectCmd ? '#4caf50' : 'rgba(255,255,255,0.12)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                        title={t('settings.copy')}
+                      >
+                        <FontAwesomeIcon icon={copiedConnectCmd ? faCheck : faCopy} />
+                        {copiedConnectCmd ? t('settings.copied') : t('settings.copy')}
+                      </button>
+                    </div>
+
+                    <div style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
+                      {t('settings.connectDeviceHint')}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
           )}
         </section>
       )}

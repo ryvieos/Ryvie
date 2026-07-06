@@ -6,6 +6,7 @@ const { verifyToken, hasPermission, isAdmin } = require('../middleware/auth');
 const { getAppStatus, startApp, stopApp, restartApp } = require('../services/dockerService');
 const appManager = require('../services/appManagerService');
 const appAccounts = require('../services/appAccountsService');
+const configEditor = require('../services/configEditorService');
 const publicExposure = require('../services/publicExposureService');
 
 // GET /api/apps - list applications and status
@@ -171,6 +172,46 @@ router.get('/apps/:id/default-credentials', verifyToken, async (req: any, res: a
       console.error(`Erreur statut compte par défaut de ${id}:`, error.message);
     }
     res.status(status).json({ error: error.message || 'Erreur serveur' });
+  }
+});
+
+// GET /api/apps/:id/config-files - list editable config files of an app (admin only)
+router.get('/apps/:id/config-files', verifyToken, isAdmin, async (req: any, res: any) => {
+  const { id } = req.params;
+  try {
+    const result = await configEditor.listConfigFiles(id);
+    res.status(200).json(result);
+  } catch (error: any) {
+    const status = error.status || 500;
+    if (status >= 500) console.error(`Erreur listing config de ${id}:`, error.message);
+    res.status(status).json({ error: error.message || 'Erreur serveur' });
+  }
+});
+
+// GET /api/apps/:id/config-files/:fileKey - read a config file (admin only)
+router.get('/apps/:id/config-files/:fileKey', verifyToken, isAdmin, async (req: any, res: any) => {
+  const { id, fileKey } = req.params;
+  try {
+    const result = await configEditor.readConfigFile(id, fileKey);
+    res.status(200).json(result);
+  } catch (error: any) {
+    const status = error.status || 500;
+    if (status >= 500) console.error(`Erreur lecture config ${fileKey} de ${id}:`, error.message);
+    res.status(status).json({ error: error.message || 'Erreur serveur' });
+  }
+});
+
+// PUT /api/apps/:id/config-files/:fileKey - write a config file, optionally restart (admin only)
+router.put('/apps/:id/config-files/:fileKey', verifyToken, isAdmin, async (req: any, res: any) => {
+  const { id, fileKey } = req.params;
+  const { content, restart } = req.body || {};
+  try {
+    const result = await configEditor.writeConfigFile(id, fileKey, content, { restart });
+    res.status(200).json({ success: true, ...result });
+  } catch (error: any) {
+    const status = error.status || 500;
+    if (status >= 500) console.error(`Erreur écriture config ${fileKey} de ${id}:`, error.message);
+    res.status(status).json({ success: false, error: error.message || 'Erreur serveur' });
   }
 });
 

@@ -244,6 +244,79 @@
   gap: 1.1rem;
 }
 
+/* ── Carrousel disque (vue d'ensemble : un seul disque affiché) ── */
+.disk-carousel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.disk-carousel .disk-card-simple {
+  flex: 0 1 340px;
+  max-width: 340px;
+  cursor: default;
+}
+
+.disk-carousel-nav {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.9);
+  color: #334155;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 6px 16px rgba(10, 14, 23, 0.06);
+}
+
+.disk-carousel-nav:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(59, 130, 246, 0.18);
+}
+
+.disk-carousel-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.disk-carousel-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.disk-carousel-dots {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.disk-carousel-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: rgba(148, 163, 184, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.disk-carousel-dot.active {
+  background: #3b82f6;
+  transform: scale(1.25);
+}
+
 .disk-card-simple {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: saturate(150%) blur(6px);

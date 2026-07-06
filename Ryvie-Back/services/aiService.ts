@@ -417,6 +417,8 @@ function getStatus(runningOverride?: boolean): any {
     model: cfg.model || null,
     baseUrl: cfg.baseUrl || '',
     hasKey: !!cfg.apiKeyEnc || (!!p && !p.needsKey),
+    // enabled absent = activé (rétro-compatibilité). Désactivé => LiteLLM arrêté pour libérer la RAM.
+    enabled: cfg.enabled !== false,
     running: runningOverride != null ? runningOverride : litellm.isRunning(),
     appBaseUrl: cfg.provider ? appBaseUrl() : null
   };
@@ -510,6 +512,11 @@ async function setProviderConfig(input: any): Promise<any> {
  * setProviderConfig (changement de fournisseur) et setAppModel (modèle par app).
  */
 async function applyLitellmConfig(cfg: any, opts: { keyChanged?: boolean } = {}): Promise<{ ready: boolean; restarted: boolean }> {
+  // Fournisseur IA désactivé par l'admin : on persiste la config mais on NE démarre
+  // pas le proxy (économie de RAM). Il sera (re)démarré à la réactivation.
+  if (cfg.enabled === false) {
+    return { ready: false, restarted: false };
+  }
   const masterKey = getMasterKey(cfg);
   const newYaml = buildConfigYaml(cfg);
   let curYaml = '';
@@ -792,9 +799,38 @@ async function testConnection(input: any = {}): Promise<any> {
   }
 }
 
-/** Démarrage backend : relance LiteLLM s'il est configuré. */
+/** Démarrage backend : relance LiteLLM s'il est configuré ET non désactivé. */
 function ensureRunning() {
+  const cfg = loadConfig();
+  if (cfg.enabled === false) return { success: true, skipped: true, disabled: true };
   return litellm.ensureRunning();
+}
+
+/**
+ * Active ou désactive le fournisseur IA (LiteLLM). Désactiver arrête le conteneur
+ * `ryvie-litellm` (docker compose down) pour libérer la RAM ; réactiver le redémarre
+ * avec la config existante. L'état est persisté (cfg.enabled) donc respecté au boot.
+ */
+async function setEnabled(enabled: boolean): Promise<any> {
+  const cfg = loadConfig();
+  cfg.enabled = !!enabled;
+  saveConfig(cfg);
+
+  if (!enabled) {
+    litellm.stop();
+    return { ...getStatus(false), enabled: false, ready: false };
+  }
+
+  // Réactivation : redémarre le proxy avec la config courante (si un fournisseur existe).
+  let ready = false;
+  if (cfg.provider) {
+    const r = await applyLitellmConfig(cfg, {});
+    ready = r.ready;
+  } else {
+    const r = litellm.ensureRunning();
+    ready = (r.success && !r.skipped) || litellm.isRunning();
+  }
+  return { ...getStatus(ready), enabled: true, ready };
 }
 
 module.exports = {
@@ -809,5 +845,6 @@ module.exports = {
   purgeApp,
   testConnection,
   listProviderModels,
-  ensureRunning
+  ensureRunning,
+  setEnabled
 };

@@ -150,7 +150,9 @@ const generateAppConfigFromManifests = async (accessMode: string): Promise<Recor
         // Bloc default présent → bandeau identifiants par défaut à l'ouverture
         hasDefaultAccount: !!(app.accounts && app.accounts.default),
         // Bloc ownerReset présent → action « Réinitialiser l'accès » (CLI native)
-        hasOwnerReset: !!(app.accounts && app.accounts.ownerReset)
+        hasOwnerReset: !!(app.accounts && app.accounts.ownerReset),
+        // Bloc configEditor présent → action « Configuration avancée » (édition YAML)
+        hasConfigEditor: !!(app.configEditor && Array.isArray(app.configEditor.files) && app.configEditor.files.length > 0)
       };
     });
     

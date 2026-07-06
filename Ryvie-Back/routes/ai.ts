@@ -55,6 +55,17 @@ router.put('/ai/config', verifyToken, isAdmin, async (req: any, res: any) => {
   }
 });
 
+// PUT /api/ai/enabled — activer/désactiver le fournisseur IA (LiteLLM). Désactiver
+// arrête le conteneur pour libérer la RAM. Body { enabled: boolean }.
+router.put('/ai/enabled', verifyToken, isAdmin, async (req: any, res: any) => {
+  try {
+    const result = await ai.setEnabled(!!(req.body || {}).enabled);
+    res.status(200).json(result);
+  } catch (error: any) {
+    fail(res, error);
+  }
+});
+
 // POST /api/ai/models — liste EN DIRECT les modèles du fournisseur (clé du body
 // ou clé enregistrée). POST car peut transporter une clé non encore enregistrée.
 router.post('/ai/models', verifyToken, isAdmin, async (req: any, res: any) => {
