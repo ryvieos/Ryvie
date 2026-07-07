@@ -303,7 +303,18 @@
     "storage": {
       "name": "Storage",
       "description": "Available disk space"
+    },
+    "devices": {
+      "name": "Devices",
+      "description": "Devices connected to the Ryvie network"
     }
+  },
+  "devicesWidget": {
+    "title": "Devices",
+    "thisDevice": "this Ryvie",
+    "online": "Online",
+    "offline": "Offline",
+    "empty": "No device on the network"
   },
   "onboarding": {
     "welcome": {

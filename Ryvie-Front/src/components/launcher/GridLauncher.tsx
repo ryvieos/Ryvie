@@ -1,0 +1,684 @@
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import '../../styles/components/GridLauncher.css';
+import useGridLayout from '../../hooks/useGridLayout';
+import useDrag from '../../hooks/useDrag';
+import { GRID_CONFIG } from '../../config/appConfig';
+import Icon from './Icon';
+import WidgetAddButton from './WidgetAddButton';
+import CpuRamWidget from '../widgets/CpuRamWidget';
+import StorageWidget from '../widgets/StorageWidget';
+import WeatherWidget from '../widgets/WeatherWidget';
+import DevicesWidget from '../widgets/DevicesWidget';
+import '../../styles/components/GridLauncher.css';
+
+const GridLauncher = ({
+  apps,
+  weather,
+  weatherImages,
+  weatherIcons,
+  weatherCity,
+  iconImages,
+  appsConfig,
+  appStatus,
+  installProgress = {},
+  handleClick,
+  setShowWeatherModal,
+  setTempCity,
+  setClosingWeatherModal,
+  activeContextMenu,
+  setActiveContextMenu,
+  isAdmin,
+  setAppStatus,
+  moveIcon,
+  onLayoutChange,
+  initialLayout,
+  initialAnchors,
+  zonesReady,
+  accessMode,
+  widgets = [],
+  onAddWidget,
+  onRemoveWidget,
+  refreshDesktopIcons,
+  newApps
+}) => {
+  const gridRef = useRef(null);
+  const resizeTimeoutRef = useRef(null);
+  const { SLOT_SIZE: slotSize, GAP: gap, BASE_COLS: baseCols, BASE_ROWS: baseRows, MIN_COLS: minCols, HORIZONTAL_PADDING: horizontalPadding } = GRID_CONFIG;
+  const [cols, setCols] = useState(baseCols);
+  const [rows, setRows] = useState(baseRows);
+  const [snappedPosition, setSnappedPosition] = useState(null);
+  // Apps « occupées » (grisées / spinner : installation, démarrage, arrêt, reset,
+  // exposition…). Le statut socket ne reflète PAS ces états transitoires (internes
+  // à <Icon>) et est rafraîchi ≤30 s : sans ça la tuile resterait cliquable et
+  // ouvrirait une app pas prête. <Icon> nous remonte l'état via onBusyChange.
+  const [busyApps, setBusyApps] = useState(() => new Set());
+  const markAppBusy = React.useCallback((appId: string, busy: boolean) => {
+    setBusyApps((prev) => {
+      if (busy === prev.has(appId)) return prev;
+      const next = new Set(prev);
+      if (busy) next.add(appId); else next.delete(appId);
+      return next;
+    });
+  }, []);
+  const pendingManualSaveRef = useRef(false); // Track si on doit sauvegarder après un drag manuel
+  // Délai d'animation d'entrée FIGÉ par item (calculé une seule fois). Sinon, déplacer une
+  // app change sa colonne -> change le délai -> change la chaîne `animation` -> React met à
+  // jour le style et l'animation se relance. (À combiner avec l'ordre DOM stable ci-dessous.)
+  // IMPORTANT: on ne fige le délai qu'une fois `revealReady` vrai, c.-à-d. quand le layout
+  // responsive est stabilisé. Avant ça, les colonnes peuvent encore changer (recalcul @200ms
+  // + réorganisation de useGridLayout) : figer trop tôt donne un délai basé sur une colonne
+  // transitoire -> la vague gauche->droite apparaît dans le désordre.
+  const revealDelaysRef = useRef({});
+  const getRevealDelay = (id, colIndex) => {
+    if (revealDelaysRef.current[id] == null) revealDelaysRef.current[id] = (colIndex || 0) * 150;
+    return revealDelaysRef.current[id];
+  };
+  // Tant que faux, les tuiles restent invisibles (opacity:0 via CSS) sans animation.
+  const [revealReady, setRevealReady] = useState(false);
+  // Signaux d'ouverture de modale par widget. Le drag utilise setPointerCapture, donc le
+  // clic est capté au niveau de la tuile : incrémenter le compteur d'un id demande au widget
+  // correspondant d'ouvrir sa modale (utilisé pour le widget stockage).
+  const [widgetOpenSignals, setWidgetOpenSignals] = useState({});
+
+  // Calculer le nombre de colonnes et lignes qui rentrent dans l'espace disponible
+  useEffect(() => {
+    const updateGridLayout = () => {
+      // Calculer la largeur disponible uniquement à partir de la fenêtre, pour
+      // couvrir le cas plein écran -> fenêtre (bouton "réduire") où les mesures
+      // DOM peuvent être transitoirement incorrectes.
+      const windowWidth = window.innerWidth || 1024;
+
+      // Largeur fixe de la taskbar à gauche (voir Home.css: .taskbar width: 80px)
+      const taskbarWidth = 80;
+      // Padding horizontal de .background + .grid-launcher (20px de chaque côté environ)
+      const launcherPadding = 40; // 20px * 2
+      // Marge de sécurité un peu plus large pour éviter toute colonne coupée
+      const safetyMargin = 32;
+
+      const availableWidth = Math.max(320, windowWidth - taskbarWidth - launcherPadding - safetyMargin);
+
+      // Calculer combien de colonnes de taille slotSize + gap peuvent rentrer
+      // Formule: n * slotSize + (n-1) * gap <= availableWidth
+      // => n * (slotSize + gap) - gap <= availableWidth
+      // => n <= (availableWidth + gap) / (slotSize + gap)
+      const maxCols = Math.floor((availableWidth + gap) / (slotSize + gap));
+      
+      // Limiter entre minCols colonnes minimum et baseCols colonnes maximum (grille de base)
+      let newCols = Math.max(minCols, Math.min(baseCols, maxCols));
+
+      // Sécurité supplémentaire : s'assurer que la largeur réelle de la grille ne dépasse pas
+      // la largeur disponible (utile lors des transitions plein écran -> fenêtre réduite).
+      const tileFullWidth = slotSize + gap; // largeur d'une colonne (slot + gap)
+      const computeGridWidth = (colsCount) => colsCount * tileFullWidth - gap;
+      while (newCols > minCols && computeGridWidth(newCols) > availableWidth) {
+        newCols -= 1;
+      }
+      
+      console.log('[GridLauncher] Calcul colonnes:', {
+        windowWidth,
+        availableWidth,
+        maxCols,
+        newCols
+      });
+      
+      // Calculer le nombre de lignes en fonction de la hauteur réellement disponible
+      // dans le conteneur .grid-launcher (plutôt que window.innerHeight), afin
+      // d'éviter que la grille dépasse et déclenche un scroll inutile.
+      let availableHeight = null;
+      try {
+        if (gridRef.current) {
+          const launcher = gridRef.current.closest('.grid-launcher');
+          if (launcher) {
+            // padding-top/bottom : 20px chacun dans GridLauncher.css
+            const launcherStyles = window.getComputedStyle(launcher);
+            const paddingTop = parseFloat(launcherStyles.paddingTop || '20');
+            const paddingBottom = parseFloat(launcherStyles.paddingBottom || '20');
+            availableHeight = launcher.clientHeight - paddingTop - paddingBottom;
+          }
+        }
+      } catch (_) {}
+
+      if (!availableHeight || Number.isNaN(availableHeight)) {
+        // Fallback raisonnable si on n'a pas pu lire le DOM
+        availableHeight = Math.max(400, window.innerHeight - 140);
+      }
+
+      // On calcule un nombre de lignes qui remplit la zone utile sans la dépasser.
+      // Petite marge négative pour être sûr de ne jamais provoquer de scroll
+      // à cause d'un pixel de trop.
+      const safetyHeight = 8; // px
+      const effectiveHeight = Math.max(0, availableHeight - safetyHeight);
+      const maxRows = Math.max(2, Math.floor((effectiveHeight + gap) / (slotSize + gap)));
+      
+      // Nombre de lignes effectif : dépend de la hauteur disponible
+      // en utilisant maxRows (au moins 2 lignes).
+      const newRows = maxRows;
+      
+      setCols(newCols);
+      setRows(newRows);
+    };
+
+    // 1) Calcul immédiat au montage
+    updateGridLayout();
+
+    // 2) Recalcul différé pour laisser le temps au DOM et aux prefs
+    //    (launcherLayout, widgets, barres du navigateur...) de se stabiliser.
+    //    Cela évite que la première organisation soit faite sur une taille
+    //    intermédiaire de la fenêtre.
+    const delayedTimeoutId = setTimeout(() => {
+      try {
+        updateGridLayout();
+      } catch (_) {}
+    }, 200);
+
+    // 3) Debounce pour le resize (éviter trop de recalculs)
+    const debouncedResize = () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      resizeTimeoutRef.current = setTimeout(updateGridLayout, 50);
+    };
+    
+    window.addEventListener('resize', debouncedResize);
+    return () => {
+      clearTimeout(delayedTimeoutId);
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      window.removeEventListener('resize', debouncedResize);
+    };
+  }, [gap, slotSize, baseCols, baseRows, minCols, horizontalPadding, apps.length, widgets.length]);
+
+  // Préparer les items pour le layout
+  const items = [
+    ...apps.map(appId => ({ id: appId, type: 'app', w: 1, h: 1 })),
+    ...widgets.map(widget => ({ id: widget.id, type: 'widget', widgetType: widget.type, w: widget.w || 2, h: widget.h || 2 }))
+  ];
+
+  // Ordre de RENDU stable (trié par id), indépendant des positions. La position visuelle
+  // est gérée par gridColumn/gridRow, donc l'ordre du DOM peut rester fixe. Sinon, quand
+  // la prop `apps` se re-trie après un déplacement, React réordonne les nœuds du DOM, ce
+  // qui RELANCE leurs animations CSS d'entrée (le bug "l'animation se rejoue sur certaines apps").
+  const appsRenderOrder = [...apps].sort();
+  const widgetsRenderOrder = [...widgets].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  const { layout, moveItem, swapItems, pixelToGrid, getAnchors } = useGridLayout(items, cols, initialLayout, initialAnchors);
+
+  // Déclencher la vague d'apparition une seule fois, quand le layout est prêt ET stabilisé.
+  // On attend un court délai après que le layout devient non vide pour laisser passer le
+  // recalcul responsive des colonnes (updateGridLayout @200ms) + la réorganisation associée.
+  // C'est seulement à cet instant qu'on fige les délais (via getRevealDelay) à partir des
+  // colonnes FINALES, garantissant une vague gauche->droite cohérente.
+  useEffect(() => {
+    if (revealReady) return;
+    if (!layout || Object.keys(layout).length === 0) return;
+    let cancelled = false;
+
+    // 1) Délai mini pour laisser le recalcul responsive des colonnes se stabiliser
+    //    (figeage des délais sur les colonnes FINALES -> vague gauche->droite cohérente).
+    const minDelay = new Promise(resolve => setTimeout(resolve, 260));
+
+    // 2) Précharger/décoder les icônes AVANT de révéler les tuiles, pour ne jamais
+    //    afficher de carré blanc le temps du téléchargement (cas du tout premier
+    //    chargement à froid, cache navigateur vide). Une fois en cache (24h côté
+    //    backend), c'est quasi instantané aux chargements suivants.
+    const srcs = Array.from(new Set(apps.map(id => iconImages[id]).filter(Boolean)));
+    const preloadIcons = Promise.all(srcs.map(src => {
+      const img = new Image();
+      img.src = src;
+      // img.decode() résout quand l'image est ENTIÈREMENT décodée et prête à être
+      // peinte en un seul frame -> pas de rendu progressif "de haut en bas". On
+      // retombe sur onload si decode() n'est pas dispo / échoue.
+      if (typeof img.decode === 'function') {
+        return img.decode().catch(() => undefined);
+      }
+      return new Promise(resolve => {
+        img.onload = () => resolve(undefined);
+        img.onerror = () => resolve(undefined);
+      });
+    }));
+
+    // 3) Filet de sécurité : ne JAMAIS bloquer la vague au-delà de ~2.5s, même si
+    //    une icône est lente/indisponible (laisse le temps au premier chargement à
+    //    froid de tout télécharger + décoder avant de révéler).
+    const safety = new Promise(resolve => setTimeout(resolve, 2500));
+
+    Promise.race([
+      Promise.all([minDelay, preloadIcons]),
+      safety
+    ]).then(() => {
+      if (!cancelled) setRevealReady(true);
+    });
+
+    return () => { cancelled = true; };
+  }, [layout, revealReady, apps, iconImages]);
+
+  // Re-armer la vague d'apparition uniquement quand une app/widget est AJOUTÉE
+  // (installation). Sans ça, les délais figés dans revealDelaysRef restent calculés
+  // sur les anciennes colonnes : insérer une app fait refluer la grille et la vague
+  // gauche->droite se rejoue dans le désordre (le composant n'étant pas démonté à cause
+  // du keep-alive de CachedRoutes, qui se contente d'un display:none/block -> les
+  // animations CSS rejouent au retour sur Home). Au re-arm, les délais sont refigés à
+  // partir des colonnes FINALES post-reflow via getRevealDelay.
+  // On NE re-arme PAS sur :
+  //  - un simple drag (l'ensemble des ids est identique, seules les colonnes bougent)
+  //    -> préserve le correctif anti-rejouement au déplacement ;
+  //  - une désinstallation (retrait pur d'un id) -> sinon toutes les icônes rejouent
+  //    l'animation alors qu'on veut juste voir la tuile disparaître.
+  const itemIds = [...appsRenderOrder, ...widgetsRenderOrder.map(w => w.id)];
+  const itemIdSignature = itemIds.join('|');
+  const prevItemIdsRef = useRef(itemIds);
+  useEffect(() => {
+    const prevSet = new Set(prevItemIdsRef.current);
+    const hasAddition = itemIds.some(id => !prevSet.has(id));
+    prevItemIdsRef.current = itemIds;
+    if (!hasAddition) return; // retrait pur (désinstallation) ou inchangé : pas de re-jeu
+    revealDelaysRef.current = {};
+    setRevealReady(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemIdSignature]);
+
+  // Re-armer la vague à chaque RETOUR sur Home. CachedRoutes garde Home monté et bascule
+  // simplement display:none/block : au retour, le navigateur RELANCE les animations CSS
+  // d'entrée. Sans re-arm, elles rejouent avec les délais figés précédemment -> après une
+  // install/désinstallation (colonnes refluées), la vague repart dans le désordre. On vide
+  // donc revealDelaysRef et on remet revealReady=false pour refiger les délais sur les
+  // colonnes ACTUELLES. useLayoutEffect: l'état est remis AVANT le paint, ce qui évite un
+  // flash de vague périmée juste avant la vague ordonnée.
+  const location = useLocation();
+  const prevPathRef = useRef(location.pathname);
+  useLayoutEffect(() => {
+    const prev = prevPathRef.current;
+    prevPathRef.current = location.pathname;
+    if (location.pathname === '/home' && prev !== '/home') {
+      revealDelaysRef.current = {};
+      setRevealReady(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  // NE PLUS notifier automatiquement le parent à chaque changement de layout
+  // car cela déclenchait des sauvegardes backend lors des réorganisations automatiques (responsive).
+  // Seuls les drags manuels (handleDrop) déclenchent maintenant onLayoutChange avec isManualChange=true.
+  
+  // Notifier une seule fois au chargement initial (quand le layout est prêt)
+  const initialNotificationSent = useRef(false);
+  useEffect(() => {
+    if (!onLayoutChange || initialNotificationSent.current) return;
+    if (!layout || Object.keys(layout).length === 0) return;
+    
+    // Attendre que le layout soit stabilisé (après la première réorganisation)
+    const timer = setTimeout(() => {
+      const snapshot = { layout, anchors: getAnchors() };
+      try { 
+        onLayoutChange(snapshot, false); // false = pas un changement manuel
+        initialNotificationSent.current = true;
+        console.log('[GridLauncher] ✅ Notification initiale envoyée au parent');
+      } catch (e) { /* noop */ }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [layout, onLayoutChange]);
+
+  // Détecter l'ajout/suppression de widgets et apps, et marquer comme changement manuel
+  const prevWidgetsCountRef = useRef(null);
+  const prevAppsCountRef = useRef(null);
+  
+  useEffect(() => {
+    // Initialiser au premier rendu
+    if (prevWidgetsCountRef.current === null) {
+      prevWidgetsCountRef.current = widgets.length;
+      return;
+    }
+    
+    // Un widget a été ajouté ou supprimé
+    if (prevWidgetsCountRef.current !== widgets.length && initialNotificationSent.current && layout && Object.keys(layout).length > 0) {
+      console.log('[GridLauncher] ✅ Changement de widgets détecté, marquage pour sauvegarde');
+      pendingManualSaveRef.current = true;
+      prevWidgetsCountRef.current = widgets.length;
+    }
+  }, [widgets.length, layout]);
+  
+  useEffect(() => {
+    // Initialiser au premier rendu
+    if (prevAppsCountRef.current === null) {
+      prevAppsCountRef.current = apps.length;
+      return;
+    }
+    
+    // Une app a été ajoutée (PAS supprimée - la suppression ne doit pas déclencher de sauvegarde)
+    // Seul l'ajout d'apps doit déclencher une sauvegarde automatique
+    if (apps.length > prevAppsCountRef.current && initialNotificationSent.current && layout && Object.keys(layout).length > 0) {
+      console.log('[GridLauncher] 🆕 Nouvelles apps ajoutées (avant:', prevAppsCountRef.current, 'après:', apps.length, '), marquage pour sauvegarde');
+      pendingManualSaveRef.current = true;
+      prevAppsCountRef.current = apps.length;
+    } else if (apps.length < prevAppsCountRef.current) {
+      // App supprimée - juste mettre à jour le compteur sans déclencher de sauvegarde
+      console.log('[GridLauncher] 🗑️ Apps supprimées (avant:', prevAppsCountRef.current, 'après:', apps.length, '), PAS de sauvegarde automatique');
+      prevAppsCountRef.current = apps.length;
+    }
+  }, [apps.length, layout]);
+
+  // Sauvegarder après un changement manuel (drag & drop OU ajout/suppression widget)
+  useEffect(() => {
+    if (!pendingManualSaveRef.current || !onLayoutChange) return;
+    if (!layout || Object.keys(layout).length === 0) return;
+    
+    // Attendre un peu que le layout soit complètement à jour
+    const timer = setTimeout(() => {
+      const snapshot = { layout, anchors: getAnchors() };
+      try {
+        console.log('[GridLauncher] 💾 Sauvegarde après drag manuel:', snapshot);
+        onLayoutChange(snapshot, true); // true = changement manuel
+        pendingManualSaveRef.current = false; // Reset
+      } catch (e) {
+        console.error('[GridLauncher] ❌ Erreur sauvegarde:', e);
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [layout, onLayoutChange, getAnchors]);
+
+  // Callback pendant le drag pour snap visuel
+  const handleDragMove = (x, y, dragData) => {
+    if (!gridRef.current) return;
+    
+    const rect = gridRef.current.getBoundingClientRect();
+    const relX = x - rect.left;
+    const relY = y - rect.top;
+    
+    // Calculer position sur la grille
+    const col = Math.round(relX / (slotSize + gap));
+    const row = Math.round(relY / (slotSize + gap));
+    
+    // Limiter aux bornes
+    const clampedCol = Math.max(0, Math.min(col, cols - (dragData.itemData?.w || 1)));
+    const clampedRow = Math.max(0, row);
+    
+    setSnappedPosition({ col: clampedCol, row: clampedRow });
+  };
+
+  const handleDragEnd = (dragData) => {
+    setSnappedPosition(null); // Reset snap visuel
+    if (!gridRef.current) return;
+
+    const rect = gridRef.current.getBoundingClientRect();
+    const relativeX = dragData.x - rect.left;
+    const relativeY = dragData.y - rect.top;
+
+    const { col, row } = pixelToGrid(relativeX, relativeY, slotSize, gap);
+    const item = items.find(i => i.id === dragData.itemId);
+    
+    if (item) {
+      let success = moveItem(dragData.itemId, col, row, item.w, item.h);
+      
+      // Si impossible (collision) et que c'est une app 1x1, tenter un échange avec l'app ciblée
+      if (!success && item.type === 'app' && item.w === 1 && item.h === 1) {
+        // Chercher s'il y a une app à la position cible
+        let targetAppId = null;
+        for (const [id, pos] of Object.entries(layout)) {
+          if (id === dragData.itemId) continue;
+          const w = pos.w || 1; const h = pos.h || 1;
+          // intersection rectangles (col,row,1,1) vs (pos.col,pos.row,w,h)
+          const overlap = !(col + 1 <= pos.col || col >= pos.col + w || row + 1 <= pos.row || row >= pos.row + h);
+          if (overlap) {
+            // N'autoriser l'échange qu'avec une app 1x1
+            const isOneByOneApp = apps.includes(id) && w === 1 && h === 1;
+            if (isOneByOneApp) { targetAppId = id; break; }
+          }
+        }
+        if (targetAppId) {
+          try { swapItems(dragData.itemId, targetAppId); success = true; } catch (_) {}
+        }
+      }
+      
+      // Si succès, marquer qu'on doit sauvegarder (le useEffect s'en chargera)
+      if (success) {
+        console.log('[GridLauncher] ✅ Drag réussi, sauvegarde programmée');
+        pendingManualSaveRef.current = true;
+      }
+      
+      if (!success) {
+        // Animation shake si échec
+        const element = document.getElementById(`tile-${dragData.itemId}`);
+        if (element) {
+          element.classList.add('tile-shake');
+          setTimeout(() => element.classList.remove('tile-shake'), 300);
+        }
+      }
+    }
+  };
+
+  const { isDragging, dragPosition, draggedItem, hasDragged, handlers } = useDrag(handleDragEnd, handleDragMove);
+
+  // Rendre les slots de la grille
+  const renderSlots = () => {
+    const slots = [];
+
+    // Construire un set des cases occupées (pour afficher un slot visible uniquement sous les apps)
+    const occupied = new Set();
+    // Apps 1x1
+    let maxOccupiedRow = rows - 1;
+    apps.forEach((appId) => {
+      const pos = layout[appId];
+      if (pos) {
+        occupied.add(`${pos.row},${pos.col}`);
+        // Tracker la ligne max occupée pour s'assurer de rendre les slots jusqu'à cette ligne
+        if (pos.row > maxOccupiedRow) maxOccupiedRow = pos.row;
+      }
+    });
+    // Widgets (pas de fond visible derrière les widgets, ils ont leur propre style)
+    // Note: on n'ajoute PAS les widgets au set occupied car ils gèrent leur propre fond
+    
+    // S'assurer de rendre les slots jusqu'à la ligne max occupée (pour le fond des apps en scroll)
+    const effectiveRows = Math.max(rows, maxOccupiedRow + 1);
+    
+    for (let row = 0; row < effectiveRows; row++) {
+      for (let col = 0; col < cols; col++) {
+        // Vérifier si ce slot doit être highlighted
+        let isHighlighted = false;
+        if (snappedPosition && draggedItem) {
+          const w = draggedItem.itemData?.w || 1;
+          const h = draggedItem.itemData?.h || 1;
+          
+          // Vérifier si ce slot est dans la zone snappée
+          if (col >= snappedPosition.col && col < snappedPosition.col + w &&
+              row >= snappedPosition.row && row < snappedPosition.row + h) {
+            isHighlighted = true;
+          }
+        }
+        const isOccupied = occupied.has(`${row},${col}`);
+        
+        slots.push(
+          <div 
+            key={`slot-${row}-${col}`} 
+            className={`grid-slot ${isHighlighted ? 'highlight' : ''} ${isOccupied ? 'occupied' : ''}`}
+            style={{
+              gridColumn: col + 1,
+              gridRow: row + 1
+            }}
+          />
+        );
+      }
+    }
+    
+    return slots;
+  };
+
+  return (
+    <div className={`grid-launcher ${zonesReady ? 'zones-ready' : ''}`}>
+      <div 
+        ref={gridRef}
+        className="grid-container"
+        style={{
+          gridTemplateColumns: `repeat(${cols}, ${slotSize}px)`,
+          gap: `${gap}px`,
+          gridAutoRows: `${slotSize}px`
+        }}
+        onPointerMove={handlers.onPointerMove}
+        onPointerUp={handlers.onPointerUp}
+      >
+        {/* Slots en arrière-plan */}
+        {renderSlots()}
+
+        {/* Apps — rendues dans un ordre DOM stable (positions via gridColumn/gridRow) */}
+        {appsRenderOrder.map((appId, index) => {
+          if (!layout[appId]) return null;
+          
+          const colIndex = layout[appId].col || 0;
+          // On ne fige le délai (et ne lance l'animation) qu'une fois le layout stabilisé.
+          const animDelayMs = revealReady ? getRevealDelay(appId, colIndex) : 0;
+          const installInfo = installProgress?.[appId] || null;
+          // Une app en cours d'installation/màj n'est jamais cliquable
+          const isClickable = installInfo ? false : (!busyApps.has(appId) && (!appsConfig?.[appId]?.showStatus || (appStatus?.[appId]?.status === 'running')));
+
+          return (
+            <div
+              key={appId}
+              id={`tile-${appId}`}
+              className={`grid-tile ${isDragging && draggedItem?.itemId === appId ? 'dragging' : ''}`}
+              style={{
+                gridColumn: layout[appId].col + 1,
+                gridRow: layout[appId].row + 1,
+                animation: revealReady ? `accordionReveal 1050ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards` : 'none',
+                cursor: isClickable ? 'pointer' : 'not-allowed'
+              }}
+              onPointerDown={(e) => handlers.onPointerDown(e, appId, { w: 1, h: 1 })}
+              onClick={(e) => {
+                e.stopPropagation();
+                // Ne pas ouvrir si le menu contextuel est actif
+                if (activeContextMenu) return;
+                if (!hasDragged) {
+                  if (!isClickable) return;
+                  try { handleClick(appId); } catch (_) {}
+                }
+              }}
+              // onContextMenu supprimé - laissé au composant Icon enfant
+              tabIndex={0}
+              role="button"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (!isClickable) return;
+                  try { handleClick(appId); } catch (_) {}
+                }
+              }}
+            >
+              <Icon
+                id={appId}
+                src={iconImages[appId] || installInfo?.appIcon}
+                installInfo={installInfo}
+                zoneId="grid"
+                moveIcon={moveIcon || (() => {})}
+                handleClick={() => {
+                  if (!isDragging) {
+                    handleClick(appId);
+                  }
+                }}
+                showName={true}
+                appStatusData={appStatus?.[appId]}
+                appsConfig={appsConfig}
+                activeContextMenu={activeContextMenu}
+                setActiveContextMenu={setActiveContextMenu}
+                isAdmin={isAdmin}
+                setAppStatus={setAppStatus}
+                accessMode={accessMode}
+                refreshDesktopIcons={refreshDesktopIcons}
+                isNew={newApps?.has?.(appId)}
+                onBusyChange={markAppBusy}
+              />
+            </div>
+          );
+        })}
+
+        {/* Widgets — ordre DOM stable également */}
+        {widgetsRenderOrder.map((widget) => {
+          if (!layout[widget.id]) return null;
+
+          const widgetW = widget.w || 2;
+          const widgetH = widget.h || 2;
+          const colIndex = layout[widget.id].col || 0;
+          const animDelayMs = revealReady ? getRevealDelay(widget.id, colIndex) : 0;
+
+          const renderWidget = () => {
+            const commonProps = {
+              id: widget.id,
+              onRemove: () => onRemoveWidget(widget.id)
+            };
+            switch (widget.type) {
+              case 'cpu-ram':
+                return <CpuRamWidget {...commonProps} accessMode={accessMode} />;
+              case 'devices':
+                return <DevicesWidget {...commonProps} accessMode={accessMode} />;
+              case 'storage':
+                return <StorageWidget {...commonProps} accessMode={accessMode} openSignal={widgetOpenSignals[widget.id] || 0} />;
+              case 'weather':
+                return (
+                  <WeatherWidget
+                    {...commonProps}
+                    weather={weather}
+                    weatherImages={weatherImages}
+                    weatherIcons={weatherIcons}
+                    weatherCity={weatherCity}
+                  />
+                );
+              default:
+                return null;
+            }
+          };
+
+          return (
+            <div
+              key={widget.id}
+              className={`grid-tile widget-tile ${isDragging && draggedItem?.itemId === widget.id ? 'dragging' : ''}`}
+              style={{
+                gridColumn: `${layout[widget.id].col + 1} / span ${widgetW}`,
+                gridRow: `${layout[widget.id].row + 1} / span ${widgetH}`,
+                animation: revealReady ? `accordionReveal 1050ms cubic-bezier(0.34, 1.56, 0.64, 1) ${animDelayMs}ms forwards` : 'none',
+                cursor: 'grab'
+              }}
+              onPointerDown={(e) => handlers.onPointerDown(e, widget.id, { w: widgetW, h: widgetH })}
+              onClick={(e) => {
+                // Le clic est géré au niveau de la tuile : avec setPointerCapture (drag),
+                // l'événement click est ciblé sur la tuile, pas sur l'enfant BaseWidget.
+                if (hasDragged) return;
+                if (e.target && e.target.closest && e.target.closest('.widget-remove-btn')) return;
+                if (widget.type === 'weather') {
+                  setTempCity((weatherCity || weather.location || '').toString());
+                  setClosingWeatherModal(false);
+                  setShowWeatherModal(true);
+                } else if (widget.type === 'storage') {
+                  setWidgetOpenSignals(s => ({ ...s, [widget.id]: (s[widget.id] || 0) + 1 }));
+                }
+              }}
+            >
+              {renderWidget()}
+            </div>
+          );
+        })}
+
+        {/* Ghost pendant le drag */}
+        {isDragging && draggedItem && (
+          <div
+            className="drag-ghost"
+            style={{
+              left: `${dragPosition.x}px`,
+              top: `${dragPosition.y}px`,
+              width: `${slotSize * (draggedItem.itemData.w || 1) + gap * ((draggedItem.itemData.w || 1) - 1)}px`,
+              height: `${slotSize * (draggedItem.itemData.h || 1) + gap * ((draggedItem.itemData.h || 1) - 1)}px`,
+              background: 'rgba(255, 255, 255, 0.5)',
+              borderRadius: 'var(--tile-radius)',
+              backdropFilter: 'blur(10px)'
+            }}
+          />
+        )}
+      </div>
+
+      {/* Bouton d'ajout de widgets */}
+      {onAddWidget && <WidgetAddButton onAddWidget={onAddWidget} />}
+    </div>
+  );
+};
+
+export default GridLauncher;

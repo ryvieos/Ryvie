@@ -15,7 +15,7 @@ import {
   faCheckCircle
 } from '@fortawesome/free-solid-svg-icons';
 import '../styles/Transitions.css';
-import '../styles/AppStore.css';
+import '../styles/pages/AppStore.css';
 import { getSessionInfo } from '../utils/sessionManager';
 import { useLanguage } from '../contexts/LanguageContext';
 

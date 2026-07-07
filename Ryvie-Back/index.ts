@@ -67,17 +67,17 @@ if (hasErrors) {
 
 console.log('✅ Environment variables validated successfully');
 
-const usersRouter = require('./routes/users');
-const appsRouter = require('./routes/apps');
-const authRouter = require('./routes/auth');
-const adminRouter = require('./routes/admin');
-const systemRouter = require('./routes/system');
-const storageRouter = require('./routes/storage');
-const userPreferencesRouter = require('./routes/userPreferences');
-const appStoreRouter = require('./routes/appStore');
-const healthRouter = require('./routes/health');
-const { getAppStatus } = require('./services/dockerService');
-const { setupRealtime } = require('./services/realtimeService');
+const usersRouter = require('./routes/auth/users');
+const appsRouter = require('./routes/apps/apps');
+const authRouter = require('./routes/auth/auth');
+const adminRouter = require('./routes/system/admin');
+const systemRouter = require('./routes/system/system');
+const storageRouter = require('./routes/system/storage');
+const userPreferencesRouter = require('./routes/auth/userPreferences');
+const appStoreRouter = require('./routes/apps/appStore');
+const healthRouter = require('./routes/system/health');
+const { getAppStatus } = require('./services/system/dockerService');
+const { setupRealtime } = require('./services/system/realtimeService');
 const { getLocalIP, getPrivateIP, waitForWifiInterface, listNetworkInterfaces } = require('./utils/network');
 const { syncBackgrounds, watchBackgrounds } = require('./utils/syncBackgrounds');
 const { syncNetbirdConfig } = require('./utils/syncNetbirdConfig');
@@ -86,7 +86,7 @@ const { syncNetbirdConfig } = require('./utils/syncNetbirdConfig');
 (global as any).serverReady = false;
 
 // Tracker de démarrage des services
-const startupTracker = require('./services/startupTracker');
+const startupTracker = require('./services/system/startupTracker');
 
 const docker = new Docker();
 const app = express();
@@ -173,7 +173,7 @@ app.use('/api', appsRouter);
 app.use('/api', authRouter);
 
 // Mount OIDC Auth routes (SSO)
-const oidcAuthRouter = require('./routes/oidcAuth');
+const oidcAuthRouter = require('./routes/auth/oidcAuth');
 app.use('/api/auth', oidcAuthRouter);
 
 // Mount Admin routes
@@ -196,7 +196,7 @@ if (storageRouter.setSocketIO) {
 app.use('/api', userPreferencesRouter);
 
 // Mount Settings routes
-const settingsRouter = require('./routes/settings');
+const settingsRouter = require('./routes/system/settings');
 app.use('/api', settingsRouter);
 
 // Mount App Store routes
@@ -206,7 +206,7 @@ app.use('/api', appStoreRouter);
 app.use('/api', healthRouter);
 
 // Mount AI (point central IA / LiteLLM) routes
-const aiRouter = require('./routes/ai');
+const aiRouter = require('./routes/ai/ai');
 app.use('/api', aiRouter);
 
 // Servir tous les fichiers JSON de configuration depuis /data/config/frontend-view/
@@ -295,7 +295,7 @@ async function startServer() {
     startupTracker.registerService('ai');
 
     // Mettre à niveau et auto-corriger l'architecture localement
-    const { enforceArchitectureBase } = require('./services/architectureService');
+    const { enforceArchitectureBase } = require('./services/system/architectureService');
     try {
       await enforceArchitectureBase();
       startupTracker.markDone('architecture');
@@ -331,7 +331,7 @@ async function startServer() {
     // Vérifier et démarrer le reverse proxy Caddy si nécessaire
     console.log('🔍 Vérification du reverse proxy Caddy...');
     try {
-      const { ensureCaddyRunning } = require('./services/reverseProxyService');
+      const { ensureCaddyRunning } = require('./services/system/reverseProxyService');
       const caddyResult = await ensureCaddyRunning();
       if (caddyResult.success) {
         if (caddyResult.alreadyRunning) {
@@ -354,7 +354,7 @@ async function startServer() {
     // Vérifier et démarrer LDAP si nécessaire (avant Keycloak qui en dépend)
     console.log('🔍 Vérification d\'OpenLDAP...');
     try {
-      const { ensureLdapRunning } = require('./services/ldapService');
+      const { ensureLdapRunning } = require('./services/auth/ldapService');
       const ldapResult = await ensureLdapRunning();
       if (ldapResult.success) {
         if (ldapResult.alreadyRunning) {
@@ -376,7 +376,7 @@ async function startServer() {
     // Vérifier et démarrer Keycloak si nécessaire
     console.log('🔍 Vérification de Keycloak...');
     try {
-      const { ensureKeycloakRunning } = require('./services/keycloakService');
+      const { ensureKeycloakRunning } = require('./services/auth/keycloakService');
       const keycloakResult = await ensureKeycloakRunning();
       if (keycloakResult.success) {
         if (keycloakResult.alreadyRunning) {
@@ -398,7 +398,7 @@ async function startServer() {
     // Démarrer le proxy IA (LiteLLM) s'il a déjà été configuré par l'admin.
     console.log('🔍 Vérification du point central IA (LiteLLM)...');
     try {
-      const aiService = require('./services/aiService');
+      const aiService = require('./services/ai/aiService');
       const aiResult = aiService.ensureRunning();
       if (aiResult.success) {
         if (aiResult.skipped) console.log('ℹ️  IA non configurée — LiteLLM non démarré');
@@ -438,7 +438,7 @@ async function startServer() {
     console.log('🔧 Génération des manifests des applications...');
     try {
       const { execSync } = require('child_process');
-      const manifestScript = require('path').join(__dirname, '..', '..', 'generate-manifests.js');
+      const manifestScript = require('path').join(__dirname, '..', '..', 'scripts', 'generate-manifests.js');
       execSync(`node ${manifestScript}`, { stdio: 'inherit' });
       console.log('✅ Manifests générés avec succès');
       startupTracker.markDone('manifests');
@@ -450,7 +450,7 @@ async function startServer() {
     // Synchroniser les secrets OAuth des apps SSO
     console.log('🔐 Synchronisation OAuth des apps SSO...');
     try {
-      const { syncAllAppsOAuth } = require('./services/appsOAuthService');
+      const { syncAllAppsOAuth } = require('./services/apps/appsOAuthService');
       await syncAllAppsOAuth();
       startupTracker.markDone('oauth-sync');
     } catch (oauthError: any) {
@@ -459,7 +459,7 @@ async function startServer() {
     }
     
     // Initialiser le service App Store
-    const { initialize: initAppStore } = require('./services/appStoreService');
+    const { initialize: initAppStore } = require('./services/apps/appStoreService');
     try {
       await initAppStore();
       startupTracker.markDone('appstore');

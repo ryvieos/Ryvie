@@ -1,7 +1,7 @@
 import React from 'react';
 import BaseWidget from './BaseWidget';
 import WidgetRemoveButton from './WidgetRemoveButton';
-import '../../styles/WeatherWidget.css';
+import '../../styles/widgets/WeatherWidget.css';
 
 interface WeatherData {
   location?: string;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import '../styles/StorageSettings.css';
+import '../styles/pages/StorageSettings.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';

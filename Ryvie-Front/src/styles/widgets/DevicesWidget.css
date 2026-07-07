@@ -1,0 +1,155 @@
+/* Widget "Appareils du réseau" — liste des peers NetBird connectés au Ryvie. */
+
+.devices-widget .widget-content {
+  padding: 0;
+  overflow: hidden;
+  min-height: 0; /* autorise le scroll de la liste dans le flex column */
+}
+
+/* Le titre natif (icône + libellé) est fourni par BaseWidget → même position que
+   les autres widgets. On garde une marge à droite pour ne pas passer sous la croix. */
+.devices-widget .widget-header { padding-right: 34px; }
+
+/* Libellé + compteur, alignés à gauche à côté de l'icône */
+.devices-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Compteur connectés/total en pilule, juste après le titre */
+.devices-count {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.devices-count-connected { color: #34d399; }
+.devices-count-sep { margin: 0 2px; opacity: 0.45; }
+.devices-count-total { opacity: 0.8; }
+
+/* Liste scrollable des appareils — flex:1 + min-height:0 = clé du scroll interne */
+.devices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 3px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+.devices-list::-webkit-scrollbar { width: 5px; }
+.devices-list::-webkit-scrollbar-track { background: transparent; }
+.devices-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+}
+.devices-list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.45); }
+
+.devices-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.15s ease, transform 0.15s ease;
+  flex-shrink: 0;
+}
+.devices-row.is-online:hover { background: rgba(255, 255, 255, 0.14); }
+.devices-row.is-offline { opacity: 0.5; }
+
+.devices-icon {
+  font-size: 17px;
+  line-height: 1;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.devices-info {
+  min-width: 0;
+  flex: 1;
+}
+.devices-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.devices-self {
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.22);
+  color: #6ee7b7;
+  flex-shrink: 0;
+}
+.devices-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.devices-row.is-online .devices-meta { color: #a7f3d0; }
+
+.devices-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.devices-dot.online {
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18), 0 0 6px rgba(52, 211, 153, 0.7);
+}
+.devices-dot.offline { background: rgba(255, 255, 255, 0.35); }
+
+.devices-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 12px;
+  opacity: 0.7;
+  text-align: center;
+  padding: 0 10px;
+}
+
+/* Skeleton de chargement */
+.devices-row--skeleton { background: rgba(255, 255, 255, 0.06); }
+.devices-skel-icon,
+.devices-skel-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.10), rgba(255,255,255,0.20), rgba(255,255,255,0.10));
+  background-size: 200% 100%;
+  animation: devices-shimmer 1.3s ease-in-out infinite;
+}
+.devices-skel-icon { width: 18px; height: 18px; border-radius: 6px; flex-shrink: 0; }
+.devices-skel-line { flex: 1; }
+
+@keyframes devices-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

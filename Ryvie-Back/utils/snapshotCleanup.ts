@@ -90,7 +90,7 @@ function checkPendingSnapshots() {
           
           // Rollback
           try {
-            const rollbackOutput = execSync(`/opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
+            const rollbackOutput = execSync(`/opt/Ryvie/scripts/snapshots/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
             console.log(rollbackOutput);
             console.log('[SnapshotCleanup] ✅ Rollback terminé');
             

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import '../styles/Home.css';
+import '../styles/pages/Home.css';
 import '../styles/Transitions.css';
 import axios from '../utils/setupAxios';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
@@ -19,15 +19,16 @@ import {
   images 
 } from '../config/appConfig';
 import { useLanguage } from '../contexts/LanguageContext';
-import GridLauncher from '../components/GridLauncher';
-import InstallIndicator from '../components/InstallIndicator';
-import OnboardingOverlay from '../components/OnboardingOverlay';
-import DefaultCredentialsModal from '../components/DefaultCredentialsModal';
+import GridLauncher from '../components/launcher/GridLauncher';
+import InstallIndicator from '../components/launcher/InstallIndicator';
+import OnboardingOverlay from '../components/onboarding/OnboardingOverlay';
+import DefaultCredentialsModal from '../components/modals/DefaultCredentialsModal';
  
 
 const WIDGET_CONFIGS = {
   'cpu-ram': { w: 2, h: 2 },
   'storage': { w: 2, h: 2 },
+  'devices': { w: 2, h: 2 },
   'weather': { w: 3, h: 2, fixedId: 'weather' }
 };
 

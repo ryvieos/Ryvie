@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from '../../utils/setupAxios';
 import BaseWidget from './BaseWidget';
 import urlsConfig from '../../config/urls';
-import '../../styles/CpuRamWidget.css';
+import '../../styles/widgets/CpuRamWidget.css';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;
@@ -44,7 +44,7 @@ const CpuRamWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: () 
   // Historique des valeurs pour moyenne mobile (CasaOS-style)
   const cpuHistoryRef = useRef<number[]>([]);
   const ramHistoryRef = useRef<number[]>([]);
-  const HISTORY_SIZE = 6; // 6 échantillons = 1 minute (10s * 6)
+  const HISTORY_SIZE = 3; // fenêtre courte (~30s) : suit le système sans trop lisser
 
   useEffect(() => {
     const fetchSystemStats = async () => {
@@ -97,7 +97,7 @@ const CpuRamWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: () 
     };
 
     fetchSystemStats();
-    const interval = setInterval(fetchSystemStats, 15000); // Mise à jour toutes les 15 secondes
+    const interval = setInterval(fetchSystemStats, 8000); // Mise à jour toutes les 8 secondes
 
     return () => clearInterval(interval);
   }, [accessMode]);
@@ -143,7 +143,7 @@ const CpuRamWidget = ({ id, onRemove, accessMode }: { id: string; onRemove?: () 
     const ramAvg = calculateSmartAverage(ramHistoryRef.current);
     
     // Appliquer un lissage exponentiel léger sur la moyenne pour des transitions douces
-    const ALPHA = 0.3; // Lissage plus doux qu'avant
+    const ALPHA = 0.5; // plus réactif : le widget rattrape plus vite la valeur réelle
     setSmoothed((prev) => ({
       cpu: prev.cpu === 0 ? cpuAvg : ALPHA * cpuAvg + (1 - ALPHA) * prev.cpu,
       ram: prev.ram === 0 ? ramAvg : ALPHA * ramAvg + (1 - ALPHA) * prev.ram,

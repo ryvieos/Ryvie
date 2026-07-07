@@ -310,7 +310,18 @@
     "storage": {
       "name": "Stockage",
       "description": "Espace disque disponible"
+    },
+    "devices": {
+      "name": "Appareils",
+      "description": "Appareils connectés au réseau Ryvie"
     }
+  },
+  "devicesWidget": {
+    "title": "Appareils",
+    "thisDevice": "ce Ryvie",
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "empty": "Aucun appareil sur le réseau"
   },
   "onboarding": {
     "welcome": {

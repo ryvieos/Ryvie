@@ -5,7 +5,7 @@
 
 export {}; // Make this file a module to avoid global scope conflicts
 
-const appStoreService = require('../services/appStoreService');
+const appStoreService = require('../services/apps/appStoreService');
 
 const { uninstallApp } = appStoreService;
 
