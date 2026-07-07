@@ -108,7 +108,7 @@ Comment corriger:
 
 ### À garder dans `/opt/Ryvie`
 
-- les scripts d'orchestration: `scripts/dev.sh`, `scripts/prod.sh`, `scripts/update-and-restart.sh`
+- les scripts d'orchestration: `scripts/lifecycle/dev.sh`, `scripts/lifecycle/prod.sh`, `scripts/update/update-and-restart.sh`
 - le backend et le frontend Ryvie
 - la documentation de reprise
 

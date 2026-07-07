@@ -445,9 +445,9 @@ L'ordre LDAP puis Keycloak est important parce que les flux SSO en dependent dir
 - `Ryvie-Back/services/startupTracker.ts`
 - `Ryvie-Back/config/paths.ts`
 - `ecosystem.config.js`
-- `scripts/dev.sh`
-- `scripts/prod.sh`
-- `scripts/generate-frontend-config.sh`
+- `scripts/lifecycle/dev.sh`
+- `scripts/lifecycle/prod.sh`
+- `scripts/lifecycle/generate-frontend-config.sh`
 - `/opt/Ryvie/keycloak/docker-compose.yml`
 - `/data/config/reverse-proxy/docker-compose.yml`
 - `/data/config/reverse-proxy/Caddyfile`

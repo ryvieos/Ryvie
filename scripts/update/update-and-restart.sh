@@ -81,7 +81,7 @@ rollback() {
     log "🔄 Restauration du snapshot: $SNAPSHOT_PATH"
     log "📦 Restauration des données et du code..."
     
-    if sudo "$RYVIE_DIR/scripts/rollback.sh" --set "$SNAPSHOT_PATH" --mode "$MODE" 2>&1 | tee -a "$LOG_FILE"; then
+    if sudo "$RYVIE_DIR/scripts/snapshots/rollback.sh" --set "$SNAPSHOT_PATH" --mode "$MODE" 2>&1 | tee -a "$LOG_FILE"; then
       echo ""
       echo "═══════════════════════════════════════════════════════════════"
       echo "✅ ROLLBACK TERMINÉ AVEC SUCCÈS"
@@ -110,9 +110,9 @@ rollback() {
     
     # Relancer selon le mode
     if [[ "$MODE" == "dev" ]]; then
-      cd "$RYVIE_DIR" && ./scripts/dev.sh >> "$LOG_FILE" 2>&1 &
+      cd "$RYVIE_DIR" && ./scripts/lifecycle/dev.sh >> "$LOG_FILE" 2>&1 &
     else
-      cd "$RYVIE_DIR" && ./scripts/prod.sh >> "$LOG_FILE" 2>&1 &
+      cd "$RYVIE_DIR" && ./scripts/lifecycle/prod.sh >> "$LOG_FILE" 2>&1 &
     fi
     
     echo ""
@@ -148,7 +148,7 @@ log "═════════════════════════
 
 # 1. Créer un snapshot de sécurité
 update_status "snapshot" "Création du snapshot de sécurité" 10
-SNAPSHOT_OUTPUT=$(sudo "$RYVIE_DIR/scripts/snapshot.sh" 2>&1 || true)
+SNAPSHOT_OUTPUT=$(sudo "$RYVIE_DIR/scripts/snapshots/snapshot.sh" 2>&1 || true)
 echo "$SNAPSHOT_OUTPUT" >> "$LOG_FILE"
 
 if echo "$SNAPSHOT_OUTPUT" | grep -q "SNAPSHOT_PATH="; then
@@ -239,17 +239,17 @@ fi
 
 # 8.5. Patcher prod.sh pour s'assurer qu'il installe les devDependencies
 log "🔧 Patch de prod.sh pour compatibilité..."
-if [[ -f "$RYVIE_DIR/scripts/prod.sh" ]]; then
+if [[ -f "$RYVIE_DIR/scripts/lifecycle/prod.sh" ]]; then
   # Remplacer toutes les occurrences de "npm install" (sans --include=dev) par "npm install --include=dev"
   # Cela garantit que les devDependencies sont installées pour le build
-  sed -i 's/npm install$/npm install --include=dev/g' "$RYVIE_DIR/scripts/prod.sh"
-  chmod +x "$RYVIE_DIR/scripts/prod.sh"
+  sed -i 's/npm install$/npm install --include=dev/g' "$RYVIE_DIR/scripts/lifecycle/prod.sh"
+  chmod +x "$RYVIE_DIR/scripts/lifecycle/prod.sh"
   log "✅ prod.sh patché"
 fi
 
 # 9. Générer les fichiers de configuration frontend avant le build
 log "� Génération des fichiers de configuration frontend..."
-if bash "$RYVIE_DIR/scripts/generate-frontend-config.sh" >> "$LOG_FILE" 2>&1; then
+if bash "$RYVIE_DIR/scripts/lifecycle/generate-frontend-config.sh" >> "$LOG_FILE" 2>&1; then
   log "✅ Fichiers de configuration générés"
 else
   log "⚠️  Génération des configs frontend échouée (non critique, le backend les créera)"
@@ -261,14 +261,14 @@ update_status "building" "Installation des dépendances et compilation" 60
 log "🔄 Lancement du script de démarrage en mode $MODE..."
 
 if [[ "$MODE" == "dev" ]]; then
-  if ! bash "$RYVIE_DIR/scripts/dev.sh" >> "$LOG_FILE" 2>&1; then
+  if ! bash "$RYVIE_DIR/scripts/lifecycle/dev.sh" >> "$LOG_FILE" 2>&1; then
     log "❌ Erreur lors du build/redémarrage en mode dev"
     log "⚠️  UNE ERREUR S'EST PRODUITE PENDANT LA MISE À JOUR"
     log "🔄 RETOUR À LA VERSION PRÉCÉDENTE EN COURS..."
     rollback
   fi
 else
-  if ! bash "$RYVIE_DIR/scripts/prod.sh" >> "$LOG_FILE" 2>&1; then
+  if ! bash "$RYVIE_DIR/scripts/lifecycle/prod.sh" >> "$LOG_FILE" 2>&1; then
     log "❌ Erreur lors du build/redémarrage en mode prod"
     log "📋 Dernières lignes du log:"
     tail -n 50 "$LOG_FILE" | tee -a "$LOG_FILE"

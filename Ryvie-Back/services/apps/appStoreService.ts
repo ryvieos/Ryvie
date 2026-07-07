@@ -950,7 +950,7 @@ async function updateAppFromStore(appId) {
       sendProgressUpdate(appId, 3, 'Création du snapshot de sécurité...', 'snapshot');
       
       try {
-        const snapshotOutput = execSync(`sudo /opt/Ryvie/scripts/snapshot-app.sh ${appId}`, { encoding: 'utf8' });
+        const snapshotOutput = execSync(`sudo /opt/Ryvie/scripts/snapshots/snapshot-app.sh ${appId}`, { encoding: 'utf8' });
         console.log(`[Update] Snapshot output: ${snapshotOutput.substring(0, 100)}...`);
         
         // Extraire le chemin du snapshot
@@ -1718,8 +1718,8 @@ LOCAL_IP=${localIP}
       }
       
       try {
-        console.error(`[Update] 🚀 Exécution du rollback: sudo /opt/Ryvie/scripts/rollback-app.sh "${snapshotPath}" "${targetDir}"`);
-        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback-app.sh "${snapshotPath}" "${targetDir}"`, { 
+        console.error(`[Update] 🚀 Exécution du rollback: sudo /opt/Ryvie/scripts/snapshots/rollback-app.sh "${snapshotPath}" "${targetDir}"`);
+        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/snapshots/rollback-app.sh "${snapshotPath}" "${targetDir}"`, { 
           encoding: 'utf8',
           stdio: 'pipe'  // Capturer la sortie pour les logs
         });
@@ -2096,7 +2096,7 @@ async function forceCleanupCancelledInstall(appId) {
             execSync(`docker compose down 2>/dev/null || true`, { cwd: appDir, stdio: 'inherit' });
             
             // Exécuter le rollback
-            const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback-app.sh "${snapshotPath}" "${appDir}"`, { 
+            const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/snapshots/rollback-app.sh "${snapshotPath}" "${appDir}"`, { 
               encoding: 'utf8',
               stdio: 'pipe'
             });

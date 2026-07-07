@@ -13,9 +13,9 @@ if [ -z "$MODE" ]; then
 fi
 
 if [ "$MODE" == "dev" ]; then
-  /opt/Ryvie/scripts/dev.sh
+  /opt/Ryvie/scripts/lifecycle/dev.sh
 elif [ "$MODE" == "prod" ]; then
-  /opt/Ryvie/scripts/prod.sh
+  /opt/Ryvie/scripts/lifecycle/prod.sh
 else
   echo "❌ Mode invalide: $MODE"
   echo "Utilisez 'dev' ou 'prod'"

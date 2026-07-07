@@ -172,8 +172,8 @@ router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: 
     const tmpDir = '/tmp/ryvie-update-monitor';
     const monitorScript = path.join(tmpDir, 'monitor.js');
     const monitorHtml = path.join(tmpDir, 'update-monitor.html');
-    const templateScript = path.join(__dirname, '../../../../scripts/update-monitor-template.js');
-    const templateHtml = path.join(__dirname, '../../../../scripts/update-monitor.html');
+    const templateScript = path.join(__dirname, '../../../../scripts/update/update-monitor-template.js');
+    const templateHtml = path.join(__dirname, '../../../../scripts/update/update-monitor.html');
     
     console.log('[settings] Création du dossier temporaire:', tmpDir);
     

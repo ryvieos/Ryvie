@@ -269,7 +269,7 @@ Si vous changez un secret **uniquement via l'admin UI** sans mettre à jour le r
 
 ```bash
 # Toujours utiliser le script pour modifier un client :
-/opt/Ryvie/scripts/add-client-oauth.sh <client-id> "<nom>" <port> [nouveau-secret]
+/opt/Ryvie/scripts/keycloak/add-client-oauth.sh <client-id> "<nom>" <port> [nouveau-secret]
 
 # Ou mettre à jour manuellement le realm JSON après modification dans l'admin UI
 ```
@@ -279,7 +279,7 @@ Si vous changez un secret **uniquement via l'admin UI** sans mettre à jour le r
 Un script shell est aussi disponible pour forcer la sync sans redémarrer le backend :
 
 ```bash
-/opt/Ryvie/scripts/sync-keycloak-secrets.sh
+/opt/Ryvie/scripts/keycloak/sync-keycloak-secrets.sh
 ```
 
 ### Vérification réseau LDAP

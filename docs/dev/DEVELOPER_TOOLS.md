@@ -82,11 +82,11 @@ Ce document centralise tous les outils et intégrations disponibles pour facilit
 
 ```bash
 # Développement
-/opt/Ryvie/scripts/dev.sh         # Lance Ryvie en mode développement
-/opt/Ryvie/scripts/prod.sh        # Lance Ryvie en mode production
+/opt/Ryvie/scripts/lifecycle/dev.sh         # Lance Ryvie en mode développement
+/opt/Ryvie/scripts/lifecycle/prod.sh        # Lance Ryvie en mode production
 
 # Mise à jour
-/opt/Ryvie/scripts/update-and-restart.sh  # Met à jour et redémarre
+/opt/Ryvie/scripts/update/update-and-restart.sh  # Met à jour et redémarre
 ```
 
 ### Structure des scripts
@@ -265,7 +265,7 @@ cd ../Ryvie-Front && npm install
 
 ```bash
 # Lancer en mode dev
-/opt/Ryvie/scripts/dev.sh
+/opt/Ryvie/scripts/lifecycle/dev.sh
 
 # Utiliser Caveman pour les interactions IA
 # (automatique avec Claude Code)
@@ -295,7 +295,7 @@ git commit -m "..."  # ou utiliser /caveman-commit
 
 ```bash
 # Basculer en mode production
-/opt/Ryvie/scripts/prod.sh
+/opt/Ryvie/scripts/lifecycle/prod.sh
 
 # Vérifier l'état
 pm2 list

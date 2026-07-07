@@ -144,19 +144,19 @@ echo "🔄 Redémarrage de Ryvie..."
 # Utiliser le mode passé en paramètre ou détecter via PM2
 if [[ "$MODE" == "dev" ]]; then
   echo "  Mode DEV (paramètre), relance via dev.sh"
-  cd "$RYVIE_DIR" && ./scripts/dev.sh 2>&1 | head -20
+  cd "$RYVIE_DIR" && ./scripts/lifecycle/dev.sh 2>&1 | head -20
 elif [[ "$MODE" == "prod" ]]; then
   echo "  Mode PROD (paramètre), relance via prod.sh"
-  cd "$RYVIE_DIR" && ./scripts/prod.sh 2>&1 | head -20
+  cd "$RYVIE_DIR" && ./scripts/lifecycle/prod.sh 2>&1 | head -20
 elif pm2 list 2>/dev/null | grep -q "ryvie-backend-dev"; then
   echo "  Mode DEV détecté via PM2, relance via dev.sh"
-  cd "$RYVIE_DIR" && ./scripts/dev.sh 2>&1 | head -20
+  cd "$RYVIE_DIR" && ./scripts/lifecycle/dev.sh 2>&1 | head -20
 elif pm2 list 2>/dev/null | grep -q "ryvie-backend-prod"; then
   echo "  Mode PROD détecté via PM2, relance via prod.sh"
-  cd "$RYVIE_DIR" && ./scripts/prod.sh 2>&1 | head -20
+  cd "$RYVIE_DIR" && ./scripts/lifecycle/prod.sh 2>&1 | head -20
 else
   echo "  ⚠️ Mode non détecté, utilisation de prod.sh par défaut"
-  cd "$RYVIE_DIR" && ./scripts/prod.sh 2>&1 | head -20
+  cd "$RYVIE_DIR" && ./scripts/lifecycle/prod.sh 2>&1 | head -20
 fi
 
 echo "✅ Rollback terminé depuis : $SET_PATH"

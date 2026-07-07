@@ -15,8 +15,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/index.ts": {
-    "mtime": 1783419512.157295,
-    "ast_hash": "0110dff3b6efd27ff215712140548e1c",
+    "mtime": 1783420044.7929347,
+    "ast_hash": "e02a0daa3a7ad35ecdffe628d4ecec18",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/middleware/auth.ts": {
@@ -33,61 +33,6 @@
     "mtime": 1780659362.3485515,
     "ast_hash": "a8e79b9a338d163035e3a5e4f1b5bb88",
     "semantic_hash": "a8e79b9a338d163035e3a5e4f1b5bb88"
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/admin.ts": {
-    "mtime": 1783419512.161295,
-    "ast_hash": "5836471b3d70c7a92905dc688bf47ef3",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/appStore.ts": {
-    "mtime": 1783419512.169295,
-    "ast_hash": "eaa317633a3e350b51fc2ad70e935360",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/apps.ts": {
-    "mtime": 1783419512.169295,
-    "ast_hash": "2bf87816160e65e4cf488f8d8a0836ae",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/auth.ts": {
-    "mtime": 1783419512.169295,
-    "ast_hash": "0e9523fe368fb905f3d885321d026478",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/health.ts": {
-    "mtime": 1783419512.173295,
-    "ast_hash": "4a32eb5c6f537051717c6c6f324be457",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/oidcAuth.ts": {
-    "mtime": 1783419512.173295,
-    "ast_hash": "0b1f8e2ba2cbdb271e604b018814c3b1",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/settings.ts": {
-    "mtime": 1783419512.173295,
-    "ast_hash": "f9dfc63de76334eb1232832ac62a7031",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/storage.ts": {
-    "mtime": 1783073279.2983193,
-    "ast_hash": "c77f370fbb0cc265f2be1eb1870ef090",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/system.ts": {
-    "mtime": 1783419512.181295,
-    "ast_hash": "2ced91cc1c6302c3b62f371d6582bbe0",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/userPreferences.ts": {
-    "mtime": 1781710191.8466616,
-    "ast_hash": "78f280a4b9a72b74fd43b268a98ee493",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/users.ts": {
-    "mtime": 1783419512.181295,
-    "ast_hash": "118eba83bbc8e4d44381a797eeb73ebb",
-    "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/tsconfig.json": {
     "mtime": 1780659362.3845513,
@@ -115,9 +60,9 @@
     "semantic_hash": "7b4ea8e7b11c7d73b314e28e5834c0bc"
   },
   "/opt/Ryvie/Ryvie-Back/utils/snapshotCleanup.ts": {
-    "mtime": 1780659362.3885512,
-    "ast_hash": "54dc0592d65d6a85f84f5c1f9edc9601",
-    "semantic_hash": "54dc0592d65d6a85f84f5c1f9edc9601"
+    "mtime": 1783421127.708016,
+    "ast_hash": "6a3f190666112e65f9d84d57039d0919",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/utils/syncBackgrounds.ts": {
     "mtime": 1780659362.3885512,
@@ -174,65 +119,30 @@
     "ast_hash": "bcc59485f919c35f30869e16baf1f1b2",
     "semantic_hash": "bcc59485f919c35f30869e16baf1f1b2"
   },
-  "/opt/Ryvie/Ryvie-Front/src/components/GlobalUpdateModal.tsx": {
-    "mtime": 1780659362.4285512,
-    "ast_hash": "9ecb137bdf3c8cab5f85eabd9956eeaa",
-    "semantic_hash": "9ecb137bdf3c8cab5f85eabd9956eeaa"
-  },
-  "/opt/Ryvie/Ryvie-Front/src/components/GridLauncher.tsx": {
-    "mtime": 1781710191.8586617,
-    "ast_hash": "d6d92e95e90ae54f585635db2e87c586",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Front/src/components/Icon.tsx": {
-    "mtime": 1783107305.609476,
-    "ast_hash": "0b9400dcaa204991ab1e9d8fc5a9bf07",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Front/src/components/InstallIndicator.tsx": {
-    "mtime": 1781710191.8586617,
-    "ast_hash": "3dd88c5c9074464c3fd3359f03e54d34",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Front/src/components/OnboardingOverlay.tsx": {
-    "mtime": 1780659362.436551,
-    "ast_hash": "fb4e5290eb75e2056bac77c97be43311",
-    "semantic_hash": "fb4e5290eb75e2056bac77c97be43311"
-  },
-  "/opt/Ryvie/Ryvie-Front/src/components/UpdateModal.tsx": {
-    "mtime": 1780659362.436551,
-    "ast_hash": "c28a6266a5c408acaea0e89d29188fc3",
-    "semantic_hash": "c28a6266a5c408acaea0e89d29188fc3"
-  },
-  "/opt/Ryvie/Ryvie-Front/src/components/WidgetAddButton.tsx": {
-    "mtime": 1780659362.436551,
-    "ast_hash": "af6efb708d7af85508c4bfd200d56d30",
-    "semantic_hash": "af6efb708d7af85508c4bfd200d56d30"
-  },
   "/opt/Ryvie/Ryvie-Front/src/components/widgets/BaseWidget.tsx": {
-    "mtime": 1780659362.4405513,
-    "ast_hash": "353fc9127c79d81815fc8e9ef176d6ba",
-    "semantic_hash": "353fc9127c79d81815fc8e9ef176d6ba"
+    "mtime": 1783420044.7649348,
+    "ast_hash": "6b23593a4f3daaedca2532f4b479bb37",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/components/widgets/CpuRamWidget.tsx": {
-    "mtime": 1781710191.8586617,
-    "ast_hash": "bfe0a7201ba0068608cbe2cacf6d3351",
+    "mtime": 1783420044.7649348,
+    "ast_hash": "c71bf3fe7c2cac3571fde9e1fd893788",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/components/widgets/StorageWidget.tsx": {
-    "mtime": 1781710191.8586617,
-    "ast_hash": "1c5af8d4a4ff3acebc52b10950e6d146",
+    "mtime": 1783420044.7649348,
+    "ast_hash": "b511715a9f3c11b2a2aecc12ed866c07",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/components/widgets/WeatherWidget.tsx": {
-    "mtime": 1781710191.8586617,
-    "ast_hash": "962c3668f5545c7250b3a64c30c5a285",
+    "mtime": 1783420044.7649348,
+    "ast_hash": "6d8f2ffe146db627adabf6e44606cb33",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/components/widgets/WidgetRemoveButton.tsx": {
-    "mtime": 1780659362.4405513,
-    "ast_hash": "fbe59decb33a9a65b67c0a8a3e391261",
-    "semantic_hash": "fbe59decb33a9a65b67c0a8a3e391261"
+    "mtime": 1783420044.7649348,
+    "ast_hash": "89c1f4daf0cae6a5388a6dc1c1ea8914",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/config/appConfig.ts": {
     "mtime": 1783105823.282983,
@@ -285,13 +195,13 @@
     "semantic_hash": "7ad83cfb6b9fc4c834d2c2c43fe93bec"
   },
   "/opt/Ryvie/Ryvie-Front/src/index.tsx": {
-    "mtime": 1781710191.8626616,
-    "ast_hash": "3f3a37fe8c74b7c0f7ce2cfa87df22a3",
+    "mtime": 1783420044.7689347,
+    "ast_hash": "bebd571871e79ceb98ccefc9e9d9aeaa",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/AppStore.tsx": {
-    "mtime": 1783341864.0482192,
-    "ast_hash": "74c76555c05ed3f2e43594e719dd7295",
+    "mtime": 1783420044.7689347,
+    "ast_hash": "8fd98a4547c0a2042e108826394fe7b7",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/AuthCallback.tsx": {
@@ -300,54 +210,54 @@
     "semantic_hash": "c5e9763af339b3e4317e30ad33882474"
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/Connexion.tsx": {
-    "mtime": 1781710191.8666618,
-    "ast_hash": "8a16aed12f64d9c65df60388b37eac5f",
+    "mtime": 1783420044.7729347,
+    "ast_hash": "3e01602cb9837563182adea83c9661cf",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/FirstTimeSetup.tsx": {
-    "mtime": 1781710191.8666618,
-    "ast_hash": "27058330d02c58ee5bfdec4633eb901e",
+    "mtime": 1783420044.7729347,
+    "ast_hash": "e28b927274635b5e60ed573cd75ac419",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/Home.tsx": {
-    "mtime": 1781710191.8666618,
-    "ast_hash": "cbf9540951d6f48ba69aa4365a647343",
+    "mtime": 1783420044.7769349,
+    "ast_hash": "315a7b78b1b338cec0cb1cca82a63db0",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/Login.tsx": {
-    "mtime": 1781710191.8666618,
-    "ast_hash": "758e22066a195ef9e194e301a8286fdf",
+    "mtime": 1783420044.7769349,
+    "ast_hash": "176888741c4e07d027bd1dce4d8bf95d",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/Onboarding.tsx": {
-    "mtime": 1780659362.4885511,
-    "ast_hash": "455dd9bb8c0ee22dd553f4a9fa827c4b",
-    "semantic_hash": "455dd9bb8c0ee22dd553f4a9fa827c4b"
+    "mtime": 1783420044.7769349,
+    "ast_hash": "527490b2cf9ede79e0063c8d780fc241",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/ServerRestarting.tsx": {
-    "mtime": 1780659362.4885511,
-    "ast_hash": "df580890a256cb163a4d7c5e114c8478",
-    "semantic_hash": "df580890a256cb163a4d7c5e114c8478"
+    "mtime": 1783420044.7809348,
+    "ast_hash": "dd6a6354638f9b51c8fde051e9e9acd4",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/Settings.tsx": {
-    "mtime": 1783091785.0993917,
-    "ast_hash": "b02947829eb94bb456f7b3a2e857d6d7",
+    "mtime": 1783420044.7809348,
+    "ast_hash": "f8d26674c2551d2bcb160d5b383f6831",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/StorageSettings.tsx": {
-    "mtime": 1783073487.129445,
-    "ast_hash": "fbc77befbeed6001da1eee0f30acefc8",
+    "mtime": 1783420044.7849348,
+    "ast_hash": "c2d42fd5b7cbf17699e6e2cfaf12f76f",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/User.tsx": {
-    "mtime": 1781710191.8666618,
-    "ast_hash": "d84258201e0ab6590d1e4272a6fc7e5c",
+    "mtime": 1783420044.7889347,
+    "ast_hash": "2f8656bbb8693e4f7d3caf94e8ae685a",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/pages/Welcome.tsx": {
-    "mtime": 1780659362.492551,
-    "ast_hash": "84bcf79713ad98afe20ed186003c30f9",
-    "semantic_hash": "84bcf79713ad98afe20ed186003c30f9"
+    "mtime": 1783420044.7889347,
+    "ast_hash": "a2fbd3d055ba7cbaee4252e709788758",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/services/authService.ts": {
     "mtime": 1780659362.492551,
@@ -419,55 +329,20 @@
     "ast_hash": "ce0d2e3ed151607e51c5b056e288bb18",
     "semantic_hash": ""
   },
-  "/opt/Ryvie/scripts/add-client-oauth.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "723388ef6d5e52c442a8c136f10a5872",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/scripts/apply-architecture-fixes.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "c2f97967435003907bc881e2c5843c2f",
-    "semantic_hash": "c2f97967435003907bc881e2c5843c2f"
-  },
-  "/opt/Ryvie/scripts/cpu-diagnostic.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "6d85d87ce83a490c9975dadd5e7ea0d0",
-    "semantic_hash": "6d85d87ce83a490c9975dadd5e7ea0d0"
-  },
   "/opt/Ryvie/scripts/dev.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "71152217f1fc4bc2fdda530bd3cf43a4",
-    "semantic_hash": "71152217f1fc4bc2fdda530bd3cf43a4"
+    "mtime": 1783421127.7520154,
+    "ast_hash": "f4d46eafa0633c2771f363feb6757d6c",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/scripts/generate-frontend-config.sh": {
     "mtime": 1780659362.91255,
     "ast_hash": "2c8677d191a42000b905c6df3201890c",
     "semantic_hash": "2c8677d191a42000b905c6df3201890c"
   },
-  "/opt/Ryvie/scripts/init-apps-oauth.js": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "a1ceae25096c506dc6abcfe183acfa53",
-    "semantic_hash": "a1ceae25096c506dc6abcfe183acfa53"
-  },
   "/opt/Ryvie/scripts/prod.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "3ee8dce4aa3420a23e91e70a2be0ffd6",
-    "semantic_hash": "3ee8dce4aa3420a23e91e70a2be0ffd6"
-  },
-  "/opt/Ryvie/scripts/raid-setup.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "07efaf5a71372d4cecbbcea1bad0ebd8",
-    "semantic_hash": "07efaf5a71372d4cecbbcea1bad0ebd8"
-  },
-  "/opt/Ryvie/scripts/rebuild-prod.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "1c3a7ca27263efc95772faabda26f826",
-    "semantic_hash": "1c3a7ca27263efc95772faabda26f826"
-  },
-  "/opt/Ryvie/scripts/remove-client-oauth.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "34041dd1f6e19d492de801e7279a3945",
-    "semantic_hash": "34041dd1f6e19d492de801e7279a3945"
+    "mtime": 1783421127.7520154,
+    "ast_hash": "a2fc6166964fe4b7c1651bddf2b2c666",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/scripts/rollback-app.sh": {
     "mtime": 1780659362.91255,
@@ -475,9 +350,9 @@
     "semantic_hash": "bfcee21956eea5d3848f17620c3f5ca4"
   },
   "/opt/Ryvie/scripts/rollback.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "17d0e4fe60effcc64ca4c2cc36f4a829",
-    "semantic_hash": "17d0e4fe60effcc64ca4c2cc36f4a829"
+    "mtime": 1783421127.7520154,
+    "ast_hash": "93097b022edfecfeda9583b054cef179",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/scripts/snapshot-app.sh": {
     "mtime": 1780659362.91255,
@@ -489,15 +364,10 @@
     "ast_hash": "555fad48bbb8ce1823dbb11dd0e40a93",
     "semantic_hash": "555fad48bbb8ce1823dbb11dd0e40a93"
   },
-  "/opt/Ryvie/scripts/switch-mode.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "5e34bad02ea60384a40cb64c8582b64e",
-    "semantic_hash": "5e34bad02ea60384a40cb64c8582b64e"
-  },
   "/opt/Ryvie/scripts/update-and-restart.sh": {
-    "mtime": 1780659362.91255,
-    "ast_hash": "2495a5b072945e9d8d622c67b9bb171b",
-    "semantic_hash": "2495a5b072945e9d8d622c67b9bb171b"
+    "mtime": 1783421127.7560153,
+    "ast_hash": "54d3f72e8cb7ed18def887b400888279",
+    "semantic_hash": ""
   },
   "/opt/Ryvie/scripts/update-monitor-template.js": {
     "mtime": 1780659362.91255,
@@ -565,8 +435,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/keycloak/README-ADD-CLIENT.md": {
-    "mtime": 1783419122.1095588,
-    "ast_hash": "78949657406617da627149e843d5fa38",
+    "mtime": 1783421127.7480154,
+    "ast_hash": "3ed9c35cf07046f7fe8c04f40b8ece3d",
     "semantic_hash": ""
   },
   "/opt/Ryvie/keycloak/docker-compose.yml": {
@@ -744,34 +614,9 @@
     "ast_hash": "c63ff5db7eeca953c54e0223ac5307bc",
     "semantic_hash": ""
   },
-  "/opt/Ryvie/Ryvie-Front/src/components/DefaultCredentialsModal.tsx": {
-    "mtime": 1781710191.8586617,
-    "ast_hash": "dd5e9ae00ea629a8bcb33d121ff5a16d",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Front/src/components/AppSettingsModal.tsx": {
-    "mtime": 1783107788.5838103,
-    "ast_hash": "38028d98a223845242d9fd1e5771db44",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/routes/ai.ts": {
-    "mtime": 1783419512.1652951,
-    "ast_hash": "ba9ef98958f6a987fe43d19c35e8fa55",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Front/src/components/AiSettings.tsx": {
-    "mtime": 1783083907.4908636,
-    "ast_hash": "80081e684aff362a1030022e27f31cac",
-    "semantic_hash": ""
-  },
   "/opt/Ryvie/.claude/settings.local.json": {
     "mtime": 1783416409.6513917,
     "ast_hash": "a7bf2970e6557b58b323f50175eaea70",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Front/src/components/Modal.tsx": {
-    "mtime": 1783106678.7997212,
-    "ast_hash": "992f7b87293bd83ec6a8d755c15fb4f6",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Front/src/components/settings/AccountsPanel.tsx": {
@@ -820,8 +665,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/services/apps/appStoreService.ts": {
-    "mtime": 1783419512.197295,
-    "ast_hash": "5fb638f070530a2a9103d3eb7a2c81b9",
+    "mtime": 1783421127.704016,
+    "ast_hash": "d93c48f83066272e1897b341a55463f9",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/services/apps/appsOAuthService.ts": {
@@ -895,8 +740,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/services/updates/updateService.ts": {
-    "mtime": 1783419512.213295,
-    "ast_hash": "c95b3c8cdf142adeb72b11eb29c3043f",
+    "mtime": 1783421127.708016,
+    "ast_hash": "36640bf77762e9d45f27555640bc400a",
     "semantic_hash": ""
   },
   "/opt/Ryvie/scripts/generate-manifests.js": {
@@ -965,13 +810,13 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/architecture/ARCHITECTURE_DOCKER_RYVIE.md": {
-    "mtime": 1783419122.1095588,
-    "ast_hash": "dc0985137ef475d0053a1a574064cba5",
+    "mtime": 1783421127.7360156,
+    "ast_hash": "2b8fb35cd7c03547e741aa77eb48aa59",
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/architecture/ARCHITECTURE_DOCKER_RYVIE_CHANGES.md": {
-    "mtime": 1783419122.113559,
-    "ast_hash": "c51de0c3613b15c4b28f05df6bd7a25c",
+    "mtime": 1783421127.7360156,
+    "ast_hash": "c31c156783436d6dd44993c521c05c8b",
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/architecture/ARCHITECTURE_DOCKER_RYVIE_RESUME.md": {
@@ -980,8 +825,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/architecture/RESILIENCE_REPRISE_DIAGNOSTIC.md": {
-    "mtime": 1783419122.117559,
-    "ast_hash": "3ad3429e83f6b71e136f562b7d479aa5",
+    "mtime": 1783421127.7400155,
+    "ast_hash": "417ae3963bc8c2a795d0225e5701ff85",
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/cla/CLA_LAUNCH_CHECKLIST.md": {
@@ -1010,13 +855,13 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/dev/DEVELOPER_TOOLS.md": {
-    "mtime": 1783419164.6255302,
-    "ast_hash": "073955019f2d9046fc105cd716fa9d86",
+    "mtime": 1783421127.7400155,
+    "ast_hash": "42bcae8cf5a88aa8abcd4ddfc0b42ef3",
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/dev/DEV_PROD_GUIDE.md": {
-    "mtime": 1783419122.1295588,
-    "ast_hash": "7f7a75db6ea8c65d4dcc836a6ba451f4",
+    "mtime": 1783421127.7400155,
+    "ast_hash": "cedc496635b56c9fb59258d9494c71d0",
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/dev/MIGRATION-TYPESCRIPT.md": {
@@ -1055,8 +900,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/storage/BACKUP_STRATEGY.md": {
-    "mtime": 1783419122.1255589,
-    "ast_hash": "90003497e092c5144edb7aa22aa9bf1e",
+    "mtime": 1783421127.7440155,
+    "ast_hash": "51227aa74fa8290d2439e2fff8467968",
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/storage/BTRFS_DEGRADED_MODE.md": {
@@ -1085,8 +930,193 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/docs/updates/UPDATE_SYSTEM.md": {
-    "mtime": 1783419122.1295588,
-    "ast_hash": "22a43c754e3c11556fdc7b3cb6e6ccdf",
+    "mtime": 1783421127.7480154,
+    "ast_hash": "f7cdac8397e59e0fcd9b7eb8a138268a",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/ai/ai.ts": {
+    "mtime": 1783420044.7969348,
+    "ast_hash": "4771484811a0cecc0b25bd897027270c",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/apps/appStore.ts": {
+    "mtime": 1783420044.7929347,
+    "ast_hash": "5c81d67d57552bd3094b02fc230a9832",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/apps/apps.ts": {
+    "mtime": 1783420044.7929347,
+    "ast_hash": "b9109d98104270a9e4c1db32ef2d5a2a",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/auth/auth.ts": {
+    "mtime": 1783420044.7969348,
+    "ast_hash": "4b7334b1d369915044da1c8ee0fa37b4",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/auth/oidcAuth.ts": {
+    "mtime": 1783420044.7969348,
+    "ast_hash": "b28ab89ce2b918d205369b8e134a472d",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/auth/userPreferences.ts": {
+    "mtime": 1783420044.7969348,
+    "ast_hash": "c8d49482f46d83b82bb7bad01f8f4303",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/auth/users.ts": {
+    "mtime": 1783420044.8009348,
+    "ast_hash": "406d82371768d7325380b870321c4838",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/system/admin.ts": {
+    "mtime": 1783420044.8009348,
+    "ast_hash": "498c56943a9e6ad77c2b2841b12d76d9",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/system/health.ts": {
+    "mtime": 1783420044.8009348,
+    "ast_hash": "8da1655a7da47b480eb18efee5b84eb9",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/system/settings.ts": {
+    "mtime": 1783421127.6920161,
+    "ast_hash": "c484aae12fa8502aa546530b3cc36081",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/system/storage.ts": {
+    "mtime": 1783420044.8049347,
+    "ast_hash": "bab68bae4f2e9375ff86b1d489b7c9b7",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Back/routes/system/system.ts": {
+    "mtime": 1783420044.8049347,
+    "ast_hash": "0f6bd570241396b949c0943d20800f6a",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/launcher/GridLauncher.tsx": {
+    "mtime": 1783420228.1088107,
+    "ast_hash": "e1839a2685e259efb244dd5df4793bc0",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/launcher/Icon.tsx": {
+    "mtime": 1783420228.1168108,
+    "ast_hash": "429030bd5866b67c2f5646f30a12fdab",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/launcher/InstallIndicator.tsx": {
+    "mtime": 1783420228.1288106,
+    "ast_hash": "e557b8312f3ea7d7821d49911a2fb408",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/launcher/WidgetAddButton.tsx": {
+    "mtime": 1783420228.1208107,
+    "ast_hash": "b18e02b8ebbfe2ac9a14dd1bd147d9f8",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/modals/AppSettingsModal.tsx": {
+    "mtime": 1783420228.1448107,
+    "ast_hash": "373be689d0a0702ce77f95a0c6b46e97",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/modals/DefaultCredentialsModal.tsx": {
+    "mtime": 1783420228.1488106,
+    "ast_hash": "93e6944b56f0873cd267d4e854b21556",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/modals/GlobalUpdateModal.tsx": {
+    "mtime": 1783420228.1568108,
+    "ast_hash": "66e67fc75d378c9775cebfd5c8d45fde",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/modals/Modal.tsx": {
+    "mtime": 1783420228.1368108,
+    "ast_hash": "992f7b87293bd83ec6a8d755c15fb4f6",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/modals/UpdateModal.tsx": {
+    "mtime": 1783420228.1648107,
+    "ast_hash": "18373b2ec7ed33b5a88b31ab2a7b89bf",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/onboarding/OnboardingOverlay.tsx": {
+    "mtime": 1783420228.1688106,
+    "ast_hash": "ddd3b1d8bfdbbb59c2a434cdeb3c2f5c",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/Ryvie-Front/src/components/settings/AiSettings.tsx": {
+    "mtime": 1783420228.1768107,
+    "ast_hash": "94b0b59c0b67612b68f5f0fa1fbb8dc7",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/diagnostics/apply-architecture-fixes.sh": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "c2f97967435003907bc881e2c5843c2f",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/diagnostics/cpu-diagnostic.sh": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "6d85d87ce83a490c9975dadd5e7ea0d0",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/keycloak/add-client-oauth.sh": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "723388ef6d5e52c442a8c136f10a5872",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/keycloak/init-apps-oauth.js": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "a1ceae25096c506dc6abcfe183acfa53",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/keycloak/remove-client-oauth.sh": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "34041dd1f6e19d492de801e7279a3945",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/lifecycle/dev.sh": {
+    "mtime": 1783421127.7520154,
+    "ast_hash": "f4d46eafa0633c2771f363feb6757d6c",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/lifecycle/generate-frontend-config.sh": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "2c8677d191a42000b905c6df3201890c",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/lifecycle/prod.sh": {
+    "mtime": 1783421127.7520154,
+    "ast_hash": "a2fc6166964fe4b7c1651bddf2b2c666",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/lifecycle/rebuild-prod.sh": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "1c3a7ca27263efc95772faabda26f826",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/lifecycle/switch-mode.sh": {
+    "mtime": 1783421127.7520154,
+    "ast_hash": "a3c01406cfb89c0af42a1f3571c37e6c",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/storage/raid-setup.sh": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "07efaf5a71372d4cecbbcea1bad0ebd8",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/update/update-and-restart.sh": {
+    "mtime": 1783421127.7560153,
+    "ast_hash": "54d3f72e8cb7ed18def887b400888279",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/update/update-monitor-template.js": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "8a2020c2e1a99f38dd6bbae8c9c93618",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/update/update-monitor.html": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "1981f2b8c2d96edeff00baa745ded67e",
     "semantic_hash": ""
   }
 }

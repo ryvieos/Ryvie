@@ -5,7 +5,7 @@ echo "🏭 Démarrage de Ryvie en mode PRODUCTION..."
 echo ""
 
 # Installer/mettre à jour les scripts RAID système et s'assurer que /data est monté
-bash /opt/Ryvie/scripts/raid-setup.sh
+bash /opt/Ryvie/scripts/storage/raid-setup.sh
 
 # Vérification critique de sécurité: /data doit être en ligne
 if ! findmnt -f /data > /dev/null 2>&1; then
@@ -91,7 +91,7 @@ fi
 
 # Générer les fichiers de configuration frontend avant le build
 echo "📝 Génération des fichiers de configuration frontend..."
-bash /opt/Ryvie/scripts/generate-frontend-config.sh
+bash /opt/Ryvie/scripts/lifecycle/generate-frontend-config.sh
 if [ $? -ne 0 ]; then
   echo "⚠️  Avertissement: génération des configs frontend échouée (non critique)"
 fi

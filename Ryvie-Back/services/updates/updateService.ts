@@ -140,7 +140,7 @@ async function updateRyvie() {
     }
     
     // 4. Lancer le script externe en arrière-plan détaché
-    const updateScript = path.join(RYVIE_DIR, 'scripts/update-and-restart.sh');
+    const updateScript = path.join(RYVIE_DIR, 'scripts/update/update-and-restart.sh');
     
     if (!fs.existsSync(updateScript)) {
       throw new Error('Script update-and-restart.sh introuvable');
@@ -207,7 +207,7 @@ async function updateApp(appName) {
     console.log('[Update] 📸 Création du snapshot de sécurité...');
     sendUpdateProgress(appName, 5, 'Création du snapshot de sécurité...', 'snapshot');
     try {
-      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshot.sh', { encoding: 'utf8' });
+      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshots/snapshot.sh', { encoding: 'utf8' });
       console.log(snapshotOutput);
       
       // Extraire le chemin du snapshot
@@ -356,7 +356,7 @@ async function updateApp(appName) {
     if (snapshotPath) {
       console.error('[Update] 🔄 Rollback en cours...');
       try {
-        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
+        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/snapshots/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
         console.log(rollbackOutput);
         console.log('[Update] ✅ Rollback terminé');
         

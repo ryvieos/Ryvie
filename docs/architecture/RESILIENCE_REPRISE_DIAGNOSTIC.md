@@ -94,7 +94,7 @@ Détails utiles :
 | Méthode | Résultat |
 |---|---|
 | `git clone` **nu** + reboot | ❌ **Insuffisant** |
-| clone + `bash scripts/prod.sh` | ✅ Fonctionne |
+| clone + `bash scripts/lifecycle/prod.sh` | ✅ Fonctionne |
 
 **Pourquoi le clone nu ne suffit pas :** `/opt/Ryvie` contient des **artefacts dérivés non
 versionnés**, régénérés à l'installation :
@@ -185,7 +185,7 @@ pour fermer la boucle, plus 3 fuites d'état non bloquantes.
 1. Vérifier le montage : `findmnt /data` (bon device attendu).
 2. Runtime Docker **neuf** (ne pas restaurer `/data/docker` / `/data/containerd`).
 3. `/opt/Ryvie` : `git clone/pull` de la **version taggée correspondant aux schémas DB**.
-4. `bash /opt/Ryvie/scripts/prod.sh` (reconstruit `/opt` + relance PM2).
+4. `bash /opt/Ryvie/scripts/lifecycle/prod.sh` (reconstruit `/opt` + relance PM2).
 5. Laisser le backend réconcilier : réseaux → LDAP → Keycloak → Caddy → IA → **toutes les apps**.
 6. Contrôler `pm2 status` + l'état des conteneurs.
 

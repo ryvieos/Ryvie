@@ -11,7 +11,7 @@ echo "  - Logs détaillés"
 echo ""
 
 # Installer/mettre à jour les scripts RAID système et s'assurer que /data est monté
-bash /opt/Ryvie/scripts/raid-setup.sh
+bash /opt/Ryvie/scripts/storage/raid-setup.sh
 
 # Arrêter les processus prod s'ils tournent
 pm2 stop ryvie-backend-prod ryvie-frontend-prod 2>/dev/null || true
@@ -43,7 +43,7 @@ npm install
 
 # Générer les fichiers de configuration frontend
 echo "📝 Génération des fichiers de configuration frontend..."
-bash /opt/Ryvie/scripts/generate-frontend-config.sh
+bash /opt/Ryvie/scripts/lifecycle/generate-frontend-config.sh
 
 # Build initial du backend (nécessaire pour nodemon)
 echo "📦 Build initial du backend..."

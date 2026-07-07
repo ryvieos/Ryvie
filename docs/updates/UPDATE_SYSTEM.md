@@ -52,8 +52,8 @@ POST /api/settings/start-update-monitor
 
 Ce endpoint (`routes/settings.ts`) :
 1. Crée le dossier `/tmp/ryvie-update-monitor/`
-2. Copie `scripts/update-monitor-template.js` → `/tmp/ryvie-update-monitor/monitor.js`
-3. Copie `scripts/update-monitor.html` → `/tmp/ryvie-update-monitor/update-monitor.html`
+2. Copie `scripts/update/update-monitor-template.js` → `/tmp/ryvie-update-monitor/monitor.js`
+3. Copie `scripts/update/update-monitor.html` → `/tmp/ryvie-update-monitor/update-monitor.html`
 4. Crée un symlink vers `node_modules` du backend
 5. Sauvegarde l'URL de retour dans un fichier `.env`
 6. Lance le monitor en arrière-plan avec `setsid` + `nohup` sur le **port 3001**
@@ -70,14 +70,14 @@ Ce endpoint (`routes/settings.ts`) appelle `updateRyvie()` dans `updateService.t
 1. Détecte le mode (dev/prod)
 2. Récupère le dernier tag GitHub via `git ls-remote`
 3. Vérifie si déjà à jour
-4. Lance `scripts/update-and-restart.sh` en arrière-plan détaché avec `nohup`
+4. Lance `scripts/update/update-and-restart.sh` en arrière-plan détaché avec `nohup`
 5. Répond immédiatement au frontend
 
 Le frontend est ensuite **redirigé** vers `http://hostname:3001` (le monitor).
 
 ### Étape 3 — Exécution du script shell
 
-`scripts/update-and-restart.sh` s'exécute indépendamment du backend. Il écrit sa progression dans `/tmp/ryvie-update-status.json` à chaque étape :
+`scripts/update/update-and-restart.sh` s'exécute indépendamment du backend. Il écrit sa progression dans `/tmp/ryvie-update-status.json` à chaque étape :
 
 | Progression | Étape | Description |
 |---|---|---|
@@ -114,7 +114,7 @@ Deux mécanismes parallèles suivent la progression :
 
 #### Page monitor HTML (port 3001)
 
-`scripts/update-monitor.html` poll `GET /status` sur le monitor (port 3001) toutes les 2 secondes. Le monitor lit `/tmp/ryvie-update-status.json` et retourne le contenu. Quand `progress >= 100`, la page redirige vers le frontend Ryvie puis appelle `POST /cleanup` pour que le monitor s'auto-détruise.
+`scripts/update/update-monitor.html` poll `GET /status` sur le monitor (port 3001) toutes les 2 secondes. Le monitor lit `/tmp/ryvie-update-status.json` et retourne le contenu. Quand `progress >= 100`, la page redirige vers le frontend Ryvie puis appelle `POST /cleanup` pour que le monitor s'auto-détruise.
 
 #### UpdateModal React (si l'utilisateur reste sur le frontend)
 
@@ -254,7 +254,7 @@ Le rollback est déclenché automatiquement si :
 
 ### Processus de rollback
 
-1. Si un snapshot BTRFS existe → appelle `scripts/rollback.sh --set <snapshot_path>`
+1. Si un snapshot BTRFS existe → appelle `scripts/snapshots/rollback.sh --set <snapshot_path>`
 2. Si pas de snapshot → arrête PM2, relance `dev.sh` ou `prod.sh` avec le code actuel
 3. Le snapshot est conservé après un rollback (pas supprimé)
 
@@ -266,13 +266,13 @@ Le rollback est déclenché automatiquement si :
 
 | Fichier | Rôle |
 |---|---|
-| `scripts/update-and-restart.sh` | Script principal de mise à jour (exécution indépendante) |
-| `scripts/update-monitor-template.js` | Serveur Express temporaire (port 3001) pour afficher la progression |
-| `scripts/update-monitor.html` | Page HTML de suivi de progression |
-| `scripts/snapshot.sh` | Création de snapshots BTRFS |
-| `scripts/rollback.sh` | Restauration d'un snapshot |
-| `scripts/prod.sh` | Build et démarrage en mode production |
-| `scripts/dev.sh` | Build et démarrage en mode développement |
+| `scripts/update/update-and-restart.sh` | Script principal de mise à jour (exécution indépendante) |
+| `scripts/update/update-monitor-template.js` | Serveur Express temporaire (port 3001) pour afficher la progression |
+| `scripts/update/update-monitor.html` | Page HTML de suivi de progression |
+| `scripts/snapshots/snapshot.sh` | Création de snapshots BTRFS |
+| `scripts/snapshots/rollback.sh` | Restauration d'un snapshot |
+| `scripts/lifecycle/prod.sh` | Build et démarrage en mode production |
+| `scripts/lifecycle/dev.sh` | Build et démarrage en mode développement |
 
 ### Backend
 
@@ -379,7 +379,7 @@ Si une mise à jour pose problème après redémarrage, restaurer un snapshot BT
 ls -lh /data/.snapshots/
 
 # Restaurer un snapshot
-sudo /opt/Ryvie/scripts/rollback.sh --set /data/.snapshots/ryvie_YYYYMMDD_HHMMSS
+sudo /opt/Ryvie/scripts/snapshots/rollback.sh --set /data/.snapshots/ryvie_YYYYMMDD_HHMMSS
 
 # Redémarrer les services
 pm2 reload all

@@ -24,7 +24,7 @@ Ryvie dispose maintenant de deux modes de fonctionnement distincts :
 
 ### Démarrer en mode DEV
 ```bash
-/opt/Ryvie/scripts/dev.sh
+/opt/Ryvie/scripts/lifecycle/dev.sh
 ```
 - Build initial du backend
 - Lance `tsc --watch` + `nodemon` (backend)
@@ -33,7 +33,7 @@ Ryvie dispose maintenant de deux modes de fonctionnement distincts :
 
 ### Démarrer en mode PROD
 ```bash
-/opt/Ryvie/scripts/prod.sh
+/opt/Ryvie/scripts/lifecycle/prod.sh
 ```
 - Build backend (TypeScript → JavaScript)
 - Build frontend (webpack production avec `NODE_ENV=production`)
@@ -43,7 +43,7 @@ Ryvie dispose maintenant de deux modes de fonctionnement distincts :
 
 ### Rebuilder en PROD (après modification)
 ```bash
-/opt/Ryvie/scripts/rebuild-prod.sh
+/opt/Ryvie/scripts/lifecycle/rebuild-prod.sh
 ```
 - Rebuild backend + frontend
 - Redémarre les processus prod
@@ -51,8 +51,8 @@ Ryvie dispose maintenant de deux modes de fonctionnement distincts :
 
 ### Basculer entre les modes
 ```bash
-/opt/Ryvie/scripts/switch-mode.sh dev   # Passer en dev
-/opt/Ryvie/scripts/switch-mode.sh prod  # Passer en prod
+/opt/Ryvie/scripts/lifecycle/switch-mode.sh dev   # Passer en dev
+/opt/Ryvie/scripts/lifecycle/switch-mode.sh prod  # Passer en prod
 ```
 
 ### Arrêter tout
@@ -118,7 +118,7 @@ pm2 stop ryvie-backend-dev ryvie-frontend-dev
 
 **OU** utiliser le script :
 ```bash
-/opt/Ryvie/scripts/prod.sh  # Build + restart automatique
+/opt/Ryvie/scripts/lifecycle/prod.sh  # Build + restart automatique
 ```
 
 ### Backend (Node.js)
@@ -278,13 +278,13 @@ kill -9 <PID>
 ### Workflow recommandé
 ```bash
 # 1. Développer en mode DEV
-/opt/Ryvie/scripts/dev.sh
+/opt/Ryvie/scripts/lifecycle/dev.sh
 
 # 2. Coder et tester (hot-reload automatique)
 # ...
 
 # 3. Tester en mode PROD avant commit
-/opt/Ryvie/scripts/prod.sh
+/opt/Ryvie/scripts/lifecycle/prod.sh
 
 # 4. Vérifier que tout fonctionne
 # ...
@@ -294,7 +294,7 @@ git add .
 git commit -m "Feature: ..."
 
 # 6. Retourner en mode DEV
-/opt/Ryvie/scripts/dev.sh
+/opt/Ryvie/scripts/lifecycle/dev.sh
 ```
 
 ---

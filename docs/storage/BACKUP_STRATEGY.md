@@ -66,7 +66,7 @@ Le snapshot BTRFS (`btrfs subvolume snapshot -r`) est atomique (quelques
 millisecondes) : il capture un état cohérent de `/data` sans avoir besoin
 d'arrêter les apps longtemps. C'est la **couche de cohérence** de la stratégie.
 
-Le script existant `scripts/snapshot.sh` fait déjà l'essentiel :
+Le script existant `scripts/snapshots/snapshot.sh` fait déjà l'essentiel :
 1. `docker pause` de tous les conteneurs actifs (fige leur état le temps du
    snapshot, quelques secondes),
 2. `sync`,
@@ -124,7 +124,7 @@ etc.), reconstruction sur une nouvelle machine :
    Ceci remet `/data/apps`, `/data/config`, `/data/images`, `/data/logs`,
    `/data/netbird` dans l'état du dernier snapshot envoyé.
 3. **Code Ryvie** : `git clone`/`pull` de `/opt/Ryvie` sur la version taggée
-   correspondant aux schémas DB, puis `bash scripts/prod.sh` (reconstruit
+   correspondant aux schémas DB, puis `bash scripts/lifecycle/prod.sh` (reconstruit
    `node_modules`, build, `.env`, config frontend, PM2 — voir
    `RESILIENCE_REPRISE_DIAGNOSTIC.md` section 4).
 4. **Réconciliation automatique** : le backend recrée les réseaux Docker
@@ -142,7 +142,7 @@ etc.), reconstruction sur une nouvelle machine :
 |---|---|
 | Loopback BTRFS pour `/data` sur VM/VPS | `install.sh` |
 | Simplifier `BTRFS_MODE` (constante, plus de bifurcation Docker/containerd) | `install.sh` |
-| Exclure `docker`, `containerd`, `snapshot` des sous-volumes sauvegardés | `scripts/snapshot.sh` |
+| Exclure `docker`, `containerd`, `snapshot` des sous-volumes sauvegardés | `scripts/snapshots/snapshot.sh` |
 | Script d'envoi hors site incrémental (`btrfs send \| ssh receive`) | nouveau `scripts/backup-offsite.sh` |
 | Script de restauration hors site (sens inverse) | nouveau `scripts/restore-offsite.sh` |
 | Réconciliateur boot "start ALL installed apps" (déjà identifié) | `Ryvie-Back/index.ts` / `services/` |
