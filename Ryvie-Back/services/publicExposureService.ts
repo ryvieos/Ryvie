@@ -240,6 +240,69 @@ async function updateAppPublicUrlEnv(appId: string, appDir: string, domain: stri
   return changed;
 }
 
+// ───────── Hooks d'exposition déclarés par l'app (ryvie-app.yml) ─────────
+// Certaines apps doivent adapter leur config quand elles gagnent/perdent une
+// adresse publique — p.ex. autoriser le domaine dans leurs CORS/allowedOrigins et
+// déclarer le proxy de confiance (sinon leur UI peut refuser les connexions :
+// « origin not allowed »). Plutôt que du code par-app dans le cœur, l'app décrit
+// ELLE-MÊME quoi faire via des scripts (bloc `exposure.hooks` de son ryvie-app.yml),
+// exécutés côté hôte comme les hooks IA. Le cœur reste agnostique : il ne connaît
+// ni le format ni le stockage de config de l'app.
+
+/** Lit le bloc `exposure` du ryvie-app.yml de l'app (source de la recette). */
+function readExposureRecipe(manifest: any, appId: string): any | null {
+  const sourceDir = manifest?.sourceDir || path.join('/data/apps', appId);
+  try {
+    const yaml = require('yaml');
+    const cfg = yaml.parse(fsSync.readFileSync(path.join(sourceDir, 'ryvie-app.yml'), 'utf8'));
+    return (cfg && cfg.exposure) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Exécute un hook d'exposition fourni par l'app (script côté hôte). Le script est
+ * responsable d'appliquer ET de redémarrer l'app si besoin (comme ai/connect.sh).
+ * Ne lève jamais : l'exposition doit aboutir même si le hook échoue.
+ * Variables passées : RYVIE_APP_ID, RYVIE_APP_DIR, RYVIE_EXPOSURE_MODE,
+ * RYVIE_PUBLIC_DOMAIN, RYVIE_PUBLIC_URL (les deux dernières vides en dé-exposition).
+ */
+function runExposureHook(hookRel: string, appDir: string, vars: Record<string, string>): Promise<void> {
+  const scriptPath = path.join(appDir, hookRel);
+  if (!fsSync.existsSync(scriptPath)) {
+    console.warn(`[publicExposure] hook d'exposition introuvable: ${scriptPath}`);
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    exec(`sh "${scriptPath}"`, { cwd: appDir, timeout: 120000, env: { ...process.env, ...vars } }, (err: any, stdout: string, stderr: string) => {
+      if (err) console.error(`[publicExposure] ❌ hook ${hookRel}:`, String(stderr || err.message || '').trim().slice(0, 300));
+      else if (stdout) console.log(`[publicExposure] hook ${hookRel}: ${String(stdout).trim().slice(0, 300)}`);
+      resolve();
+    });
+  });
+}
+
+/**
+ * Applique le hook d'exposition (`expose`) ou de dé-exposition (`unexpose`) déclaré
+ * par l'app, si présent. Retourne true si un hook a été lancé.
+ */
+async function applyExposureHook(manifest: any, appId: string, appDir: string, domain: string | null): Promise<boolean> {
+  const recipe = readExposureRecipe(manifest, appId);
+  const hooks = recipe && recipe.hooks;
+  const mode = domain ? 'expose' : 'unexpose';
+  const hookRel = hooks && hooks[mode];
+  if (!hookRel) return false;
+  await runExposureHook(hookRel, appDir, {
+    RYVIE_APP_ID: appId,
+    RYVIE_APP_DIR: appDir,
+    RYVIE_EXPOSURE_MODE: mode,
+    RYVIE_PUBLIC_DOMAIN: domain || '',
+    RYVIE_PUBLIC_URL: domain ? `https://${domain}` : ''
+  });
+  return true;
+}
+
 /**
  * Redémarre l'app en arrière-plan pour prendre en compte le nouveau .env
  */
@@ -458,6 +521,15 @@ async function exposeApp(appId: string): Promise<any> {
     console.warn(`[publicExposure] ⚠️ Mise à jour .env de ${id}:`, err.message);
   }
   if (envChanged) restartAppInBackground(id, appDir);
+  // Hook d'exposition déclaré par l'app (best-effort) : lui laisse adapter sa
+  // config au nouveau domaine (CORS/allowedOrigins, proxy de confiance…) et se
+  // redémarrer si besoin. Le cœur n'a aucune logique par-app.
+  let hookRan = false;
+  try {
+    hookRan = await applyExposureHook(manifest, id, appDir, domain);
+  } catch (err: any) {
+    console.warn(`[publicExposure] ⚠️ Hook d'exposition de ${id}:`, err.message);
+  }
 
   // Attendre que l'adresse réponde vraiment (sinon l'utilisateur tombe sur
   // « Route not configured » en cliquant tout de suite). Best effort : au-delà
@@ -465,7 +537,7 @@ async function exposeApp(appId: string): Promise<any> {
   const ready = await waitForDomainReady(domain);
 
   console.log(`[publicExposure] ✅ ${id} exposé publiquement: ${domain}${ready ? '' : ' (activation en cours)'}`);
-  return { success: true, domain, envChanged, restarted: envChanged, ready };
+  return { success: true, domain, envChanged, restarted: envChanged || hookRan, ready };
 }
 
 /**
@@ -516,6 +588,7 @@ async function unexposeApp(appId: string): Promise<any> {
   const manifest = getManifest(appId) || getManifest(id);
   const port = manifest?.mainPort || 0;
   let envChanged = false;
+  let hookRan = false;
   let ready = true;
   if (manifest && port) {
     const appDir = resolveAppDir(manifest, id);
@@ -524,8 +597,15 @@ async function unexposeApp(appId: string): Promise<any> {
     } catch (err: any) {
       console.warn(`[publicExposure] ⚠️ Mise à jour .env de ${id}:`, err.message);
     }
-    if (envChanged) {
-      restartAppInBackground(id, appDir);
+    if (envChanged) restartAppInBackground(id, appDir);
+    // Hook de dé-exposition déclaré par l'app (best-effort) : retire le domaine
+    // public de sa config (allowedOrigins, proxy de confiance…) et se redémarre.
+    try {
+      hookRan = await applyExposureHook(manifest, id, appDir, null);
+    } catch (err: any) {
+      console.warn(`[publicExposure] ⚠️ Hook de dé-exposition de ${id}:`, err.message);
+    }
+    if (envChanged || hookRan) {
       // Attendre que l'app réponde de nouveau en local (elle redémarre pour
       // revenir aux URLs locales). On ne rend la main — donc le spinner UI ne
       // s'arrête — que lorsqu'elle est réellement de nouveau joignable, pour ne
@@ -535,7 +615,7 @@ async function unexposeApp(appId: string): Promise<any> {
   }
 
   console.log(`[publicExposure] ✅ Adresse publique de ${id} supprimée${ready ? '' : ' (redémarrage en cours)'}`);
-  return { success: true, envChanged, restarted: envChanged, ready };
+  return { success: true, envChanged, restarted: envChanged || hookRan, ready };
 }
 
 /**
