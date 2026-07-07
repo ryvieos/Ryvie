@@ -1,6 +1,6 @@
 import React from 'react';
 import WidgetRemoveButton from './WidgetRemoveButton';
-import '../../styles/Widgets.css';
+import '../../styles/widgets/Widgets.css';
 
 const BaseWidget = ({ id, title = '', icon = '', children, onRemove, w = 2, h = 2, className = '', action = null, onClick = null }) => {
   return (

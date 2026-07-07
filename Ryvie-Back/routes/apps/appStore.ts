@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { verifyToken, hasPermission } = require('../middleware/auth');
-const { getApps, getAppById, clearCache, getStoreHealth, getRateLimitInfo, updateAppFromStore, uninstallApp, forceCleanupCancelledInstall, progressEmitter } = require('../services/appStoreService');
-const { checkStoreCatalogUpdate } = require('../services/updateCheckService');
-const { updateStoreCatalog } = require('../services/updateService');
+const { verifyToken, hasPermission } = require('../../middleware/auth');
+const { getApps, getAppById, clearCache, getStoreHealth, getRateLimitInfo, updateAppFromStore, uninstallApp, forceCleanupCancelledInstall, progressEmitter } = require('../../services/apps/appStoreService');
+const { checkStoreCatalogUpdate } = require('../../services/updates/updateCheckService');
+const { updateStoreCatalog } = require('../../services/updates/updateService');
 
 // Map pour stocker les workers actifs (appId -> worker process)
 const activeWorkers = new Map();
@@ -386,7 +386,7 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     
     // Lancer l'installation dans un processus enfant séparé (non-bloquant)
     const { fork } = require('child_process');
-    const workerPath = require('path').join(__dirname, '../workers/installWorker.js');
+    const workerPath = require('path').join(__dirname, '../../workers/installWorker.js');
     
     const worker = fork(workerPath, [appId], {
       detached: false,
@@ -566,7 +566,7 @@ router.delete('/appstore/apps/:id/uninstall', verifyToken, hasPermission('uninst
     
     // Lancer la désinstallation dans un processus enfant séparé (non-bloquant)
     const { fork } = require('child_process');
-    const workerPath = require('path').join(__dirname, '../workers/uninstallWorker.js');
+    const workerPath = require('path').join(__dirname, '../../workers/uninstallWorker.js');
     
     const worker = fork(workerPath, [appId], {
       detached: false,

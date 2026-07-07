@@ -1,6 +1,6 @@
 const ldap = require('ldapjs');
 const crypto = require('crypto');
-const ldapConfig = require('../config/ldap');
+const ldapConfig = require('../../config/ldap');
 const DEFAULT_EMAIL_DOMAIN = process.env.DEFAULT_EMAIL_DOMAIN || 'localhost';
 
 // Génère un identifiant (uid) stable, opaque et neutre, sans lien avec le nom.
@@ -224,7 +224,7 @@ function isLdapRunning(): boolean {
 function startLdap(): void {
   const { execSync } = require('child_process');
   const fs = require('fs');
-  const { composeUpWithRecovery } = require('./dockerService');
+  const { composeUpWithRecovery } = require('../system/dockerService');
   const composePath = `${LDAP_COMPOSE_DIR}/docker-compose.yml`;
   if (!fs.existsSync(composePath)) {
     console.log('[ldap] ⚠️ docker-compose.yml introuvable, impossible de démarrer LDAP');

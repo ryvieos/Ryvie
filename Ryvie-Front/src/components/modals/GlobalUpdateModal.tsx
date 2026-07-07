@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { useUpdate } from '../contexts/UpdateContext';
+import { useUpdate } from '../../contexts/UpdateContext';
 import UpdateModal from './UpdateModal';
 
 const GlobalUpdateModal: React.FC = () => {

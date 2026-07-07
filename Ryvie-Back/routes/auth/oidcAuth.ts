@@ -1,8 +1,8 @@
 export {};
 const express = require('express');
-const oidcService = require('../services/oidcService');
-const { signToken, allowlistToken } = require('../services/authService');
-const ldapService = require('../services/ldapService');
+const oidcService = require('../../services/auth/oidcService');
+const { signToken, allowlistToken } = require('../../services/auth/authService');
+const ldapService = require('../../services/auth/ldapService');
 
 const getOIDCConfig = oidcService.getOIDCConfig;
 const generateAuthUrl = oidcService.generateAuthUrl;
@@ -175,7 +175,7 @@ router.get('/callback', async (req: any, res: any) => {
 
     // Chercher le DN de l'utilisateur dans LDAP
     const ldap = require('ldapjs');
-    const ldapConfig = require('../config/ldap');
+    const ldapConfig = require('../../config/ldap');
 
     let userDN = null;
     let role = 'Guest';

@@ -45,7 +45,7 @@ Ce document centralise tous les outils et intégrations disponibles pour facilit
 /caveman-review
 
 # Compression de la documentation
-/caveman:compress /opt/Ryvie/docs/ARCHITECTURE_DOCKER_RYVIE.md
+/caveman:compress /opt/Ryvie/docs/architecture/ARCHITECTURE_DOCKER_RYVIE.md
 ```
 
 ## 📝 Documentation du projet
@@ -54,27 +54,27 @@ Ce document centralise tous les outils et intégrations disponibles pour facilit
 
 | Document | Description |
 |----------|-------------|
-| [ARCHITECTURE_DOCKER_RYVIE.md](ARCHITECTURE_DOCKER_RYVIE.md) | Architecture Docker complète |
-| [ARCHITECTURE_DOCKER_RYVIE_RESUME.md](ARCHITECTURE_DOCKER_RYVIE_RESUME.md) | Résumé de l'architecture |
-| [ARCHITECTURE_DOCKER_RYVIE_CHANGES.md](ARCHITECTURE_DOCKER_RYVIE_CHANGES.md) | Changements à apporter |
+| [ARCHITECTURE_DOCKER_RYVIE.md](../architecture/ARCHITECTURE_DOCKER_RYVIE.md) | Architecture Docker complète |
+| [ARCHITECTURE_DOCKER_RYVIE_RESUME.md](../architecture/ARCHITECTURE_DOCKER_RYVIE_RESUME.md) | Résumé de l'architecture |
+| [ARCHITECTURE_DOCKER_RYVIE_CHANGES.md](../architecture/ARCHITECTURE_DOCKER_RYVIE_CHANGES.md) | Changements à apporter |
 
 ### Documents de migration
 
 | Document | Description |
 |----------|-------------|
-| [STORAGE_MIGRATION_STRATEGY.md](STORAGE_MIGRATION_STRATEGY.md) | Stratégie de migration du stockage |
-| [RAID_MIGRATION_CHECKLIST.md](RAID_MIGRATION_CHECKLIST.md) | Checklist pour la migration RAID |
-| [BTRFS_DEGRADED_MODE.md](BTRFS_DEGRADED_MODE.md) | Mode dégradé BTRFS |
+| [STORAGE_MIGRATION_STRATEGY.md](../storage/STORAGE_MIGRATION_STRATEGY.md) | Stratégie de migration du stockage |
+| [RAID_MIGRATION_CHECKLIST.md](../storage/RAID_MIGRATION_CHECKLIST.md) | Checklist pour la migration RAID |
+| [BTRFS_DEGRADED_MODE.md](../storage/BTRFS_DEGRADED_MODE.md) | Mode dégradé BTRFS |
 
 ### Autres documents importants
 
 | Document | Description |
 |----------|-------------|
-| [API_RYVIE_DOMAINS.md](API_RYVIE_DOMAINS.md) | Documentation des domaines API |
-| [appStore.md](appStore.md) | Documentation de l'App Store |
-| [UPDATE_SYSTEM.md](UPDATE_SYSTEM.md) | Système de mise à jour |
-| [KEYCLOAK_SSO_MIGRATION.md](KEYCLOAK_SSO_MIGRATION.md) | Migration Keycloak SSO |
-| [CLA_SYSTEM_OVERVIEW.md](CLA_SYSTEM_OVERVIEW.md) | Vue d'ensemble du système CLA |
+| [API_RYVIE_DOMAINS.md](../apps/API_RYVIE_DOMAINS.md) | Documentation des domaines API |
+| [appStore.md](../apps/appStore.md) | Documentation de l'App Store |
+| [UPDATE_SYSTEM.md](../updates/UPDATE_SYSTEM.md) | Système de mise à jour |
+| [KEYCLOAK_SSO_MIGRATION.md](../sso/KEYCLOAK_SSO_MIGRATION.md) | Migration Keycloak SSO |
+| [CLA_SYSTEM_OVERVIEW.md](../cla/CLA_SYSTEM_OVERVIEW.md) | Vue d'ensemble du système CLA |
 
 ## 🛠️ Scripts de développement
 
@@ -316,8 +316,8 @@ docker ps
 ### Communauté
 
 - Signaler un bug : [GitHub Issues](https://github.com/[votre-org]/Ryvie/issues)
-- Contribuer : Voir [CONTRIBUTING.md](../CONTRIBUTING.md)
-- CLA : Voir [CLA.md](../CLA.md)
+- Contribuer : Voir [CONTRIBUTING.md](../../CONTRIBUTING.md)
+- CLA : Voir [CLA.md](../../CLA.md)
 
 ---
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
-import '../styles/WidgetAddButton.css';
-import { useLanguage } from '../contexts/LanguageContext';
+import '../../styles/components/WidgetAddButton.css';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 /**
  * Menu de sélection de widget rendu via portal

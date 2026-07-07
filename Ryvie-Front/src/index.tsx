@@ -22,7 +22,7 @@ import faviconUrl from './icons/ryvielogo0.png';
 import { SocketProvider } from './contexts/SocketContext';
 import { CachedRoutes } from './components/CachedRoutes';
 import { UpdateProvider } from './contexts/UpdateContext';
-import GlobalUpdateModal from './components/GlobalUpdateModal';
+import GlobalUpdateModal from './components/modals/GlobalUpdateModal';
 import { LanguageProvider } from './contexts/LanguageContext';
 
 // Composant de redirection conditionnelle (Web et Electron)

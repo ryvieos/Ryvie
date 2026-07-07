@@ -2,7 +2,7 @@ export {};
 const Docker = require('dockerode');
 const os = require('os');
 const { execSync } = require('child_process');
-const appManager = require('./appManagerService');
+const appManager = require('../apps/appManagerService');
 
 const docker = new Docker();
 

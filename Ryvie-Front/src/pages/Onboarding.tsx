@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
-import '../styles/Onboarding.css';
+import '../styles/pages/Onboarding.css';
 import urlsConfig from '../config/urls';
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
 

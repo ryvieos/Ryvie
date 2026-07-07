@@ -28,7 +28,7 @@ async function getServerInfo() {
   // Compter le nombre d'utilisateurs dans LDAP
   let activeUsersCount = 0;
   try {
-    const { listUsersPublic } = require('./ldapService');
+    const { listUsersPublic } = require('../auth/ldapService');
     const ldapUsers = await listUsersPublic();
     activeUsersCount = ldapUsers.length;
   } catch (error) {
@@ -38,7 +38,7 @@ async function getServerInfo() {
   // Compter le nombre d'apps installées
   let appsCount = 0;
   try {
-    const { listInstalledApps } = require('./appManagerService');
+    const { listInstalledApps } = require('../apps/appManagerService');
     const installedApps = await listInstalledApps();
     appsCount = installedApps.length;
   } catch (error) {

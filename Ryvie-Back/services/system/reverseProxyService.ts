@@ -3,8 +3,8 @@ const util = require('util');
 const fs = require('fs').promises;
 const path = require('path');
 const Docker = require('dockerode');
-const { getLocalIP, getPrivateIP } = require('../utils/network');
-const { REVERSE_PROXY_DIR, NETBIRD_FILE } = require('../config/paths');
+const { getLocalIP, getPrivateIP } = require('../../utils/network');
+const { REVERSE_PROXY_DIR, NETBIRD_FILE } = require('../../config/paths');
 const yaml = require('js-yaml');
 const { composeUpWithRecovery } = require('./dockerService');
 

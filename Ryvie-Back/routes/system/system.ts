@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { verifyToken } = require('../middleware/auth');
-const { getServerInfo, restartServer } = require('../services/systemService');
+const { verifyToken } = require('../../middleware/auth');
+const { getServerInfo, restartServer } = require('../../services/system/systemService');
 const si = require('systeminformation');
-const { getLocalIP } = require('../utils/network');
-const { APPS_DIR, MANIFESTS_DIR } = require('../config/paths');
+const { getLocalIP } = require('../../utils/network');
+const { APPS_DIR, MANIFESTS_DIR } = require('../../config/paths');
 
 // GET /status (non-authenticated health endpoint)
 router.get('/status', (req: any, res: any) => {
@@ -41,7 +41,7 @@ router.get('/storage-detail', verifyToken, async (req: any, res: any) => {
     const systemSize = rootPartition ? rootPartition.size / 1e9 : 0;
 
     // 2. Récupérer toutes les apps
-    const { listInstalledApps } = require('../services/appManagerService');
+    const { listInstalledApps } = require('../../services/apps/appManagerService');
     const apps = await listInstalledApps();
 
     // 3. Calculer la taille de chaque app (dossier + volumes + images)

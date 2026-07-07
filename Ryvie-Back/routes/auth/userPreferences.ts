@@ -4,8 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const axios = require('axios');
-const { verifyToken } = require('../middleware/auth');
-const { PREFERENCES_DIR, BACKGROUNDS_DIR, PRESETS_DIR, MANIFESTS_DIR } = require('../config/paths');
+const { verifyToken } = require('../../middleware/auth');
+const { PREFERENCES_DIR, BACKGROUNDS_DIR, PRESETS_DIR, MANIFESTS_DIR } = require('../../config/paths');
 
 // Répertoire pour stocker les préférences utilisateur
 

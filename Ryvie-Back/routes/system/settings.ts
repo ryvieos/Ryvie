@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
-const { verifyToken, isAdmin } = require('../middleware/auth');
-const { checkAllUpdates } = require('../services/updateCheckService');
-const { updateRyvie, updateApp, updateProgressEmitter } = require('../services/updateService');
-const { SETTINGS_FILE, NETBIRD_FILE } = require('../config/paths');
+const { verifyToken, isAdmin } = require('../../middleware/auth');
+const { checkAllUpdates } = require('../../services/updates/updateCheckService');
+const { updateRyvie, updateApp, updateProgressEmitter } = require('../../services/updates/updateService');
+const { SETTINGS_FILE, NETBIRD_FILE } = require('../../config/paths');
 const crypto = require('crypto');
 
 // Charger les paramètres
@@ -86,7 +86,7 @@ router.patch('/settings/token-expiration', verifyToken, (req: any, res: any) => 
       // que ce réglage gouverne la vraie session SSO et pas seulement le JWT dashboard.
       // Best-effort, non bloquant : un échec Keycloak n'empêche pas la sauvegarde.
       try {
-        const { setRealmSessionTimeout } = require('../services/keycloakService');
+        const { setRealmSessionTimeout } = require('../../services/auth/keycloakService');
         Promise.resolve(setRealmSessionTimeout(parseInt(minutes))).catch(() => {});
       } catch (_) {}
 
@@ -172,8 +172,8 @@ router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: 
     const tmpDir = '/tmp/ryvie-update-monitor';
     const monitorScript = path.join(tmpDir, 'monitor.js');
     const monitorHtml = path.join(tmpDir, 'update-monitor.html');
-    const templateScript = path.join(__dirname, '../../../scripts/update-monitor-template.js');
-    const templateHtml = path.join(__dirname, '../../../scripts/update-monitor.html');
+    const templateScript = path.join(__dirname, '../../../../scripts/update-monitor-template.js');
+    const templateHtml = path.join(__dirname, '../../../../scripts/update-monitor.html');
     
     console.log('[settings] Création du dossier temporaire:', tmpDir);
     
@@ -200,7 +200,7 @@ router.post('/settings/start-update-monitor', verifyToken, isAdmin, async (req: 
     }
     
     // Créer un lien symbolique vers node_modules du backend
-    const backendNodeModules = path.join(__dirname, '../../node_modules');
+    const backendNodeModules = path.join(__dirname, '../../../node_modules');
     const tmpNodeModules = path.join(tmpDir, 'node_modules');
     
     if (fs.existsSync(backendNodeModules)) {
@@ -307,7 +307,7 @@ router.post('/settings/update-ryvie', verifyToken, isAdmin, async (req: any, res
       
       // Enregistrer le snapshot pour vérification au prochain démarrage
       if (snapshotPath) {
-        const { registerPendingSnapshot } = require('../utils/snapshotCleanup');
+        const { registerPendingSnapshot } = require('../../utils/snapshotCleanup');
         registerPendingSnapshot(snapshotPath);
       }
       
@@ -470,7 +470,7 @@ router.post('/settings/update-app', verifyToken, isAdmin, async (req: any, res: 
     
     // Lancer la mise à jour dans un processus enfant séparé (non-bloquant)
     const { fork } = require('child_process');
-    const workerPath = require('path').join(__dirname, '../workers/updateWorker.js');
+    const workerPath = require('path').join(__dirname, '../../workers/updateWorker.js');
     
     const worker = fork(workerPath, [appName], {
       detached: false,

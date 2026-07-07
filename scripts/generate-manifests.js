@@ -11,7 +11,7 @@ console.log('=================================\n');
 // Configuration
 const APPS_SOURCE_DIR = '/data/apps';
 const MANIFESTS_DIR = '/data/config/manifests';
-const GENERIC_ICON_PATH = path.join(__dirname, 'Ryvie-Front/src/icons/app-generic.svg');
+const GENERIC_ICON_PATH = path.join(__dirname, '..', 'Ryvie-Front/src/icons/app-generic.svg');
 /**
  * Scanne automatiquement tous les dossiers dans /data/apps/
  */

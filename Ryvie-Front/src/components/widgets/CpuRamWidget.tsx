@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from '../../utils/setupAxios';
 import BaseWidget from './BaseWidget';
 import urlsConfig from '../../config/urls';
-import '../../styles/CpuRamWidget.css';
+import '../../styles/widgets/CpuRamWidget.css';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;

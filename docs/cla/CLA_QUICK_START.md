@@ -48,7 +48,7 @@ Create a test PR from a secondary GitHub account to verify the bot works.
 ## 📚 Full Documentation
 
 - **Detailed setup**: `.github/CLA_SETUP.md`
-- **Launch checklist**: `docs/CLA_LAUNCH_CHECKLIST.md`
+- **Launch checklist**: `docs/cla/CLA_LAUNCH_CHECKLIST.md`
 - **CLA document**: `CLA.md`
 - **Contributing guide**: `CONTRIBUTING.md`
 

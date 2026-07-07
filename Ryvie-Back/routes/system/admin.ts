@@ -1,11 +1,11 @@
 const express = require('express');
 const ldap = require('ldapjs');
 const router = express.Router();
-const { verifyToken, isAdmin } = require('../middleware/auth');
-const ldapConfig = require('../config/ldap');
-const { createSafeClient, getRole, parseDnParts, escapeRdnValue, generateOpaqueUid } = require('../services/ldapService');
-const { startApp } = require('../services/dockerService');
-const { listInstalledApps } = require('../services/appManagerService');
+const { verifyToken, isAdmin } = require('../../middleware/auth');
+const ldapConfig = require('../../config/ldap');
+const { createSafeClient, getRole, parseDnParts, escapeRdnValue, generateOpaqueUid } = require('../../services/auth/ldapService');
+const { startApp } = require('../../services/system/dockerService');
+const { listInstalledApps } = require('../../services/apps/appManagerService');
 
 function escapeLdapFilterValue(value: any) {
   return String(value || '')

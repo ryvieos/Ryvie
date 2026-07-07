@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from '../utils/setupAxios';
-import urlsConfig from '../config/urls';
-import { useLanguage } from '../contexts/LanguageContext';
+import axios from '../../utils/setupAxios';
+import urlsConfig from '../../config/urls';
+import { useLanguage } from '../../contexts/LanguageContext';
 const { getServerUrl } = urlsConfig;
 
 const UpdateModal = ({ isOpen, targetVersion, accessMode }: { isOpen: boolean; targetVersion: string; accessMode: string }) => {

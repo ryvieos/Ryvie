@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const appManager = require('./appManagerService');
-const { APPS_DIR } = require('../config/paths');
+const { APPS_DIR } = require('../../config/paths');
 
 const docker = new Docker();
 

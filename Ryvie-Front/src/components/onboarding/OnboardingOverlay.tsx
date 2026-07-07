@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import axios from '../utils/setupAxios';
-import '../styles/OnboardingOverlay.css';
-import urlsConfig from '../config/urls';
-import { getCurrentAccessMode } from '../utils/detectAccessMode';
-import { useLanguage } from '../contexts/LanguageContext';
+import axios from '../../utils/setupAxios';
+import '../../styles/components/OnboardingOverlay.css';
+import urlsConfig from '../../config/urls';
+import { getCurrentAccessMode } from '../../utils/detectAccessMode';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const { getServerUrl } = urlsConfig;
 

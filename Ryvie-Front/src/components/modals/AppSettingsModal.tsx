@@ -1,9 +1,9 @@
 import React from 'react';
-import { useLanguage } from '../contexts/LanguageContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import Modal from './Modal';
-import ExposurePanel from './settings/ExposurePanel';
-import AccountsPanel from './settings/AccountsPanel';
-import ConfigPanel from './settings/ConfigPanel';
+import ExposurePanel from '../settings/ExposurePanel';
+import AccountsPanel from '../settings/AccountsPanel';
+import ConfigPanel from '../settings/ConfigPanel';
 
 interface Props {
   appId: string;

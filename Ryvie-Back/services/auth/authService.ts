@@ -1,8 +1,8 @@
 const jwt = require('jsonwebtoken');
-const { ensureConnected } = require('../redisClient');
+const { ensureConnected } = require('../../redisClient');
 const fs = require('fs');
 const path = require('path');
-const { SETTINGS_FILE } = require('../config/paths');
+const { SETTINGS_FILE } = require('../../config/paths');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 

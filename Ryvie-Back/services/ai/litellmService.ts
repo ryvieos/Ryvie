@@ -8,13 +8,13 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const axios = require('axios');
-const { composeUpWithRecovery } = require('./dockerService');
+const { composeUpWithRecovery } = require('../system/dockerService');
 const {
   LITELLM_DIR,
   LITELLM_COMPOSE_FILE,
   LITELLM_CONFIG_YAML,
   LITELLM_ENV_FILE
-} = require('../config/paths');
+} = require('../../config/paths');
 
 const CONTAINER = 'ryvie-litellm';
 // 4000 est déjà pris par app-rdrive-node → on utilise 4010 (hôte + conteneur).

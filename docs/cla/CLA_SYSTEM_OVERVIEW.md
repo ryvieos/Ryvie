@@ -43,9 +43,9 @@ The complete CLA (Contributor License Agreement) system for Ryvie is now ready. 
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `docs/CLA_QUICK_START.md` | 5-minute setup guide | ✅ Created |
-| `docs/CLA_LAUNCH_CHECKLIST.md` | Pre-launch checklist | ✅ Created |
-| `docs/CLA_SYSTEM_OVERVIEW.md` | This file | ✅ Created |
+| `docs/cla/CLA_QUICK_START.md` | 5-minute setup guide | ✅ Created |
+| `docs/cla/CLA_LAUNCH_CHECKLIST.md` | Pre-launch checklist | ✅ Created |
+| `docs/cla/CLA_SYSTEM_OVERVIEW.md` | This file | ✅ Created |
 
 ## 🔄 How It Works
 
@@ -100,7 +100,7 @@ To activate the CLA system, you need to complete **3 quick steps**:
 
 ### ⚠️ REQUIRED: Manual Setup (5 minutes)
 
-Follow the **Quick Start Guide**: `docs/CLA_QUICK_START.md`
+Follow the **Quick Start Guide**: `docs/cla/CLA_QUICK_START.md`
 
 **Summary:**
 1. **Create repository**: `maisonnavejul/Ryvie-CLA-signatures` (2 min)
@@ -198,9 +198,9 @@ This puts Ryvie in good company for professional open-source projects with comme
 ## 📞 Support & Resources
 
 ### For Maintainers
-- **Quick setup**: `docs/CLA_QUICK_START.md`
+- **Quick setup**: `docs/cla/CLA_QUICK_START.md`
 - **Detailed guide**: `.github/CLA_SETUP.md`
-- **Checklist**: `docs/CLA_LAUNCH_CHECKLIST.md`
+- **Checklist**: `docs/cla/CLA_LAUNCH_CHECKLIST.md`
 
 ### For Contributors
 - **CLA text**: `CLA.md`
@@ -255,7 +255,7 @@ The CLA system is now **fully configured** and ready to protect Ryvie's future. 
 ✅ **Automates workflow**: Zero manual intervention needed  
 ✅ **Scales easily**: Handles unlimited contributors  
 
-**Next action**: Complete the 5-minute setup in `docs/CLA_QUICK_START.md` to activate the system.
+**Next action**: Complete the 5-minute setup in `docs/cla/CLA_QUICK_START.md` to activate the system.
 
 ---
 

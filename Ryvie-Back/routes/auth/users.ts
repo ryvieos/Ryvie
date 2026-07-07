@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { verifyToken } = require('../middleware/auth');
-const { listUsersWithRoles, listUsersPublic } = require('../services/ldapService');
+const { verifyToken } = require('../../middleware/auth');
+const { listUsersWithRoles, listUsersPublic } = require('../../services/auth/ldapService');
 
 // GET /api/users (secured)
 router.get('/users', verifyToken, async (req: any, res: any) => {

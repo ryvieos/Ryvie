@@ -9,10 +9,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const litellm = require('./litellmService');
-const appManager = require('./appManagerService');
-const { getLocalIP } = require('../utils/network');
-const { readEnvFile, writeEnvFile, getEnvVar, setEnvVar, unsetEnvVar } = require('./appEnvService');
-const { AI_DIR, AI_CONFIG_FILE, AI_KEY_FILE, MANIFESTS_DIR, APPS_DIR, LITELLM_CONFIG_YAML } = require('../config/paths');
+const appManager = require('../apps/appManagerService');
+const { getLocalIP } = require('../../utils/network');
+const { readEnvFile, writeEnvFile, getEnvVar, setEnvVar, unsetEnvVar } = require('../apps/appEnvService');
+const { AI_DIR, AI_CONFIG_FILE, AI_KEY_FILE, MANIFESTS_DIR, APPS_DIR, LITELLM_CONFIG_YAML } = require('../../config/paths');
 
 // ───────── Catalogue des fournisseurs ─────────
 // prefix : préfixe de routage LiteLLM (openai/, anthropic/, …)

@@ -40,7 +40,7 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
 
       selfHealInFlight.add(id);
       Promise.resolve()
-        .then(() => require('./appAccountsService').provisionDefault(id, { apiOnly: true }))
+        .then(() => require('../apps/appAccountsService').provisionDefault(id, { apiOnly: true }))
         .then((result) => {
           // Résolu (sans throw) = état atteint → on ne re-balaye plus cette app.
           selfHealedAccounts.add(id);
@@ -48,7 +48,7 @@ function setupRealtime(io, docker, getLocalIP, getAppStatus) {
             console.log(`[realtime] ✅ Compte par défaut de ${id} créé (auto-réparation après readiness)`);
             // Best-effort : pré-créer le secret d'app (ex. clé API n8n), comme à l'install.
             try {
-              const aiSvc = require('./aiService');
+              const aiSvc = require('../ai/aiService');
               if (aiSvc && aiSvc.bootstrapAppSecret) return aiSvc.bootstrapAppSecret(id);
             } catch (_) { /* ignore */ }
           } else if (result === 'exists') {

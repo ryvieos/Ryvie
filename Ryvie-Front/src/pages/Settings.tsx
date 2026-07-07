@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import '../styles/Settings.css';
+import '../styles/pages/Settings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -12,7 +12,7 @@ import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode, testServerC
 import { useSocket } from '../contexts/SocketContext';
 import { getCurrentUserRole, getCurrentUser, startSession, isSessionActive, getSessionInfo, endSession } from '../utils/sessionManager';
 import StorageSettings from './StorageSettings';
-import AiSettings from '../components/AiSettings';
+import AiSettings from '../components/settings/AiSettings';
 import { useUpdate } from '../contexts/UpdateContext';
 import { useLanguage } from '../contexts/LanguageContext';
 

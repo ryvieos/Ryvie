@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import '../styles/InstallIndicator.css';
-import { useLanguage } from '../contexts/LanguageContext';
+import '../../styles/components/InstallIndicator.css';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 /**
  * Indicateur d'installation individuel pour une app

@@ -5,10 +5,10 @@ const path = require('path');
 const { exec } = require('child_process');
 const util = require('util');
 const axios = require('axios');
-const { NETBIRD_FILE, MANIFESTS_DIR } = require('../config/paths');
-const { syncNetbirdConfig } = require('../utils/syncNetbirdConfig');
-const reverseProxy = require('./reverseProxyService');
-const { composeUpWithRecovery } = require('./dockerService');
+const { NETBIRD_FILE, MANIFESTS_DIR } = require('../../config/paths');
+const { syncNetbirdConfig } = require('../../utils/syncNetbirdConfig');
+const reverseProxy = require('../system/reverseProxyService');
+const { composeUpWithRecovery } = require('../system/dockerService');
 
 const execPromise = util.promisify(exec);
 

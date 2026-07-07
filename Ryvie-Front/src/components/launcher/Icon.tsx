@@ -1,10 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { useDrag } from 'react-dnd';
-import axios from '../utils/setupAxios';
-import urlsConfig from '../config/urls';
-import { useLanguage } from '../contexts/LanguageContext';
-import AppSettingsModal from './AppSettingsModal';
+import axios from '../../utils/setupAxios';
+import urlsConfig from '../../config/urls';
+import { useLanguage } from '../../contexts/LanguageContext';
+import AppSettingsModal from '../modals/AppSettingsModal';
 
 const { getServerUrl } = urlsConfig;
 const ItemTypes = { ICON: 'icon' };

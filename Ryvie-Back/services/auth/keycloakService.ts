@@ -278,7 +278,7 @@ function ensureLdapOnNetwork(): void {
  */
 function startKeycloak(): void {
   console.log('[keycloak] 🚀 Démarrage de Keycloak...');
-  const { composeUpWithRecovery } = require('./dockerService');
+  const { composeUpWithRecovery } = require('../system/dockerService');
   const cmd = `docker compose -f "${DOCKER_COMPOSE_FILE}" --env-file "${KEYCLOAK_ENV_CODE}" up -d`;
   try {
     composeUpWithRecovery(cmd, { cwd: KEYCLOAK_CODE_DIR, timeout: 120000, label: 'keycloak' });

@@ -4,9 +4,9 @@ export {};
 
 const express = require('express');
 const router = express.Router();
-const { verifyToken, isAdmin } = require('../middleware/auth');
-const ai = require('../services/aiService');
-const claudeCli = require('../services/claudeCliService');
+const { verifyToken, isAdmin } = require('../../middleware/auth');
+const ai = require('../../services/ai/aiService');
+const claudeCli = require('../../services/ai/claudeCliService');
 
 function fail(res: any, error: any) {
   const status = error.status || 500;

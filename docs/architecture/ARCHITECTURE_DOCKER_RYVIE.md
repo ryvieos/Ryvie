@@ -279,12 +279,12 @@ Pour les scenarios de migration, le plan de pre-checks generique vise:
 ### Compose Docker a conserver
 
 - [Keycloak](../keycloak/docker-compose.yml) : compose present dans `/opt/Ryvie/keycloak/docker-compose.yml`
-- [Caddy](../docs/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/config/reverse-proxy/docker-compose.yml`
-- [LDAP](../docs/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/config/ldap/docker-compose.yml`
-- [rDrive](../docs/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/apps/rdrive/docker-compose.yml`
-- [rDrop](../docs/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/apps/rdrop/docker-compose.yml`
-- [rPictures](../docs/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/apps/rpictures/docker-compose.yml`
-- [rTransfer](../docs/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/apps/rtransfer/docker-compose.yml`
+- [Caddy](../docs/architecture/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/config/reverse-proxy/docker-compose.yml`
+- [LDAP](../docs/architecture/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/config/ldap/docker-compose.yml`
+- [rDrive](../docs/architecture/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/apps/rdrive/docker-compose.yml`
+- [rDrop](../docs/architecture/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/apps/rdrop/docker-compose.yml`
+- [rPictures](../docs/architecture/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/apps/rpictures/docker-compose.yml`
+- [rTransfer](../docs/architecture/ARCHITECTURE_DOCKER_RYVIE.md) : compose present dans `/data/apps/rtransfer/docker-compose.yml`
 
 ### Donnees a migrer absolument
 

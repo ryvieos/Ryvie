@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import '../styles/GridLauncher.css';
-import useGridLayout from '../hooks/useGridLayout';
-import useDrag from '../hooks/useDrag';
-import { GRID_CONFIG } from '../config/appConfig';
+import '../../styles/components/GridLauncher.css';
+import useGridLayout from '../../hooks/useGridLayout';
+import useDrag from '../../hooks/useDrag';
+import { GRID_CONFIG } from '../../config/appConfig';
 import Icon from './Icon';
 import WidgetAddButton from './WidgetAddButton';
-import CpuRamWidget from './widgets/CpuRamWidget';
-import StorageWidget from './widgets/StorageWidget';
-import WeatherWidget from './widgets/WeatherWidget';
-import '../styles/GridLauncher.css';
+import CpuRamWidget from '../widgets/CpuRamWidget';
+import StorageWidget from '../widgets/StorageWidget';
+import WeatherWidget from '../widgets/WeatherWidget';
+import '../../styles/components/GridLauncher.css';
 
 const GridLauncher = ({
   apps,

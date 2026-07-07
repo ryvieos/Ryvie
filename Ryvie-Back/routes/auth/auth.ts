@@ -3,10 +3,10 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const ldap = require('ldapjs');
 const jwt = require('jsonwebtoken');
-const { ensureConnected } = require('../redisClient');
-const ldapConfig = require('../config/ldap');
-const { createSafeClient, escapeLdapFilterValue, getUserRole, generateOpaqueUid } = require('../services/ldapService');
-const { verifyToken, isAdmin } = require('../middleware/auth');
+const { ensureConnected } = require('../../redisClient');
+const ldapConfig = require('../../config/ldap');
+const { createSafeClient, escapeLdapFilterValue, getUserRole, generateOpaqueUid } = require('../../services/auth/ldapService');
+const { verifyToken, isAdmin } = require('../../middleware/auth');
 const {
   getTokenExpirationSeconds,
   checkBruteForce,
@@ -14,9 +14,9 @@ const {
   clearFailedAttempts,
   signToken,
   allowlistToken,
-} = require('../services/authService');
-const { startApp } = require('../services/dockerService');
-const { listInstalledApps } = require('../services/appManagerService');
+} = require('../../services/auth/authService');
+const { startApp } = require('../../services/system/dockerService');
+const { listInstalledApps } = require('../../services/apps/appManagerService');
 
 const router = express.Router();
 

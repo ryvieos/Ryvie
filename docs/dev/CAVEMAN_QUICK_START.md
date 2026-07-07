@@ -118,7 +118,7 @@ Output: "Stop svcs → backup /data → new array → restore → fstab. 2-4h."
 Les gros fichiers de doc chargent des tokens à chaque session. Compressez-les :
 
 ```bash
-/caveman:compress /opt/Ryvie/docs/ARCHITECTURE_DOCKER_RYVIE.md
+/caveman:compress /opt/Ryvie/docs/architecture/ARCHITECTURE_DOCKER_RYVIE.md
 ```
 
 Résultat :

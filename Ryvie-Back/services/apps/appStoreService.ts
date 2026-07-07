@@ -5,10 +5,10 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const { EventEmitter } = require('events');
-const { STORE_CATALOG, RYVIE_DIR, MANIFESTS_DIR, APPS_DIR } = require('../config/paths');
-const { getLocalIP } = require('../utils/network');
+const { STORE_CATALOG, RYVIE_DIR, MANIFESTS_DIR, APPS_DIR } = require('../../config/paths');
+const { getLocalIP } = require('../../utils/network');
 // Importer compareVersions depuis updateCheckService pour un tri cohérent
-const { compareVersions } = require('./updateCheckService');
+const { compareVersions } = require('../updates/updateCheckService');
 
 // Configuration
 const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
@@ -20,7 +20,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const APPS_FILE = path.join(STORE_CATALOG, 'apps.json');
 const METADATA_FILE = path.join(STORE_CATALOG, 'metadata.json');
 // Snapshot des versions installées stocké dans /data/config (persistant aux mises à jour)
-const { FRONTEND_CONFIG_DIR } = require('../config/paths');
+const { FRONTEND_CONFIG_DIR } = require('../../config/paths');
 const APPS_VERSIONS_FILE = path.join(FRONTEND_CONFIG_DIR, 'apps-versions.json');
 
 // Metadata in memory
@@ -1306,7 +1306,7 @@ LOCAL_IP=${localIP}
     let proxyConfigData = null;
     try {
       console.log(`[Update] 🔍 Vérification de la configuration proxy pour ${appId}...`);
-      const reverseProxyService = require('./reverseProxyService');
+      const reverseProxyService = require('../system/reverseProxyService');
       const proxyConfigResult = await reverseProxyService.readAppProxyConfig(appId);
       
       if (proxyConfigResult.success && proxyConfigResult.proxy) {
@@ -1369,7 +1369,7 @@ LOCAL_IP=${localIP}
     
     // Invalider le cache des statuts pour forcer une mise à jour immédiate
     try {
-      const dockerService = require('./dockerService');
+      const dockerService = require('../system/dockerService');
       if (dockerService.clearAppStatusCache) {
         dockerService.clearAppStatusCache();
         console.log('[Update] 🔄 Cache des statuts invalidé');
@@ -1453,7 +1453,7 @@ LOCAL_IP=${localIP}
     try {
       const io = (global as any).io;
       if (io) {
-        const dockerService = require('./dockerService');
+        const dockerService = require('../system/dockerService');
         const apps = await dockerService.getAppStatus();
         io.emit('apps-status-update', apps);
         io.emit('appsStatusUpdate', apps);
@@ -1468,7 +1468,7 @@ LOCAL_IP=${localIP}
     console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
     try {
       console.log(`[Update] Régénération du manifest pour ${appId}...`);
-      const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
+      const manifestScript = path.join(RYVIE_DIR, 'scripts', 'generate-manifests.js');
       // Passer l'appId en paramètre pour ne générer que le manifest de cette app
       execSync(`node ${manifestScript} ${appId}`, { stdio: 'inherit' });
       console.log(`[Update] ✅ Manifest de ${appId} régénéré`);
@@ -1527,7 +1527,7 @@ LOCAL_IP=${localIP}
     // l'IA). No-op si l'app ne déclare pas `ai.hooks.bootstrap`. Non bloquant.
     currentStep = 'app-secret-bootstrap';
     try {
-      const aiSvc = require('./aiService');
+      const aiSvc = require('../ai/aiService');
       if (aiSvc.bootstrapAppSecret) await aiSvc.bootstrapAppSecret(appId);
     } catch (bootErr: any) {
       console.warn(`[Update] ⚠️ Bootstrap du secret d'app de ${appId}:`, bootErr.message);
@@ -1820,7 +1820,7 @@ async function initialize() {
   
   // Vérifier et mettre à jour le catalogue au démarrage
   try {
-    const { updateStoreCatalog } = require('./updateService');
+    const { updateStoreCatalog } = require('../updates/updateService');
     const result = await updateStoreCatalog();
     
     if (result.success && result.updated) {
@@ -2005,7 +2005,7 @@ async function purgeAppCompletely(appId) {
   // 7. Régénérer les manifests
   console.log(`[PurgeApp] 🔄 Régénération des manifests...`);
   try {
-    const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
+    const manifestScript = path.join(RYVIE_DIR, 'scripts', 'generate-manifests.js');
     execSync(`node ${manifestScript}`, { stdio: 'inherit' });
   } catch (e) {
     // Ignore
@@ -2025,7 +2025,7 @@ async function purgeAppCompletely(appId) {
 
   // 9. Diffuser les nouveaux statuts via Socket.IO
   try {
-    const dockerService = require('./dockerService');
+    const dockerService = require('../system/dockerService');
     if (dockerService.clearAppStatusCache) {
       dockerService.clearAppStatusCache();
     }
@@ -2220,7 +2220,7 @@ async function uninstallApp(appId) {
     // a besoin que l'app tourne encore. purgeApp s'auto-protège (no-op si pas d'IA)
     // et est best-effort : ne bloque jamais la désinstallation.
     try {
-      const aiService = require('./aiService');
+      const aiService = require('../ai/aiService');
       await aiService.purgeApp(appId);
     } catch (aiError: any) {
       console.warn(`[Uninstall] ⚠️ Purge du lien IA (LiteLLM): ${aiError.message}`);
@@ -2371,7 +2371,7 @@ async function uninstallApp(appId) {
     
     // 5c. Supprimer le client SSO si l'app en avait un (AVANT suppression du manifest)
     try {
-      const keycloakService = require('./keycloakService');
+      const keycloakService = require('../auth/keycloakService');
       if (keycloakService.removeAppSSOClient) {
         keycloakService.removeAppSSOClient(appId);
       }
@@ -2394,7 +2394,7 @@ async function uninstallApp(appId) {
     // 7. Régénérer les manifests pour mettre à jour la liste
     console.log('[Uninstall] 🔄 Régénération des manifests...');
     try {
-      const manifestScript = path.join(RYVIE_DIR, 'generate-manifests.js');
+      const manifestScript = path.join(RYVIE_DIR, 'scripts', 'generate-manifests.js');
       execSync(`node ${manifestScript}`, { stdio: 'inherit' });
       console.log('[Uninstall] ✅ Manifests régénérés');
     } catch (manifestError: any) {
@@ -2439,7 +2439,7 @@ async function uninstallApp(appId) {
     
     // Invalider le cache et diffuser les nouveaux statuts via Socket.IO
     try {
-      const dockerService = require('./dockerService');
+      const dockerService = require('../system/dockerService');
       if (dockerService.clearAppStatusCache) {
         dockerService.clearAppStatusCache();
       }
@@ -2489,7 +2489,7 @@ async function uninstallApp(appId) {
     // 11. Nettoyer la configuration Caddy en dernier (après notification frontend)
     console.log('[Uninstall] 🔍 Nettoyage de la configuration proxy...');
     try {
-      const reverseProxyService = require('./reverseProxyService');
+      const reverseProxyService = require('../system/reverseProxyService');
       
       // Régénérer le Caddyfile sans l'app désinstallée
       console.log('[Uninstall] 🔧 Mise à jour du Caddyfile...');

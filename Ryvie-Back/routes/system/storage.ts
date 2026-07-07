@@ -2,7 +2,7 @@ export {};
 const express = require('express');
 const router = express.Router();
 const { spawn } = require('child_process');
-const { authenticateToken, authenticateTokenOrFirstTime } = require('../middleware/auth');
+const { authenticateToken, authenticateTokenOrFirstTime } = require('../../middleware/auth');
 
 // Type for command execution result
 interface CommandResult {

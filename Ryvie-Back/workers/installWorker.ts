@@ -5,7 +5,7 @@
 
 export {}; // Make this file a module to avoid global scope conflicts
 
-const appStoreService = require('../services/appStoreService');
+const appStoreService = require('../services/apps/appStoreService');
 
 // Wrapper pour intercepter les événements de progression
 const originalProgressEmitter = appStoreService.progressEmitter;

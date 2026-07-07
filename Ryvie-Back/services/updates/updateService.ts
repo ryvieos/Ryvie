@@ -4,8 +4,8 @@ const path = require('path');
 const axios = require('axios');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
-const { APPS_DIR, RYVIE_DIR } = require('../config/paths');
-const { detectMode } = require('../utils/detectMode');
+const { APPS_DIR, RYVIE_DIR } = require('../../config/paths');
+const { detectMode } = require('../../utils/detectMode');
 const { getLatestGitHubTagViaGit } = require('./updateCheckService');
 require('dotenv').config();
 
@@ -429,7 +429,7 @@ async function fetchAppsFromRaw(tag) {
  * Met à jour le catalogue d'apps du store
  */
 async function updateStoreCatalog() {
-  const appStoreService = require('./appStoreService');
+  const appStoreService = require('../apps/appStoreService');
   const { checkStoreCatalogUpdate } = require('./updateCheckService');
   
   try {

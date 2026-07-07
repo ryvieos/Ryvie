@@ -4,7 +4,7 @@ import axios from 'axios';
 import urlsConfig from '../config/urls';
 const { getServerUrl, getCurrentLocation } = urlsConfig;
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
-import '../styles/ServerRestarting.css';
+import '../styles/pages/ServerRestarting.css';
 import ryvieLogo from '../icons/ryvielogo0.png';
 import { useLanguage } from '../contexts/LanguageContext';
 

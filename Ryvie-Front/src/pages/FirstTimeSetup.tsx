@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from '../utils/setupAxios';
 import { useNavigate } from 'react-router-dom';
-import '../styles/Login.css';
+import '../styles/pages/Login.css';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 import { getCurrentAccessMode } from '../utils/detectAccessMode';

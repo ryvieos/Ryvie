@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import '../styles/User.css';
+import '../styles/pages/User.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import urlsConfig from '../config/urls';

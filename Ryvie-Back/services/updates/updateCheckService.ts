@@ -2,8 +2,8 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { APPS_DIR, RYVIE_DIR } = require('../config/paths');
-const { detectMode } = require('../utils/detectMode');
+const { APPS_DIR, RYVIE_DIR } = require('../../config/paths');
+const { detectMode } = require('../../utils/detectMode');
 require('dotenv').config();
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -521,7 +521,7 @@ async function checkAllUpdates() {
  * Vérifie les mises à jour du catalogue d'apps du store
  */
 async function checkStoreCatalogUpdate() {
-  const appStoreService = require('./appStoreService');
+  const appStoreService = require('../apps/appStoreService');
   
   try {
     console.log('[updateCheck] Vérification de nouvelle release du catalogue...');

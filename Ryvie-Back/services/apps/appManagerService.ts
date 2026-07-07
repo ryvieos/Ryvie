@@ -4,8 +4,8 @@ const { execSync, exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 const Docker = require('dockerode');
-const { MANIFESTS_DIR, APPS_DIR } = require('../config/paths');
-const { getLocalIP } = require('../utils/network');
+const { MANIFESTS_DIR, APPS_DIR } = require('../../config/paths');
+const { getLocalIP } = require('../../utils/network');
 
 const docker = new Docker();
 
@@ -350,7 +350,7 @@ async function startApp(appId) {
       // Invalider le cache de statut pour refléter l'état immédiatement (require paresseux
       // car dockerService dépend déjà de ce module → évite un cycle de require).
       try {
-        const dockerService = require('./dockerService');
+        const dockerService = require('../system/dockerService');
         if (dockerService.clearAppStatusCache) {
           dockerService.clearAppStatusCache();
         }

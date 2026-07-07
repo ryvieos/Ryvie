@@ -1,5 +1,5 @@
 import React from 'react';
-import '../../styles/Widgets.css';
+import '../../styles/widgets/Widgets.css';
 
 interface WidgetRemoveButtonProps {
   id: string;

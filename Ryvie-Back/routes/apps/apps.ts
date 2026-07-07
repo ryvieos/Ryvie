@@ -2,12 +2,12 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
-const { verifyToken, hasPermission, isAdmin } = require('../middleware/auth');
-const { getAppStatus, startApp, stopApp, restartApp } = require('../services/dockerService');
-const appManager = require('../services/appManagerService');
-const appAccounts = require('../services/appAccountsService');
-const configEditor = require('../services/configEditorService');
-const publicExposure = require('../services/publicExposureService');
+const { verifyToken, hasPermission, isAdmin } = require('../../middleware/auth');
+const { getAppStatus, startApp, stopApp, restartApp } = require('../../services/system/dockerService');
+const appManager = require('../../services/apps/appManagerService');
+const appAccounts = require('../../services/apps/appAccountsService');
+const configEditor = require('../../services/apps/configEditorService');
+const publicExposure = require('../../services/apps/publicExposureService');
 
 // GET /api/apps - list applications and status
 router.get('/apps', async (req: any, res: any) => {

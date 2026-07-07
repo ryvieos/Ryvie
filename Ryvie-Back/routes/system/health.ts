@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const startupTracker = require('../services/startupTracker');
+const startupTracker = require('../../services/system/startupTracker');
 
 /**
  * GET /api/health - Health check endpoint

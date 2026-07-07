@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const os = require('os');
-const { AI_CONFIG_FILE } = require('../config/paths');
+const { AI_CONFIG_FILE } = require('../../config/paths');
 
 function getMasterKey(): string {
   try { return JSON.parse(fs.readFileSync(AI_CONFIG_FILE, 'utf8')).masterKey || ''; } catch (_) { return ''; }
