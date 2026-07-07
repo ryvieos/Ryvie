@@ -16,6 +16,17 @@ import AiSettings from '../components/settings/AiSettings';
 import { useUpdate } from '../contexts/UpdateContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
+// Arrondit un temps de réponse NetBird (ex. "2.082409ms") au dixième → "2.1ms".
+// Conserve l'unité renvoyée (ms/s/µs). Renvoie la valeur brute si non parsable.
+const formatLatency = (raw?: string | null): string => {
+  if (!raw) return '';
+  const m = String(raw).match(/([\d.]+)\s*(ms|µs|us|ns|s)?/i);
+  if (!m) return String(raw);
+  const num = parseFloat(m[1]);
+  if (isNaN(num)) return String(raw);
+  return `${num.toFixed(1)}${m[2] || 'ms'}`;
+};
+
 const Settings = () => {
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
@@ -2346,7 +2357,7 @@ const Settings = () => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '12px', color: isConnected ? '#4caf50' : '#9e9e9e', fontWeight: 500 }}>
                           <FontAwesomeIcon icon={faCircle} style={{ fontSize: '8px' }} />
                           {isConnected ? t('settings.vpnPeerConnected') : t('settings.vpnPeerDisconnected')}
-                          {peer.latency && peer.latency !== '0s' && <span style={{ color: '#999' }}>· {peer.latency}</span>}
+                          {peer.latency && peer.latency !== '0s' && <span style={{ color: '#999' }}>· {formatLatency(peer.latency)}</span>}
                         </div>
                       </div>
                     </div>

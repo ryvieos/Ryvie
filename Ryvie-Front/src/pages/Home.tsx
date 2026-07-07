@@ -28,6 +28,7 @@ import DefaultCredentialsModal from '../components/modals/DefaultCredentialsModa
 const WIDGET_CONFIGS = {
   'cpu-ram': { w: 2, h: 2 },
   'storage': { w: 2, h: 2 },
+  'devices': { w: 2, h: 2 },
   'weather': { w: 3, h: 2, fixedId: 'weather' }
 };
 

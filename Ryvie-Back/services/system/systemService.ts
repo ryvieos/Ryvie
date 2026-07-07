@@ -10,17 +10,47 @@ let serverInfoCache: any = null;
 let serverInfoCacheTime = 0;
 const CACHE_DURATION = 10000; // 10 secondes
 
-async function getServerInfo() {
-  // Retourner le cache si valide
-  const now = Date.now();
-  if (serverInfoCache && (now - serverInfoCacheTime) < CACHE_DURATION) {
-    return serverInfoCache;
+// Métriques temps réel (CPU + RAM) — peu coûteuses, calculées à CHAQUE appel.
+//  - CPU : charge moyenne sur l'intervalle depuis le dernier appel (si.currentLoad),
+//    bien plus représentative qu'un échantillon ponctuel de 1 s.
+//  - RAM : basée sur la mémoire DISPONIBLE (exclut le cache/buffers réclamables),
+//    comme `free`/htop — sinon on affiche ~100 % à cause du cache disque Linux.
+async function computeLiveMetrics() {
+  let ramUsagePercentage: string;
+  try {
+    const m = await si.mem();
+    const avail = (m.available != null ? m.available : m.free);
+    ramUsagePercentage = (((m.total - avail) / m.total) * 100).toFixed(1);
+  } catch (_) {
+    const totalRam = os.totalmem();
+    const freeRam = os.freemem();
+    ramUsagePercentage = (((totalRam - freeRam) / totalRam) * 100).toFixed(1);
   }
-  
-  // Sinon, calculer les infos
-  const totalRam = os.totalmem();
-  const freeRam = os.freemem();
-  const ramUsagePercentage = (((totalRam - freeRam) / totalRam) * 100).toFixed(1);
+
+  let cpuUsagePercentage: string;
+  try {
+    const load = await si.currentLoad();
+    cpuUsagePercentage = Number(load.currentLoad).toFixed(1);
+  } catch (_) {
+    cpuUsagePercentage = await new Promise(resolve => {
+      osutils.cpuUsage(u => resolve((u * 100).toFixed(1)));
+    });
+  }
+
+  return { cpu: `${cpuUsagePercentage}%`, ram: `${ramUsagePercentage}%` };
+}
+
+async function getServerInfo() {
+  const now = Date.now();
+
+  // CPU + RAM toujours frais (jamais cachés) : sinon la valeur reste figée 10 s
+  // et ne reflète pas l'état réel du système.
+  const live = await computeLiveMetrics();
+
+  // Le reste (disque, apps, utilisateurs, RAID) est coûteux → cache 10 s.
+  if (serverInfoCache && (now - serverInfoCacheTime) < CACHE_DURATION) {
+    return { ...serverInfoCache, ...live };
+  }
 
   const diskLayout = await si.diskLayout();
   const fsSizes = await si.fsSize();
@@ -102,10 +132,6 @@ async function getServerInfo() {
     };
   });
 
-  const cpuUsagePercentage = await new Promise(resolve => {
-    osutils.cpuUsage(u => resolve((u * 100).toFixed(1)));
-  });
-
   const result = {
     stockage: {
       utilise: `${totalUsed.toFixed(1)} GB`,
@@ -113,8 +139,7 @@ async function getServerInfo() {
       total: `${totalSize.toFixed(1)} GB`,
     },
     disques: disks,
-    cpu: `${cpuUsagePercentage}%`,
-    ram: `${ramUsagePercentage}%`,
+    ...live,
     activeUsers: activeUsersCount,
     totalApps: appsCount,
     raidDuplication: raidStatus,

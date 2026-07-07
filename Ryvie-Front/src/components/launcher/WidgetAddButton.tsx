@@ -6,12 +6,13 @@ import { useLanguage } from '../../contexts/LanguageContext';
 /**
  * Menu de sélection de widget rendu via portal
  */
-const WidgetMenuPortal = ({ x, y, onSelect, onClose }: { x: number; y: number; onSelect: (id: string) => void; onClose: () => void }) => {
+const WidgetMenuPortal = ({ x, bottom, onSelect, onClose }: { x: number; bottom: number; onSelect: (id: string) => void; onClose: () => void }) => {
   const { t } = useLanguage();
   const widgets = [
     { id: 'weather', name: t('widgetAddButton.weather.name'), icon: '🌤', description: t('widgetAddButton.weather.description') },
     { id: 'cpu-ram', name: t('widgetAddButton.cpuRam.name'), icon: '💻', description: t('widgetAddButton.cpuRam.description') },
-    { id: 'storage', name: t('widgetAddButton.storage.name'), icon: '💾', description: t('widgetAddButton.storage.description') }
+    { id: 'storage', name: t('widgetAddButton.storage.name'), icon: '💾', description: t('widgetAddButton.storage.description') },
+    { id: 'devices', name: t('widgetAddButton.devices.name'), icon: '📡', description: t('widgetAddButton.devices.description') }
   ];
 
   const menu = (
@@ -28,7 +29,7 @@ const WidgetMenuPortal = ({ x, y, onSelect, onClose }: { x: number; y: number; o
         style={{
           position: 'fixed',
           left: `${x}px`,
-          top: `${y}px`,
+          bottom: `${bottom}px`,
           zIndex: 10001,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -68,20 +69,19 @@ const WidgetMenuPortal = ({ x, y, onSelect, onClose }: { x: number; y: number; o
 const WidgetAddButton = ({ onAddWidget }: { onAddWidget: (widgetType: string) => void }) => {
   const { t } = useLanguage();
   const [showMenu, setShowMenu] = useState(false);
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const [menuPosition, setMenuPosition] = useState({ x: 0, bottom: 0 });
 
   const handleButtonClick = (e: React.MouseEvent) => {
     const button = e.currentTarget.getBoundingClientRect();
-    
-    // Positionner le menu au-dessus du bouton, aligné à droite
+
+    // Ancrer le menu par le BAS, juste au-dessus du bouton : il grandit vers le haut
+    // quel que soit le nombre de widgets (plus de hauteur codée en dur qui débordait).
     const menuWidth = 280;
-    const menuHeight = 200;
-    
     setMenuPosition({
-      x: button.right - menuWidth,
-      y: button.top - menuHeight - 10
+      x: Math.max(8, button.right - menuWidth),
+      bottom: Math.max(8, window.innerHeight - button.top + 10)
     });
-    
+
     setShowMenu(true);
   };
 
@@ -103,7 +103,7 @@ const WidgetAddButton = ({ onAddWidget }: { onAddWidget: (widgetType: string) =>
       {showMenu && (
         <WidgetMenuPortal
           x={menuPosition.x}
-          y={menuPosition.y}
+          bottom={menuPosition.bottom}
           onSelect={handleSelectWidget}
           onClose={() => setShowMenu(false)}
         />

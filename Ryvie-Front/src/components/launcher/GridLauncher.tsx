@@ -9,6 +9,7 @@ import WidgetAddButton from './WidgetAddButton';
 import CpuRamWidget from '../widgets/CpuRamWidget';
 import StorageWidget from '../widgets/StorageWidget';
 import WeatherWidget from '../widgets/WeatherWidget';
+import DevicesWidget from '../widgets/DevicesWidget';
 import '../../styles/components/GridLauncher.css';
 
 const GridLauncher = ({
@@ -608,6 +609,8 @@ const GridLauncher = ({
             switch (widget.type) {
               case 'cpu-ram':
                 return <CpuRamWidget {...commonProps} accessMode={accessMode} />;
+              case 'devices':
+                return <DevicesWidget {...commonProps} accessMode={accessMode} />;
               case 'storage':
                 return <StorageWidget {...commonProps} accessMode={accessMode} openSignal={widgetOpenSignals[widget.id] || 0} />;
               case 'weather':
