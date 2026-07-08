@@ -687,6 +687,7 @@
     "detected": "Détecté",
     "info": "Info",
     "noRaidDetected": "Aucun RAID mdadm détecté sur /data. Vous pouvez en créer un dans l'onglet Créer RAID.",
+    "vpsStorageInfo": "Stockage VPS/VM : /data est un volume Btrfs (snapshots activés). La gestion RAID n'est pas disponible sur ce type de machine.",
     "raidMdadmActive": "RAID mdadm actif",
     "state": "État",
     "members": "Membres",

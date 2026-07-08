@@ -1,7 +1,90 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---- Options ---------------------------------------------------------------
+# ============================================================================
+# snapshot.sh — snapshots SYSTÈME (tous les sous-volumes directs de /data).
+#
+# Le backend ne doit jamais appeler `btrfs` directement : il passe par ici.
+#
+#   snapshot.sh [--keep N]              crée un set de snapshots RO (+ code Ryvie)
+#   snapshot.sh delete-set <path>       supprime UN set de snapshots (sécurisé)
+#   snapshot.sh purge-orphans           supprime les sets orphelins au boot,
+#                                       en PRÉSERVANT apps/ (snapshots per-app)
+#                                       et backups/ (sauvegardes ryvie-backup.sh)
+# ============================================================================
+
+DATA_ROOT="/data"
+SNAP_ROOT="$DATA_ROOT/snapshot"
+
+# Sous-dossiers de /data/snapshot qui ne sont PAS des sets système et ne
+# doivent jamais être supprimés par delete-set / purge-orphans.
+RESERVED_SNAP_DIRS=("apps" "backups")
+
+is_reserved() {
+  local name="$1"
+  for r in "${RESERVED_SNAP_DIRS[@]}"; do
+    [[ "$name" == "$r" ]] && return 0
+  done
+  return 1
+}
+
+# Supprime un set (dossier contenant des sous-volumes enfants + archive code).
+delete_one_set() {
+  local set_path="$1"
+  [[ -d "$set_path" ]] || { echo "ℹ️  Déjà supprimé: $set_path"; return 0; }
+  # supprimer le backup de code éventuel
+  sudo rm -f "$set_path/ryvie-code.tar.gz" "$set_path/ryvie-version.txt" 2>/dev/null || true
+  # supprimer les sous-volumes enfants
+  if compgen -G "$set_path/*" > /dev/null; then
+    for child in "$set_path"/*; do
+      if sudo btrfs subvolume show "$child" &>/dev/null; then
+        sudo btrfs subvolume delete "$child" || true
+      else
+        sudo rm -rf "$child" || true
+      fi
+    done
+  fi
+  sudo rmdir "$set_path" 2>/dev/null || sudo rm -rf "$set_path" || true
+}
+
+# ---- Sous-commande: delete-set <path> --------------------------------------
+if [[ "${1:-}" == "delete-set" ]]; then
+  SET_PATH="${2:-}"
+  [[ -n "$SET_PATH" ]] || { echo "❌ Usage: $(basename "$0") delete-set <path>"; exit 1; }
+  case "$SET_PATH" in
+    "$SNAP_ROOT"/*) : ;;
+    *) echo "❌ Refus: $SET_PATH n'est pas sous $SNAP_ROOT"; exit 1 ;;
+  esac
+  [[ "$SET_PATH" == *".."* ]] && { echo "❌ Chemin invalide"; exit 1; }
+  if is_reserved "$(basename "$SET_PATH")"; then
+    echo "❌ Refus: $(basename "$SET_PATH") est un dossier réservé (apps/backups)"; exit 1
+  fi
+  echo "🗑️  Suppression du set de snapshots: $SET_PATH"
+  delete_one_set "$SET_PATH"
+  echo "✅ Set supprimé"
+  exit 0
+fi
+
+# ---- Sous-commande: purge-orphans ------------------------------------------
+# Remplace l'ancien cleanAllSnapshots() du backend, qui supprimait AVEUGLÉMENT
+# tout /data/snapshot/* (y compris apps/ et — désormais — backups/).
+if [[ "${1:-}" == "purge-orphans" ]]; then
+  echo "🧹 Purge des sets de snapshots système orphelins (apps/ et backups/ préservés)…"
+  if [[ -d "$SNAP_ROOT" ]]; then
+    for entry in "$SNAP_ROOT"/*; do
+      [[ -e "$entry" ]] || continue
+      name="$(basename "$entry")"
+      is_reserved "$name" && { echo "  • $name : préservé"; continue; }
+      [[ -d "$entry" ]] || continue
+      echo "  • $name : suppression"
+      delete_one_set "$entry"
+    done
+  fi
+  echo "✅ Purge terminée"
+  exit 0
+fi
+
+# ---- Options (création d'un set) -------------------------------------------
 KEEP=""   # ex: --keep 5  => garder 5 sets de snapshots
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -9,7 +92,7 @@ while [[ $# -gt 0 ]]; do
       KEEP="${2:-}"; shift 2 || true
       ;;
     -h|--help)
-      echo "Usage: $(basename "$0") [--keep N]"
+      echo "Usage: $(basename "$0") [--keep N] | delete-set <path> | purge-orphans"
       echo "Crée un set de snapshots RO pour tous les sous-volumes directs de /data (hors 'snapshot')."
       echo "Optionnel: --keep N  -> ne garder que les N derniers sets."
       exit 0
@@ -20,8 +103,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---- Pré-requis ------------------------------------------------------------
-DATA_ROOT="/data"
-SNAP_ROOT="$DATA_ROOT/snapshot"
 
 if [[ "$(findmnt -no FSTYPE "$DATA_ROOT")" != "btrfs" ]]; then
   echo "❌ $DATA_ROOT n'est pas en Btrfs."
@@ -149,23 +230,18 @@ if [[ -n "$KEEP" ]]; then
     exit 0
   fi
   echo "🧹 Rotation: garder $KEEP derniers sets dans $SNAP_ROOT"
-  # lister les sets (triés) et supprimer les plus anciens
-  mapfile -t SETS < <(ls -1d "$SNAP_ROOT"/* 2>/dev/null | sort)
+  # lister les sets (triés), en EXCLUANT les dossiers réservés (apps/, backups/)
+  mapfile -t SETS < <(
+    find "$SNAP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null \
+      | { grep -vxF -e apps -e backups || true; } | sort
+  )
   COUNT=${#SETS[@]}
   if (( COUNT > KEEP )); then
     TO_DEL=$(( COUNT - KEEP ))
     for ((i=0; i<TO_DEL; i++)); do
-      OLD="${SETS[$i]}"
+      OLD="$SNAP_ROOT/${SETS[$i]}"
       echo "   - suppression de $OLD"
-      # supprimer le backup du code Ryvie
-      if [[ -f "$OLD/ryvie-code.tar.gz" ]]; then
-        sudo rm -f "$OLD/ryvie-code.tar.gz" "$OLD/ryvie-version.txt" || true
-      fi
-      # supprimer les sous-volumes enfants d'abord
-      if compgen -G "$OLD/*" > /dev/null; then
-        sudo btrfs subvolume delete "$OLD"/* || true
-      fi
-      sudo rmdir "$OLD" 2>/dev/null || true
+      delete_one_set "$OLD"
     done
   else
     echo "   rien à supprimer ($COUNT set(s) présent(s))."

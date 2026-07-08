@@ -1,33 +1,25 @@
 # Guide : Ajouter une application à Keycloak SSO
 
-## 🚀 Méthode rapide : Script automatique
+## 🚀 Méthode recommandée : le backend Ryvie
 
-### Ajouter rPictures
-```bash
-cd /opt/Ryvie/keycloak
-./add-client.sh rpictures "rPictures Application" 3013
-```
+La création des clients OAuth des apps est **gérée automatiquement par le backend**
+(`Ryvie-Back/services/apps/appsOAuthService.ts` et `services/auth/keycloakService.ts`) :
+installer une app depuis l'App Store crée son client Keycloak et synchronise son
+secret au démarrage (`syncClientSecrets()`). Il n'y a normalement **rien à faire à
+la main**.
 
-### Ajouter une autre application
-```bash
-./add-client.sh <client-id> "<nom-application>" <port> [secret-optionnel]
-```
+Pour un client OAuth **hors App Store** (application tierce), deux options :
 
-**Exemple** :
-```bash
-./add-client.sh nextcloud "Nextcloud" 8080
-./add-client.sh jellyfin "Jellyfin Media Server" 8096
-```
-
-Le script va :
-1. ✅ Générer un secret aléatoire sécurisé
-2. ✅ Ajouter le client dans `/opt/Ryvie/keycloak/import/ryvie-realm.json`
-3. ✅ Afficher les variables d'environnement à utiliser
-
-### Appliquer les changements
-```bash
-docker compose -f /opt/Ryvie/keycloak/docker-compose.yml restart keycloak
-```
+1. **Éditer le realm JSON** (source de vérité), puis redémarrer le backend qui
+   applique et synchronise :
+   ```bash
+   # Ajouter le client dans la liste .clients :
+   #   /data/config/keycloak/import/ryvie-realm.json
+   pm2 restart ryvie-backend-prod   # (ou -dev)
+   ```
+2. **Via l'admin UI Keycloak** — voir la section « Interface admin » plus bas.
+   Pense ensuite à reporter le client dans le realm JSON, sinon la
+   synchronisation au démarrage l'écrasera.
 
 ---
 
@@ -258,28 +250,23 @@ La sync concerne **tous les clients custom** présents dans le realm JSON :
 | Client | Impacté ? | Pourquoi |
 |--------|-----------|----------|
 | `ryvie-dashboard` | Oui | Client principal du dashboard |
-| `ryvie-rpictures`, `ryvie-*` | Oui | Clients créés par `add-client-oauth.sh` |
+| `ryvie-rpictures`, `ryvie-*` | Oui | Clients d'apps créés par le backend (appsOAuthService) |
 | `account`, `admin-cli`, etc. | Non | Clients internes Keycloak (filtrés, pas de secret) |
 
 **C'est sans danger** : la sync écrit le **même secret** que celui déjà dans le realm JSON. Si le secret n'a pas changé en base, l'opération est un no-op fonctionnel (Keycloak re-hashe la même valeur).
 
 ### Quand un secret est modifié manuellement dans Keycloak
 
-Si vous changez un secret **uniquement via l'admin UI** sans mettre à jour le realm JSON, la sync **écrasera** ce changement au prochain démarrage du backend. Pour éviter ça :
+Si vous changez un secret **uniquement via l'admin UI** sans mettre à jour le realm JSON, la sync **écrasera** ce changement au prochain démarrage du backend. Pour éviter ça, mettez toujours à jour le realm JSON (`/data/config/keycloak/import/ryvie-realm.json`) après une modification dans l'admin UI, puis redémarrez le backend.
+
+### Forcer la synchronisation
+
+La synchronisation des secrets est faite par le backend au démarrage
+(`syncClientSecrets()`). Pour la relancer sans autre changement, il suffit de
+redémarrer le backend :
 
 ```bash
-# Toujours utiliser le script pour modifier un client :
-/opt/Ryvie/scripts/keycloak/add-client-oauth.sh <client-id> "<nom>" <port> [nouveau-secret]
-
-# Ou mettre à jour manuellement le realm JSON après modification dans l'admin UI
-```
-
-### Script de sync manuelle
-
-Un script shell est aussi disponible pour forcer la sync sans redémarrer le backend :
-
-```bash
-/opt/Ryvie/scripts/keycloak/sync-keycloak-secrets.sh
+pm2 restart ryvie-backend-prod   # (ou -dev)
 ```
 
 ### Vérification réseau LDAP

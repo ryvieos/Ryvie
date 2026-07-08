@@ -680,6 +680,7 @@
     "detected": "Detected",
     "info": "Info",
     "noRaidDetected": "No mdadm RAID detected on /data. You can create one in the Create RAID tab.",
+    "vpsStorageInfo": "VPS/VM storage: /data is a Btrfs volume (snapshots enabled). RAID management is not available on this kind of machine.",
     "raidMdadmActive": "mdadm RAID active",
     "state": "State",
     "members": "Members",

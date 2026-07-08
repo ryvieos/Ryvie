@@ -10,6 +10,10 @@ const { getLocalIP } = require('../../utils/network');
 // Importer compareVersions depuis updateCheckService pour un tri cohérent
 const { compareVersions } = require('../updates/updateCheckService');
 
+// Scripts Btrfs (le backend n'appelle jamais `btrfs` directement — tout passe par ces scripts)
+const SNAPSHOT_APP_SH = `${RYVIE_DIR}/scripts/snapshots/snapshot-app.sh`;
+const ROLLBACK_APP_SH = `${RYVIE_DIR}/scripts/snapshots/rollback-app.sh`;
+
 // Configuration
 const GITHUB_REPO = process.env.GITHUB_REPO || 'ryvieos/Ryvie-Apps';
 const repoUrl = `https://github.com/${GITHUB_REPO}.git`;
@@ -551,21 +555,13 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
     console.log(`[appStore] 📁 Sous-dossier cible détecté depuis le manifest: ${targetSubDir}`);
   }
   
-  // Créer un sous-volume Btrfs au lieu d'un simple dossier pour permettre les snapshots
+  // Créer un sous-volume Btrfs au lieu d'un simple dossier pour permettre les snapshots.
+  // Toute la logique Btrfs est déléguée à snapshot-app.sh (le backend n'appelle
+  // jamais `btrfs` directement). Le script est idempotent (crée ou corrige l'owner).
   try {
-    // Vérifier si le dossier existe déjà
-    try {
-      await fs.access(appDir);
-      console.log(`[appStore] ℹ️  Le dossier ${appDir} existe déjà`);
-      // S'assurer que le propriétaire est correct même si le dossier existe
-      execSync(`sudo chown ryvie:ryvie "${appDir}"`, { stdio: 'inherit' });
-    } catch {
-      // Le dossier n'existe pas, créer un sous-volume Btrfs
-      console.log(`[appStore] 📦 Création du sous-volume Btrfs: ${appDir}`);
-      execSync(`sudo btrfs subvolume create "${appDir}"`, { stdio: 'inherit' });
-      execSync(`sudo chown ryvie:ryvie "${appDir}"`);
-      console.log(`[appStore] ✅ Sous-volume Btrfs créé`);
-    }
+    console.log(`[appStore] 📦 Préparation du sous-volume Btrfs pour ${appId}`);
+    execSync(`sudo ${SNAPSHOT_APP_SH} create-subvolume "${appId}"`, { stdio: 'inherit' });
+    console.log(`[appStore] ✅ Sous-volume Btrfs prêt`);
   } catch (btrfsError: any) {
     // Si Btrfs échoue, annuler l'installation
     console.error(`[appStore] ❌ Impossible de créer un sous-volume Btrfs:`, btrfsError.message);
@@ -950,7 +946,7 @@ async function updateAppFromStore(appId) {
       sendProgressUpdate(appId, 3, 'Création du snapshot de sécurité...', 'snapshot');
       
       try {
-        const snapshotOutput = execSync(`sudo /opt/Ryvie/scripts/snapshots/snapshot-app.sh ${appId}`, { encoding: 'utf8' });
+        const snapshotOutput = execSync(`sudo ${SNAPSHOT_APP_SH} "${appId}"`, { encoding: 'utf8' });
         console.log(`[Update] Snapshot output: ${snapshotOutput.substring(0, 100)}...`);
         
         // Extraire le chemin du snapshot
@@ -1672,7 +1668,7 @@ LOCAL_IP=${localIP}
       console.log(`[Update] 🔎 Étape courante: ${currentStep}`);
       console.log('[Update] 🧹 Suppression du snapshot de sécurité...');
       try {
-        execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
+        execSync(`sudo ${SNAPSHOT_APP_SH} delete "${snapshotPath}"`, { stdio: 'inherit' });
         console.log('[Update] ✅ Snapshot supprimé');
       } catch (delError: any) {
         console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message , '. attention cela peut causer des problèmes à votre machine sur le long terme! Veuillez vérifier manuellement le sous-volume si nécessaire.' );
@@ -1704,22 +1700,11 @@ LOCAL_IP=${localIP}
       const targetDir = appDir || path.join(APPS_DIR, appId);
       console.error(`[Update] 🎯 Target dir pour rollback: ${targetDir}`);
       
-      // Vérifier que le snapshot existe bien
+      // Note: la validation d'existence du snapshot est faite par rollback-app.sh
+      // lui-même (il échoue proprement si le snapshot est absent/invalide).
       try {
-        const snapshotExists = execSync(`sudo btrfs subvolume show "${snapshotPath}"`, { 
-          encoding: 'utf8',
-          stdio: 'pipe'
-        });
-        console.error('[Update] ✅ Snapshot trouvé sur le système de fichiers');
-        console.error(`[Update] 📄 Snapshot info: ${snapshotExists.substring(0, 200)}...`);
-      } catch (checkError: any) {
-        console.error('[Update] ❌ Snapshot non trouvé:', checkError.message);
-        // Continuer quand même, le script rollback gérera l'erreur
-      }
-      
-      try {
-        console.error(`[Update] 🚀 Exécution du rollback: sudo /opt/Ryvie/scripts/snapshots/rollback-app.sh "${snapshotPath}" "${targetDir}"`);
-        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/snapshots/rollback-app.sh "${snapshotPath}" "${targetDir}"`, { 
+        console.error(`[Update] 🚀 Exécution du rollback: sudo ${ROLLBACK_APP_SH} "${snapshotPath}" "${targetDir}"`);
+        const rollbackOutput = execSync(`sudo ${ROLLBACK_APP_SH} "${snapshotPath}" "${targetDir}"`, {
           encoding: 'utf8',
           stdio: 'pipe'  // Capturer la sortie pour les logs
         });
@@ -1739,7 +1724,7 @@ LOCAL_IP=${localIP}
         // Supprimer le snapshot après rollback réussi
         try {
           console.error(`[Update] 🧹 Suppression du snapshot: ${snapshotPath}`);
-          execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
+          execSync(`sudo ${SNAPSHOT_APP_SH} delete "${snapshotPath}"`, { stdio: 'inherit' });
           console.error('[Update] 🧹 Snapshot supprimé après rollback');
         } catch (delError: any) {
           console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
@@ -1768,7 +1753,7 @@ LOCAL_IP=${localIP}
         // SUPPRIMER LE SNAPSHOT DANS TOUS LES CAS (même si rollback échoue)
         console.error(`[Update] 🧹 SUPPRESSION FORCÉE du snapshot: ${snapshotPath}`);
         try {
-          execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
+          execSync(`sudo ${SNAPSHOT_APP_SH} delete "${snapshotPath}"`, { stdio: 'inherit' });
           console.error('[Update] 🧹 Snapshot supprimé de force (sécurité)');
         } catch (delError: any) {
           console.error('[Update] ❌ CRITIQUE: Impossible de supprimer le snapshot:', delError.message);
@@ -2082,10 +2067,14 @@ async function forceCleanupCancelledInstall(appId) {
     if (isUpdate) {
       console.log(`[ForceCleanup] 🔄 MISE À JOUR annulée → Recherche du snapshot pour rollback...`);
       
-      // Chercher le snapshot le plus récent pour cette app
+      // Chercher le snapshot le plus récent pour cette app (via snapshot-app.sh,
+      // qui connaît le bon emplacement /data/snapshot/apps — l'ancien glob
+      // pointait sur /data/snapshots inexistant, le rollback ne se lançait jamais).
       try {
-        const snapshotsOutput = execSync(`ls -t /data/snapshots/${appId}-* 2>/dev/null | head -1`, { encoding: 'utf8' }).trim();
-        
+        const latestOut = execSync(`sudo ${SNAPSHOT_APP_SH} latest "${appId}"`, { encoding: 'utf8' });
+        const match = latestOut.match(/SNAPSHOT_PATH=(.+)/);
+        const snapshotsOutput = (match && match[1].trim() !== 'none') ? match[1].trim() : '';
+
         if (snapshotsOutput) {
           const snapshotPath = snapshotsOutput;
           console.log(`[ForceCleanup] 📸 Snapshot trouvé: ${snapshotPath}`);
@@ -2096,7 +2085,7 @@ async function forceCleanupCancelledInstall(appId) {
             execSync(`docker compose down 2>/dev/null || true`, { cwd: appDir, stdio: 'inherit' });
             
             // Exécuter le rollback
-            const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/snapshots/rollback-app.sh "${snapshotPath}" "${appDir}"`, { 
+            const rollbackOutput = execSync(`sudo ${ROLLBACK_APP_SH} "${snapshotPath}" "${appDir}"`, {
               encoding: 'utf8',
               stdio: 'pipe'
             });
@@ -2109,7 +2098,7 @@ async function forceCleanupCancelledInstall(appId) {
             
             // Supprimer le snapshot après rollback réussi
             try {
-              execSync(`sudo btrfs subvolume delete "${snapshotPath}"`, { stdio: 'inherit' });
+              execSync(`sudo ${SNAPSHOT_APP_SH} delete "${snapshotPath}"`, { stdio: 'inherit' });
               console.log(`[ForceCleanup] 🧹 Snapshot supprimé`);
             } catch (delError: any) {
               console.warn(`[ForceCleanup] ⚠️ Impossible de supprimer le snapshot:`, delError.message);

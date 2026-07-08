@@ -2,6 +2,7 @@ export {};
 const express = require('express');
 const router = express.Router();
 const { spawn } = require('child_process');
+const fs = require('fs');
 const { authenticateToken, authenticateTokenOrFirstTime } = require('../../middleware/auth');
 
 // Type for command execution result
@@ -67,6 +68,74 @@ async function executeCommandStrict(command: string, args: string[] = [], errorC
   }
   return result;
 }
+
+// ============================================================
+// Mode de stockage : 'appliance' (machine physique → gestion RAID)
+// ou 'vps' (VM/VPS, /data en Btrfs loopback → RAID désactivé).
+// Écrit par install.sh dans /data/config/system/storage-mode,
+// avec fallback par détection (device loop ou virtualisation).
+// ============================================================
+const STORAGE_MODE_FILE = '/data/config/system/storage-mode';
+let cachedStorageMode: string | null = null;
+
+async function getStorageMode(): Promise<string> {
+  if (cachedStorageMode) return cachedStorageMode;
+
+  // 1. Flag persisté par install.sh
+  try {
+    const mode = fs.readFileSync(STORAGE_MODE_FILE, 'utf8').trim();
+    if (mode === 'appliance' || mode === 'vps') {
+      cachedStorageMode = mode;
+      return mode;
+    }
+  } catch (e: any) {
+    // Fichier absent (installation antérieure) → détection automatique
+  }
+
+  // 2. /data monté depuis un device loop => image loopback => vps
+  //    /data monté depuis un RAID mdadm (/dev/mdX) => appliance (même en VM)
+  try {
+    const result = await executeCommand('findmnt', ['-no', 'SOURCE', '/data']);
+    const source = result.stdout.trim();
+    if (source.startsWith('/dev/loop')) {
+      cachedStorageMode = 'vps';
+      return 'vps';
+    }
+    if (/^\/dev\/md\d+/.test(source)) {
+      cachedStorageMode = 'appliance';
+      return 'appliance';
+    }
+  } catch (e: any) {}
+
+  // 3. Machine virtuelle => vps
+  try {
+    const result = await executeCommand('systemd-detect-virt', ['--quiet']);
+    if (result.exitCode === 0) {
+      cachedStorageMode = 'vps';
+      return 'vps';
+    }
+  } catch (e: any) {}
+
+  cachedStorageMode = 'appliance';
+  return 'appliance';
+}
+
+// Bloque toutes les opérations RAID (mdraid-*) hors mode appliance.
+// La consultation (GET, ex: mdraid-status) reste autorisée.
+router.use(async (req: any, res: any, next: any) => {
+  if (req.method === 'GET' || !req.path.startsWith('/storage/mdraid-')) {
+    return next();
+  }
+  const mode = await getStorageMode();
+  if (mode !== 'appliance') {
+    return res.status(403).json({
+      success: false,
+      error: 'La gestion RAID est désactivée sur ce système (mode VPS/VM)',
+      storageMode: mode
+    });
+  }
+  next();
+});
 
 /**
  * Valide qu'un chemin de device est sécurisé
@@ -1913,7 +1982,8 @@ router.get('/storage/mdraid-status', authenticateTokenOrFirstTime, async (req: a
       success: true,
       arrays,
       dataDevice,
-      count: arrays.length
+      count: arrays.length,
+      storageMode: await getStorageMode()
     });
   } catch (error: any) {
     console.error('Error fetching mdraid status:', error);

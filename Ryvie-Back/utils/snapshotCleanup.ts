@@ -1,8 +1,12 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
-const path = require('path');
+const { RYVIE_DIR } = require('../config/paths');
 
 const SNAPSHOT_PENDING_FILE = '/tmp/ryvie-snapshot-pending.txt';
+
+// Scripts snapshots système (le backend n'appelle jamais `btrfs` directement)
+const SNAPSHOT_SH = `${RYVIE_DIR}/scripts/snapshots/snapshot.sh`;
+const ROLLBACK_SH = `${RYVIE_DIR}/scripts/snapshots/rollback.sh`;
 
 /**
  * Enregistre un snapshot en attente de vérification
@@ -15,35 +19,14 @@ function registerPendingSnapshot(snapshotPath) {
 }
 
 /**
- * Nettoie tous les snapshots orphelins au démarrage
+ * Nettoie les sets de snapshots système orphelins au démarrage.
+ * Délègue à snapshot.sh purge-orphans, qui PRÉSERVE /data/snapshot/apps
+ * (snapshots per-app) et /data/snapshot/backups (sauvegardes ryvie-backup.sh).
  */
 function cleanAllSnapshots() {
-  const SNAPSHOT_DIR = '/data/snapshot';
-  
   try {
-    if (!fs.existsSync(SNAPSHOT_DIR)) {
-      return;
-    }
-    
-    const snapshots = fs.readdirSync(SNAPSHOT_DIR).filter(name => {
-      const fullPath = path.join(SNAPSHOT_DIR, name);
-      return fs.statSync(fullPath).isDirectory();
-    });
-    
-    if (snapshots.length > 0) {
-      console.log(`[SnapshotCleanup] 🧹 Nettoyage de ${snapshots.length} snapshot(s) orphelin(s)...`);
-      
-      for (const snapshot of snapshots) {
-        const snapshotPath = path.join(SNAPSHOT_DIR, snapshot);
-        try {
-          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
-          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
-          console.log(`[SnapshotCleanup] ✅ Snapshot supprimé: ${snapshot}`);
-        } catch (delError: any) {
-          console.error(`[SnapshotCleanup] ❌ Erreur lors de la suppression de ${snapshot}:`, delError.message);
-        }
-      }
-    }
+    console.log('[SnapshotCleanup] 🧹 Purge des sets de snapshots système orphelins...');
+    execSync(`sudo ${SNAPSHOT_SH} purge-orphans`, { stdio: 'inherit' });
   } catch (error: any) {
     console.error('[SnapshotCleanup] Erreur lors du nettoyage des snapshots:', error.message);
   }
@@ -76,8 +59,7 @@ function checkPendingSnapshots() {
           
           // Supprimer le snapshot
           try {
-            execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
-            execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+            execSync(`sudo ${SNAPSHOT_SH} delete-set "${snapshotPath}"`, { stdio: 'inherit' });
             console.log('[SnapshotCleanup] ✅ Snapshot supprimé avec succès');
             
             // Supprimer le fichier de tracking
@@ -90,7 +72,7 @@ function checkPendingSnapshots() {
           
           // Rollback
           try {
-            const rollbackOutput = execSync(`/opt/Ryvie/scripts/snapshots/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
+            const rollbackOutput = execSync(`sudo ${ROLLBACK_SH} --set "${snapshotPath}"`, { encoding: 'utf8' });
             console.log(rollbackOutput);
             console.log('[SnapshotCleanup] ✅ Rollback terminé');
             

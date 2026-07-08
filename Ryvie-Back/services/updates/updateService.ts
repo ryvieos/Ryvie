@@ -9,6 +9,10 @@ const { detectMode } = require('../../utils/detectMode');
 const { getLatestGitHubTagViaGit } = require('./updateCheckService');
 require('dotenv').config();
 
+// Scripts snapshots système (le backend n'appelle jamais `btrfs` directement)
+const SNAPSHOT_SH = `${RYVIE_DIR}/scripts/snapshots/snapshot.sh`;
+const ROLLBACK_SH = `${RYVIE_DIR}/scripts/snapshots/rollback.sh`;
+
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const TEMP_DIR = path.join(RYVIE_DIR, '.update-staging');
 
@@ -207,7 +211,7 @@ async function updateApp(appName) {
     console.log('[Update] 📸 Création du snapshot de sécurité...');
     sendUpdateProgress(appName, 5, 'Création du snapshot de sécurité...', 'snapshot');
     try {
-      const snapshotOutput = execSync('sudo /opt/Ryvie/scripts/snapshots/snapshot.sh', { encoding: 'utf8' });
+      const snapshotOutput = execSync(`sudo ${SNAPSHOT_SH}`, { encoding: 'utf8' });
       console.log(snapshotOutput);
       
       // Extraire le chemin du snapshot
@@ -332,8 +336,7 @@ async function updateApp(appName) {
     if (snapshotPath) {
       console.log('[Update] 🧹 Suppression du snapshot de sécurité...');
       try {
-        execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
-        execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+        execSync(`sudo ${SNAPSHOT_SH} delete-set "${snapshotPath}"`, { stdio: 'inherit' });
         console.log('[Update] ✅ Snapshot supprimé');
       } catch (delError: any) {
         console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);
@@ -356,14 +359,13 @@ async function updateApp(appName) {
     if (snapshotPath) {
       console.error('[Update] 🔄 Rollback en cours...');
       try {
-        const rollbackOutput = execSync(`sudo /opt/Ryvie/scripts/snapshots/rollback.sh --set "${snapshotPath}"`, { encoding: 'utf8' });
+        const rollbackOutput = execSync(`sudo ${ROLLBACK_SH} --set "${snapshotPath}"`, { encoding: 'utf8' });
         console.log(rollbackOutput);
         console.log('[Update] ✅ Rollback terminé');
-        
+
         // Supprimer le snapshot après rollback réussi
         try {
-          execSync(`sudo btrfs subvolume delete "${snapshotPath}"/* 2>/dev/null || true`, { stdio: 'inherit' });
-          execSync(`sudo rmdir "${snapshotPath}" 2>/dev/null || true`, { stdio: 'inherit' });
+          execSync(`sudo ${SNAPSHOT_SH} delete-set "${snapshotPath}"`, { stdio: 'inherit' });
           console.log('[Update] 🧹 Snapshot supprimé après rollback');
         } catch (delError: any) {
           console.warn('[Update] ⚠️ Impossible de supprimer le snapshot:', delError.message);

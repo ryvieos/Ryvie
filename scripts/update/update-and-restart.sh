@@ -303,35 +303,31 @@ update_status "health_check" "Vérification du démarrage" 80
 # Déterminer les processus et logs selon le mode
 if [[ "$MODE" == "dev" ]]; then
   BACKEND_PROCESS="ryvie-backend-dev"
-  FRONTEND_PROCESS="ryvie-frontend-dev"
   BACKEND_LOG="/data/logs/backend-dev-error.log"
-  BACKEND_OUT="/data/logs/backend-dev-out.log"
 else
   BACKEND_PROCESS="ryvie-backend-prod"
-  FRONTEND_PROCESS="ryvie-frontend-prod"
   BACKEND_LOG="/data/logs/backend-prod-error-0.log"
-  BACKEND_OUT="/data/logs/backend-prod-out-0.log"
 fi
 
 # Fonction de health check intelligent
 # Attend que le backend signale que TOUS ses services sont initialisés via /api/health/ready
 perform_health_check() {
   local max_wait=600  # Timeout de sécurité (10 minutes - Keycloak peut prendre du temps au premier démarrage)
-  local start_time=$(date +%s)
+  local start_time; start_time=$(date +%s)
   local check_interval=3
-  local health_check_start_timestamp=$(date '+%Y-%m-%dT%H:%M')
+  local health_check_start_timestamp; health_check_start_timestamp=$(date '+%Y-%m-%dT%H:%M')
   
   log "  Surveillance active (timeout sécurité: ${max_wait}s)..."
   log "  Attente que tous les services backend soient initialisés..."
   log "  Timestamp de référence: $health_check_start_timestamp"
   
   while true; do
-    local current_time=$(date +%s)
+    local current_time; current_time=$(date +%s)
     local elapsed=$((current_time - start_time))
     
     # 1. Vérifier les erreurs critiques dans les logs RÉCENTS uniquement
     if [[ -f "$BACKEND_LOG" ]]; then
-      local recent_errors=$(grep "$health_check_start_timestamp" "$BACKEND_LOG" 2>/dev/null | tail -n 50 || echo "")
+      local recent_errors; recent_errors=$(grep "$health_check_start_timestamp" "$BACKEND_LOG" 2>/dev/null | tail -n 50 || echo "")
       
       if [[ -n "$recent_errors" ]]; then
         # Erreurs critiques qui nécessitent un rollback immédiat
@@ -351,8 +347,8 @@ perform_health_check() {
     fi
     
     # 2. Vérifier le statut PM2
-    local backend_status=$(pm2 jlist 2>/dev/null | jq -r ".[] | select(.name==\"$BACKEND_PROCESS\") | .pm2_env.status" 2>/dev/null || echo "not_found")
-    local restart_count=$(pm2 jlist 2>/dev/null | jq -r ".[] | select(.name==\"$BACKEND_PROCESS\") | .pm2_env.restart_time" 2>/dev/null || echo "0")
+    local backend_status; backend_status=$(pm2 jlist 2>/dev/null | jq -r ".[] | select(.name==\"$BACKEND_PROCESS\") | .pm2_env.status" 2>/dev/null || echo "not_found")
+    local restart_count; restart_count=$(pm2 jlist 2>/dev/null | jq -r ".[] | select(.name==\"$BACKEND_PROCESS\") | .pm2_env.restart_time" 2>/dev/null || echo "0")
     
     # Processus en erreur ou arrêté
     if [[ "$backend_status" == "stopped" ]] || [[ "$backend_status" == "errored" ]]; then
@@ -369,7 +365,7 @@ perform_health_check() {
     # 3. Si le backend est online, vérifier la readiness complète via /api/health/ready
     if [[ "$backend_status" == "online" ]] && [[ $elapsed -ge 5 ]]; then
       if command -v curl >/dev/null 2>&1; then
-        local http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3002/api/health/ready 2>/dev/null || echo "000")
+        local http_code; http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3002/api/health/ready 2>/dev/null || echo "000")
         
         # 200 = tous les services sont initialisés (Keycloak, AppStore, etc.)
         if [[ "$http_code" == "200" ]]; then
@@ -407,7 +403,7 @@ perform_health_check() {
       log "  ⚠️  Timeout de sécurité atteint (${max_wait}s) - backend: $backend_status"
       if [[ "$backend_status" == "online" ]]; then
         # Vérifier une dernière fois si le backend répond au moins sur /api/health
-        local fallback_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3002/api/health 2>/dev/null || echo "000")
+        local fallback_code; fallback_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3002/api/health 2>/dev/null || echo "000")
         if [[ "$fallback_code" == "200" ]]; then
           log "  ⚠️  Backend répond sur /api/health mais pas encore ready - on continue quand même"
           log "  ℹ️  Certains services peuvent encore être en cours d'initialisation"

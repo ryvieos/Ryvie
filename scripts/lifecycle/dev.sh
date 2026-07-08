@@ -33,12 +33,12 @@ echo "ℹ️  netbird-data.json sera synchronisé automatiquement au démarrage 
 
 # Installer les dépendances backend
 echo "📦 Installation des dépendances backend..."
-cd /opt/Ryvie/Ryvie-Back
+cd /opt/Ryvie/Ryvie-Back || exit 1
 npm install
 
 # Installer les dépendances frontend
 echo "📦 Installation des dépendances frontend..."
-cd /opt/Ryvie/Ryvie-Front
+cd /opt/Ryvie/Ryvie-Front || exit 1
 npm install
 
 # Générer les fichiers de configuration frontend
@@ -47,7 +47,7 @@ bash /opt/Ryvie/scripts/lifecycle/generate-frontend-config.sh
 
 # Build initial du backend (nécessaire pour nodemon)
 echo "📦 Build initial du backend..."
-cd /opt/Ryvie/Ryvie-Back
+cd /opt/Ryvie/Ryvie-Back || exit 1
 npm run build
 
 # Démarrer les processus dev
