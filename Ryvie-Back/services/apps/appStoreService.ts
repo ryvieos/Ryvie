@@ -1077,24 +1077,51 @@ async function updateAppFromStore(appId) {
         throw new Error(`Aucun fichier docker-compose trouvé`);
       }
       
-      // Générer le fichier .env avec LOCAL_IP avant de lancer docker compose
+      // Générer le fichier .env avec LOCAL_IP + PUID/PGID avant de lancer docker compose.
+      // PUID/PGID = propriétaire de /data (= utilisateur applicatif « ryvie », quel que
+      // soit son UID réel : 1000 sur une appliance, autre chose si un compte humain a
+      // pris 1000 en premier). Les conteneurs qui tournent en user fixe non-root
+      // (n8n, twenty, hermes…) s'appuient dessus pour écrire leurs bind-mounts sans
+      // conflit de permissions — sinon crash-loop « Permission denied » (même cause que
+      // la régression OpenLDAP). Fallback 1000 → comportement inchangé sur les appliances.
       const envPath = path.join(appDir, '.env');
       const localIP = getLocalIP();
-      
+      let dataUid = 1000, dataGid = 1000;
+      try {
+        const st = fsSync.statSync('/data');
+        dataUid = st.uid;
+        dataGid = st.gid;
+      } catch {
+        console.warn('[Update] ⚠️ Propriétaire de /data illisible, PUID/PGID=1000 par défaut');
+      }
+
       try {
         // Vérifier si un .env existe déjà
         await fs.access(envPath);
         console.log('[Update] ✅ Fichier .env déjà présent');
+        // S'assurer que PUID/PGID y figurent (apps mises à jour / .env préexistant)
+        const existing = await fs.readFile(envPath, 'utf8');
+        let toAppend = '';
+        if (!/^PUID=/m.test(existing)) toAppend += `PUID=${dataUid}\n`;
+        if (!/^PGID=/m.test(existing)) toAppend += `PGID=${dataGid}\n`;
+        if (toAppend) {
+          await fs.writeFile(envPath, existing.replace(/\n?$/, '\n') + toAppend);
+          console.log(`[Update] ✅ PUID/PGID ajoutés au .env existant (${dataUid}:${dataGid})`);
+        }
       } catch {
-        // Créer le fichier .env avec LOCAL_IP
+        // Créer le fichier .env avec LOCAL_IP + PUID/PGID
         const envContent = `# Fichier .env généré automatiquement par Ryvie
 # Ne pas modifier manuellement - sera régénéré lors des mises à jour
 
 # IP locale du serveur
 LOCAL_IP=${localIP}
+
+# Propriétaire des bind-mounts (= utilisateur applicatif ryvie)
+PUID=${dataUid}
+PGID=${dataGid}
 `;
         await fs.writeFile(envPath, envContent);
-        console.log(`[Update] ✅ Fichier .env créé avec LOCAL_IP=${localIP}`);
+        console.log(`[Update] ✅ Fichier .env créé (LOCAL_IP=${localIP}, PUID=${dataUid}, PGID=${dataGid})`);
       }
       
       // Déterminer le dossier de travail et le fichier compose
