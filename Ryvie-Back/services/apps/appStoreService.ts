@@ -630,39 +630,58 @@ async function downloadAppFromRepoArchive(release, appId, existingManifest = nul
       const progressPercent = 5 + (i / allFiles.length) * 60;
       sendProgressUpdate(appId, progressPercent, `Téléchargement: ${filePath}...`, 'download');
       
-      try {
-        // Construire l'URL raw
-        const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${tag}/${appId}/${filePath}`;
-        
-        // Télécharger le fichier
-        const fileResponse = await axios.get(rawUrl, {
-          responseType: 'arraybuffer',
-          headers: { 'User-Agent': 'Ryvie-App-Store' },
-          timeout: 300000
-        });
-        
-        // Construire le chemin local (dans le sous-dossier si spécifié)
-        const localFilePath = targetSubDir 
-          ? path.join(appDir, targetSubDir, filePath)
-          : path.join(appDir, filePath);
-        
-        // Créer le répertoire si nécessaire
-        const localDir = path.dirname(localFilePath);
-        if (!fsSync.existsSync(localDir)) {
-          await fs.mkdir(localDir, { recursive: true });
+      // Téléchargement d'un fichier avec RÉESSAIS : une erreur transitoire (blip
+      // réseau, rate-limit GitHub 403/429, 5xx, timeout) sur un seul fichier ne doit
+      // PAS avorter toute la mise à jour. On retente jusqu'à 4 fois avec backoff.
+      // Un 404 reste un "fichier absent" légitime -> on passe au suivant sans retenter.
+      const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${tag}/${appId}/${filePath}`;
+      const MAX_ATTEMPTS = 4;
+      let handled = false;      // téléchargé OU absent (404) -> traité
+      let lastError: any = null;
+
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const fileResponse = await axios.get(rawUrl, {
+            responseType: 'arraybuffer',
+            headers: { 'User-Agent': 'Ryvie-App-Store' },
+            timeout: 300000
+          });
+
+          // Construire le chemin local (dans le sous-dossier si spécifié)
+          const localFilePath = targetSubDir
+            ? path.join(appDir, targetSubDir, filePath)
+            : path.join(appDir, filePath);
+
+          // Créer le répertoire si nécessaire
+          const localDir = path.dirname(localFilePath);
+          if (!fsSync.existsSync(localDir)) {
+            await fs.mkdir(localDir, { recursive: true });
+          }
+
+          // Sauvegarder le fichier
+          await fs.writeFile(localFilePath, fileResponse.data);
+          downloadedCount++;
+          handled = true;
+          console.log(`[appStore] ✅ ${filePath} téléchargé${attempt > 1 ? ` (tentative ${attempt})` : ''}`);
+          break;
+        } catch (error: any) {
+          // 404 = fichier réellement absent : légitime, on ne retente pas.
+          if (error.response?.status === 404) {
+            console.log(`[appStore] ⚠️ Fichier ${filePath} non trouvé (404), passage au suivant`);
+            handled = true;
+            break;
+          }
+          lastError = error;
+          console.warn(`[appStore] ⚠️ Échec téléchargement de ${filePath} (tentative ${attempt}/${MAX_ATTEMPTS}): ${error.message}`);
+          // Backoff progressif avant de retenter (1s, 2s, 3s), sauf après la dernière.
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise((r) => setTimeout(r, 1000 * attempt));
+          }
         }
-        
-        // Sauvegarder le fichier
-        await fs.writeFile(localFilePath, fileResponse.data);
-        downloadedCount++;
-        
-        console.log(`[appStore] ✅ ${filePath} téléchargé`);
-      } catch (error: any) {
-        console.error(`[appStore] ❌ Erreur lors du téléchargement de ${filePath}:`, error.message);
-        if (error.response?.status === 404) {
-          console.log(`[appStore] ⚠️ Fichier ${filePath} non trouvé, passage au suivant`);
-          continue;
-        }
+      }
+
+      if (!handled) {
+        console.error(`[appStore] ❌ Échec définitif du téléchargement de ${filePath} après ${MAX_ATTEMPTS} tentatives:`, lastError?.message);
         throw new Error(`Échec du téléchargement de ${filePath}`);
       }
     }
@@ -1095,20 +1114,25 @@ async function updateAppFromStore(appId) {
         console.warn('[Update] ⚠️ Propriétaire de /data illisible, PUID/PGID=1000 par défaut');
       }
 
-      try {
-        // Vérifier si un .env existe déjà
-        await fs.access(envPath);
+      // Reader/writer résilients : le .env peut appartenir à root (généré par
+      // install.sh lors de la 1re installation) alors que le backend tourne en
+      // utilisateur applicatif (ryvie, non-root). writeEnvFile bascule sur `sudo cp`
+      // si l'écriture directe est refusée (EACCES/EPERM) — sinon la mise à jour
+      // échouait ici en tentant d'ajouter PUID/PGID à un .env root (cf. n8n).
+      const { readEnvFile, writeEnvFile } = require('./appEnvService');
+
+      if (fsSync.existsSync(envPath)) {
         console.log('[Update] ✅ Fichier .env déjà présent');
         // S'assurer que PUID/PGID y figurent (apps mises à jour / .env préexistant)
-        const existing = await fs.readFile(envPath, 'utf8');
+        const existing = readEnvFile(envPath);
         let toAppend = '';
         if (!/^PUID=/m.test(existing)) toAppend += `PUID=${dataUid}\n`;
         if (!/^PGID=/m.test(existing)) toAppend += `PGID=${dataGid}\n`;
         if (toAppend) {
-          await fs.writeFile(envPath, existing.replace(/\n?$/, '\n') + toAppend);
+          writeEnvFile(envPath, existing.replace(/\n?$/, '\n') + toAppend);
           console.log(`[Update] ✅ PUID/PGID ajoutés au .env existant (${dataUid}:${dataGid})`);
         }
-      } catch {
+      } else {
         // Créer le fichier .env avec LOCAL_IP + PUID/PGID
         const envContent = `# Fichier .env généré automatiquement par Ryvie
 # Ne pas modifier manuellement - sera régénéré lors des mises à jour
@@ -1120,7 +1144,7 @@ LOCAL_IP=${localIP}
 PUID=${dataUid}
 PGID=${dataGid}
 `;
-        await fs.writeFile(envPath, envContent);
+        writeEnvFile(envPath, envContent);
         console.log(`[Update] ✅ Fichier .env créé (LOCAL_IP=${localIP}, PUID=${dataUid}, PGID=${dataGid})`);
       }
       

@@ -940,6 +940,7 @@
       "completedUpdate": "✅ Mise à jour de {appName} terminée avec succès !",
       "installationLogs": "Logs d'installation",
       "cancelInstallation": "Annuler l'installation",
+      "cannotCancelUpdate": "Une mise à jour ne peut pas être annulée (cela supprimerait l'application).",
       "installLimitNearlyReached": "Limite d'installations presque atteinte",
       "installLimitMessage": "Seulement {remaining} installation{remaining, plural, =1 {} other{s}} possible{remaining, plural, =1 {} other{s}} restante{remaining, plural, =1 {} other{s}} cette heure. Réinitialisation dans {minutes} minute{minutes, plural, =1 {} other{s}}.",
       "noAppsFound": "Aucune application trouvée",

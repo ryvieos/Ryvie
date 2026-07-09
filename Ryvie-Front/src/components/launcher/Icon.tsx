@@ -5,6 +5,7 @@ import axios from '../../utils/setupAxios';
 import urlsConfig from '../../config/urls';
 import { useLanguage } from '../../contexts/LanguageContext';
 import AppSettingsModal from '../modals/AppSettingsModal';
+import { useAppTransition } from './useAppTransition';
 
 const { getServerUrl } = urlsConfig;
 const ItemTypes = { ICON: 'icon' };
@@ -39,9 +40,13 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   const appConfig = appsConfig[id] || {};
   const [imgSrc, setImgSrc] = React.useState(src);
   const [imgError, setImgError] = React.useState(false);
+  // pendingAction ne sert plus QUE pour l'exposition d'adresse publique ('exposing').
+  // start / stop / restart / reset passent désormais par useAppTransition (op).
   const [pendingAction, setPendingAction] = React.useState(null);
-  // Plancher de durée du spinner de réinitialisation d'accès (10 s minimum)
-  const [resetMinElapsed, setResetMinElapsed] = React.useState(true);
+  // Machine à états unifiée des transitions start/stop/restart/reset. Le spinner
+  // (op != null) n'est piloté QUE par le cycle de vie de l'opération (confirmation
+  // backend + plancher), jamais par le statut socket brut.
+  const { op, begin: beginTransition } = useAppTransition({ id, setAppStatus, refreshDesktopIcons });
   // Spinner d'exposition (création/suppression d'adresse publique) :
   // - exposureMinElapsed : ≥10 s écoulées (plancher anti-flash)
   // - exposureSettled : le backend a CONFIRMÉ que l'app est de nouveau joignable
@@ -51,8 +56,6 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   const [exposureSettled, setExposureSettled] = React.useState(true);
   const [isUninstalling, setIsUninstalling] = React.useState(false);
   const isProcessingMenuActionRef = React.useRef(false);
-  // Résultat d'un reset d'accès en attente d'affichage (montré quand le spinner s'arrête)
-  const resetResultRef = React.useRef<any>(null);
   const [confirmModal, setConfirmModal] = React.useState({ show: false, type: '', title: '', message: '', onConfirm: null });
   const [settingsModalOpen, setSettingsModalOpen] = React.useState(false);
 
@@ -75,29 +78,12 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
     setImgError(false);
   }, [src]);
   
-  React.useEffect(() => {
-    if (pendingAction === 'stopping' && appStatusData?.status === 'stopped') {
-      setPendingAction(null);
-    } else if (pendingAction === 'starting' && appStatusData?.status === 'running') {
-      setPendingAction(null);
-    } else if (pendingAction === 'resetting' && appStatusData?.status === 'running' && resetMinElapsed) {
-      // Reset : le spinner s'arrête quand l'app est RÉELLEMENT "running" (accessible)
-      // ET qu'au moins 10 s se sont écoulées (plancher). Sûr car on pose un statut
-      // optimiste "starting" au début (sinon ça couperait tout de suite).
-      setPendingAction(null);
-      // La notif « Accès réinitialisé » s'affiche PILE maintenant (spinner arrêté).
-      const r = resetResultRef.current;
-      if (r) {
-        resetResultRef.current = null;
-        setConfirmModal({ show: true, type: 'success', title: r.title, message: r.message, onConfirm: () => closeModal() } as any);
-      }
-    }
-    // L'arrêt du spinner d'exposition n'est PAS géré ici : le statut socket est
-    // trop tardif (rafraîchi ≤30 s, et seulement sur changement) pour voir le
-    // bref passage hors-ligne du redémarrage → on s'appuie sur la confirmation
-    // backend (exposureSettled), cf. l'effet dédié plus bas.
-  }, [appStatusData?.status, pendingAction, resetMinElapsed]);
-  
+  // NB : plus aucun effet ne coupe le spinner en fonction du statut socket. C'était
+  // la cause du bug (un "running" périmé d'avant le redémarrage arrêtait le spinner,
+  // puis l'icône grisait). Les transitions start/stop/restart/reset sont désormais
+  // terminées par useAppTransition (confirmation backend + plancher). L'exposition
+  // garde son effet dédié (gate backend exposureSettled) plus bas.
+
   const handleImageError = () => {
     if (imgError) return;
     setImgError(true);
@@ -132,8 +118,8 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
   // installation), qui ressemblerait à tort à un redémarrage.
   const isTransitioning = !isInstalling && appConfig.showStatus && (
     isUninstalling ||
-    pendingAction === 'starting' || pendingAction === 'stopping' ||
-    pendingAction === 'resetting' || pendingAction === 'exposing'
+    op !== null ||                 // start / stop / restart / reset (useAppTransition)
+    pendingAction === 'exposing'   // exposition d'adresse publique
   );
 
   // App arrêtée -> grise fixe
@@ -285,7 +271,8 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
     }
     uninstallInProgress.add(appId);
 
-    setPendingAction('stopping');
+    // Le spinner de désinstallation est piloté par isUninstalling (cf. isTransitioning) ;
+    // il persiste jusqu'à ce que l'icône disparaisse (événement app-uninstalled).
     setIsUninstalling(true);
     
     try {
@@ -442,52 +429,40 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
       title: t('icon.resetAccessTitle').replace('{appName}', appName),
       message: t('icon.resetAccessMessage'),
       confirmLabel: t('icon.resetAccess'),
-      onConfirm: async () => {
+      onConfirm: () => {
         setConfirmModal({ show: false, type: '', title: '', message: '', onConfirm: null });
-        // Spinner + statut optimiste "starting" (comme un redémarrage) : le spinner
-        // restera tant que l'app n'est pas réellement revenue "running" (accessible)
-        // ET au moins 10 s (plancher, pour éviter un flash trop court).
-        setPendingAction('resetting');
-        setResetMinElapsed(false);
-        setTimeout(() => setResetMinElapsed(true), 10000);
-        if (setAppStatus) {
-          setAppStatus((prev: any) => ({ ...prev, [id]: { ...(prev?.[id] || {}), status: 'starting', progress: 50 } }));
-        }
-
-        try {
-          const serverUrl = getServerUrl(accessMode);
-          const res = await axios.post(`${serverUrl}/api/apps/${appId}/reset-owner`, {}, { _noAuthRedirect: true });
-          // Succès : on N'AFFICHE PAS la notif tout de suite. On la mémorise et elle
-          // sera montrée PILE quand le spinner s'arrêtera (app de retour "running").
-          resetResultRef.current = { title: t('icon.resetAccessDone'), message: res.data?.message || '' };
-          // Rafraîchir le statut en rafale ; l'effet coupe le spinner quand c'est prêt.
-          if (refreshDesktopIcons) {
-            [0, 2000, 5000, 10000, 20000, 35000, 55000].forEach((ms) =>
-              setTimeout(() => { try { refreshDesktopIcons(); } catch (_) {} }, ms)
+        // Transition unifiée : statut optimiste "starting", plancher 10 s, et arrêt du
+        // spinner UNIQUEMENT quand la route /reset-owner répond (elle attend que l'app
+        // soit revenue saine). La notif « Accès réinitialisé » s'affiche pile à la fin.
+        beginTransition('reset', {
+          optimisticStatus: 'starting',
+          optimisticProgress: 50,
+          terminalStatus: 'running',
+          minFloorMs: 10000,
+          safetyMs: 130000,
+          run: async () => {
+            const serverUrl = getServerUrl(accessMode);
+            // timeout 120 s explicite : la route attend l'app saine (défaut axios = 30 s).
+            const res = await axios.post(
+              `${serverUrl}/api/apps/${appId}/reset-owner`, {},
+              { _noAuthRedirect: true, timeout: 120000 }
             );
-          }
-          // Filet de sécurité : si "running" n'est jamais détecté, on coupe le spinner
-          // et on affiche quand même la notif au bout de 90 s.
-          setTimeout(() => {
-            setPendingAction(null);
-            const r = resetResultRef.current;
-            if (r) {
-              resetResultRef.current = null;
-              setConfirmModal({ show: true, type: 'success', title: r.title, message: r.message, onConfirm: () => closeModal() } as any);
+            return { title: t('icon.resetAccessDone'), message: res.data?.message || '' };
+          },
+          onDone: (result) => {
+            if (result) {
+              setConfirmModal({ show: true, type: 'success', title: result.title, message: result.message, onConfirm: () => closeModal() } as any);
             }
-          }, 90000);
-        } catch (e) {
-          // Erreur : on coupe le spinner et on affiche l'erreur immédiatement.
-          resetResultRef.current = null;
-          setConfirmModal({
-            show: true, type: 'error',
-            title: t('icon.error'),
-            message: e?.response?.data?.error || String(e?.message || ''),
-            onConfirm: () => closeModal(),
-          });
-          setPendingAction(null);
-          if (refreshDesktopIcons) { try { refreshDesktopIcons(); } catch (_) {} }
-        }
+          },
+          onError: (e: any) => {
+            setConfirmModal({
+              show: true, type: 'error',
+              title: t('icon.error'),
+              message: e?.response?.data?.error || String(e?.message || ''),
+              onConfirm: () => closeModal(),
+            });
+          },
+        });
       },
     });
   };
@@ -538,126 +513,71 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
       return;
     }
     
-    // Définir l'action en cours (pour l'affichage du badge)
-    if (action === 'stop') {
-      setPendingAction('stopping');
-    } else if (action === 'start' || action === 'restart') {
-      setPendingAction('starting');
-    } else if (action === 'uninstall') {
-      // On garde le badge en mode "arrêt" mais on ne touche pas à appStatus global
-      setPendingAction('stopping');
-      setIsUninstalling(true);
-    }
-    
-    // Mise à jour optimiste du statut (avant l'appel API)
-    if (setAppStatus) {
-      setAppStatus(prevStatus => {
-        const newStatus = { ...prevStatus };
-        
-        if (action === 'stop') {
-          console.log(`[Icon] ⏹️  ${appName} - Mise à jour optimiste: partial (arrêt en cours)`);
-          newStatus[appKey] = {
-            ...newStatus[appKey],
-            status: 'partial',
-            progress: 50
-          };
-        } else if (action === 'start' || action === 'restart') {
-          console.log(`[Icon] ▶️  ${appName} - Mise à jour optimiste: starting`);
-          newStatus[appKey] = {
-            ...newStatus[appKey],
-            status: 'starting',
-            progress: 50
-          };
-        }
-        
-        return newStatus;
-      });
-    }
-    
-    // Appel API vers le backend
-    try {
-      const serverUrl = getServerUrl(accessMode);
-      
-      // Gestion spéciale du restart: tenter /restart, sinon fallback stop+start
-      if (action === 'restart') {
-        const restartUrl = `${serverUrl}/api/apps/${appId}/restart`;
-        console.log(`[Icon] 📡 POST ${restartUrl}`);
-        try {
-          const resp = await axios.post(restartUrl, {}, { timeout: 120000, headers: { 'Content-Type': 'application/json' } });
-          console.log('[Icon] ✅ restart terminé avec succès', resp.data);
-        } catch (err) {
-          const status = err?.response?.status;
-          console.warn(`[Icon] ⚠️  /restart indisponible (status ${status}). Fallback stop+start`);
-          // Fallback: stop puis start séquentiels
-          const stopUrl = `${serverUrl}/api/apps/${appId}/stop`;
-          console.log(`[Icon] 📡 POST ${stopUrl}`);
-          await axios.post(stopUrl, {}, { timeout: 120000, headers: { 'Content-Type': 'application/json' } });
-          // Mise à jour optimiste: partial
-          if (setAppStatus) {
-            setAppStatus(prev => ({
-              ...prev,
-              [appKey]: { ...(prev[appKey] || {}), status: 'partial', progress: 50 }
-            }));
+    // start / stop / restart : transition unifiée via useAppTransition.
+    //  - le spinner tourne tant que l'op n'est pas CONFIRMÉE par le backend (la route
+    //    attend que l'app soit réellement saine/arrêtée) ET le plancher anti-flash écoulé ;
+    //  - statut optimiste au lancement, statut terminal écrit AVANT l'arrêt du spinner
+    //    (aucun flash gris) ;
+    //  - une seule opération à la fois (verrou anti double-clic / re-render).
+    const isStop = action === 'stop';
+    const started = beginTransition(action, {
+      optimisticStatus: isStop ? 'partial' : 'starting',
+      optimisticProgress: 50,
+      terminalStatus: isStop ? 'stopped' : 'running',
+      // restart : plancher 10 s (l'app part de "running", il faut couvrir la descente).
+      minFloorMs: action === 'restart' ? 10000 : 2000,
+      safetyMs: 130000,
+      run: async () => {
+        const serverUrl = getServerUrl(accessMode);
+        const cfg = { timeout: 120000, headers: { 'Content-Type': 'application/json' } };
+        let data: any;
+        if (action === 'restart') {
+          const restartUrl = `${serverUrl}/api/apps/${appId}/restart`;
+          console.log(`[Icon] 📡 POST ${restartUrl}`);
+          try {
+            const resp = await axios.post(restartUrl, {}, cfg);
+            data = resp.data;
+          } catch (err: any) {
+            // Fallback stop+start si /restart indisponible (404/405…).
+            console.warn(`[Icon] ⚠️ /restart indisponible (status ${err?.response?.status}). Fallback stop+start`);
+            await axios.post(`${serverUrl}/api/apps/${appId}/stop`, {}, cfg);
+            const resp2 = await axios.post(`${serverUrl}/api/apps/${appId}/start`, {}, cfg);
+            data = resp2.data;
           }
-          const startUrl = `${serverUrl}/api/apps/${appId}/start`;
-          console.log(`[Icon] 📡 POST ${startUrl}`);
-          await axios.post(startUrl, {}, { timeout: 120000, headers: { 'Content-Type': 'application/json' } });
-          console.log('[Icon] ✅ restart (stop+start) terminé avec succès');
+        } else {
+          const apiUrl = `${serverUrl}/api/apps/${appId}/${action}`;
+          console.log(`[Icon] 📡 POST ${apiUrl}`);
+          const resp = await axios.post(apiUrl, {}, cfg);
+          data = resp.data;
         }
-      } else {
-        const apiUrl = `${serverUrl}/api/apps/${appId}/${action}`;
-        console.log(`[Icon] 📡 POST ${apiUrl}`);
-        const response = await axios.post(apiUrl, {}, { 
-          timeout: 120000,
-          headers: { 'Content-Type': 'application/json' }
-        });
-        console.log(`[Icon] ✅ ${action} de ${appName} terminé avec succès`);
-        console.log('[Icon] Réponse:', response.data);
-      }
-
-      // IMPORTANT : le backend renvoie souvent AVANT que l'app soit réellement prête
-      // (start/restart lancent la commande mais n'attendent pas que les conteneurs soient
-      // sains). On NE force donc PAS le statut "running" ici (sinon le spinner s'arrête
-      // trop tôt). On garde pendingAction (= spinner) et on rafraîchit le statut en rafale :
-      // l'effet de reset (cf. useEffect plus haut) coupera le spinner quand le statut réel
-      // sera "running" (start/restart) ou "stopped" (stop) — donc quand l'app est accessible.
-      if (refreshDesktopIcons) {
-        [0, 2000, 5000, 10000, 20000, 35000, 55000].forEach(ms => setTimeout(() => {
-          try { refreshDesktopIcons(); } catch (_) {}
-        }, ms));
-      }
-      // Filet de sécurité : ne pas laisser le spinner tourner indéfiniment si le statut
-      // "running" n'est jamais détecté.
-      setTimeout(() => setPendingAction(null), 90000);
-
-    } catch (error) {
-      console.error(`[Icon] ❌ Erreur lors de ${action} de ${appName}`);
-      console.error('[Icon] Détails de l\'erreur:', error);
-      
-      // Réinitialiser l'action en cours
-      setPendingAction(null);
-      setIsUninstalling(false);
-
-      // Restaurer le statut précédent en cas d'erreur
-      if (setAppStatus && appStatusData) {
-        console.log(`[Icon] 🔙 Restauration du statut précédent pour ${appName}`);
-        setAppStatus(prevStatus => ({
-          ...prevStatus,
-          [appKey]: appStatusData
-        }));
-      }
-      
-      // Message d'erreur détaillé
-      let errorMsg = error.response?.data?.message || error.message;
-      if (error.code === 'ECONNABORTED') {
-        errorMsg = 'Timeout - l\'opération prend plus de 2 minutes';
-      } else if (error.response?.status === 404) {
-        errorMsg = 'Application non trouvée sur le serveur';
-      } else if (error.response?.status === 500) {
-        errorMsg = 'Erreur serveur interne';
-      }
-      
-      alert(t('icon.actionError').replace('{action}', action).replace('{appName}', appName).replace('{error}', errorMsg));
+        console.log(`[Icon] ✅ ${action} de ${appName} confirmé`, data);
+        // La route attend l'état cible : ready === false = l'app n'y est pas parvenue.
+        if (data && data.ready === false) {
+          const err: any = new Error(data.message || 'L\'application n\'a pas atteint l\'état attendu');
+          err.appNotReady = true;
+          throw err;
+        }
+        return data;
+      },
+      onError: (error: any) => {
+        console.error(`[Icon] ❌ Erreur lors de ${action} de ${appName}`, error);
+        // Restaurer le statut réel précédent.
+        if (setAppStatus && appStatusData) {
+          setAppStatus((prevStatus: any) => ({ ...prevStatus, [appKey]: appStatusData }));
+        }
+        let errorMsg = error.response?.data?.message || error.message;
+        if (error.code === 'ECONNABORTED') {
+          errorMsg = 'Timeout - l\'opération prend plus de 2 minutes';
+        } else if (error.response?.status === 404) {
+          errorMsg = 'Application non trouvée sur le serveur';
+        } else if (error.response?.status === 500) {
+          errorMsg = 'Erreur serveur interne';
+        }
+        alert(t('icon.actionError').replace('{action}', action).replace('{appName}', appName).replace('{error}', errorMsg));
+      },
+    });
+    if (!started) {
+      console.log(`[Icon] ⏭️ Action ${action} ignorée : une opération est déjà en cours pour ${appId}`);
     }
   };
 
@@ -737,8 +657,9 @@ const Icon = React.memo(({ id, src, installInfo, zoneId, moveIcon, handleClick, 
       
       {!imgError && activeContextMenu && activeContextMenu.iconId === id && (
         <ContextMenuPortal x={activeContextMenu.x} y={activeContextMenu.y}>
-          {/* Show stop/restart when running OR when in pending state (orange blinking) */}
-          {(appStatusData?.status === 'running' || pendingAction === 'starting' || pendingAction === 'stopping') ? (
+          {/* Menu "running" (stop/restart/…) si l'app tourne OU si une transition
+              start/stop/restart/reset est en cours (op). */}
+          {(appStatusData?.status === 'running' || op !== null) ? (
             <>
               <div 
                 className="context-menu-item" 

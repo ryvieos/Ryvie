@@ -3,7 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const { verifyToken, hasPermission, isAdmin } = require('../../middleware/auth');
-const { getAppStatus, startApp, stopApp, restartApp } = require('../../services/system/dockerService');
+const { getAppStatus, startApp, stopApp, restartApp, clearAppStatusCache } = require('../../services/system/dockerService');
 const appManager = require('../../services/apps/appManagerService');
 const appAccounts = require('../../services/apps/appAccountsService');
 const configEditor = require('../../services/apps/configEditorService');
@@ -26,13 +26,20 @@ router.post('/apps/:id/start', verifyToken, hasPermission('manage_apps'), async 
   try {
     // Essayer d'abord avec appManager (manifests)
     let result = await appManager.startApp(id);
-    
+
     // Si échec, fallback sur dockerService
     if (!result.success) {
       result = await startApp(id);
     }
-    
-    res.status(200).json(result);
+
+    // Attendre que l'app soit RÉELLEMENT saine avant de répondre : la réponse HTTP
+    // devient le signal fiable « démarrage terminé » consommé par le frontend
+    // (le spinner de l'icône ne s'arrête qu'ici). Puis invalider le cache 5 s pour
+    // que le prochain broadcast socket reflète le nouvel état.
+    const readiness = await appManager.waitForAppHealthy(id);
+    try { clearAppStatusCache(); } catch (_) {}
+
+    res.status(200).json({ ...result, ...readiness });
   } catch (error: any) {
     console.error(`Erreur lors du démarrage de l'application ${id}:`, error);
     res.status(500).json({ error: `Erreur serveur lors du démarrage de l'application`, message: error.message });
@@ -45,13 +52,17 @@ router.post('/apps/:id/stop', verifyToken, hasPermission('manage_apps'), async (
   try {
     // Essayer d'abord avec appManager (manifests)
     let result = await appManager.stopApp(id);
-    
+
     // Si échec, fallback sur dockerService
     if (!result.success) {
       result = await stopApp(id);
     }
-    
-    res.status(200).json(result);
+
+    // Attendre l'arrêt effectif (signal fiable « arrêt terminé ») + invalider le cache.
+    const readiness = await appManager.waitForAppStopped(id);
+    try { clearAppStatusCache(); } catch (_) {}
+
+    res.status(200).json({ ...result, ...readiness });
   } catch (error: any) {
     console.error(`Erreur lors de l'arrêt de l'application ${id}:`, error);
     res.status(500).json({ error: `Erreur serveur lors de l'arrêt de l'application`, message: error.message });
@@ -64,13 +75,19 @@ router.post('/apps/:id/restart', verifyToken, hasPermission('manage_apps'), asyn
   try {
     // Essayer d'abord avec appManager (manifests)
     let result = await appManager.restartApp(id);
-    
+
     // Si échec, fallback sur dockerService
     if (!result.success) {
       result = await restartApp(id);
     }
-    
-    res.status(200).json(result);
+
+    // Attendre que l'app soit RÉELLEMENT revenue saine avant de répondre. C'est ce
+    // qui manquait au redémarrage (d'où le bug : spinner coupé trop tôt puis icône
+    // grise). La réponse HTTP = signal « redémarrage terminé » pour le frontend.
+    const readiness = await appManager.waitForAppHealthy(id);
+    try { clearAppStatusCache(); } catch (_) {}
+
+    res.status(200).json({ ...result, ...readiness });
   } catch (error: any) {
     console.error(`Erreur lors du redémarrage de l'application ${id}:`, error);
     res.status(500).json({ error: `Erreur serveur lors du redémarrage de l'application`, message: error.message });
@@ -149,7 +166,13 @@ router.post('/apps/:id/reset-owner', verifyToken, isAdmin, async (req: any, res:
   const { id } = req.params;
   try {
     const result = await appAccounts.resetOwner(id);
-    res.status(200).json(result);
+    // Certaines recettes redémarrent le conteneur lors du reset : on attend que
+    // l'app soit revenue saine avant de répondre (même contrat que start/restart).
+    // Si aucun redémarrage n'a lieu, l'app est déjà 'running' et l'attente est
+    // immédiate. Le plancher anti-flash côté frontend gère l'affichage.
+    const readiness = await appManager.waitForAppHealthy(id);
+    try { clearAppStatusCache(); } catch (_) {}
+    res.status(200).json({ ...result, ...readiness });
   } catch (error: any) {
     const status = error.status || 500;
     if (status >= 500) {

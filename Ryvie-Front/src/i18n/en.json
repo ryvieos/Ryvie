@@ -920,6 +920,7 @@
       "completedUpdate": "✅ Update of {appName} completed successfully!",
       "installationLogs": "Installation logs",
       "cancelInstallation": "Cancel installation",
+      "cannotCancelUpdate": "An update cannot be cancelled (it would delete the application).",
       "installLimitNearlyReached": "Installation limit nearly reached",
       "installLimitMessage": "Only {remaining} installation{remaining, plural, =1 {} other{s}} lef{remaining, plural, =1 {t} other {t}} this hour. Reset in {minutes} minute{minutes, plural, =1 {} other{s}}.",
       "noAppsFound": "No applications found",
