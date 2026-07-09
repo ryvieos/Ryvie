@@ -231,13 +231,14 @@ router.post('/add-user', verifyToken, isAdmin, async (req: any, res: any) => {
                   const employeeTypeMap = { Admin: 'admins', User: 'users', Guest: 'guests' };
                   const employeeType = employeeTypeMap[role] || 'users';
                   
-                  // givenName + sn = cn : le sync LDAP→Immich construit le nom comme
-                  // `(givenName || uid) + (sn si ≠ firstName)`. En posant givenName=cn et
-                  // sn=cn, le nom affiché dans les apps = exactement le nom (cn), sans
-                  // jamais faire apparaître l'uid.
+                  // cn = uid : le "common name" LDAP est aligné sur l'identifiant de
+                  // connexion (uid), qui reste la clé d'identité. Le nom d'affichage saisi
+                  // (variable cn) est conservé dans givenName + sn afin que le sync
+                  // LDAP→Immich — qui construit le nom comme `(givenName || uid) + (sn si
+                  // ≠ firstName)` — affiche toujours un nom lisible dans les apps.
                   const entry = {
                     objectClass: ['inetOrgPerson', 'posixAccount', 'shadowAccount'],
-                    cn,
+                    cn: uid,
                     sn: cn,
                     givenName: cn,
                     uid,
