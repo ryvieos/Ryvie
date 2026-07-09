@@ -56,6 +56,13 @@ function composeUpWithRecovery(
   const label = opts.label || 'service';
   const execOpts = { stdio: 'pipe' as const, timeout: opts.timeout || 120000, cwd: opts.cwd };
 
+  // Garantit le réseau IA `ryvie-ai` (external) AVANT tout `up` : les apps IA le
+  // déclarent dans leur compose pour joindre LiteLLM par DNS. S'il n'existe pas (jamais
+  // configuré, ou purgé via `docker network prune`), le compose échoue et l'app ne
+  // démarre plus du tout. Idempotent ; require paresseux car litellmService require déjà
+  // ce module (composeUpWithRecovery) → évite le cycle au chargement.
+  try { require('../ai/litellmService').ensureNetwork(); } catch (_) { /* non bloquant */ }
+
   for (let attempt = 1; attempt <= MAX_COMPOSE_RETRIES; attempt++) {
     try {
       execSync(composeCmd, execOpts);
