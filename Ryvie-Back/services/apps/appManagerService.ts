@@ -520,6 +520,49 @@ async function restartApp(appId) {
 }
 
 /**
+ * Attend que TOUS les conteneurs d'une app soient sains (statut global 'running'),
+ * ou jusqu'au timeout. Sonde getAppDockerStatus EN DIRECT (pas le cache 5 s de
+ * dockerService) pour refléter l'état réel post-démarrage/redémarrage.
+ *
+ * C'est le SIGNAL FIABLE « opération terminée » consommé par le frontend : les
+ * routes start/restart/reset n'y répondent qu'une fois l'app revenue saine, si
+ * bien que le spinner de l'icône ne s'arrête qu'à la résolution de la requête HTTP
+ * (et jamais sur un statut socket périmé). Renvoie toujours (jamais de blocage
+ * infini) : { ready, status }.
+ */
+async function waitForAppHealthy(appId, { timeoutMs = 90000, intervalMs = 1500 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let last: any = null;
+  while (Date.now() < deadline) {
+    try {
+      last = await getAppDockerStatus(appId);
+      if (last && last.status === 'running') return { ready: true, status: 'running' };
+    } catch (e) { /* erreur docker transitoire -> on retente */ }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  try { last = await getAppDockerStatus(appId); } catch (e) {}
+  return { ready: !!last && last.status === 'running', status: (last && last.status) || 'unknown' };
+}
+
+/**
+ * Symétrique de waitForAppHealthy : attend que l'app soit complètement arrêtée
+ * (statut global 'stopped'), ou jusqu'au timeout. Renvoie { ready, status }.
+ */
+async function waitForAppStopped(appId, { timeoutMs = 60000, intervalMs = 1000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let last: any = null;
+  while (Date.now() < deadline) {
+    try {
+      last = await getAppDockerStatus(appId);
+      if (last && last.status === 'stopped') return { ready: true, status: 'stopped' };
+    } catch (e) { /* erreur docker transitoire -> on retente */ }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  try { last = await getAppDockerStatus(appId); } catch (e) {}
+  return { ready: !!last && last.status === 'stopped', status: (last && last.status) || 'unknown' };
+}
+
+/**
  * Récupère l'icône d'une app
  */
 function getAppIcon(appId) {
@@ -557,6 +600,8 @@ export = {
   startApp,
   stopApp,
   restartApp,
+  waitForAppHealthy,
+  waitForAppStopped,
   getAppIcon,
   syncAppsWithDocker
 };

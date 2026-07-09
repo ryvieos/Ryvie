@@ -63,7 +63,7 @@
       "source_file": "Ryvie-Back/config/ldap.ts",
       "source_location": "L1",
       "id": "config_ldap",
-      "community": 31,
+      "community": 273,
       "norm_label": "ldap.ts"
     },
     {
@@ -495,7 +495,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L1",
       "id": "middleware_auth",
-      "community": 30,
+      "community": 190,
       "norm_label": "auth.ts"
     },
     {
@@ -504,7 +504,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L2",
       "id": "middleware_auth_jwt",
-      "community": 30,
+      "community": 190,
       "norm_label": "jwt"
     },
     {
@@ -513,7 +513,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L3",
       "id": "middleware_auth_dotenv",
-      "community": 30,
+      "community": 190,
       "norm_label": "dotenv"
     },
     {
@@ -522,7 +522,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L4",
       "id": "middleware_auth_createclient",
-      "community": 30,
+      "community": 190,
       "norm_label": "{ createclient }"
     },
     {
@@ -531,7 +531,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L14",
       "id": "middleware_auth_redisclient",
-      "community": 30,
+      "community": 190,
       "norm_label": "redisclient"
     },
     {
@@ -540,7 +540,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L33",
       "id": "middleware_auth_verifytoken",
-      "community": 30,
+      "community": 190,
       "norm_label": "verifytoken()"
     },
     {
@@ -549,7 +549,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L105",
       "id": "middleware_auth_isadmin",
-      "community": 30,
+      "community": 190,
       "norm_label": "isadmin()"
     },
     {
@@ -558,7 +558,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L116",
       "id": "middleware_auth_haspermission",
-      "community": 30,
+      "community": 20,
       "norm_label": "haspermission()"
     },
     {
@@ -567,7 +567,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L147",
       "id": "middleware_auth_checkisfirsttime",
-      "community": 30,
+      "community": 190,
       "norm_label": "checkisfirsttime()"
     },
     {
@@ -576,7 +576,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L182",
       "id": "middleware_auth_resetfirsttimecache",
-      "community": 30,
+      "community": 190,
       "norm_label": "resetfirsttimecache()"
     },
     {
@@ -585,7 +585,7 @@
       "source_file": "Ryvie-Back/middleware/auth.ts",
       "source_location": "L188",
       "id": "middleware_auth_authenticatetokenorfirsttime",
-      "community": 30,
+      "community": 190,
       "norm_label": "authenticatetokenorfirsttime()"
     },
     {
@@ -972,7 +972,7 @@
       "source_file": "Ryvie-Back/routes/ai/ai.ts",
       "source_location": "L1",
       "id": "ai_ai",
-      "community": 30,
+      "community": 190,
       "norm_label": "ai.ts"
     },
     {
@@ -981,7 +981,7 @@
       "source_file": "Ryvie-Back/routes/ai/ai.ts",
       "source_location": "L5",
       "id": "ai_ai_express",
-      "community": 30,
+      "community": 190,
       "norm_label": "express"
     },
     {
@@ -990,7 +990,7 @@
       "source_file": "Ryvie-Back/routes/ai/ai.ts",
       "source_location": "L6",
       "id": "ai_ai_router",
-      "community": 30,
+      "community": 190,
       "norm_label": "router"
     },
     {
@@ -999,7 +999,7 @@
       "source_file": "Ryvie-Back/routes/ai/ai.ts",
       "source_location": "L7",
       "id": "ai_ai_verifytoken_isadmin",
-      "community": 30,
+      "community": 190,
       "norm_label": "{ verifytoken, isadmin }"
     },
     {
@@ -1008,7 +1008,7 @@
       "source_file": "Ryvie-Back/routes/ai/ai.ts",
       "source_location": "L8",
       "id": "ai_ai_ai",
-      "community": 30,
+      "community": 190,
       "norm_label": "ai"
     },
     {
@@ -1017,7 +1017,7 @@
       "source_file": "Ryvie-Back/routes/ai/ai.ts",
       "source_location": "L9",
       "id": "ai_ai_claudecli",
-      "community": 30,
+      "community": 190,
       "norm_label": "claudecli"
     },
     {
@@ -1026,7 +1026,7 @@
       "source_file": "Ryvie-Back/routes/ai/ai.ts",
       "source_location": "L11",
       "id": "ai_ai_fail",
-      "community": 30,
+      "community": 190,
       "norm_label": "fail()"
     },
     {
@@ -1386,7 +1386,7 @@
       "source_file": "Ryvie-Back/routes/auth/oidcAuth.ts",
       "source_location": "L1",
       "id": "auth_oidcauth",
-      "community": 31,
+      "community": 273,
       "norm_label": "oidcauth.ts"
     },
     {
@@ -1395,7 +1395,7 @@
       "source_file": "Ryvie-Back/routes/auth/oidcAuth.ts",
       "source_location": "L2",
       "id": "auth_oidcauth_express",
-      "community": 31,
+      "community": 273,
       "norm_label": "express"
     },
     {
@@ -1404,7 +1404,7 @@
       "source_file": "Ryvie-Back/routes/auth/oidcAuth.ts",
       "source_location": "L3",
       "id": "auth_oidcauth_oidcservice",
-      "community": 31,
+      "community": 273,
       "norm_label": "oidcservice"
     },
     {
@@ -1413,7 +1413,7 @@
       "source_file": "Ryvie-Back/routes/auth/oidcAuth.ts",
       "source_location": "L4",
       "id": "auth_oidcauth_signtoken_allowlisttoken",
-      "community": 31,
+      "community": 273,
       "norm_label": "{ signtoken, allowlisttoken }"
     },
     {
@@ -1422,7 +1422,7 @@
       "source_file": "Ryvie-Back/routes/auth/oidcAuth.ts",
       "source_location": "L5",
       "id": "auth_oidcauth_ldapservice",
-      "community": 31,
+      "community": 273,
       "norm_label": "ldapservice"
     },
     {
@@ -1431,7 +1431,7 @@
       "source_file": "Ryvie-Back/routes/auth/oidcAuth.ts",
       "source_location": "L14",
       "id": "auth_oidcauth_router",
-      "community": 31,
+      "community": 273,
       "norm_label": "router"
     },
     {
@@ -1440,7 +1440,7 @@
       "source_file": "Ryvie-Back/routes/auth/oidcAuth.ts",
       "source_location": "L16",
       "id": "auth_oidcauth_statestore",
-      "community": 31,
+      "community": 273,
       "norm_label": "statestore"
     },
     {
@@ -1449,7 +1449,7 @@
       "source_file": "Ryvie-Back/routes/auth/oidcAuth.ts",
       "source_location": "L28",
       "id": "auth_oidcauth_getfrontendorigin",
-      "community": 31,
+      "community": 273,
       "norm_label": "getfrontendorigin()"
     },
     {
@@ -1458,7 +1458,7 @@
       "source_file": "Ryvie-Back/routes/auth/oidcAuth.ts",
       "source_location": "L56",
       "id": "auth_oidcauth_getoriginfromrequest",
-      "community": 31,
+      "community": 273,
       "norm_label": "getoriginfromrequest()"
     },
     {
@@ -1692,7 +1692,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L1",
       "id": "system_admin",
-      "community": 52,
+      "community": 90,
       "norm_label": "admin.ts"
     },
     {
@@ -1701,7 +1701,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L1",
       "id": "system_admin_express",
-      "community": 52,
+      "community": 90,
       "norm_label": "express"
     },
     {
@@ -1710,7 +1710,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L2",
       "id": "system_admin_ldap",
-      "community": 52,
+      "community": 90,
       "norm_label": "ldap"
     },
     {
@@ -1719,7 +1719,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L3",
       "id": "system_admin_router",
-      "community": 52,
+      "community": 90,
       "norm_label": "router"
     },
     {
@@ -1728,7 +1728,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L4",
       "id": "system_admin_verifytoken_isadmin",
-      "community": 52,
+      "community": 90,
       "norm_label": "{ verifytoken, isadmin }"
     },
     {
@@ -1737,7 +1737,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L5",
       "id": "system_admin_ldapconfig",
-      "community": 52,
+      "community": 90,
       "norm_label": "ldapconfig"
     },
     {
@@ -1746,7 +1746,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L6",
       "id": "system_admin_createsafeclient_getrole_parsednparts_escaperdnvalue_generateopaqueuid",
-      "community": 52,
+      "community": 90,
       "norm_label": "{ createsafeclient, getrole, parsednparts, escaperdnvalue, generateopaqueuid }"
     },
     {
@@ -1755,7 +1755,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L7",
       "id": "system_admin_startapp",
-      "community": 52,
+      "community": 90,
       "norm_label": "{ startapp }"
     },
     {
@@ -1764,7 +1764,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L8",
       "id": "system_admin_listinstalledapps",
-      "community": 52,
+      "community": 90,
       "norm_label": "{ listinstalledapps }"
     },
     {
@@ -1773,7 +1773,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L10",
       "id": "system_admin_escapeldapfiltervalue",
-      "community": 52,
+      "community": 90,
       "norm_label": "escapeldapfiltervalue()"
     },
     {
@@ -1782,7 +1782,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L561",
       "id": "system_admin_triggerldapsync",
-      "community": 52,
+      "community": 90,
       "norm_label": "triggerldapsync()"
     },
     {
@@ -1791,7 +1791,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L584",
       "id": "system_admin_syncldapwithapps",
-      "community": 52,
+      "community": 90,
       "norm_label": "syncldapwithapps()"
     },
     {
@@ -1800,7 +1800,7 @@
       "source_file": "Ryvie-Back/routes/system/admin.ts",
       "source_location": "L744",
       "id": "system_admin_updateuser",
-      "community": 52,
+      "community": 90,
       "norm_label": "updateuser()"
     },
     {
@@ -1809,7 +1809,7 @@
       "source_file": "Ryvie-Back/routes/system/health.ts",
       "source_location": "L1",
       "id": "system_health",
-      "community": 36,
+      "community": 56,
       "norm_label": "health.ts"
     },
     {
@@ -1818,7 +1818,7 @@
       "source_file": "Ryvie-Back/routes/system/health.ts",
       "source_location": "L1",
       "id": "system_health_express",
-      "community": 36,
+      "community": 56,
       "norm_label": "express"
     },
     {
@@ -1827,7 +1827,7 @@
       "source_file": "Ryvie-Back/routes/system/health.ts",
       "source_location": "L2",
       "id": "system_health_router",
-      "community": 36,
+      "community": 56,
       "norm_label": "router"
     },
     {
@@ -1836,7 +1836,7 @@
       "source_file": "Ryvie-Back/routes/system/health.ts",
       "source_location": "L3",
       "id": "system_health_startuptracker",
-      "community": 36,
+      "community": 56,
       "norm_label": "startuptracker"
     },
     {
@@ -5841,7 +5841,7 @@
       "source_file": "Ryvie-Back/services/auth/ldapService.ts",
       "source_location": "L38",
       "id": "auth_ldapservice_escaperdnvalue",
-      "community": 52,
+      "community": 90,
       "norm_label": "escaperdnvalue()"
     },
     {
@@ -5850,7 +5850,7 @@
       "source_file": "Ryvie-Back/services/auth/ldapService.ts",
       "source_location": "L55",
       "id": "auth_ldapservice_parsednparts",
-      "community": 52,
+      "community": 90,
       "norm_label": "parsednparts()"
     },
     {
@@ -6741,7 +6741,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L1",
       "id": "system_startuptracker",
-      "community": 36,
+      "community": 56,
       "norm_label": "startuptracker.ts"
     },
     {
@@ -6750,7 +6750,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L7",
       "id": "system_startuptracker_servicestatus",
-      "community": 36,
+      "community": 56,
       "norm_label": "servicestatus"
     },
     {
@@ -6759,7 +6759,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L15",
       "id": "system_startuptracker_services",
-      "community": 36,
+      "community": 56,
       "norm_label": "services"
     },
     {
@@ -6768,7 +6768,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L21",
       "id": "system_startuptracker_registerservice",
-      "community": 36,
+      "community": 56,
       "norm_label": "registerservice()"
     },
     {
@@ -6777,7 +6777,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L32",
       "id": "system_startuptracker_markdone",
-      "community": 36,
+      "community": 56,
       "norm_label": "markdone()"
     },
     {
@@ -6786,7 +6786,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L46",
       "id": "system_startuptracker_markerror",
-      "community": 36,
+      "community": 56,
       "norm_label": "markerror()"
     },
     {
@@ -6795,7 +6795,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L61",
       "id": "system_startuptracker_checkalldone",
-      "community": 36,
+      "community": 56,
       "norm_label": "checkalldone()"
     },
     {
@@ -6804,7 +6804,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L77",
       "id": "system_startuptracker_onready",
-      "community": 36,
+      "community": 56,
       "norm_label": "onready()"
     },
     {
@@ -6813,7 +6813,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L88",
       "id": "system_startuptracker_getstatus",
-      "community": 36,
+      "community": 56,
       "norm_label": "getstatus()"
     },
     {
@@ -6822,7 +6822,7 @@
       "source_file": "Ryvie-Back/services/system/startupTracker.ts",
       "source_location": "L101",
       "id": "system_startuptracker_isready",
-      "community": 36,
+      "community": 56,
       "norm_label": "isready()"
     },
     {
@@ -7884,7 +7884,7 @@
       "source_file": "Ryvie-Back/utils/syncNetbirdConfig.ts",
       "source_location": "L1",
       "id": "utils_syncnetbirdconfig",
-      "community": 3,
+      "community": 279,
       "norm_label": "syncnetbirdconfig.ts"
     },
     {
@@ -7893,7 +7893,7 @@
       "source_file": "Ryvie-Back/utils/syncNetbirdConfig.ts",
       "source_location": "L1",
       "id": "utils_syncnetbirdconfig_fs",
-      "community": 3,
+      "community": 279,
       "norm_label": "fs"
     },
     {
@@ -7902,7 +7902,7 @@
       "source_file": "Ryvie-Back/utils/syncNetbirdConfig.ts",
       "source_location": "L2",
       "id": "utils_syncnetbirdconfig_path",
-      "community": 3,
+      "community": 279,
       "norm_label": "path"
     },
     {
@@ -7911,7 +7911,7 @@
       "source_file": "Ryvie-Back/utils/syncNetbirdConfig.ts",
       "source_location": "L3",
       "id": "utils_syncnetbirdconfig_netbird_file_frontend_config_dir",
-      "community": 3,
+      "community": 279,
       "norm_label": "{ netbird_file, frontend_config_dir }"
     },
     {
@@ -8838,7 +8838,7 @@
       "source_file": "Ryvie-Front/src/components/CachedRoutes.tsx",
       "source_location": "L1",
       "id": "components_cachedroutes",
-      "community": 25,
+      "community": 114,
       "norm_label": "cachedroutes.tsx"
     },
     {
@@ -8847,7 +8847,7 @@
       "source_file": "Ryvie-Front/src/components/CachedRoutes.tsx",
       "source_location": "L8",
       "id": "components_cachedroutes_cachedroutes",
-      "community": 25,
+      "community": 114,
       "norm_label": "cachedroutes()"
     },
     {
@@ -8856,7 +8856,7 @@
       "source_file": "Ryvie-Front/src/components/launcher/GridLauncher.tsx",
       "source_location": "L1",
       "id": "launcher_gridlauncher",
-      "community": 39,
+      "community": 87,
       "norm_label": "gridlauncher.tsx"
     },
     {
@@ -8865,7 +8865,7 @@
       "source_file": "Ryvie-Front/src/components/launcher/GridLauncher.tsx",
       "source_location": "L15",
       "id": "launcher_gridlauncher_gridlauncher",
-      "community": 39,
+      "community": 87,
       "norm_label": "gridlauncher()"
     },
     {
@@ -9063,7 +9063,7 @@
       "source_file": "Ryvie-Front/src/components/modals/GlobalUpdateModal.tsx",
       "source_location": "L1",
       "id": "modals_globalupdatemodal",
-      "community": 90,
+      "community": 114,
       "norm_label": "globalupdatemodal.tsx"
     },
     {
@@ -9072,7 +9072,7 @@
       "source_file": "Ryvie-Front/src/components/modals/GlobalUpdateModal.tsx",
       "source_location": "L6",
       "id": "modals_globalupdatemodal_globalupdatemodal",
-      "community": 90,
+      "community": 114,
       "norm_label": "globalupdatemodal()"
     },
     {
@@ -9144,7 +9144,7 @@
       "source_file": "Ryvie-Front/src/components/onboarding/OnboardingOverlay.tsx",
       "source_location": "L1",
       "id": "onboarding_onboardingoverlay",
-      "community": 12,
+      "community": 19,
       "norm_label": "onboardingoverlay.tsx"
     },
     {
@@ -9153,7 +9153,7 @@
       "source_file": "Ryvie-Front/src/components/onboarding/OnboardingOverlay.tsx",
       "source_location": "L10",
       "id": "onboarding_onboardingoverlay_onboardingpage",
-      "community": 12,
+      "community": 19,
       "norm_label": "onboardingpage"
     },
     {
@@ -9162,7 +9162,7 @@
       "source_file": "Ryvie-Front/src/components/onboarding/OnboardingOverlay.tsx",
       "source_location": "L17",
       "id": "onboarding_onboardingoverlay_onboardingoverlayprops",
-      "community": 12,
+      "community": 19,
       "norm_label": "onboardingoverlayprops"
     },
     {
@@ -9171,7 +9171,7 @@
       "source_file": "Ryvie-Front/src/components/onboarding/OnboardingOverlay.tsx",
       "source_location": "L21",
       "id": "onboarding_onboardingoverlay_onboardingoverlay",
-      "community": 12,
+      "community": 19,
       "norm_label": "onboardingoverlay()"
     },
     {
@@ -9423,7 +9423,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/DevicesWidget.tsx",
       "source_location": "L1",
       "id": "widgets_deviceswidget",
-      "community": 87,
+      "community": 277,
       "norm_label": "deviceswidget.tsx"
     },
     {
@@ -9432,7 +9432,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/DevicesWidget.tsx",
       "source_location": "L15",
       "id": "widgets_deviceswidget_peer",
-      "community": 87,
+      "community": 277,
       "norm_label": "peer"
     },
     {
@@ -9441,7 +9441,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/DevicesWidget.tsx",
       "source_location": "L24",
       "id": "widgets_deviceswidget_devicesdata",
-      "community": 87,
+      "community": 277,
       "norm_label": "devicesdata"
     },
     {
@@ -9450,7 +9450,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/DevicesWidget.tsx",
       "source_location": "L26",
       "id": "widgets_deviceswidget_readcache",
-      "community": 87,
+      "community": 277,
       "norm_label": "readcache()"
     },
     {
@@ -9459,7 +9459,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/DevicesWidget.tsx",
       "source_location": "L36",
       "id": "widgets_deviceswidget_writecache",
-      "community": 87,
+      "community": 277,
       "norm_label": "writecache()"
     },
     {
@@ -9468,7 +9468,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/DevicesWidget.tsx",
       "source_location": "L41",
       "id": "widgets_deviceswidget_formatlatency",
-      "community": 87,
+      "community": 277,
       "norm_label": "formatlatency()"
     },
     {
@@ -9477,7 +9477,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/DevicesWidget.tsx",
       "source_location": "L52",
       "id": "widgets_deviceswidget_deviceicon",
-      "community": 87,
+      "community": 277,
       "norm_label": "deviceicon()"
     },
     {
@@ -9486,7 +9486,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/DevicesWidget.tsx",
       "source_location": "L62",
       "id": "widgets_deviceswidget_isconnected",
-      "community": 87,
+      "community": 277,
       "norm_label": "isconnected()"
     },
     {
@@ -9495,7 +9495,7 @@
       "source_file": "Ryvie-Front/src/components/widgets/DevicesWidget.tsx",
       "source_location": "L67",
       "id": "widgets_deviceswidget_deviceswidget",
-      "community": 87,
+      "community": 277,
       "norm_label": "deviceswidget()"
     },
     {
@@ -9621,7 +9621,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L11",
       "id": "config_appconfig_grid_config",
-      "community": 39,
+      "community": 87,
       "norm_label": "grid_config"
     },
     {
@@ -9657,7 +9657,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L36",
       "id": "config_appconfig_images",
-      "community": 37,
+      "community": 39,
       "norm_label": "images"
     },
     {
@@ -9855,7 +9855,7 @@
       "source_file": "Ryvie-Front/src/config/urls.ts",
       "source_location": "L210",
       "id": "config_urls_setlocalip",
-      "community": 19,
+      "community": 14,
       "norm_label": "setlocalip()"
     },
     {
@@ -10116,7 +10116,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L1",
       "id": "contexts_updatecontext",
-      "community": 90,
+      "community": 114,
       "norm_label": "updatecontext.tsx"
     },
     {
@@ -10125,7 +10125,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L3",
       "id": "contexts_updatecontext_updatecontexttype",
-      "community": 90,
+      "community": 114,
       "norm_label": "updatecontexttype"
     },
     {
@@ -10134,7 +10134,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L11",
       "id": "contexts_updatecontext_updatecontext",
-      "community": 90,
+      "community": 114,
       "norm_label": "updatecontext"
     },
     {
@@ -10143,7 +10143,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L13",
       "id": "contexts_updatecontext_updateprovider",
-      "community": 25,
+      "community": 114,
       "norm_label": "updateprovider()"
     },
     {
@@ -10152,7 +10152,7 @@
       "source_file": "Ryvie-Front/src/contexts/UpdateContext.tsx",
       "source_location": "L37",
       "id": "contexts_updatecontext_useupdate",
-      "community": 90,
+      "community": 114,
       "norm_label": "useupdate()"
     },
     {
@@ -10161,7 +10161,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L1",
       "id": "hooks_usedrag",
-      "community": 39,
+      "community": 87,
       "norm_label": "usedrag.ts"
     },
     {
@@ -10170,7 +10170,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L3",
       "id": "hooks_usedrag_dragoffset",
-      "community": 39,
+      "community": 87,
       "norm_label": "dragoffset"
     },
     {
@@ -10179,7 +10179,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L8",
       "id": "hooks_usedrag_dragposition",
-      "community": 39,
+      "community": 87,
       "norm_label": "dragposition"
     },
     {
@@ -10188,7 +10188,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L13",
       "id": "hooks_usedrag_draggeditem",
-      "community": 39,
+      "community": 87,
       "norm_label": "draggeditem"
     },
     {
@@ -10197,7 +10197,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L18",
       "id": "hooks_usedrag_dragenddata",
-      "community": 39,
+      "community": 87,
       "norm_label": "dragenddata"
     },
     {
@@ -10206,7 +10206,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L27",
       "id": "hooks_usedrag_usedraghandlers",
-      "community": 39,
+      "community": 87,
       "norm_label": "usedraghandlers"
     },
     {
@@ -10215,7 +10215,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L33",
       "id": "hooks_usedrag_usedragreturn",
-      "community": 39,
+      "community": 87,
       "norm_label": "usedragreturn"
     },
     {
@@ -10224,7 +10224,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L41",
       "id": "hooks_usedrag_usedrag",
-      "community": 39,
+      "community": 87,
       "norm_label": "usedrag()"
     },
     {
@@ -10260,7 +10260,7 @@
       "source_file": "Ryvie-Front/src/hooks/useGridLayout.ts",
       "source_location": "L22",
       "id": "hooks_usegridlayout_usegridlayout",
-      "community": 39,
+      "community": 87,
       "norm_label": "usegridlayout()"
     },
     {
@@ -10269,7 +10269,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L1",
       "id": "i18n_en",
-      "community": 193,
+      "community": 140,
       "norm_label": "en.json"
     },
     {
@@ -11187,7 +11187,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L108",
       "id": "i18n_en_home_storage",
-      "community": 15,
+      "community": 193,
       "norm_label": "storage"
     },
     {
@@ -11196,7 +11196,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L109",
       "id": "i18n_en_home_weather",
-      "community": 15,
+      "community": 193,
       "norm_label": "weather"
     },
     {
@@ -11241,7 +11241,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L114",
       "id": "i18n_en_home_connecteduser",
-      "community": 56,
+      "community": 15,
       "norm_label": "connecteduser"
     },
     {
@@ -11304,7 +11304,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L121",
       "id": "i18n_en_home_uninstall",
-      "community": 41,
+      "community": 50,
       "norm_label": "uninstall"
     },
     {
@@ -11484,7 +11484,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L141",
       "id": "i18n_en_home_connectionstatus",
-      "community": 56,
+      "community": 15,
       "norm_label": "connectionstatus"
     },
     {
@@ -11493,7 +11493,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L142",
       "id": "i18n_en_connectionstatus_connected",
-      "community": 56,
+      "community": 15,
       "norm_label": "connected"
     },
     {
@@ -11502,7 +11502,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L143",
       "id": "i18n_en_connectionstatus_disconnected",
-      "community": 56,
+      "community": 15,
       "norm_label": "disconnected"
     },
     {
@@ -11511,7 +11511,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L144",
       "id": "i18n_en_connectionstatus_local",
-      "community": 56,
+      "community": 15,
       "norm_label": "local"
     },
     {
@@ -11520,7 +11520,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L145",
       "id": "i18n_en_connectionstatus_web",
-      "community": 56,
+      "community": 15,
       "norm_label": "web"
     },
     {
@@ -11529,7 +11529,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L146",
       "id": "i18n_en_connectionstatus_remote",
-      "community": 56,
+      "community": 15,
       "norm_label": "remote"
     },
     {
@@ -12294,7 +12294,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L238",
       "id": "i18n_en_installindicator",
-      "community": 193,
+      "community": 140,
       "norm_label": "installindicator"
     },
     {
@@ -12303,7 +12303,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L239",
       "id": "i18n_en_installindicator_showprogress",
-      "community": 193,
+      "community": 140,
       "norm_label": "showprogress"
     },
     {
@@ -12312,7 +12312,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L240",
       "id": "i18n_en_installindicator_installing",
-      "community": 193,
+      "community": 140,
       "norm_label": "installing"
     },
     {
@@ -12321,7 +12321,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L241",
       "id": "i18n_en_installindicator_updating",
-      "community": 193,
+      "community": 140,
       "norm_label": "updating"
     },
     {
@@ -12330,7 +12330,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L242",
       "id": "i18n_en_installindicator_finalizing",
-      "community": 193,
+      "community": 140,
       "norm_label": "finalizing"
     },
     {
@@ -12339,7 +12339,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L243",
       "id": "i18n_en_installindicator_hide",
-      "community": 193,
+      "community": 140,
       "norm_label": "hide"
     },
     {
@@ -12789,7 +12789,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L299",
       "id": "i18n_en_widgetaddbutton_cpuram",
-      "community": 15,
+      "community": 193,
       "norm_label": "cpuram"
     },
     {
@@ -12798,7 +12798,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L300",
       "id": "i18n_en_cpuram_name",
-      "community": 15,
+      "community": 193,
       "norm_label": "name"
     },
     {
@@ -12807,7 +12807,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L301",
       "id": "i18n_en_cpuram_description",
-      "community": 15,
+      "community": 193,
       "norm_label": "description"
     },
     {
@@ -19044,7 +19044,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L1",
       "id": "src_index",
-      "community": 25,
+      "community": 114,
       "norm_label": "index.tsx"
     },
     {
@@ -19053,7 +19053,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L29",
       "id": "src_index_protectedroute",
-      "community": 25,
+      "community": 114,
       "norm_label": "protectedroute()"
     },
     {
@@ -19062,7 +19062,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L39",
       "id": "src_index_app",
-      "community": 25,
+      "community": 114,
       "norm_label": "app()"
     },
     {
@@ -19071,7 +19071,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L163",
       "id": "src_index_rootelement",
-      "community": 25,
+      "community": 114,
       "norm_label": "rootelement"
     },
     {
@@ -19080,7 +19080,7 @@
       "source_file": "Ryvie-Front/src/index.tsx",
       "source_location": "L167",
       "id": "src_index_root",
-      "community": 25,
+      "community": 114,
       "norm_label": "root"
     },
     {
@@ -19089,7 +19089,7 @@
       "source_file": "Ryvie-Front/src/pages/AppStore.tsx",
       "source_location": "L1",
       "id": "pages_appstore",
-      "community": 19,
+      "community": 50,
       "norm_label": "appstore.tsx"
     },
     {
@@ -19098,7 +19098,7 @@
       "source_file": "Ryvie-Front/src/pages/AppStore.tsx",
       "source_location": "L22",
       "id": "pages_appstore_appstoreapp",
-      "community": 19,
+      "community": 50,
       "norm_label": "appstoreapp"
     },
     {
@@ -19107,7 +19107,7 @@
       "source_file": "Ryvie-Front/src/pages/AppStore.tsx",
       "source_location": "L38",
       "id": "pages_appstore_appstore",
-      "community": 19,
+      "community": 50,
       "norm_label": "appstore()"
     },
     {
@@ -19152,7 +19152,7 @@
       "source_file": "Ryvie-Front/src/pages/FirstTimeSetup.tsx",
       "source_location": "L1",
       "id": "pages_firsttimesetup",
-      "community": 12,
+      "community": 19,
       "norm_label": "firsttimesetup.tsx"
     },
     {
@@ -19233,7 +19233,7 @@
       "source_file": "Ryvie-Front/src/pages/Home.tsx",
       "source_location": "L64",
       "id": "pages_home_icon",
-      "community": 39,
+      "community": 87,
       "norm_label": "icon()"
     },
     {
@@ -19800,7 +19800,7 @@
       "source_file": "Ryvie-Front/src/utils/detectAccessMode.ts",
       "source_location": "L191",
       "id": "utils_detectaccessmode_testserverconnectivity",
-      "community": 14,
+      "community": 19,
       "norm_label": "testserverconnectivity()"
     },
     {
@@ -19980,7 +19980,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L1",
       "id": "utils_platformutils",
-      "community": 37,
+      "community": 25,
       "norm_label": "platformutils.ts"
     },
     {
@@ -19998,7 +19998,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L5",
       "id": "utils_platformutils_isweb",
-      "community": 37,
+      "community": 25,
       "norm_label": "isweb()"
     },
     {
@@ -20007,7 +20007,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L9",
       "id": "utils_platformutils_ifelectron",
-      "community": 37,
+      "community": 25,
       "norm_label": "ifelectron()"
     },
     {
@@ -20016,7 +20016,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L17",
       "id": "utils_platformutils_ifweb",
-      "community": 37,
+      "community": 25,
       "norm_label": "ifweb()"
     },
     {
@@ -20025,7 +20025,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L25",
       "id": "utils_platformutils_windowmanager",
-      "community": 37,
+      "community": 25,
       "norm_label": "windowmanager"
     },
     {
@@ -20043,7 +20043,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L73",
       "id": "utils_platformutils_notificationmanager",
-      "community": 37,
+      "community": 25,
       "norm_label": "notificationmanager"
     },
     {
@@ -20331,7 +20331,7 @@
       "source_file": "Ryvie-Front/src/utils/setupAxios.ts",
       "source_location": "L1",
       "id": "utils_setupaxios",
-      "community": 25,
+      "community": 19,
       "norm_label": "setupaxios.ts"
     },
     {
@@ -20340,7 +20340,7 @@
       "source_file": "Ryvie-Front/src/utils/setupAxios.ts",
       "source_location": "L7",
       "id": "utils_setupaxios_verifytoken",
-      "community": 25,
+      "community": 19,
       "norm_label": "verifytoken()"
     },
     {
@@ -20349,7 +20349,7 @@
       "source_file": "Ryvie-Front/src/utils/setupAxios.ts",
       "source_location": "L22",
       "id": "utils_setupaxios_handletokenerror",
-      "community": 25,
+      "community": 19,
       "norm_label": "handletokenerror()"
     },
     {
@@ -22844,6 +22844,32 @@
       "norm_label": "main()"
     },
     {
+      "label": "add-client-oauth.sh",
+      "file_type": "code",
+      "source_file": "scripts/keycloak/add-client-oauth.sh",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "file"
+      },
+      "id": "keycloak_add_client_oauth",
+      "community": 239,
+      "norm_label": "add-client-oauth.sh"
+    },
+    {
+      "label": "add-client-oauth.sh script",
+      "file_type": "code",
+      "source_file": "scripts/keycloak/add-client-oauth.sh",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_entrypoint"
+      },
+      "id": "opt_ryvie_scripts_keycloak_add_client_oauth_sh__entry",
+      "community": 239,
+      "norm_label": "add-client-oauth.sh script"
+    },
+    {
       "label": "init-apps-oauth.js",
       "file_type": "code",
       "source_file": "scripts/keycloak/init-apps-oauth.js",
@@ -22869,6 +22895,32 @@
       "id": "keycloak_init_apps_oauth_main",
       "community": 148,
       "norm_label": "main()"
+    },
+    {
+      "label": "remove-client-oauth.sh",
+      "file_type": "code",
+      "source_file": "scripts/keycloak/remove-client-oauth.sh",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "file"
+      },
+      "id": "keycloak_remove_client_oauth",
+      "community": 244,
+      "norm_label": "remove-client-oauth.sh"
+    },
+    {
+      "label": "remove-client-oauth.sh script",
+      "file_type": "code",
+      "source_file": "scripts/keycloak/remove-client-oauth.sh",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_entrypoint"
+      },
+      "id": "opt_ryvie_scripts_keycloak_remove_client_oauth_sh__entry",
+      "community": 244,
+      "norm_label": "remove-client-oauth.sh script"
     },
     {
       "label": "prod.sh",
@@ -23315,92 +23367,92 @@
     {
       "label": "update-and-restart.sh",
       "file_type": "code",
-      "source_file": "scripts/update/update-and-restart.sh",
+      "source_file": "scripts/update-and-restart.sh",
       "source_location": "L1",
       "metadata": {
         "language": "bash",
         "kind": "file"
       },
-      "id": "update_update_and_restart",
-      "community": 115,
+      "id": "scripts_update_and_restart",
+      "community": 9,
       "norm_label": "update-and-restart.sh"
     },
     {
       "label": "update-and-restart.sh script",
       "file_type": "code",
-      "source_file": "scripts/update/update-and-restart.sh",
+      "source_file": "scripts/update-and-restart.sh",
       "source_location": "L1",
       "metadata": {
         "language": "bash",
         "kind": "bash_entrypoint"
       },
-      "id": "opt_ryvie_scripts_update_update_and_restart_sh__entry",
-      "community": 115,
+      "id": "opt_ryvie_scripts_update_and_restart_sh__entry",
+      "community": 9,
       "norm_label": "update-and-restart.sh script"
     },
     {
       "label": "log()",
       "file_type": "code",
-      "source_file": "scripts/update/update-and-restart.sh",
+      "source_file": "scripts/update-and-restart.sh",
       "source_location": "L33",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
       },
-      "id": "update_update_and_restart_log",
-      "community": 115,
+      "id": "scripts_update_and_restart_log",
+      "community": 9,
       "norm_label": "log()"
     },
     {
       "label": "update_status()",
       "file_type": "code",
-      "source_file": "scripts/update/update-and-restart.sh",
+      "source_file": "scripts/update-and-restart.sh",
       "source_location": "L38",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
       },
-      "id": "update_update_and_restart_update_status",
-      "community": 115,
+      "id": "scripts_update_and_restart_update_status",
+      "community": 9,
       "norm_label": "update_status()"
     },
     {
       "label": "cleanup()",
       "file_type": "code",
-      "source_file": "scripts/update/update-and-restart.sh",
+      "source_file": "scripts/update-and-restart.sh",
       "source_location": "L56",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
       },
-      "id": "update_update_and_restart_cleanup",
-      "community": 115,
+      "id": "scripts_update_and_restart_cleanup",
+      "community": 9,
       "norm_label": "cleanup()"
     },
     {
       "label": "rollback()",
       "file_type": "code",
-      "source_file": "scripts/update/update-and-restart.sh",
+      "source_file": "scripts/update-and-restart.sh",
       "source_location": "L69",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
       },
-      "id": "update_update_and_restart_rollback",
-      "community": 115,
+      "id": "scripts_update_and_restart_rollback",
+      "community": 9,
       "norm_label": "rollback()"
     },
     {
       "label": "perform_health_check()",
       "file_type": "code",
-      "source_file": "scripts/update/update-and-restart.sh",
+      "source_file": "scripts/update-and-restart.sh",
       "source_location": "L314",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
       },
-      "id": "update_update_and_restart_perform_health_check",
-      "community": 115,
+      "id": "scripts_update_and_restart_perform_health_check",
+      "community": 9,
       "norm_label": "perform_health_check()"
     },
     {
@@ -23501,6 +23553,97 @@
       "id": "scripts_update_monitor_template_shutdown",
       "community": 68,
       "norm_label": "shutdown()"
+    },
+    {
+      "label": "update-and-restart.sh",
+      "file_type": "code",
+      "source_file": "scripts/update/update-and-restart.sh",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "file"
+      },
+      "id": "update_update_and_restart",
+      "community": 115,
+      "norm_label": "update-and-restart.sh"
+    },
+    {
+      "label": "update-and-restart.sh script",
+      "file_type": "code",
+      "source_file": "scripts/update/update-and-restart.sh",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_entrypoint"
+      },
+      "id": "opt_ryvie_scripts_update_update_and_restart_sh__entry",
+      "community": 115,
+      "norm_label": "update-and-restart.sh script"
+    },
+    {
+      "label": "log()",
+      "file_type": "code",
+      "source_file": "scripts/update/update-and-restart.sh",
+      "source_location": "L33",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_function"
+      },
+      "id": "update_update_and_restart_log",
+      "community": 115,
+      "norm_label": "log()"
+    },
+    {
+      "label": "update_status()",
+      "file_type": "code",
+      "source_file": "scripts/update/update-and-restart.sh",
+      "source_location": "L38",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_function"
+      },
+      "id": "update_update_and_restart_update_status",
+      "community": 115,
+      "norm_label": "update_status()"
+    },
+    {
+      "label": "cleanup()",
+      "file_type": "code",
+      "source_file": "scripts/update/update-and-restart.sh",
+      "source_location": "L56",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_function"
+      },
+      "id": "update_update_and_restart_cleanup",
+      "community": 115,
+      "norm_label": "cleanup()"
+    },
+    {
+      "label": "rollback()",
+      "file_type": "code",
+      "source_file": "scripts/update/update-and-restart.sh",
+      "source_location": "L69",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_function"
+      },
+      "id": "update_update_and_restart_rollback",
+      "community": 115,
+      "norm_label": "rollback()"
+    },
+    {
+      "label": "perform_health_check()",
+      "file_type": "code",
+      "source_file": "scripts/update/update-and-restart.sh",
+      "source_location": "L314",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_function"
+      },
+      "id": "update_update_and_restart_perform_health_check",
+      "community": 115,
+      "norm_label": "perform_health_check()"
     },
     {
       "label": "update-monitor-template.js",
@@ -26550,7 +26693,7 @@
       "source_file": "docs/apps/appStore.md",
       "source_location": "L1",
       "id": "docs_apps_appstore_md_apps_appstore",
-      "community": 36,
+      "community": 248,
       "norm_label": "appstore.md"
     },
     {
@@ -26559,7 +26702,7 @@
       "source_file": "docs/apps/appStore.md",
       "source_location": "L1",
       "id": "apps_appstore_documentation_app_store",
-      "community": 36,
+      "community": 248,
       "norm_label": "documentation app store"
     },
     {
@@ -26568,7 +26711,7 @@
       "source_file": "docs/apps/appStore.md",
       "source_location": "L3",
       "id": "apps_appstore_vue_d_ensemble",
-      "community": 36,
+      "community": 248,
       "norm_label": "vue d'ensemble"
     },
     {
@@ -26577,7 +26720,7 @@
       "source_file": "docs/apps/appStore.md",
       "source_location": "L7",
       "id": "apps_appstore_architecture",
-      "community": 36,
+      "community": 248,
       "norm_label": "architecture"
     },
     {
@@ -26586,7 +26729,7 @@
       "source_file": "docs/apps/appStore.md",
       "source_location": "L9",
       "id": "apps_appstore_services_impliqu\u00e9s",
-      "community": 36,
+      "community": 248,
       "norm_label": "services impliques"
     },
     {
@@ -26595,7 +26738,7 @@
       "source_file": "docs/apps/appStore.md",
       "source_location": "L15",
       "id": "apps_appstore_flux_de_donn\u00e9es",
-      "community": 36,
+      "community": 248,
       "norm_label": "flux de donnees"
     },
     {
@@ -26604,7 +26747,7 @@
       "source_file": "docs/apps/appStore.md",
       "source_location": "L33",
       "id": "apps_appstore_configuration",
-      "community": 36,
+      "community": 248,
       "norm_label": "configuration"
     },
     {
@@ -26613,7 +26756,7 @@
       "source_file": "docs/apps/appStore.md",
       "source_location": "L35",
       "id": "apps_appstore_variables_d_environnement",
-      "community": 36,
+      "community": 248,
       "norm_label": "variables d'environnement"
     },
     {
@@ -32251,19 +32394,46 @@
       "norm_label": "guide : ajouter une application a keycloak sso"
     },
     {
-      "label": "\ud83d\ude80 M\u00e9thode recommand\u00e9e : le backend Ryvie",
+      "label": "\ud83d\ude80 M\u00e9thode rapide : Script automatique",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
       "source_location": "L3",
-      "id": "keycloak_readme_add_client_m\u00e9thode_recommand\u00e9e_le_backend_ryvie",
+      "id": "keycloak_readme_add_client_m\u00e9thode_rapide_script_automatique",
       "community": 66,
-      "norm_label": "\ud83d\ude80 methode recommandee : le backend ryvie"
+      "norm_label": "\ud83d\ude80 methode rapide : script automatique"
+    },
+    {
+      "label": "Ajouter rPictures",
+      "file_type": "document",
+      "source_file": "keycloak/README-ADD-CLIENT.md",
+      "source_location": "L5",
+      "id": "keycloak_readme_add_client_ajouter_rpictures",
+      "community": 66,
+      "norm_label": "ajouter rpictures"
+    },
+    {
+      "label": "Ajouter une autre application",
+      "file_type": "document",
+      "source_file": "keycloak/README-ADD-CLIENT.md",
+      "source_location": "L11",
+      "id": "keycloak_readme_add_client_ajouter_une_autre_application",
+      "community": 66,
+      "norm_label": "ajouter une autre application"
+    },
+    {
+      "label": "Appliquer les changements",
+      "file_type": "document",
+      "source_file": "keycloak/README-ADD-CLIENT.md",
+      "source_location": "L27",
+      "id": "keycloak_readme_add_client_appliquer_les_changements",
+      "community": 66,
+      "norm_label": "appliquer les changements"
     },
     {
       "label": "\ud83d\udccb Configuration de l'application",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L26",
+      "source_location": "L34",
       "id": "keycloak_readme_add_client_configuration_de_l_application",
       "community": 66,
       "norm_label": "\ud83d\udccb configuration de l'application"
@@ -32272,7 +32442,7 @@
       "label": "Pour rPictures (Node.js/Express)",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L30",
+      "source_location": "L38",
       "id": "keycloak_readme_add_client_pour_rpictures_node_js_express",
       "community": 66,
       "norm_label": "pour rpictures (node.js/express)"
@@ -32281,7 +32451,7 @@
       "label": "Code d'int\u00e9gration (exemple Node.js)",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L39",
+      "source_location": "L47",
       "id": "keycloak_readme_add_client_code_d_int\u00e9gration_exemple_node_js",
       "community": 66,
       "norm_label": "code d'integration (exemple node.js)"
@@ -32290,7 +32460,7 @@
       "label": "\ud83d\udd27 M\u00e9thode manuelle : Interface admin",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L131",
+      "source_location": "L139",
       "id": "keycloak_readme_add_client_m\u00e9thode_manuelle_interface_admin",
       "community": 66,
       "norm_label": "\ud83d\udd27 methode manuelle : interface admin"
@@ -32299,7 +32469,7 @@
       "label": "1. Acc\u00e9der \u00e0 Keycloak",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L133",
+      "source_location": "L141",
       "id": "keycloak_readme_add_client_1_acc\u00e9der_\u00e0_keycloak",
       "community": 66,
       "norm_label": "1. acceder a keycloak"
@@ -32308,7 +32478,7 @@
       "label": "2. Cr\u00e9er le client",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L140",
+      "source_location": "L148",
       "id": "keycloak_readme_add_client_2_cr\u00e9er_le_client",
       "community": 66,
       "norm_label": "2. creer le client"
@@ -32317,7 +32487,7 @@
       "label": "3. Configurer les URLs",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L148",
+      "source_location": "L156",
       "id": "keycloak_readme_add_client_3_configurer_les_urls",
       "community": 66,
       "norm_label": "3. configurer les urls"
@@ -32326,7 +32496,7 @@
       "label": "4. R\u00e9cup\u00e9rer le secret",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L162",
+      "source_location": "L170",
       "id": "keycloak_readme_add_client_4_r\u00e9cup\u00e9rer_le_secret",
       "community": 66,
       "norm_label": "4. recuperer le secret"
@@ -32335,7 +32505,7 @@
       "label": "5. Exporter la configuration",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L165",
+      "source_location": "L173",
       "id": "keycloak_readme_add_client_5_exporter_la_configuration",
       "community": 66,
       "norm_label": "5. exporter la configuration"
@@ -32344,7 +32514,7 @@
       "label": "\ud83d\udcca V\u00e9rifier la configuration",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L175",
+      "source_location": "L183",
       "id": "keycloak_readme_add_client_v\u00e9rifier_la_configuration",
       "community": 66,
       "norm_label": "\ud83d\udcca verifier la configuration"
@@ -32353,7 +32523,7 @@
       "label": "Tester l'endpoint de d\u00e9couverte",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L177",
+      "source_location": "L185",
       "id": "keycloak_readme_add_client_tester_l_endpoint_de_d\u00e9couverte",
       "community": 66,
       "norm_label": "tester l'endpoint de decouverte"
@@ -32362,7 +32532,7 @@
       "label": "Lister les clients configur\u00e9s",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L182",
+      "source_location": "L190",
       "id": "keycloak_readme_add_client_lister_les_clients_configur\u00e9s",
       "community": 66,
       "norm_label": "lister les clients configures"
@@ -32371,7 +32541,7 @@
       "label": "\ud83d\udd10 Flux d'authentification",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L189",
+      "source_location": "L197",
       "id": "keycloak_readme_add_client_flux_d_authentification",
       "community": 66,
       "norm_label": "\ud83d\udd10 flux d'authentification"
@@ -32380,7 +32550,7 @@
       "label": "\ud83d\udcdd Exemples d'applications",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L202",
+      "source_location": "L210",
       "id": "keycloak_readme_add_client_exemples_d_applications",
       "community": 66,
       "norm_label": "\ud83d\udcdd exemples d'applications"
@@ -32389,7 +32559,7 @@
       "label": "rPictures (Port 3013)",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L204",
+      "source_location": "L212",
       "id": "keycloak_readme_add_client_rpictures_port_3013",
       "community": 66,
       "norm_label": "rpictures (port 3013)"
@@ -32398,7 +32568,7 @@
       "label": "Nextcloud (Port 8080)",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L209",
+      "source_location": "L217",
       "id": "keycloak_readme_add_client_nextcloud_port_8080",
       "community": 66,
       "norm_label": "nextcloud (port 8080)"
@@ -32407,7 +32577,7 @@
       "label": "Jellyfin (Port 8096)",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L214",
+      "source_location": "L222",
       "id": "keycloak_readme_add_client_jellyfin_port_8096",
       "community": 66,
       "norm_label": "jellyfin (port 8096)"
@@ -32416,7 +32586,7 @@
       "label": "Vaultwarden (Port 8000)",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L219",
+      "source_location": "L227",
       "id": "keycloak_readme_add_client_vaultwarden_port_8000",
       "community": 66,
       "norm_label": "vaultwarden (port 8000)"
@@ -32425,7 +32595,7 @@
       "label": "\ud83d\udd11 Synchronisation automatique des secrets",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L226",
+      "source_location": "L234",
       "id": "keycloak_readme_add_client_synchronisation_automatique_des_secrets",
       "community": 66,
       "norm_label": "\ud83d\udd11 synchronisation automatique des secrets"
@@ -32434,7 +32604,7 @@
       "label": "Pourquoi ?",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L228",
+      "source_location": "L236",
       "id": "keycloak_readme_add_client_pourquoi",
       "community": 66,
       "norm_label": "pourquoi ?"
@@ -32443,7 +32613,7 @@
       "label": "Comment \u00e7a fonctionne",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L236",
+      "source_location": "L244",
       "id": "keycloak_readme_add_client_comment_\u00e7a_fonctionne",
       "community": 66,
       "norm_label": "comment ca fonctionne"
@@ -32452,7 +32622,7 @@
       "label": "Impact sur les clients des apps",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L246",
+      "source_location": "L254",
       "id": "keycloak_readme_add_client_impact_sur_les_clients_des_apps",
       "community": 66,
       "norm_label": "impact sur les clients des apps"
@@ -32461,25 +32631,25 @@
       "label": "Quand un secret est modifi\u00e9 manuellement dans Keycloak",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L258",
+      "source_location": "L266",
       "id": "keycloak_readme_add_client_quand_un_secret_est_modifi\u00e9_manuellement_dans_keycloak",
       "community": 66,
       "norm_label": "quand un secret est modifie manuellement dans keycloak"
     },
     {
-      "label": "Forcer la synchronisation",
+      "label": "Script de sync manuelle",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L262",
-      "id": "keycloak_readme_add_client_forcer_la_synchronisation",
+      "source_location": "L277",
+      "id": "keycloak_readme_add_client_script_de_sync_manuelle",
       "community": 66,
-      "norm_label": "forcer la synchronisation"
+      "norm_label": "script de sync manuelle"
     },
     {
       "label": "V\u00e9rification r\u00e9seau LDAP",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L272",
+      "source_location": "L285",
       "id": "keycloak_readme_add_client_v\u00e9rification_r\u00e9seau_ldap",
       "community": 66,
       "norm_label": "verification reseau ldap"
@@ -32488,7 +32658,7 @@
       "label": "Ordre d'ex\u00e9cution au d\u00e9marrage",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L284",
+      "source_location": "L297",
       "id": "keycloak_readme_add_client_ordre_d_ex\u00e9cution_au_d\u00e9marrage",
       "community": 66,
       "norm_label": "ordre d'execution au demarrage"
@@ -32497,7 +32667,7 @@
       "label": "\u26a0\ufe0f Important",
       "file_type": "document",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L303",
+      "source_location": "L316",
       "id": "keycloak_readme_add_client_important",
       "community": 66,
       "norm_label": "\u26a0\ufe0f important"
@@ -32627,142 +32797,6 @@
       "id": "themes_readme_v\u00e9rifier_que_le_th\u00e8me_est_charg\u00e9",
       "community": 143,
       "norm_label": "verifier que le theme est charge"
-    },
-    {
-      "label": "update-and-restart.sh",
-      "file_type": "code",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L1",
-      "metadata": {
-        "language": "bash",
-        "kind": "file"
-      },
-      "community": 9,
-      "norm_label": "update-and-restart.sh",
-      "id": "scripts_update_and_restart"
-    },
-    {
-      "label": "update-and-restart.sh script",
-      "file_type": "code",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L1",
-      "metadata": {
-        "language": "bash",
-        "kind": "bash_entrypoint"
-      },
-      "community": 9,
-      "norm_label": "update-and-restart.sh script",
-      "id": "opt_ryvie_scripts_update_and_restart_sh__entry"
-    },
-    {
-      "label": "log()",
-      "file_type": "code",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L33",
-      "metadata": {
-        "language": "bash",
-        "kind": "bash_function"
-      },
-      "community": 9,
-      "norm_label": "log()",
-      "id": "scripts_update_and_restart_log"
-    },
-    {
-      "label": "update_status()",
-      "file_type": "code",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L38",
-      "metadata": {
-        "language": "bash",
-        "kind": "bash_function"
-      },
-      "community": 9,
-      "norm_label": "update_status()",
-      "id": "scripts_update_and_restart_update_status"
-    },
-    {
-      "label": "cleanup()",
-      "file_type": "code",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L56",
-      "metadata": {
-        "language": "bash",
-        "kind": "bash_function"
-      },
-      "community": 9,
-      "norm_label": "cleanup()",
-      "id": "scripts_update_and_restart_cleanup"
-    },
-    {
-      "label": "rollback()",
-      "file_type": "code",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L69",
-      "metadata": {
-        "language": "bash",
-        "kind": "bash_function"
-      },
-      "community": 9,
-      "norm_label": "rollback()",
-      "id": "scripts_update_and_restart_rollback"
-    },
-    {
-      "label": "perform_health_check()",
-      "file_type": "code",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L314",
-      "metadata": {
-        "language": "bash",
-        "kind": "bash_function"
-      },
-      "community": 9,
-      "norm_label": "perform_health_check()",
-      "id": "scripts_update_and_restart_perform_health_check"
-    },
-    {
-      "label": "\ud83d\ude80 M\u00e9thode rapide : Script automatique",
-      "file_type": "document",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L3",
-      "community": 66,
-      "norm_label": "\ud83d\ude80 methode rapide : script automatique",
-      "id": "keycloak_readme_add_client_m\u00e9thode_rapide_script_automatique"
-    },
-    {
-      "label": "Ajouter rPictures",
-      "file_type": "document",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L5",
-      "community": 66,
-      "norm_label": "ajouter rpictures",
-      "id": "keycloak_readme_add_client_ajouter_rpictures"
-    },
-    {
-      "label": "Ajouter une autre application",
-      "file_type": "document",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L11",
-      "community": 66,
-      "norm_label": "ajouter une autre application",
-      "id": "keycloak_readme_add_client_ajouter_une_autre_application"
-    },
-    {
-      "label": "Appliquer les changements",
-      "file_type": "document",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L27",
-      "community": 66,
-      "norm_label": "appliquer les changements",
-      "id": "keycloak_readme_add_client_appliquer_les_changements"
-    },
-    {
-      "label": "Script de sync manuelle",
-      "file_type": "document",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L277",
-      "community": 66,
-      "norm_label": "script de sync manuelle",
-      "id": "keycloak_readme_add_client_script_de_sync_manuelle"
     },
     {
       "label": "path",
@@ -32979,7 +33013,7 @@
       "file_type": "document",
       "source_file": "docs/apps/appStore.md",
       "source_location": "L1",
-      "community": 36,
+      "community": 248,
       "norm_label": "appstore.md",
       "id": "apps_appstore"
     },
@@ -40728,7 +40762,7 @@
       "file_type": "document",
       "source_file": "I18N_SUMMARY.md",
       "source_location": "L1",
-      "community": 193,
+      "community": 87,
       "norm_label": "i18n_summary.md",
       "id": "i18n_summary"
     },
@@ -41574,7 +41608,7 @@
       "file_type": "document",
       "source_file": "TRADUCTION_GUIDE.md",
       "source_location": "L1",
-      "community": 193,
+      "community": 87,
       "norm_label": "traduction_guide.md",
       "id": "traduction_guide"
     },
@@ -44922,7 +44956,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 87,
       "norm_label": "app update sse system documentation",
       "id": "sse_update_doc"
     },
@@ -45143,7 +45177,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 87,
       "norm_label": "settings page",
       "id": "settings_page"
     },
@@ -45182,7 +45216,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 87,
       "norm_label": "welcome page",
       "id": "welcome_page"
     },
@@ -45195,7 +45229,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 87,
       "norm_label": "login page",
       "id": "login_page"
     },
@@ -45208,7 +45242,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 87,
       "norm_label": "language context",
       "id": "languagecontext_context"
     },
@@ -45221,7 +45255,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 87,
       "norm_label": "french translations",
       "id": "frjson_translation"
     },
@@ -45234,7 +45268,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 193,
+      "community": 87,
       "norm_label": "english translations",
       "id": "enjson_translation"
     },
@@ -46183,7 +46217,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 25,
+      "community": 114,
       "norm_label": "update context",
       "id": "updatecontext_context"
     },
@@ -46773,9 +46807,9 @@
       "source_file": "Ryvie-Back/utils/snapshotCleanup.ts",
       "source_location": "L3",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "utils_snapshotcleanup",
-      "target": "config_paths"
+      "target": "config_paths",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -63363,9 +63397,9 @@
       "source_file": "Ryvie-Back/utils/snapshotCleanup.ts",
       "source_location": "L3",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "utils_snapshotcleanup",
-      "target": "utils_snapshotcleanup_ryvie_dir"
+      "target": "utils_snapshotcleanup_ryvie_dir",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports",
@@ -90372,9 +90406,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L39",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_die"
+      "target": "backup_ryvie_backup_die",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90382,9 +90416,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L60",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_is_subvol"
+      "target": "backup_ryvie_backup_is_subvol",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90392,9 +90426,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L37",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_log"
+      "target": "backup_ryvie_backup_log",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90402,9 +90436,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L112",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_remote_has_parent"
+      "target": "backup_ryvie_backup_remote_has_parent",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90412,9 +90446,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L186",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_rotate_local"
+      "target": "backup_ryvie_backup_rotate_local",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90422,9 +90456,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L200",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_rotate_target"
+      "target": "backup_ryvie_backup_rotate_target",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90432,9 +90466,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L40",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_run"
+      "target": "backup_ryvie_backup_run",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90442,9 +90476,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L38",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_warn"
+      "target": "backup_ryvie_backup_warn",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -90452,9 +90486,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L1",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry"
+      "target": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90463,9 +90497,9 @@
       "source_location": "L49",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry",
-      "target": "backup_ryvie_backup_die"
+      "target": "backup_ryvie_backup_die",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90474,9 +90508,9 @@
       "source_location": "L64",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry",
-      "target": "backup_ryvie_backup_is_subvol"
+      "target": "backup_ryvie_backup_is_subvol",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90485,9 +90519,9 @@
       "source_location": "L89",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry",
-      "target": "backup_ryvie_backup_log"
+      "target": "backup_ryvie_backup_log",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90496,9 +90530,9 @@
       "source_location": "L124",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry",
-      "target": "backup_ryvie_backup_remote_has_parent"
+      "target": "backup_ryvie_backup_remote_has_parent",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90507,9 +90541,9 @@
       "source_location": "L229",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry",
-      "target": "backup_ryvie_backup_rotate_local"
+      "target": "backup_ryvie_backup_rotate_local",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90518,9 +90552,9 @@
       "source_location": "L230",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry",
-      "target": "backup_ryvie_backup_rotate_target"
+      "target": "backup_ryvie_backup_rotate_target",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90529,9 +90563,9 @@
       "source_location": "L93",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry",
-      "target": "backup_ryvie_backup_run"
+      "target": "backup_ryvie_backup_run",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90540,9 +90574,9 @@
       "source_location": "L64",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_backup_sh__entry",
-      "target": "backup_ryvie_backup_warn"
+      "target": "backup_ryvie_backup_warn",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90551,9 +90585,9 @@
       "source_location": "L192",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup_rotate_local",
-      "target": "backup_ryvie_backup_log"
+      "target": "backup_ryvie_backup_log",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90562,9 +90596,9 @@
       "source_location": "L211",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup_rotate_target",
-      "target": "backup_ryvie_backup_log"
+      "target": "backup_ryvie_backup_log",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90573,9 +90607,9 @@
       "source_location": "L194",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup_rotate_local",
-      "target": "backup_ryvie_backup_run"
+      "target": "backup_ryvie_backup_run",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90584,9 +90618,9 @@
       "source_location": "L214",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup_rotate_target",
-      "target": "backup_ryvie_backup_run"
+      "target": "backup_ryvie_backup_run",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90594,9 +90628,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L38",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_die"
+      "target": "backup_ryvie_restore_die",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90604,9 +90638,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L36",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_log"
+      "target": "backup_ryvie_restore_log",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90614,9 +90648,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L39",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_run"
+      "target": "backup_ryvie_restore_run",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90624,9 +90658,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L83",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_src_cat"
+      "target": "backup_ryvie_restore_src_cat",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90634,9 +90668,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L82",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_src_exists"
+      "target": "backup_ryvie_restore_src_exists",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90644,9 +90678,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L81",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_src_ls"
+      "target": "backup_ryvie_restore_src_ls",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -90654,9 +90688,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L37",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_warn"
+      "target": "backup_ryvie_restore_warn",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -90664,9 +90698,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L1",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "opt_ryvie_scripts_backup_ryvie_restore_sh__entry"
+      "target": "opt_ryvie_scripts_backup_ryvie_restore_sh__entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90675,9 +90709,9 @@
       "source_location": "L48",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_restore_sh__entry",
-      "target": "backup_ryvie_restore_die"
+      "target": "backup_ryvie_restore_die",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90686,9 +90720,9 @@
       "source_location": "L78",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_restore_sh__entry",
-      "target": "backup_ryvie_restore_log"
+      "target": "backup_ryvie_restore_log",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90697,9 +90731,9 @@
       "source_location": "L121",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_restore_sh__entry",
-      "target": "backup_ryvie_restore_run"
+      "target": "backup_ryvie_restore_run",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90708,9 +90742,9 @@
       "source_location": "L88",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_restore_sh__entry",
-      "target": "backup_ryvie_restore_src_exists"
+      "target": "backup_ryvie_restore_src_exists",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -90719,9 +90753,9 @@
       "source_location": "L97",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_restore_sh__entry",
-      "target": "backup_ryvie_restore_warn"
+      "target": "backup_ryvie_restore_warn",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -91098,6 +91132,16 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "scripts/keycloak/add-client-oauth.sh",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "keycloak_add_client_oauth",
+      "target": "opt_ryvie_scripts_keycloak_add_client_oauth_sh__entry"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "scripts/keycloak/init-apps-oauth.js",
       "source_location": "L10",
       "weight": 1.0,
@@ -91114,6 +91158,16 @@
       "confidence_score": 1.0,
       "source": "keycloak_init_apps_oauth",
       "target": "keycloak_init_apps_oauth_main"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/keycloak/remove-client-oauth.sh",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "keycloak_remove_client_oauth",
+      "target": "opt_ryvie_scripts_keycloak_remove_client_oauth_sh__entry"
     },
     {
       "relation": "contains",
@@ -91311,9 +91365,9 @@
       "source_file": "scripts/snapshot-app.sh",
       "source_location": "L37",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "scripts_snapshot_app",
-      "target": "scripts_snapshot_app_cmd_create_subvolume"
+      "target": "scripts_snapshot_app_cmd_create_subvolume",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91321,9 +91375,9 @@
       "source_file": "scripts/snapshot-app.sh",
       "source_location": "L78",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "scripts_snapshot_app",
-      "target": "scripts_snapshot_app_cmd_delete"
+      "target": "scripts_snapshot_app_cmd_delete",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91331,9 +91385,9 @@
       "source_file": "scripts/snapshot-app.sh",
       "source_location": "L59",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "scripts_snapshot_app",
-      "target": "scripts_snapshot_app_cmd_latest"
+      "target": "scripts_snapshot_app_cmd_latest",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91341,9 +91395,9 @@
       "source_file": "scripts/snapshot-app.sh",
       "source_location": "L104",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "scripts_snapshot_app",
-      "target": "scripts_snapshot_app_cmd_snapshot"
+      "target": "scripts_snapshot_app_cmd_snapshot",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91351,9 +91405,9 @@
       "source_file": "scripts/snapshot-app.sh",
       "source_location": "L25",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "scripts_snapshot_app",
-      "target": "scripts_snapshot_app_require_btrfs"
+      "target": "scripts_snapshot_app_require_btrfs",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91362,9 +91416,9 @@
       "source_location": "L167",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_snapshot_app_sh__entry",
-      "target": "scripts_snapshot_app_cmd_create_subvolume"
+      "target": "scripts_snapshot_app_cmd_create_subvolume",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91373,9 +91427,9 @@
       "source_location": "L169",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_snapshot_app_sh__entry",
-      "target": "scripts_snapshot_app_cmd_delete"
+      "target": "scripts_snapshot_app_cmd_delete",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91384,9 +91438,9 @@
       "source_location": "L168",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_snapshot_app_sh__entry",
-      "target": "scripts_snapshot_app_cmd_latest"
+      "target": "scripts_snapshot_app_cmd_latest",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91395,9 +91449,9 @@
       "source_location": "L170",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_snapshot_app_sh__entry",
-      "target": "scripts_snapshot_app_cmd_snapshot"
+      "target": "scripts_snapshot_app_cmd_snapshot",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91406,9 +91460,9 @@
       "source_location": "L40",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "scripts_snapshot_app_cmd_create_subvolume",
-      "target": "scripts_snapshot_app_require_btrfs"
+      "target": "scripts_snapshot_app_require_btrfs",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91417,9 +91471,9 @@
       "source_location": "L107",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "scripts_snapshot_app_cmd_snapshot",
-      "target": "scripts_snapshot_app_require_btrfs"
+      "target": "scripts_snapshot_app_require_btrfs",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91428,9 +91482,9 @@
       "source_location": "L141",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "scripts_snapshot_app_cmd_snapshot",
-      "target": "scripts_snapshot_app_resume"
+      "target": "scripts_snapshot_app_resume",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -91458,9 +91512,9 @@
       "source_file": "scripts/snapshot.sh",
       "source_location": "L32",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "scripts_snapshot",
-      "target": "scripts_snapshot_delete_one_set"
+      "target": "scripts_snapshot_delete_one_set",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91468,9 +91522,9 @@
       "source_file": "scripts/snapshot.sh",
       "source_location": "L23",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "scripts_snapshot",
-      "target": "scripts_snapshot_is_reserved"
+      "target": "scripts_snapshot_is_reserved",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91479,9 +91533,9 @@
       "source_location": "L63",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_snapshot_sh__entry",
-      "target": "scripts_snapshot_delete_one_set"
+      "target": "scripts_snapshot_delete_one_set",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91490,9 +91544,9 @@
       "source_location": "L59",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_snapshot_sh__entry",
-      "target": "scripts_snapshot_is_reserved"
+      "target": "scripts_snapshot_is_reserved",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -91503,6 +91557,364 @@
       "confidence_score": 1.0,
       "source": "storage_raid_setup",
       "target": "opt_ryvie_scripts_storage_raid_setup_sh__entry"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart",
+      "target": "opt_ryvie_scripts_update_and_restart_sh__entry"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L56",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart",
+      "target": "scripts_update_and_restart_cleanup"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L33",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart",
+      "target": "scripts_update_and_restart_log"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L318",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart",
+      "target": "scripts_update_and_restart_perform_health_check"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L69",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart",
+      "target": "scripts_update_and_restart_rollback"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L38",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart",
+      "target": "scripts_update_and_restart_update_status"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L440",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
+      "target": "scripts_update_and_restart_cleanup"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L138",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
+      "target": "scripts_update_and_restart_log"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L430",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
+      "target": "scripts_update_and_restart_perform_health_check"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L268",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
+      "target": "scripts_update_and_restart_rollback"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L140",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
+      "target": "scripts_update_and_restart_update_status"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L58",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart_cleanup",
+      "target": "scripts_update_and_restart_log"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L324",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart_perform_health_check",
+      "target": "scripts_update_and_restart_log"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L78",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart_rollback",
+      "target": "scripts_update_and_restart_log"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L52",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart_update_status",
+      "target": "scripts_update_and_restart_log"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L33",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "updateandrestart_script",
+      "target": "scripts_update_and_restart_log"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L77",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart_rollback",
+      "target": "scripts_update_and_restart_update_status"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L38",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "updateandrestart_script",
+      "target": "scripts_update_and_restart_update_status"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L127",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "scripts_update_and_restart_rollback",
+      "target": "scripts_update_and_restart_cleanup"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L56",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "updateandrestart_script",
+      "target": "scripts_update_and_restart_cleanup"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L69",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "updateandrestart_script",
+      "target": "scripts_update_and_restart_rollback"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-and-restart.sh",
+      "source_location": "L318",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "updateandrestart_script",
+      "target": "scripts_update_and_restart_perform_health_check"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L12",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_app"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_cors"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L31",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_escapeattr"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_express"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_fs"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_log"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L10",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_path"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L105",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_performcleanupandshutdown"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L135",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_server"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L147",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template",
+      "target": "scripts_update_monitor_template_shutdown"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L106",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template_performcleanupandshutdown",
+      "target": "scripts_update_monitor_template_log"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/update-monitor-template.js",
+      "source_location": "L148",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scripts_update_monitor_template_shutdown",
+      "target": "scripts_update_monitor_template_performcleanupandshutdown"
     },
     {
       "relation": "contains",
@@ -91684,128 +92096,6 @@
       "confidence_score": 1.0,
       "source": "update_update_and_restart_rollback",
       "target": "update_update_and_restart_cleanup"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L12",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_app"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L8",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_cors"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L31",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_escapeattr"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L7",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_express"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L9",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_fs"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L19",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_log"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L10",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_path"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L105",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_performcleanupandshutdown"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L135",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_server"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L147",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template",
-      "target": "scripts_update_monitor_template_shutdown"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L106",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template_performcleanupandshutdown",
-      "target": "scripts_update_monitor_template_log"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-monitor-template.js",
-      "source_location": "L148",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_monitor_template_shutdown",
-      "target": "scripts_update_monitor_template_performcleanupandshutdown"
     },
     {
       "relation": "contains",
@@ -101213,16 +101503,6 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "keycloak_readme_add_client_guide_ajouter_une_application_\u00e0_keycloak_sso",
-      "target": "keycloak_readme_add_client_m\u00e9thode_recommand\u00e9e_le_backend_ryvie",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
       "source_location": "L234",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -101238,6 +101518,36 @@
       "confidence_score": 1.0,
       "source": "keycloak_readme_add_client_guide_ajouter_une_application_\u00e0_keycloak_sso",
       "target": "keycloak_readme_add_client_v\u00e9rifier_la_configuration"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "keycloak/README-ADD-CLIENT.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "keycloak_readme_add_client_m\u00e9thode_rapide_script_automatique",
+      "target": "keycloak_readme_add_client_ajouter_rpictures"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "keycloak/README-ADD-CLIENT.md",
+      "source_location": "L11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "keycloak_readme_add_client_m\u00e9thode_rapide_script_automatique",
+      "target": "keycloak_readme_add_client_ajouter_une_autre_application"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "keycloak/README-ADD-CLIENT.md",
+      "source_location": "L27",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "keycloak_readme_add_client_m\u00e9thode_rapide_script_automatique",
+      "target": "keycloak_readme_add_client_appliquer_les_changements"
     },
     {
       "relation": "contains",
@@ -101378,16 +101688,6 @@
       "confidence_score": 1.0,
       "source": "keycloak_readme_add_client_synchronisation_automatique_des_secrets",
       "target": "keycloak_readme_add_client_comment_\u00e7a_fonctionne"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L262",
-      "weight": 1.0,
-      "source": "keycloak_readme_add_client_synchronisation_automatique_des_secrets",
-      "target": "keycloak_readme_add_client_forcer_la_synchronisation",
-      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -101578,272 +101878,6 @@
       "confidence_score": 1.0,
       "source": "themes_readme_d\u00e9pannage",
       "target": "themes_readme_v\u00e9rifier_que_le_th\u00e8me_est_charg\u00e9"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L1",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart",
-      "target": "opt_ryvie_scripts_update_and_restart_sh__entry"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L56",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart",
-      "target": "scripts_update_and_restart_cleanup"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L33",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart",
-      "target": "scripts_update_and_restart_log"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L318",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart",
-      "target": "scripts_update_and_restart_perform_health_check"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L69",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart",
-      "target": "scripts_update_and_restart_rollback"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L38",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart",
-      "target": "scripts_update_and_restart_update_status"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L440",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
-      "target": "scripts_update_and_restart_cleanup"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L138",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
-      "target": "scripts_update_and_restart_log"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L430",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
-      "target": "scripts_update_and_restart_perform_health_check"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L268",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
-      "target": "scripts_update_and_restart_rollback"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L140",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "opt_ryvie_scripts_update_and_restart_sh__entry",
-      "target": "scripts_update_and_restart_update_status"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L58",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart_cleanup",
-      "target": "scripts_update_and_restart_log"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L324",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart_perform_health_check",
-      "target": "scripts_update_and_restart_log"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L78",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart_rollback",
-      "target": "scripts_update_and_restart_log"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L52",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart_update_status",
-      "target": "scripts_update_and_restart_log"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L33",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "updateandrestart_script",
-      "target": "scripts_update_and_restart_log"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L77",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart_rollback",
-      "target": "scripts_update_and_restart_update_status"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L38",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "updateandrestart_script",
-      "target": "scripts_update_and_restart_update_status"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L127",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "scripts_update_and_restart_rollback",
-      "target": "scripts_update_and_restart_cleanup"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L56",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "updateandrestart_script",
-      "target": "scripts_update_and_restart_cleanup"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L69",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "updateandrestart_script",
-      "target": "scripts_update_and_restart_rollback"
-    },
-    {
-      "relation": "defines",
-      "confidence": "EXTRACTED",
-      "source_file": "scripts/update-and-restart.sh",
-      "source_location": "L318",
-      "weight": 1.0,
-      "context": "call",
-      "confidence_score": 1.0,
-      "source": "updateandrestart_script",
-      "target": "scripts_update_and_restart_perform_health_check"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L5",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "keycloak_readme_add_client_m\u00e9thode_rapide_script_automatique",
-      "target": "keycloak_readme_add_client_ajouter_rpictures"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L11",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "keycloak_readme_add_client_m\u00e9thode_rapide_script_automatique",
-      "target": "keycloak_readme_add_client_ajouter_une_autre_application"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "keycloak/README-ADD-CLIENT.md",
-      "source_location": "L27",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "keycloak_readme_add_client_m\u00e9thode_rapide_script_automatique",
-      "target": "keycloak_readme_add_client_appliquer_les_changements"
     },
     {
       "relation": "contains",

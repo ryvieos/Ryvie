@@ -370,7 +370,7 @@
   position: absolute;
   inset: 0;
   border-radius: 18px;
-  background: rgba(15, 15, 15, 0.78);
+  background: rgba(15, 15, 15, 0.88);
   /* trou un peu plus grand que le disque (22px) -> anneau transparent de séparation */
   -webkit-mask: radial-gradient(circle 26px at 50% 50%, transparent 0 25.5px, #000 26px);
   mask: radial-gradient(circle 26px at 50% 50%, transparent 0 25.5px, #000 26px);
@@ -388,6 +388,14 @@
   justify-content: center;
   z-index: 4;
   pointer-events: none;
+  /* Apparition en fondu du spinner / camembert (pas de "pop" à l'entrée).
+     La sortie est adoucie par la transition du filtre grayscale de .icon-img. */
+  animation: iconOverlayFadeIn 0.2s ease both;
+}
+
+@keyframes iconOverlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Variable animable pour fluidifier le remplissage du camembert (sinon un
@@ -407,7 +415,7 @@
   background: conic-gradient(
     from -90deg,
     transparent 0 var(--icon-progress, 0%),
-    rgba(25, 25, 25, 0.65) var(--icon-progress, 0%) 100%
+    rgba(25, 25, 25, 0.82) var(--icon-progress, 0%) 100%
   );
   /* Anime la variable elle-même -> remplissage progressif et fluide */
   transition: --icon-progress 0.5s ease;

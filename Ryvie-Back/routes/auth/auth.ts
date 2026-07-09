@@ -265,8 +265,11 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Tous les champs sont requis (name, email, password)' });
   }
-  // uid opaque et stable généré côté serveur ; le nom (cn) reste librement modifiable.
-  const uid = generateOpaqueUid();
+  // uid lisible dérivé de l'email (partie locale) puis du nom, normalisé comme dans
+  // /add-user (minuscules, [a-z0-9._-]). L'uid sert d'identifiant de connexion ET de cn.
+  // Repli sur un uid opaque si la normalisation ne laisse rien d'exploitable.
+  const normalizeUid = (v: string) => String(v || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  const uid = normalizeUid(String(email).split('@')[0]) || normalizeUid(name) || generateOpaqueUid();
 
   const ldapClient = createSafeClient();
 
@@ -313,7 +316,10 @@ router.post('/ldap/create-first-user', async (req: any, res: any) => {
           const userEntry: any = {
             objectClass: ['inetOrgPerson', 'posixAccount', 'shadowAccount'],
             uid,
-            cn: name,
+            // cn = uid : le "common name" LDAP est aligné sur l'identifiant (uid). Le nom
+            // saisi reste dans givenName + sn pour l'affichage dans les apps (sync Immich).
+            cn: uid,
+            givenName: name,
             sn: name.split(' ').pop() || name,
             mail: email,
             userPassword: password,

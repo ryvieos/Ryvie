@@ -435,8 +435,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/keycloak/README-ADD-CLIENT.md": {
-    "mtime": 1783510114.3004758,
-    "ast_hash": "af168033d820f516a2d2d9446e53773b",
+    "mtime": 1783421127.7480154,
+    "ast_hash": "3ed9c35cf07046f7fe8c04f40b8ece3d",
     "semantic_hash": ""
   },
   "/opt/Ryvie/keycloak/docker-compose.yml": {
@@ -1059,9 +1059,19 @@
     "ast_hash": "6d85d87ce83a490c9975dadd5e7ea0d0",
     "semantic_hash": ""
   },
+  "/opt/Ryvie/scripts/keycloak/add-client-oauth.sh": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "723388ef6d5e52c442a8c136f10a5872",
+    "semantic_hash": ""
+  },
   "/opt/Ryvie/scripts/keycloak/init-apps-oauth.js": {
     "mtime": 1780659362.91255,
     "ast_hash": "a1ceae25096c506dc6abcfe183acfa53",
+    "semantic_hash": ""
+  },
+  "/opt/Ryvie/scripts/keycloak/remove-client-oauth.sh": {
+    "mtime": 1780659362.91255,
+    "ast_hash": "34041dd1f6e19d492de801e7279a3945",
     "semantic_hash": ""
   },
   "/opt/Ryvie/scripts/lifecycle/dev.sh": {

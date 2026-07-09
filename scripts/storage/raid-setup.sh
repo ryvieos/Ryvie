@@ -4,8 +4,6 @@
 # que toutes les machines Ryvie ont la dernière version.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # --- 1. BOOT_DEGRADED=true dans initramfs ---
 if [ -d /etc/initramfs-tools/conf.d ] && ! grep -qs "BOOT_DEGRADED=true" /etc/initramfs-tools/conf.d/mdadm 2>/dev/null; then
   echo "BOOT_DEGRADED=true" | sudo tee /etc/initramfs-tools/conf.d/mdadm > /dev/null

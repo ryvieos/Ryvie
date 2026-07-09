@@ -14,6 +14,12 @@ const lastProgressMap = new Map();
 // Map pour stocker les apps en cours de nettoyage (appId -> timestamp)
 const cleaningApps = new Map();
 
+// Set des apps dont l'opération en cours est une MISE À JOUR (et non une première
+// installation). L'annulation est INTERDITE pour ces apps : elle tuerait le worker
+// puis lancerait forceCleanupCancelledInstall, ce qui SUPPRIMERAIT l'app existante
+// (déjà fonctionnelle). On ne peut annuler qu'une première installation.
+const updatingApps = new Set();
+
 /**
  * GET /api/appstore/active-installations - Retourne la liste des installations en cours
  */
@@ -398,6 +404,13 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
     lastProgressMap.set(appId, { progress: 0, message: 'Installation en cours...', stage: 'active' });
     // Stocker le worker actif pour pouvoir l'annuler plus tard
     activeWorkers.set(appId, worker);
+    // Marquer si c'est une mise à jour (annulation interdite, cf. updatingApps).
+    if (req.body && req.body.isUpdate === true) {
+      updatingApps.add(appId);
+      console.log(`[appStore] 🔄 ${appId} : mise à jour en cours -> annulation désactivée`);
+    } else {
+      updatingApps.delete(appId);
+    }
     
     worker.on('message', (message) => {
       if (message.type === 'log') {
@@ -413,6 +426,8 @@ router.post('/appstore/apps/:id/install', verifyToken, hasPermission('manage_app
       activeWorkers.delete(appId);
       // Nettoyer la progression sauvegardée
       lastProgressMap.delete(appId);
+      // Fin de l'opération : lever le verrou "mise à jour".
+      updatingApps.delete(appId);
       
       if (code === 0) {
         console.log(`[appStore] ✅ Installation de ${appId} terminée avec succès`);
@@ -464,7 +479,20 @@ router.post('/appstore/apps/:id/cancel', verifyToken, hasPermission('manage_apps
   try {
     const appId = req.params.id;
     console.log(`[appStore] 🛑 Demande d'annulation de l'installation de ${appId}...`);
-    
+
+    // GARDE-FOU : on n'annule JAMAIS une mise à jour. Annuler tuerait le worker puis
+    // supprimerait l'app existante (forceCleanupCancelledInstall). On refuse la requête
+    // sans rien toucher — l'app reste intacte et la mise à jour se poursuit.
+    if (updatingApps.has(appId)) {
+      console.log(`[appStore] ⛔ Annulation refusée : ${appId} est une mise à jour (protection anti-suppression)`);
+      return res.status(409).json({
+        success: false,
+        error: 'cancel_update_forbidden',
+        message: `Impossible d'annuler la mise à jour de ${appId} : cela supprimerait l'application. La mise à jour se poursuit.`,
+        appId,
+      });
+    }
+
     // Vérifier si un worker est actif pour cette app
     const worker = activeWorkers.get(appId);
     

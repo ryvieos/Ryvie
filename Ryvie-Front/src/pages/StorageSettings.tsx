@@ -25,7 +25,8 @@ import {
   faExchangeAlt,
   faTrash,
   faExpand,
-  faMinus
+  faMinus,
+  faInfoCircle
 } from '@fortawesome/free-solid-svg-icons';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
@@ -129,6 +130,8 @@ const StorageSettings = () => {
   const [raidStatus, setRaidStatus] = useState<any>(() => cached?.raidStatus || null);
   const [raidMemberPartitions, setRaidMemberPartitions] = useState(() => cached?.raidMemberPartitions || []);
   const [raidMemberDisksMap, setRaidMemberDisksMap] = useState(() => cached?.raidMemberDisksMap || {});
+  // Mode de stockage renvoyé par le backend : 'appliance' (RAID géré) ou 'vps' (RAID désactivé)
+  const [storageMode, setStorageMode] = useState(() => cached?.storageMode || null);
 
   // Mode: 'overview' (view disks + health), 'create' (new RAID), 'manage' (existing RAID)
   const [mode, setMode] = useState('overview');
@@ -254,10 +257,10 @@ const StorageSettings = () => {
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify({
         disks, diskHealth, dataSource, sourceDevice,
-        raidStatus, raidMemberPartitions, raidMemberDisksMap, raidType
+        raidStatus, raidMemberPartitions, raidMemberDisksMap, raidType, storageMode
       }));
     } catch {}
-  }, [loading, disks, diskHealth, dataSource, sourceDevice, raidStatus, raidMemberPartitions, raidMemberDisksMap, raidType]);
+  }, [loading, disks, diskHealth, dataSource, sourceDevice, raidStatus, raidMemberPartitions, raidMemberDisksMap, raidType, storageMode]);
 
   // Connexion Socket.IO pour les logs en temps réel
   useEffect(() => {
@@ -399,6 +402,10 @@ const StorageSettings = () => {
       if (response.data.success && response.data.arrays) {
         const arrays = response.data.arrays;
         const dataDevice = response.data.dataDevice;
+
+        if (response.data.storageMode) {
+          setStorageMode(response.data.storageMode);
+        }
         
         console.log('RAID Arrays received:', arrays);
         
@@ -1399,7 +1406,7 @@ const StorageSettings = () => {
             <button className={`mode-tab ${mode === 'overview' ? 'active' : ''}`} onClick={() => { setMode('overview'); setSelectedDisks([]); setSelectedDisk(''); }}>
               <FontAwesomeIcon icon={faHeartbeat} /> {t('storageSettings.diskOverview')}
             </button>
-            {!(raidStatus && raidStatus.type === 'mdadm') && (
+            {storageMode !== 'vps' && !(raidStatus && raidStatus.type === 'mdadm') && (
               <button className={`mode-tab ${mode === 'create' ? 'active' : ''}`} onClick={() => { setMode('create'); setSelectedDisks([]); setSelectedDisk(''); setCanProceed(false); setValidationErrors([]); }}>
                 <FontAwesomeIcon icon={faPlus} /> {t('storageSettings.createRaid')}
               </button>
@@ -1490,7 +1497,14 @@ const StorageSettings = () => {
                 </div>
               )}
 
-              {!dataSource && !raidStatus && (
+              {storageMode === 'vps' && !raidStatus && (
+                <div className="alert-warning" style={{ background: 'rgba(59, 130, 246, 0.08)', borderColor: 'rgba(59, 130, 246, 0.35)' }}>
+                  <FontAwesomeIcon icon={faInfoCircle} />
+                  <div><strong>{t('storageSettings.info')}:</strong> {t('storageSettings.vpsStorageInfo')}</div>
+                </div>
+              )}
+
+              {storageMode !== 'vps' && !dataSource && !raidStatus && (
                 <div className="alert-warning">
                   <FontAwesomeIcon icon={faExclamationTriangle} />
                   <div><strong>{t('storageSettings.info')}:</strong> {t('storageSettings.noRaidDetected')}</div>

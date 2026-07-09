@@ -7,17 +7,17 @@ echo ""
 
 # Installer les dépendances backend
 echo "📦 Installation des dépendances backend..."
-cd /opt/Ryvie/Ryvie-Back
+cd /opt/Ryvie/Ryvie-Back || exit 1
 npm install
 
 # Installer les dépendances frontend
 echo "📦 Installation des dépendances frontend..."
-cd /opt/Ryvie/Ryvie-Front
+cd /opt/Ryvie/Ryvie-Front || exit 1
 npm install
 
 # Build backend
 echo "📦 Build du backend..."
-cd /opt/Ryvie/Ryvie-Back
+cd /opt/Ryvie/Ryvie-Back || exit 1
 npm run build
 if [ $? -ne 0 ]; then
   echo "❌ Erreur lors du build du backend"
@@ -26,7 +26,7 @@ fi
 
 # Build frontend
 echo "📦 Build du frontend..."
-cd /opt/Ryvie/Ryvie-Front
+cd /opt/Ryvie/Ryvie-Front || exit 1
 rm -rf dist
 NODE_ENV=production npm run build
 if [ $? -ne 0 ]; then

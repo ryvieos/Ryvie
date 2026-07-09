@@ -42,7 +42,7 @@ fi
 # Installer les dépendances backend (avec devDependencies pour tsc)
 # npm install mettra à jour uniquement les dépendances modifiées
 echo "📦 Installation des dépendances backend..."
-cd /opt/Ryvie/Ryvie-Back
+cd /opt/Ryvie/Ryvie-Back || exit 1
 if ! npm install --include=dev; then
   echo "❌ Erreur lors de l'installation des dépendances backend"
   exit 1
@@ -55,7 +55,7 @@ echo "✅ Dépendances backend installées"
 
 # Installer les dépendances frontend (avec devDependencies pour webpack)
 echo "📦 Installation des dépendances frontend..."
-cd /opt/Ryvie/Ryvie-Front
+cd /opt/Ryvie/Ryvie-Front || exit 1
 if ! npm install --include=dev; then
   echo "❌ Erreur lors de l'installation des dépendances frontend"
   exit 1
@@ -82,7 +82,7 @@ fi
 
 # Build backend
 echo "📦 Build du backend..."
-cd /opt/Ryvie/Ryvie-Back
+cd /opt/Ryvie/Ryvie-Back || exit 1
 npm run build
 if [ $? -ne 0 ]; then
   echo "❌ Erreur lors du build du backend"
@@ -98,7 +98,7 @@ fi
 
 # Build frontend
 echo "📦 Build du frontend..."
-cd /opt/Ryvie/Ryvie-Front
+cd /opt/Ryvie/Ryvie-Front || exit 1
 rm -rf dist
 NODE_ENV=production npm run build
 if [ $? -ne 0 ]; then
@@ -113,11 +113,11 @@ echo "✅ Symlink dist/config → /data/config/frontend-view créé"
 
 # Réinstaller uniquement les dépendances de production (optimisation)
 echo "🧹 Nettoyage des devDependencies pour la production..."
-cd /opt/Ryvie/Ryvie-Back
+cd /opt/Ryvie/Ryvie-Back || exit 1
 if ! npm prune --production; then
   echo "⚠️  Avertissement: npm prune a échoué pour le backend (non critique)"
 fi
-cd /opt/Ryvie/Ryvie-Front
+cd /opt/Ryvie/Ryvie-Front || exit 1
 if ! npm prune --production; then
   echo "⚠️  Avertissement: npm prune a échoué pour le frontend (non critique)"
 fi
@@ -126,7 +126,7 @@ fi
 if [ ! -f "/opt/Ryvie/Ryvie-Front/node_modules/.bin/serve" ] && [ ! -d "/opt/Ryvie/Ryvie-Front/node_modules/serve" ]; then
   echo "❌ ERREUR CRITIQUE: serve a été supprimé par npm prune!"
   echo "🔄 Réinstallation de serve..."
-  cd /opt/Ryvie/Ryvie-Front
+  cd /opt/Ryvie/Ryvie-Front || exit 1
   npm install serve --save
 fi
 

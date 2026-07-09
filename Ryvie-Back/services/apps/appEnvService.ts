@@ -32,17 +32,30 @@ function readEnvFile(envPath: string): string {
  * l'écriture directe est refusée (EACCES/EPERM).
  */
 function writeEnvFile(envPath: string, content: string): void {
+  // 1) Écriture directe.
   try {
     fs.writeFileSync(envPath, content, 'utf8');
+    return;
   } catch (err: any) {
-    if (err.code === 'EACCES' || err.code === 'EPERM') {
-      const tmpFile = `/tmp/ryvie-env-${process.pid}-${Date.now()}`;
-      fs.writeFileSync(tmpFile, content, 'utf8');
-      execSync(`sudo cp "${tmpFile}" "${envPath}" && rm -f "${tmpFile}"`);
-    } else {
-      throw err;
-    }
+    if (err.code !== 'EACCES' && err.code !== 'EPERM') throw err;
   }
+
+  // 2) Écriture refusée = fichier appartenant à root (ex. .env généré par install.sh)
+  //    alors que le backend tourne en utilisateur applicatif. Si le DOSSIER parent est
+  //    inscriptible par le backend, on supprime puis recrée le fichier : il appartiendra
+  //    alors au backend -> plus aucune EACCES aux écritures suivantes, et SANS sudo.
+  try {
+    fs.unlinkSync(envPath);
+    fs.writeFileSync(envPath, content, 'utf8');
+    return;
+  } catch (_) {
+    // dossier parent non inscriptible -> on tente le fallback sudo ci-dessous.
+  }
+
+  // 3) Dernier recours : sudo cp depuis un fichier temporaire.
+  const tmpFile = `/tmp/ryvie-env-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmpFile, content, 'utf8');
+  execSync(`sudo cp "${tmpFile}" "${envPath}" && rm -f "${tmpFile}"`);
 }
 
 /** Valeur actuelle d'une variable dans un contenu .env (ou null). */

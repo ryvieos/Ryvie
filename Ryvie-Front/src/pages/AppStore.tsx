@@ -120,7 +120,14 @@ const AppStore = () => {
   };
 
   // Annuler une installation en cours
-  const cancelInstall = async (appId, appName) => {
+  const cancelInstall = async (appId, appName, isUpdate = false) => {
+    // On n'annule JAMAIS une mise à jour : cela supprimerait l'app existante.
+    // (Le bouton est déjà masqué dans ce cas ; ce garde protège aussi tout appel direct.)
+    if (isUpdate) {
+      addLog(`⛔ Annulation impossible pendant une mise à jour de ${appName}`, 'warning');
+      showToast(t('appStore.notifications.cannotCancelUpdate'), 'info');
+      return;
+    }
     const eventSource = activeEventSources.current[appId];
     if (eventSource) {
       eventSource.close();
@@ -640,8 +647,9 @@ const AppStore = () => {
 try {
   addLog('📤 Envoi de la requête au serveur...', 'info');
   
-  // Option 1: Essayer avec un body vide au lieu de null
-  response = await axios.post(requestUrl, {}, { 
+  // isUpdate informe le backend qu'il s'agit d'une mise à jour : l'annulation sera
+  // alors refusée côté serveur (annuler supprimerait l'app existante).
+  response = await axios.post(requestUrl, { isUpdate }, {
     timeout: 300000,
     headers: {
       'Content-Type': 'application/json',
@@ -1037,7 +1045,8 @@ try {
     const isCurrentlyCleaning = appId ? cleaningApps.has(appId) : false;
     let label;
     if (isCurrentlyInstalling) {
-      label = t('appStore.installing');
+      // Distinguer « Mise à jour… » d'« Installation… » selon l'opération en cours.
+      label = updateAvailable ? t('appStore.updating') : t('appStore.installing');
     } else if (isCurrentlyCleaning) {
       label = t('appStore.cleaning');
     } else if (updateAvailable) {
@@ -1368,10 +1377,10 @@ try {
                           >
                             <span>{label}</span>
                           </button>
-                          {isInstalling && (
-                            <button 
+                          {isInstalling && !updateAvailable && (
+                            <button
                               className="cancel-install-btn"
-                              onClick={(e) => { e.stopPropagation(); cancelInstall(app.id, app.name); }}
+                              onClick={(e) => { e.stopPropagation(); cancelInstall(app.id, app.name, updateAvailable); }}
                               title={t('appStore.notifications.cancelInstallation')}
                             >
                               <FontAwesomeIcon icon={faTimes} />
