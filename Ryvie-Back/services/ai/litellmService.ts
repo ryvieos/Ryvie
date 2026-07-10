@@ -19,7 +19,10 @@ const {
 const CONTAINER = 'ryvie-litellm';
 // 4000 est déjà pris par app-rdrive-node → on utilise 4010 (hôte + conteneur).
 const PORT = 4010;
-const IMAGE = 'ghcr.io/berriai/litellm:main-stable';
+// Version ÉPINGLÉE (pas de tag flottant `main-stable`) : une version de Ryvie = une
+// version LiteLLM reproductible. Pour monter de version, bumper ce tag dans une release
+// (le changement de tag force docker à re-pull au prochain recreate du conteneur).
+const IMAGE = 'ghcr.io/berriai/litellm:v1.91.1';
 
 // Réseau DÉDIÉ à l'IA : LiteLLM + les apps connectées y vivent. Les apps joignent
 // `ryvie-litellm` par DNS SANS être exposées à l'infra sensible de ryvie-network
@@ -129,16 +132,21 @@ function restart(): void {
   });
 }
 
-/** Démarre LiteLLM s'il est configuré et pas déjà lancé (appelé au boot). */
+/** Démarre LiteLLM s'il est configuré (appelé au boot). Toujours writeCompose + up -d,
+ *  même si le conteneur tourne déjà : idempotent, mais permet de détecter un changement
+ *  de compose/image (ex. bump du tag LiteLLM ÉPINGLÉ lors d'un update Ryvie) → docker
+ *  re-pull et recrée le conteneur. Aligné sur le comportement de Keycloak
+ *  (ensureKeycloakRunning) pour que « une version de Ryvie = des versions de composants
+ *  reproductibles » s'applique vraiment aux mises à jour, pas seulement aux fresh installs. */
 function ensureRunning(): { success: boolean; alreadyRunning?: boolean; started?: boolean; skipped?: boolean; error?: string } {
   try {
     if (!isConfigured()) {
       return { success: true, skipped: true };
     }
-    if (isRunning()) return { success: true, alreadyRunning: true };
+    const wasRunning = isRunning();
     writeCompose();
     composeUpWithRecovery(`docker compose up -d`, { cwd: LITELLM_DIR, timeout: 120000, label: 'litellm' });
-    return { success: true, started: true };
+    return { success: true, started: !wasRunning, alreadyRunning: wasRunning };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
