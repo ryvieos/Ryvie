@@ -486,6 +486,8 @@
       "testing": "Test…",
       "testOk": "✅ Modèle connecté.",
       "testFail": "❌ Échec du test :",
+      "savedAndTestOk": "✅ Enregistré, modèle connecté.",
+      "savedButTestFail": "⚠️ Enregistré, mais le modèle ne répond pas :",
       "saved": "Fournisseur IA configuré.",
       "savedPending": "Enregistré. La passerelle IA démarre encore…",
       "savedShort": "Enregistré",

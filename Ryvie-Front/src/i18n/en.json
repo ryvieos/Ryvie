@@ -479,6 +479,8 @@
       "testing": "Testing…",
       "testOk": "✅ Model connected.",
       "testFail": "❌ Test failed:",
+      "savedAndTestOk": "✅ Saved, model connected.",
+      "savedButTestFail": "⚠️ Saved, but the model isn't responding:",
       "saved": "AI provider configured.",
       "savedPending": "Saved. The AI gateway is still starting…",
       "savedShort": "Saved",

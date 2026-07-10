@@ -179,6 +179,18 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
     }
   };
 
+  // Vrai appel via LiteLLM jusqu'au fournisseur. Renvoie { ok, model?, error? } SANS
+  // gérer le toast : mutualisé entre le bouton « Tester » et l'enregistrement (qui
+  // enchaîne un test automatiquement).
+  const runTest = async (): Promise<any> => {
+    const res = await axios.post(
+      `${serverUrl}/api/ai/test`,
+      { provider, model },
+      { timeout: 60000, _noAuthRedirect: true } as any
+    );
+    return res.data || {};
+  };
+
   const save = async () => {
     if (!provider) return;
     setSaving(true);
@@ -190,13 +202,35 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
       );
       setStatus(res.data);
       setApiKey('');
-      setToast({
-        type: 'success',
-        msg: res.data?.ready === false ? t('settings.ai.savedPending') : t('settings.ai.saved')
-      });
-      // Flash « ✓ Enregistré » animé sur le bouton pendant ~2,5 s.
+      // Flash « ✓ Enregistré » animé sur le bouton pendant ~2,5 s (la config EST
+      // enregistrée, quel que soit le résultat du test qui suit).
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 2500);
+
+      if (res.data?.ready === false) {
+        // Passerelle pas encore prête (désactivée / en cours de démarrage) → inutile
+        // de tester : on informe simplement que l'enregistrement a réussi.
+        setToast({ type: 'success', msg: t('settings.ai.savedPending') });
+      } else {
+        // Enregistré ET passerelle prête → on ENCHAÎNE un vrai test de connexion au
+        // modèle, pour confirmer d'un coup que la clé/le modèle répondent réellement.
+        setTesting(true);
+        try {
+          const data = await runTest();
+          const tested = data?.model ? ` (${data.model})` : '';
+          if (data?.ok) {
+            setToast({ type: 'success', msg: `${t('settings.ai.savedAndTestOk')}${tested}`.trim() });
+          } else {
+            setToast({ type: 'error', msg: `${t('settings.ai.savedButTestFail')}${tested} ${data?.error || ''}`.trim() });
+          }
+        } catch (e: any) {
+          setToast({ type: 'error', msg: `${t('settings.ai.savedButTestFail')} ${e?.response?.data?.error || ''}`.trim() });
+        } finally {
+          setTesting(false);
+        }
+      }
+      // Le test peut avoir (re)démarré la passerelle → rafraîchit l'état.
+      load();
     } catch (e: any) {
       setToast({ type: 'error', msg: e?.response?.data?.error || t('settings.ai.saveError') });
     } finally {
@@ -207,14 +241,14 @@ const AiSettings: React.FC<{ accessMode: string }> = ({ accessMode }) => {
   const test = async () => {
     setTesting(true);
     try {
-      const res = await axios.post(`${serverUrl}/api/ai/test`, { provider, model }, { timeout: 60000, _noAuthRedirect: true } as any);
-      const tested = res.data?.model ? ` (${res.data.model})` : '';
-      if (res.data?.ok) {
+      const data = await runTest();
+      const tested = data?.model ? ` (${data.model})` : '';
+      if (data?.ok) {
         // On ne montre PAS la réponse du modèle (variable, ex. « pong ») : seul
         // compte de savoir si le modèle répond/est connecté.
         setToast({ type: 'success', msg: `${t('settings.ai.testOk')}${tested}`.trim() });
       } else {
-        setToast({ type: 'error', msg: `${t('settings.ai.testFail')}${tested} ${res.data?.error || ''}`.trim() });
+        setToast({ type: 'error', msg: `${t('settings.ai.testFail')}${tested} ${data?.error || ''}`.trim() });
       }
       // Le test peut avoir (re)démarré la passerelle → rafraîchit l'état.
       load();
