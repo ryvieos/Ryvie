@@ -387,13 +387,17 @@ async function provisionApp(appId: string): Promise<void> {
   const appDir = resolveAppDir(manifest, appId);
   mutateAppEnv(appDir, ai, false);
   if (ai.restart !== false) await composeUp(appDir);
-  // APRÈS un éventuel recreate : rattache les conteneurs de l'app au réseau LiteLLM
-  // (pour résoudre `ryvie-litellm` par DNS → adressage indépendant de l'IP hôte).
+  // Filet de sécurité : les apps IA déclarent `ryvie-ai` dans leur compose (rattachement
+  // déclaratif, durable), donc cet appel est normalement un no-op (« already exists »,
+  // ignoré). Il ne fait un vrai `connect` que pour une app dont le compose n'aurait pas
+  // encore été migré vers la déclaration réseau → résout `ryvie-litellm` par DNS.
   await ensureContainersOnNetwork(ai, true);
   if (ai.hooks && ai.hooks.connect) await runHook(ai.hooks.connect, appDir, hookVars(appId, appDir, 'connect', manifest), appId);
 }
 
-/** Déprovisionne : hook disconnect (app encore up) → retrait env → redémarrage. */
+/** Déprovisionne : hook disconnect (app encore up) → retrait env → redémarrage.
+ *  Ne détache PAS du réseau IA (cf. note en fin de fonction) : le retrait de l'env
+ *  suffit à couper l'IA, et la déclaration `ryvie-ai` du compose rend un detach vain. */
 async function deprovisionApp(appId: string): Promise<void> {
   const manifest = await appManager.getAppManifest(appId);
   const ai = manifest && manifest.ai;
@@ -401,8 +405,11 @@ async function deprovisionApp(appId: string): Promise<void> {
   if (ai && ai.hooks && ai.hooks.disconnect) await runHook(ai.hooks.disconnect, appDir, hookVars(appId, appDir, 'disconnect', manifest), appId);
   if (ai) mutateAppEnv(appDir, ai, true);
   if (ai && ai.restart !== false) await composeUp(appDir);
-  // Détache les conteneurs de l'app du réseau LiteLLM (symétrique du connect).
-  if (ai) await ensureContainersOnNetwork(ai, false);
+  // PAS de détachement réseau : les apps IA déclarent `ryvie-ai` dans leur compose, donc
+  // un `docker network disconnect` serait non durable (le prochain up rerattache) ET
+  // incohérent avec le compose. Ce qui coupe RÉELLEMENT l'IA, c'est le retrait de l'env
+  // (baseUrl/clé, ci-dessus) + le hook disconnect : sans baseUrl, l'app ne joint pas
+  // LiteLLM même si son conteneur reste sur `ryvie-ai` (réseau isolé, sans infra sensible).
 }
 
 // ───────── API publique ─────────
@@ -799,8 +806,20 @@ async function testConnection(input: any = {}): Promise<any> {
   }
 }
 
-/** Démarrage backend : relance LiteLLM s'il est configuré ET non désactivé. */
+/** Démarrage backend : garantit d'ABORD l'existence du réseau IA, puis relance
+ *  LiteLLM s'il est configuré ET non désactivé.
+ *
+ *  Le réseau `ryvie-ai` (external) est provisionné INCONDITIONNELLEMENT — même si
+ *  l'IA n'est pas configurée, est désactivée, ou si LiteLLM est arrêté. Raison : les
+ *  apps IA déclarent désormais `ryvie-ai` (external) DANS LEUR COMPOSE pour rejoindre
+ *  LiteLLM en déclaratif (rattachement survivant à chaque recreate/update, au lieu d'un
+ *  `docker network connect` impératif reperdu à chaque `up`). Un réseau external doit
+ *  exister AVANT le `up` de l'app — y compris le `docker compose up` lancé par un
+ *  install.sh, qui contourne composeUpWithRecovery — sinon l'app ne démarre PLUS du tout
+ *  (« network ryvie-ai not found »). Le backend bootant avant toute opération d'app et le
+ *  réseau persistant, le créer ici couvre tout le cycle de vie. Idempotent. */
 function ensureRunning() {
+  try { litellm.ensureNetwork(); } catch (_) { /* non bloquant : ne doit pas empêcher le boot */ }
   const cfg = loadConfig();
   if (cfg.enabled === false) return { success: true, skipped: true, disabled: true };
   return litellm.ensureRunning();
