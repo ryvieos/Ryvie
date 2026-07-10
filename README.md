@@ -2,7 +2,7 @@
  <img src="Ryvie-Front/src/icons/ryvielogo0.png" alt="Ryvie" width="160" />
 </p>
 
-<h1 align="center">Ryvie, the Self-Hosted Personal Cloud OS</h1>
+<h1 align="center">Ryvie · Personal Cloud OS</h1>
 
 <p align="center">
  <b>Your personal cloud.</b><br/>
