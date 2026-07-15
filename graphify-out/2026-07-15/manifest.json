@@ -10,8 +10,8 @@
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/index.ts": {
-    "mtime": 1784123017.5498862,
-    "ast_hash": "462136132b9b6772d197db804ed05a45",
+    "mtime": 1783678545.5466375,
+    "ast_hash": "e02a0daa3a7ad35ecdffe628d4ecec18",
     "semantic_hash": ""
   },
   "/opt/Ryvie/Ryvie-Back/middleware/auth.ts": {
@@ -1092,16 +1092,6 @@
   "/opt/Ryvie/README.fr.md": {
     "mtime": 1784121677.9767513,
     "ast_hash": "4dc1bef5c7c33ba7e342ec56fe443850",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/services/system/migrationRunner.ts": {
-    "mtime": 1784122979.9939814,
-    "ast_hash": "0784d67a6fcf5525071832f539b89556",
-    "semantic_hash": ""
-  },
-  "/opt/Ryvie/Ryvie-Back/migrations/README.md": {
-    "mtime": 1784123000.26593,
-    "ast_hash": "a58c274e6577ee2c5090ef9f4b1e8827",
     "semantic_hash": ""
   }
 }

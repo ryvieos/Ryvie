@@ -144,8 +144,10 @@ function compareVersions(current, latest) {
   
   // Si les versions principales sont identiques, comparer les pré-versions
   // Une version sans pré-version est plus récente qu'une version avec pré-version
-  if (!curr.prerelease && lat.prerelease) return 'update-available';
-  if (curr.prerelease && !lat.prerelease) return 'ahead';
+  // (ex: v1.0.0 > v1.0.0-beta). Donc passer d'une pré-version à la version
+  // stable de même numéro (ex: v1.0.0-beta -> v1.0.0) doit proposer la MAJ.
+  if (!curr.prerelease && lat.prerelease) return 'ahead';
+  if (curr.prerelease && !lat.prerelease) return 'update-available';
   
   // Si les deux ont des pré-versions, les comparer
   if (curr.prerelease && lat.prerelease) {
