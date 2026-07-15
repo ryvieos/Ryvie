@@ -59,9 +59,28 @@ command -v jq >/dev/null || die "jq est requis."
 
 is_subvol() { btrfs subvolume show "$1" >/dev/null 2>&1; }
 
+# Un snapshot Btrfs N'EST PAS récursif : les sous-volumes imbriqués (ex: apps/rdrive,
+# apps/rpictures) apparaissent VIDES dans un snapshot du parent. Il faut donc les
+# découvrir et les sauvegarder chacun individuellement, sinon toute la donnée
+# applicative (fichiers rDrive, photos rPictures, bases…) est silencieusement perdue.
+mangle() { printf '%s' "${1//\//%}"; }   # apps/rdrive -> apps%rdrive (nom plat sûr)
+
+# Liste aplatie des sous-volumes à sauvegarder : chaque top-level + ses imbriqués,
+# parents AVANT enfants (l'ordre de découverte le garantit).
+declare -a ALL_SVS=()
 for sv in "${SUBVOLS[@]}"; do
   [ -d "$DATA_ROOT/$sv" ] || die "$DATA_ROOT/$sv est introuvable (installation incomplète ?)."
-  is_subvol "$DATA_ROOT/$sv" || warn "$DATA_ROOT/$sv est un dossier simple (pas un sous-volume) → envoi complet à chaque fois."
+  ALL_SVS+=("$sv")
+  if is_subvol "$DATA_ROOT/$sv"; then
+    # `btrfs subvolume list -o` renvoie les chemins relatifs à la racine du FS
+    # (/data en est la racine), ex: "apps/rdrive".
+    while IFS= read -r rel; do
+      [ -n "$rel" ] || continue
+      [ -e "$DATA_ROOT/$rel" ] && ALL_SVS+=("$rel")
+    done < <(btrfs subvolume list -o "$DATA_ROOT/$sv" 2>/dev/null | sed 's/.* path //')
+  else
+    warn "$DATA_ROOT/$sv est un dossier simple (pas un sous-volume) → envoi complet à chaque fois."
+  fi
 done
 
 # ---------- Analyse de la cible ----------
@@ -89,16 +108,19 @@ BACKUP_NAME="ryvie-backup-$TS"
 log "Cible: $TARGET (mode: $MODE) — sauvegarde: $BACKUP_NAME"
 
 # ---------- 1. Snapshots locaux lecture-seule (cohérents, instantanés) ----------
+# Chaque sous-volume (imbriqués inclus) est snapshoté SÉPARÉMENT, à plat, sous un
+# nom manglé — impossible de nicher un snapshot RO dans un autre snapshot RO.
 log "Création des snapshots locaux lecture-seule…"
 run mkdir -p "$SNAP_BOOK/$TS"
-for sv in "${SUBVOLS[@]}"; do
-  if is_subvol "$DATA_ROOT/$sv"; then
-    run btrfs subvolume snapshot -r "$DATA_ROOT/$sv" "$SNAP_BOOK/$TS/$sv" >/dev/null
+for rel in "${ALL_SVS[@]}"; do
+  m="$(mangle "$rel")"
+  if is_subvol "$DATA_ROOT/$rel"; then
+    run btrfs subvolume snapshot -r "$DATA_ROOT/$rel" "$SNAP_BOOK/$TS/$m" >/dev/null
   else
     # Dossier simple → on fabrique un sous-volume lecture-seule (reflink rapide, même FS)
-    run btrfs subvolume create "$SNAP_BOOK/$TS/$sv" >/dev/null
-    run cp -a --reflink=auto "$DATA_ROOT/$sv/." "$SNAP_BOOK/$TS/$sv/"
-    run btrfs property set -ts "$SNAP_BOOK/$TS/$sv" ro true
+    run btrfs subvolume create "$SNAP_BOOK/$TS/$m" >/dev/null
+    run cp -a --reflink=auto "$DATA_ROOT/$rel/." "$SNAP_BOOK/$TS/$m/"
+    run btrfs property set -ts "$SNAP_BOOK/$TS/$m" ro true
   fi
 done
 
@@ -109,7 +131,12 @@ if [ "$FULL" -eq 0 ]; then
 fi
 
 # ---------- 2. Transfert ----------
-remote_has_parent() { # $1=sv
+# Destination :
+#   · rsync    → arbre IMBRIQUÉ ($TARGET/$TS/apps/rdrive) : lisible, portable (ext4/NTFS…)
+#   · send/ssh → sous-volumes À PLAT, manglés ($TARGET/$TS/apps%rdrive) : on ne peut pas
+#     nicher un sous-volume reçu (RO) sous un autre. Le manifest note le layout pour
+#     que la restauration reconstruise l'arborescence.
+remote_has_parent() { # $1=mangled
   case "$MODE" in
     send)     btrfs subvolume show "$TARGET/$PARENT_TS/$1" >/dev/null 2>&1 ;;
     ssh-send) ssh "$SSH_HOST" "btrfs subvolume show '$SSH_PATH/$PARENT_TS/$1'" >/dev/null 2>&1 ;;
@@ -120,44 +147,48 @@ remote_has_parent() { # $1=sv
 case "$MODE" in
   send)
     run mkdir -p "$TARGET/$TS"
-    for sv in "${SUBVOLS[@]}"; do
-      if [ -n "$PARENT_TS" ] && is_subvol "$DATA_ROOT/$sv" && remote_has_parent "$sv"; then
-        log "  → $sv (incrémental depuis $PARENT_TS)"
+    for rel in "${ALL_SVS[@]}"; do
+      m="$(mangle "$rel")"
+      if [ -n "$PARENT_TS" ] && is_subvol "$DATA_ROOT/$rel" && [ -d "$SNAP_BOOK/$PARENT_TS/$m" ] && remote_has_parent "$m"; then
+        log "  → $rel (incrémental depuis $PARENT_TS)"
         if [ "$DRY_RUN" -eq 0 ]; then
-          btrfs send -q -p "$SNAP_BOOK/$PARENT_TS/$sv" "$SNAP_BOOK/$TS/$sv" | btrfs receive "$TARGET/$TS"
+          btrfs send -q -p "$SNAP_BOOK/$PARENT_TS/$m" "$SNAP_BOOK/$TS/$m" | btrfs receive "$TARGET/$TS"
         else
-          echo "  (dry-run) btrfs send -p …/$PARENT_TS/$sv …/$TS/$sv | btrfs receive $TARGET/$TS"
+          echo "  (dry-run) btrfs send -p …/$PARENT_TS/$m …/$TS/$m | btrfs receive $TARGET/$TS"
         fi
       else
-        log "  → $sv (complet)"
+        log "  → $rel (complet)"
         if [ "$DRY_RUN" -eq 0 ]; then
-          btrfs send -q "$SNAP_BOOK/$TS/$sv" | btrfs receive "$TARGET/$TS"
+          btrfs send -q "$SNAP_BOOK/$TS/$m" | btrfs receive "$TARGET/$TS"
         else
-          echo "  (dry-run) btrfs send …/$TS/$sv | btrfs receive $TARGET/$TS"
+          echo "  (dry-run) btrfs send …/$TS/$m | btrfs receive $TARGET/$TS"
         fi
       fi
     done
     ;;
   ssh-send)
     run ssh "$SSH_HOST" "mkdir -p '$SSH_PATH/$TS'"
-    for sv in "${SUBVOLS[@]}"; do
-      if [ -n "$PARENT_TS" ] && is_subvol "$DATA_ROOT/$sv" && remote_has_parent "$sv"; then
-        log "  → $sv (incrémental depuis $PARENT_TS, via SSH)"
-        [ "$DRY_RUN" -eq 0 ] && btrfs send -q -p "$SNAP_BOOK/$PARENT_TS/$sv" "$SNAP_BOOK/$TS/$sv" | ssh "$SSH_HOST" "btrfs receive '$SSH_PATH/$TS'"
+    for rel in "${ALL_SVS[@]}"; do
+      m="$(mangle "$rel")"
+      if [ -n "$PARENT_TS" ] && is_subvol "$DATA_ROOT/$rel" && [ -d "$SNAP_BOOK/$PARENT_TS/$m" ] && remote_has_parent "$m"; then
+        log "  → $rel (incrémental depuis $PARENT_TS, via SSH)"
+        [ "$DRY_RUN" -eq 0 ] && btrfs send -q -p "$SNAP_BOOK/$PARENT_TS/$m" "$SNAP_BOOK/$TS/$m" | ssh "$SSH_HOST" "btrfs receive '$SSH_PATH/$TS'"
       else
-        log "  → $sv (complet, via SSH)"
-        [ "$DRY_RUN" -eq 0 ] && btrfs send -q "$SNAP_BOOK/$TS/$sv" | ssh "$SSH_HOST" "btrfs receive '$SSH_PATH/$TS'"
+        log "  → $rel (complet, via SSH)"
+        [ "$DRY_RUN" -eq 0 ] && btrfs send -q "$SNAP_BOOK/$TS/$m" | ssh "$SSH_HOST" "btrfs receive '$SSH_PATH/$TS'"
       fi
     done
     ;;
   rsync)
     run mkdir -p "$TARGET/$TS"
-    for sv in "${SUBVOLS[@]}"; do
-      log "  → $sv (rsync)"
+    for rel in "${ALL_SVS[@]}"; do   # parents avant enfants → le parent crée le dossier vide, l'enfant le remplit
+      m="$(mangle "$rel")"
+      log "  → $rel (rsync)"
+      run mkdir -p "$TARGET/$TS/$rel"
       # --link-dest : dédup avec la sauvegarde précédente (hardlinks) si dispo
       link_opt=()
-      [ -n "$PARENT_TS" ] && [ -d "$TARGET/$PARENT_TS/$sv" ] && link_opt=(--link-dest="$TARGET/$PARENT_TS/$sv")
-      run rsync -aHAX --numeric-ids --delete "${link_opt[@]}" "$SNAP_BOOK/$TS/$sv/" "$TARGET/$TS/$sv/"
+      [ -n "$PARENT_TS" ] && [ -d "$TARGET/$PARENT_TS/$rel" ] && link_opt=(--link-dest="$TARGET/$PARENT_TS/$rel")
+      run rsync -aHAX --numeric-ids --delete "${link_opt[@]}" "$SNAP_BOOK/$TS/$m/" "$TARGET/$TS/$rel/"
     done
     ;;
 esac
@@ -167,6 +198,8 @@ log "Écriture du manifest…"
 RYVIE_VERSION=$(git -C /opt/Ryvie describe --tags --always 2>/dev/null || echo "unknown")
 APPS_LIST=$(ls -1 "$DATA_ROOT/config/manifests" 2>/dev/null | sed 's/\.json$//' | jq -R . | jq -sc . || echo '[]')
 STORAGE_MODE=$(cat "$DATA_ROOT/config/system/storage-mode" 2>/dev/null || echo "unknown")
+# nested (rsync) : $TS/apps/rdrive   |   flat (send) : $TS/apps%rdrive
+[ "$MODE" = "rsync" ] && LAYOUT="nested" || LAYOUT="flat"
 MANIFEST=$(jq -n \
   --arg date "$TS" \
   --arg host "$(hostname)" \
@@ -174,9 +207,10 @@ MANIFEST=$(jq -n \
   --arg ryvieVersion "$RYVIE_VERSION" \
   --arg storageMode "$STORAGE_MODE" \
   --arg mode "$MODE" \
+  --arg layout "$LAYOUT" \
   --argjson apps "$APPS_LIST" \
-  --argjson subvols "$(printf '%s\n' "${SUBVOLS[@]}" | jq -R . | jq -sc .)" \
-  '{date:$date, host:$host, machineId:$machineId, ryvieVersion:$ryvieVersion, storageMode:$storageMode, transferMode:$mode, apps:$apps, subvolumes:$subvols}')
+  --argjson subvols "$(printf '%s\n' "${ALL_SVS[@]}" | jq -R . | jq -sc .)" \
+  '{date:$date, host:$host, machineId:$machineId, ryvieVersion:$ryvieVersion, storageMode:$storageMode, transferMode:$mode, layout:$layout, apps:$apps, subvolumes:$subvols}')
 case "$MODE" in
   ssh-send) [ "$DRY_RUN" -eq 0 ] && echo "$MANIFEST" | ssh "$SSH_HOST" "cat > '$SSH_PATH/$TS/manifest.json'" ;;
   *)        [ "$DRY_RUN" -eq 0 ] && echo "$MANIFEST" > "$TARGET/$TS/manifest.json" ;;
@@ -184,14 +218,16 @@ esac
 
 # ---------- 4. Rotation ----------
 rotate_local() {
-  # Ne garder localement QUE le snapshot de cette sauvegarde : c'est lui qui
-  # servira de parent au prochain envoi incrémental. Les plus anciens dégagent.
+  # Ne garder localement QUE les snapshots de cette sauvegarde : ils serviront de
+  # parents au prochain envoi incrémental. Les plus anciens dégagent.
+  # Les snapshots de staging sont À PLAT (manglés) → on supprime tout sous-volume du set.
   [ -d "$SNAP_BOOK" ] || return 0
   find "$SNAP_BOOK" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | while read -r old; do
     [ "$old" = "$TS" ] && continue
     log "  rotation locale: suppression du snapshot $old"
-    for sv in "${SUBVOLS[@]}"; do
-      run btrfs subvolume delete "$SNAP_BOOK/$old/$sv" >/dev/null 2>&1 || true
+    for s in "$SNAP_BOOK/$old"/*; do
+      [ -e "$s" ] || continue
+      run btrfs subvolume delete "$s" >/dev/null 2>&1 || true
     done
     run rmdir "$SNAP_BOOK/$old" 2>/dev/null || true
   done
@@ -211,12 +247,14 @@ rotate_target() {
     log "  rotation cible: suppression de $old"
     case "$MODE" in
       send)
-        for sv in "${SUBVOLS[@]}"; do run btrfs subvolume delete "$TARGET/$old/$sv" >/dev/null 2>&1 || true; done
+        # sous-volumes à plat : supprimer chaque entrée du set (les enfants d'abord)
+        for s in $(find "$TARGET/$old" -mindepth 1 -maxdepth 1 -type d | sort -r); do
+          run btrfs subvolume delete "$s" >/dev/null 2>&1 || true
+        done
         run rm -rf "${TARGET:?}/$old"
         ;;
       ssh-send)
-        for sv in "${SUBVOLS[@]}"; do run ssh "$SSH_HOST" "btrfs subvolume delete '$SSH_PATH/$old/$sv'" >/dev/null 2>&1 || true; done
-        run ssh "$SSH_HOST" "rm -rf '$SSH_PATH/$old'"
+        run ssh "$SSH_HOST" "for s in \$(find '$SSH_PATH/$old' -mindepth 1 -maxdepth 1 -type d | sort -r); do btrfs subvolume delete \"\$s\" >/dev/null 2>&1 || true; done; rm -rf '$SSH_PATH/$old'"
         ;;
       rsync)
         run rm -rf "${TARGET:?}/$old"
