@@ -37,6 +37,8 @@ log()  { echo -e "${GREEN}[restore]${NC} $1"; }
 warn() { echo -e "${YELLOW}[restore]${NC} $1"; }
 die()  { echo -e "${RED}[restore] ❌ $1${NC}" >&2; exit 1; }
 run()  { if [ "$DRY_RUN" -eq 1 ]; then echo "  (dry-run) $*"; else "$@"; fi; }
+is_subvol() { btrfs subvolume show "$1" >/dev/null 2>&1; }
+mangle() { printf '%s' "${1//\//%}"; }   # apps/rdrive -> apps%rdrive (layout "flat")
 
 # ---------- Arguments ----------
 while [ $# -gt 0 ]; do
@@ -98,22 +100,43 @@ else
   MANIFEST="{}"
 fi
 
-for sv in "${SUBVOLS[@]}"; do
-  src_exists "$sv" || die "La source ne contient pas '$sv/' — sauvegarde incomplète ?"
+# Liste (aplatie) des sous-volumes à restaurer + disposition de la source :
+#   layout=nested → source/apps/rdrive      (sauvegarde rsync, portable)
+#   layout=flat   → source/apps%rdrive      (sauvegarde btrfs send)
+# Repli pour les vieilles sauvegardes sans ces champs : les 4 top-levels, en nested.
+LAYOUT="nested"
+declare -a SV_LIST=()
+if [ "$MANIFEST" != "{}" ]; then
+  ml=$(echo "$MANIFEST" | jq -r '.layout // empty'); [ -n "$ml" ] && LAYOUT="$ml"
+  while IFS= read -r s; do [ -n "$s" ] && SV_LIST+=("$s"); done \
+    < <(echo "$MANIFEST" | jq -r '.subvolumes[]?')
+fi
+[ ${#SV_LIST[@]} -gt 0 ] || SV_LIST=("${SUBVOLS[@]}")
+
+# Chemin de la source pour un sous-volume donné (selon le layout)
+src_rel() { [ "$LAYOUT" = "flat" ] && mangle "$1" || printf '%s' "$1"; }
+
+for rel in "${SV_LIST[@]}"; do
+  src_exists "$(src_rel "$rel")" || die "La source ne contient pas '$rel' — sauvegarde incomplète ?"
+done
+
+# Liste effective à restaurer (parents avant enfants — garanti par le manifest).
+# --new-netbird-identity : on écarte netbird et tout ce qui est imbriqué dessous.
+declare -a RESTORE_SUBVOLS=()
+for rel in "${SV_LIST[@]}"; do
+  if [ "$NEW_NB_IDENTITY" -eq 1 ] && { [ "$rel" = "netbird" ] || [[ "$rel" == netbird/* ]]; }; then
+    continue
+  fi
+  RESTORE_SUBVOLS+=("$rel")
 done
 
 echo ""
-warn "⚠️  Le contenu actuel de /data/{apps,config,images$( [ "$NEW_NB_IDENTITY" -eq 0 ] && echo ",netbird")} sera REMPLACÉ."
-warn "    (une copie de secours locale est conservée : /data/<sousvol>.pre-restore)"
+warn "⚠️  Le contenu actuel de /data/{$(IFS=,; echo "${RESTORE_SUBVOLS[*]}")} sera REMPLACÉ."
+warn "    (copies de secours locales conservées sous : $DATA_ROOT/.pre-restore/)"
+[ "$NEW_NB_IDENTITY" -eq 1 ] && warn "Identité NetBird NON restaurée (--new-netbird-identity)."
 if [ "$ASSUME_YES" -ne 1 ] && [ "$DRY_RUN" -ne 1 ]; then
   read -r -p "Confirmer la restauration ? (oui/non) : " CONFIRM
   [ "$CONFIRM" = "oui" ] || { echo "Abandon."; exit 1; }
-fi
-
-RESTORE_SUBVOLS=("${SUBVOLS[@]}")
-if [ "$NEW_NB_IDENTITY" -eq 1 ]; then
-  RESTORE_SUBVOLS=(apps config images)
-  warn "Identité NetBird NON restaurée (--new-netbird-identity)."
 fi
 
 # ---------- 1. Tout arrêter ----------
@@ -134,20 +157,44 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
 fi
 
 # ---------- 2. Réinjecter les données ----------
-log "2/5 Restauration des données (rsync -aHAX --numeric-ids --delete)…"
-for sv in "${RESTORE_SUBVOLS[@]}"; do
-  log "  → $sv"
-  # Copie de secours du contenu actuel (renommage de sous-volume = instantané)
-  if [ -e "$DATA_ROOT/$sv" ]; then
-    run rm -rf "$DATA_ROOT/$sv.pre-restore" 2>/dev/null || true
-    if btrfs subvolume show "$DATA_ROOT/$sv" >/dev/null 2>&1; then
-      run btrfs subvolume snapshot "$DATA_ROOT/$sv" "$DATA_ROOT/$sv.pre-restore" >/dev/null
+# Chaque sous-volume est restauré INDIVIDUELLEMENT dans son propre chemin. Pour un
+# parent (ex: apps) qui contient des sous-volumes imbriqués (rdrive, rpictures…), on
+# EXCLUT ces enfants du rsync : sinon le --delete effacerait leur contenu (ils vivent
+# dans des sous-volumes distincts, absents/vides côté source du parent). Les enfants
+# sont restaurés ensuite, dans leur propre itération (parents avant enfants).
+log "2/5 Restauration des données (rsync -aHAX --numeric-ids --delete, par sous-volume)…"
+
+# --exclude ancrés pour les enfants DIRECTS de $1 présents dans RESTORE_SUBVOLS
+direct_child_excludes() {
+  local parent="$1" c
+  for c in "${RESTORE_SUBVOLS[@]}"; do
+    [ "$(dirname "$c")" = "$parent" ] && printf -- '--exclude=/%s/\n' "$(basename "$c")"
+  done
+}
+
+PRE_ROOT="$DATA_ROOT/.pre-restore"
+run mkdir -p "$PRE_ROOT"
+for rel in "${RESTORE_SUBVOLS[@]}"; do
+  log "  → $rel"
+  m="$(mangle "$rel")"
+
+  # Copie de secours COMPLÈTE du contenu actuel (snapshot instantané, ou copie)
+  if [ -e "$DATA_ROOT/$rel" ]; then
+    run rm -rf "$PRE_ROOT/$m" 2>/dev/null || true
+    if is_subvol "$DATA_ROOT/$rel"; then
+      run btrfs subvolume snapshot "$DATA_ROOT/$rel" "$PRE_ROOT/$m" >/dev/null
     else
-      run cp -a "$DATA_ROOT/$sv" "$DATA_ROOT/$sv.pre-restore"
+      run cp -a "$DATA_ROOT/$rel" "$PRE_ROOT/$m"
     fi
+  else
+    # Cible absente (ex: sous-volume applicatif pas encore créé) → le créer
+    run btrfs subvolume create "$DATA_ROOT/$rel" >/dev/null 2>&1 || run mkdir -p "$DATA_ROOT/$rel"
   fi
-  # Restauration DANS le sous-volume existant (préserve le statut sous-volume)
-  run rsync -aHAX --numeric-ids --delete "$RSYNC_SRC/$sv/" "$DATA_ROOT/$sv/"
+
+  # Restauration DANS le sous-volume existant (préserve son statut de sous-volume),
+  # en protégeant les enfants imbriqués contre le --delete.
+  mapfile -t EXC < <(direct_child_excludes "$rel")
+  run rsync -aHAX --numeric-ids --delete "${EXC[@]}" "$RSYNC_SRC/$(src_rel "$rel")/" "$DATA_ROOT/$rel/"
 done
 
 # ---------- 3. Spécificités machine ----------
@@ -171,6 +218,14 @@ sleep 3
 if [ -f "$DATA_ROOT/config/ldap/docker-compose.yml" ]; then
   run docker compose -f "$DATA_ROOT/config/ldap/docker-compose.yml" up -d
 fi
+# Autres stacks cœur sous config/ (portainer…) — un `docker stop` manuel neutralise
+# restart:always, et le backend ne les relance pas si leur compose existe déjà.
+# (caddy et keycloak, eux, sont relancés par le backend au démarrage.)
+for compose in "$DATA_ROOT"/config/*/docker-compose.yml; do
+  [ -f "$compose" ] || continue
+  [ "$compose" = "$DATA_ROOT/config/ldap/docker-compose.yml" ] && continue
+  run docker compose -f "$compose" up -d 2>/dev/null || warn "  échec de relance: $compose (à relancer manuellement)"
+done
 if command -v pm2 >/dev/null 2>&1; then
   run sudo -u "${RYVIE_USER:-ryvie}" pm2 restart all 2>/dev/null || true
 fi
@@ -192,5 +247,5 @@ fi
 echo ""
 log "✅ Restauration terminée."
 log "   À vérifier : connexion UI avec un ancien compte, photos rPictures, fichiers rDrive."
-log "   Copies de secours locales : /data/<sousvol>.pre-restore (supprimez-les une fois satisfait :"
-log "   btrfs subvolume delete /data/apps.pre-restore … )"
+log "   Copies de secours locales : $DATA_ROOT/.pre-restore/ (supprimez-les une fois satisfait :"
+log "   for s in $DATA_ROOT/.pre-restore/*; do sudo btrfs subvolume delete \"\$s\" 2>/dev/null || sudo rm -rf \"\$s\"; done )"
