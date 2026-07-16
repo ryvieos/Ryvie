@@ -323,20 +323,19 @@
   z-index: 0;
   transform-style: preserve-3d;
   opacity: 0;
-  will-change: transform, opacity, filter;
   animation: contentFadeIn 0.6s cubic-bezier(0.23, 1, 0.32, 1) 0.4s forwards;
 }
 
+/* Pas de filter: blur ici : flouter toute la page à chaque frame coûte trop cher,
+   transform + opacity restent sur le compositeur (pas de repaint). */
 @keyframes contentFadeIn {
   0% {
     opacity: 0;
     transform: translateZ(-100px) translateY(20px);
-    filter: blur(5px);
   }
   100% {
     opacity: 1;
     transform: translateZ(0) translateY(0);
-    filter: blur(0);
   }
 }
 
@@ -912,8 +911,20 @@
 .bottom-zones .zone:nth-child(9) { animation-delay: 0.9s; }
 .bottom-zones .zone:nth-child(10) { animation-delay: 0.95s; }
 
-/* Animation de pulsation pour les applications actives - seulement dans les zones */
+/* Animation de pulsation pour les applications actives - seulement dans les zones.
+   L'anneau est un pseudo-élément animé en transform/opacity (composité) :
+   animer box-shadow directement repeint l'icône à chaque frame, en continu. */
 .zone .icon.active {
+  position: relative;
+}
+
+.zone .icon.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 5px rgba(0, 123, 255, 0.4);
+  pointer-events: none;
   animation: pulse-animation 2s infinite;
 }
 
@@ -950,13 +961,16 @@
 
 @keyframes pulse-animation {
   0% {
-    box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.4);
+    transform: scale(1);
+    opacity: 1;
   }
   70% {
-    box-shadow: 0 0 0 10px rgba(0, 123, 255, 0);
+    transform: scale(1.14);
+    opacity: 0;
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(0, 123, 255, 0);
+    transform: scale(1.14);
+    opacity: 0;
   }
 }
 
@@ -988,25 +1002,23 @@
   animation: appstoreBackdropOut 250ms ease forwards;
 }
 
+/* On anime uniquement l'opacité : animer backdrop-filter force le navigateur
+   à recalculer le flou plein écran à chaque frame. */
 @keyframes appstoreBackdropIn {
   from {
-    background: rgba(0, 0, 0, 0);
-    backdrop-filter: blur(0px);
+    opacity: 0;
   }
   to {
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(2px);
+    opacity: 1;
   }
 }
 
 @keyframes appstoreBackdropOut {
   from {
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(2px);
+    opacity: 1;
   }
   to {
-    background: rgba(0, 0, 0, 0);
-    backdrop-filter: blur(0px);
+    opacity: 0;
   }
 }
 
@@ -1065,8 +1077,8 @@
 }
 
 @keyframes overlayFadeIn {
-  from { opacity: 0; backdrop-filter: blur(0); }
-  to { opacity: 1; backdrop-filter: blur(8px); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .confirm-modal {

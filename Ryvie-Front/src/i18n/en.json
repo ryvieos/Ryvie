@@ -976,7 +976,7 @@
     "processing": "Processing...",
     "authAdmin": "Administrator Authentication",
     "authAdminAdd": "Please authenticate as administrator to add a new user",
-    "authAdminDelete": "Please authenticate as administrator to delete user <strong>{name}</strong>",
+    "authAdminDelete": "Please authenticate as administrator to delete user {name}",
     "userExists": "This user already exists.",
     "emailAlreadyUsed": "This email address is already in use.",
     "adminUid": "Admin identifier",

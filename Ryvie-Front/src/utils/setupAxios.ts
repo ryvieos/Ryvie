@@ -2,7 +2,7 @@ import axios from 'axios';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 import { getCurrentAccessMode, setAccessMode as setGlobalAccessMode } from './detectAccessMode';
-import { getSessionInfo, setToken, endSession } from './sessionManager';
+import sessionManager, { getSessionInfo, setToken, endSession } from './sessionManager';
 
 export const verifyToken = async (): Promise<boolean> => {
   const token = (getSessionInfo() || {}).token;
@@ -13,7 +13,8 @@ export const verifyToken = async (): Promise<boolean> => {
     const json = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
     const payload = JSON.parse(json);
     if (!payload?.exp) return true;
-    return Date.now() < payload.exp * 1000;
+    // Dérive d'horloge client/serveur compensée (cf. sessionManager.recordClockSkew).
+    return !sessionManager.isTokenExpired(token);
   } catch (e) {
     return false;
   }

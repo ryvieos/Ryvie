@@ -4392,7 +4392,7 @@
       "source_file": "Ryvie-Back/services/apps/appStoreService.ts",
       "source_location": "L859",
       "id": "apps_appstoreservice_getstorehealth",
-      "community": 86,
+      "community": 47,
       "norm_label": "getstorehealth()"
     },
     {
@@ -4437,7 +4437,7 @@
       "source_file": "Ryvie-Back/services/apps/appStoreService.ts",
       "source_location": "L2087",
       "id": "apps_appstoreservice_forcecleanupcancelledinstall",
-      "community": 86,
+      "community": 47,
       "norm_label": "forcecleanupcancelledinstall()"
     },
     {
@@ -8037,7 +8037,7 @@
       "source_file": "Ryvie-Back/workers/updateWorker.js",
       "source_location": "L1",
       "id": "workers_updateworker",
-      "community": 273,
+      "community": 9,
       "norm_label": "updateworker.js"
     },
     {
@@ -8046,7 +8046,7 @@
       "source_file": "Ryvie-Back/workers/updateWorker.js",
       "source_location": "L6",
       "id": "workers_updateworker_updateapp",
-      "community": 273,
+      "community": 9,
       "norm_label": "{ updateapp }"
     },
     {
@@ -8055,7 +8055,7 @@
       "source_file": "Ryvie-Back/workers/updateWorker.js",
       "source_location": "L19",
       "id": "workers_updateworker_sendlog",
-      "community": 273,
+      "community": 9,
       "norm_label": "sendlog()"
     },
     {
@@ -8064,7 +8064,7 @@
       "source_file": "Ryvie-Back/workers/updateWorker.js",
       "source_location": "L26",
       "id": "workers_updateworker_sendprogress",
-      "community": 273,
+      "community": 9,
       "norm_label": "sendprogress()"
     },
     {
@@ -8073,7 +8073,7 @@
       "source_file": "Ryvie-Back/workers/updateWorker.js",
       "source_location": "L33",
       "id": "workers_updateworker_updateprogressemitter",
-      "community": 273,
+      "community": 9,
       "norm_label": "{ updateprogressemitter }"
     },
     {
@@ -8910,7 +8910,7 @@
       "source_file": "Ryvie-Front/src/components/launcher/GridLauncher.tsx",
       "source_location": "L1",
       "id": "launcher_gridlauncher",
-      "community": 39,
+      "community": 87,
       "norm_label": "gridlauncher.tsx"
     },
     {
@@ -8919,7 +8919,7 @@
       "source_file": "Ryvie-Front/src/components/launcher/GridLauncher.tsx",
       "source_location": "L15",
       "id": "launcher_gridlauncher_gridlauncher",
-      "community": 39,
+      "community": 87,
       "norm_label": "gridlauncher()"
     },
     {
@@ -9189,7 +9189,7 @@
       "source_file": "Ryvie-Front/src/components/modals/Modal.tsx",
       "source_location": "L1",
       "id": "modals_modal",
-      "community": 12,
+      "community": 132,
       "norm_label": "modal.tsx"
     },
     {
@@ -9198,7 +9198,7 @@
       "source_file": "Ryvie-Front/src/components/modals/Modal.tsx",
       "source_location": "L21",
       "id": "modals_modal_modalprops",
-      "community": 12,
+      "community": 132,
       "norm_label": "modalprops"
     },
     {
@@ -9207,7 +9207,7 @@
       "source_file": "Ryvie-Front/src/components/modals/Modal.tsx",
       "source_location": "L35",
       "id": "modals_modal_stop",
-      "community": 12,
+      "community": 132,
       "norm_label": "stop()"
     },
     {
@@ -9216,7 +9216,7 @@
       "source_file": "Ryvie-Front/src/components/modals/Modal.tsx",
       "source_location": "L37",
       "id": "modals_modal_modal",
-      "community": 12,
+      "community": 132,
       "norm_label": "modal()"
     },
     {
@@ -9225,7 +9225,7 @@
       "source_file": "Ryvie-Front/src/components/modals/Modal.tsx",
       "source_location": "L145",
       "id": "modals_modal_styles",
-      "community": 12,
+      "community": 132,
       "norm_label": "styles"
     },
     {
@@ -9252,7 +9252,7 @@
       "source_file": "Ryvie-Front/src/components/onboarding/OnboardingOverlay.tsx",
       "source_location": "L1",
       "id": "onboarding_onboardingoverlay",
-      "community": 19,
+      "community": 12,
       "norm_label": "onboardingoverlay.tsx"
     },
     {
@@ -9261,7 +9261,7 @@
       "source_file": "Ryvie-Front/src/components/onboarding/OnboardingOverlay.tsx",
       "source_location": "L10",
       "id": "onboarding_onboardingoverlay_onboardingpage",
-      "community": 19,
+      "community": 12,
       "norm_label": "onboardingpage"
     },
     {
@@ -9270,7 +9270,7 @@
       "source_file": "Ryvie-Front/src/components/onboarding/OnboardingOverlay.tsx",
       "source_location": "L17",
       "id": "onboarding_onboardingoverlay_onboardingoverlayprops",
-      "community": 19,
+      "community": 12,
       "norm_label": "onboardingoverlayprops"
     },
     {
@@ -9279,7 +9279,7 @@
       "source_file": "Ryvie-Front/src/components/onboarding/OnboardingOverlay.tsx",
       "source_location": "L21",
       "id": "onboarding_onboardingoverlay_onboardingoverlay",
-      "community": 19,
+      "community": 12,
       "norm_label": "onboardingoverlay()"
     },
     {
@@ -9729,7 +9729,7 @@
       "source_file": "Ryvie-Front/src/config/appConfig.ts",
       "source_location": "L11",
       "id": "config_appconfig_grid_config",
-      "community": 39,
+      "community": 87,
       "norm_label": "grid_config"
     },
     {
@@ -10170,7 +10170,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L1",
       "id": "contexts_socketcontext",
-      "community": 90,
+      "community": 19,
       "norm_label": "socketcontext.tsx"
     },
     {
@@ -10179,7 +10179,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L8",
       "id": "contexts_socketcontext_socketcontextvalue",
-      "community": 90,
+      "community": 19,
       "norm_label": "socketcontextvalue"
     },
     {
@@ -10188,7 +10188,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L15",
       "id": "contexts_socketcontext_socketcontext",
-      "community": 90,
+      "community": 19,
       "norm_label": "socketcontext"
     },
     {
@@ -10206,7 +10206,7 @@
       "source_file": "Ryvie-Front/src/contexts/SocketContext.tsx",
       "source_location": "L25",
       "id": "contexts_socketcontext_socketproviderprops",
-      "community": 90,
+      "community": 19,
       "norm_label": "socketproviderprops"
     },
     {
@@ -10269,7 +10269,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L1",
       "id": "hooks_usedrag",
-      "community": 39,
+      "community": 87,
       "norm_label": "usedrag.ts"
     },
     {
@@ -10278,7 +10278,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L3",
       "id": "hooks_usedrag_dragoffset",
-      "community": 39,
+      "community": 87,
       "norm_label": "dragoffset"
     },
     {
@@ -10287,7 +10287,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L8",
       "id": "hooks_usedrag_dragposition",
-      "community": 39,
+      "community": 87,
       "norm_label": "dragposition"
     },
     {
@@ -10296,7 +10296,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L13",
       "id": "hooks_usedrag_draggeditem",
-      "community": 39,
+      "community": 87,
       "norm_label": "draggeditem"
     },
     {
@@ -10305,7 +10305,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L18",
       "id": "hooks_usedrag_dragenddata",
-      "community": 39,
+      "community": 87,
       "norm_label": "dragenddata"
     },
     {
@@ -10314,7 +10314,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L27",
       "id": "hooks_usedrag_usedraghandlers",
-      "community": 39,
+      "community": 87,
       "norm_label": "usedraghandlers"
     },
     {
@@ -10323,7 +10323,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L33",
       "id": "hooks_usedrag_usedragreturn",
-      "community": 39,
+      "community": 87,
       "norm_label": "usedragreturn"
     },
     {
@@ -10332,7 +10332,7 @@
       "source_file": "Ryvie-Front/src/hooks/useDrag.ts",
       "source_location": "L41",
       "id": "hooks_usedrag_usedrag",
-      "community": 39,
+      "community": 87,
       "norm_label": "usedrag()"
     },
     {
@@ -10368,7 +10368,7 @@
       "source_file": "Ryvie-Front/src/hooks/useGridLayout.ts",
       "source_location": "L22",
       "id": "hooks_usegridlayout_usegridlayout",
-      "community": 39,
+      "community": 87,
       "norm_label": "usegridlayout()"
     },
     {
@@ -10737,7 +10737,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L43",
       "id": "i18n_en_firsttimesetup_confirmpassword",
-      "community": 132,
+      "community": 5,
       "norm_label": "confirmpassword"
     },
     {
@@ -10782,7 +10782,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L48",
       "id": "i18n_en_firsttimesetup_createbutton",
-      "community": 132,
+      "community": 5,
       "norm_label": "createbutton"
     },
     {
@@ -10809,7 +10809,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L51",
       "id": "i18n_en_firsttimesetup_passwordmismatch",
-      "community": 132,
+      "community": 5,
       "norm_label": "passwordmismatch"
     },
     {
@@ -10818,7 +10818,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L52",
       "id": "i18n_en_firsttimesetup_passwordtooshort",
-      "community": 132,
+      "community": 5,
       "norm_label": "passwordtooshort"
     },
     {
@@ -10836,7 +10836,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L54",
       "id": "i18n_en_firsttimesetup_errormessage",
-      "community": 132,
+      "community": 5,
       "norm_label": "errormessage"
     },
     {
@@ -10890,7 +10890,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L61",
       "id": "i18n_en_login_username",
-      "community": 132,
+      "community": 5,
       "norm_label": "username"
     },
     {
@@ -10899,7 +10899,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L62",
       "id": "i18n_en_login_usernameplaceholder",
-      "community": 132,
+      "community": 5,
       "norm_label": "usernameplaceholder"
     },
     {
@@ -10908,7 +10908,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L63",
       "id": "i18n_en_login_password",
-      "community": 132,
+      "community": 5,
       "norm_label": "password"
     },
     {
@@ -10917,7 +10917,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L64",
       "id": "i18n_en_login_passwordplaceholder",
-      "community": 132,
+      "community": 5,
       "norm_label": "passwordplaceholder"
     },
     {
@@ -10998,7 +10998,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L73",
       "id": "i18n_en_login_allfieldsrequired",
-      "community": 132,
+      "community": 5,
       "norm_label": "allfieldsrequired"
     },
     {
@@ -11052,7 +11052,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L79",
       "id": "i18n_en_login_serverunavailable",
-      "community": 132,
+      "community": 5,
       "norm_label": "serverunavailable"
     },
     {
@@ -11466,7 +11466,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L127",
       "id": "i18n_en_home_close",
-      "community": 15,
+      "community": 64,
       "norm_label": "close"
     },
     {
@@ -11547,7 +11547,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L136",
       "id": "i18n_en_home_cancel",
-      "community": 23,
+      "community": 15,
       "norm_label": "cancel"
     },
     {
@@ -12807,7 +12807,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L287",
       "id": "i18n_en_cpuramwidget",
-      "community": 24,
+      "community": 140,
       "norm_label": "cpuramwidget"
     },
     {
@@ -12816,7 +12816,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L288",
       "id": "i18n_en_cpuramwidget_title",
-      "community": 24,
+      "community": 140,
       "norm_label": "title"
     },
     {
@@ -12825,7 +12825,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L289",
       "id": "i18n_en_cpuramwidget_open",
-      "community": 24,
+      "community": 140,
       "norm_label": "open"
     },
     {
@@ -12834,7 +12834,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L290",
       "id": "i18n_en_cpuramwidget_cpu",
-      "community": 24,
+      "community": 140,
       "norm_label": "cpu"
     },
     {
@@ -12843,7 +12843,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L291",
       "id": "i18n_en_cpuramwidget_ram",
-      "community": 24,
+      "community": 140,
       "norm_label": "ram"
     },
     {
@@ -12978,7 +12978,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L312",
       "id": "i18n_en_deviceswidget",
-      "community": 140,
+      "community": 273,
       "norm_label": "deviceswidget"
     },
     {
@@ -12987,7 +12987,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L313",
       "id": "i18n_en_deviceswidget_title",
-      "community": 140,
+      "community": 273,
       "norm_label": "title"
     },
     {
@@ -12996,7 +12996,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L314",
       "id": "i18n_en_deviceswidget_thisdevice",
-      "community": 140,
+      "community": 273,
       "norm_label": "thisdevice"
     },
     {
@@ -13005,7 +13005,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L315",
       "id": "i18n_en_deviceswidget_online",
-      "community": 140,
+      "community": 273,
       "norm_label": "online"
     },
     {
@@ -13014,7 +13014,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L316",
       "id": "i18n_en_deviceswidget_offline",
-      "community": 140,
+      "community": 273,
       "norm_label": "offline"
     },
     {
@@ -13023,7 +13023,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L317",
       "id": "i18n_en_deviceswidget_empty",
-      "community": 140,
+      "community": 273,
       "norm_label": "empty"
     },
     {
@@ -13653,7 +13653,7 @@
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L423",
       "id": "i18n_en_actions_open",
-      "community": 24,
+      "community": 140,
       "norm_label": "open"
     },
     {
@@ -19177,7 +19177,7 @@
       "label": "rootElement",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/index.tsx",
-      "source_location": "L162",
+      "source_location": "L163",
       "id": "src_index_rootelement",
       "community": 90,
       "norm_label": "rootelement"
@@ -19186,7 +19186,7 @@
       "label": "root",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/index.tsx",
-      "source_location": "L166",
+      "source_location": "L167",
       "id": "src_index_root",
       "community": 90,
       "norm_label": "root"
@@ -19228,37 +19228,10 @@
       "norm_label": "authcallback.tsx"
     },
     {
-      "label": "recordCallbackVisit()",
-      "file_type": "code",
-      "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L15",
-      "id": "pages_authcallback_recordcallbackvisit",
-      "community": 25,
-      "norm_label": "recordcallbackvisit()"
-    },
-    {
-      "label": "clearCallbackHistory()",
-      "file_type": "code",
-      "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L28",
-      "id": "pages_authcallback_clearcallbackhistory",
-      "community": 25,
-      "norm_label": "clearcallbackhistory()"
-    },
-    {
-      "label": "healAuthState()",
-      "file_type": "code",
-      "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L34",
-      "id": "pages_authcallback_healauthstate",
-      "community": 25,
-      "norm_label": "healauthstate()"
-    },
-    {
       "label": "AuthCallback()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L39",
+      "source_location": "L5",
       "id": "pages_authcallback_authcallback",
       "community": 25,
       "norm_label": "authcallback()"
@@ -19278,7 +19251,7 @@
       "source_file": "Ryvie-Front/src/pages/Connexion.tsx",
       "source_location": "L12",
       "id": "pages_connexion_userlogin",
-      "community": 25,
+      "community": 12,
       "norm_label": "userlogin()"
     },
     {
@@ -19368,7 +19341,7 @@
       "source_file": "Ryvie-Front/src/pages/Home.tsx",
       "source_location": "L64",
       "id": "pages_home_icon",
-      "community": 39,
+      "community": 87,
       "norm_label": "icon()"
     },
     {
@@ -19539,7 +19512,7 @@
       "source_file": "Ryvie-Front/src/pages/Welcome.tsx",
       "source_location": "L1",
       "id": "pages_welcome",
-      "community": 25,
+      "community": 19,
       "norm_label": "welcome.tsx"
     },
     {
@@ -19971,7 +19944,7 @@
       "source_file": "Ryvie-Front/src/utils/detectAccessMode.ts",
       "source_location": "L235",
       "id": "utils_detectaccessmode_connectryviesocket",
-      "community": 90,
+      "community": 19,
       "norm_label": "connectryviesocket()"
     },
     {
@@ -20115,7 +20088,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L1",
       "id": "utils_platformutils",
-      "community": 25,
+      "community": 37,
       "norm_label": "platformutils.ts"
     },
     {
@@ -20133,7 +20106,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L5",
       "id": "utils_platformutils_isweb",
-      "community": 25,
+      "community": 37,
       "norm_label": "isweb()"
     },
     {
@@ -20142,7 +20115,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L9",
       "id": "utils_platformutils_ifelectron",
-      "community": 25,
+      "community": 37,
       "norm_label": "ifelectron()"
     },
     {
@@ -20151,7 +20124,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L17",
       "id": "utils_platformutils_ifweb",
-      "community": 25,
+      "community": 37,
       "norm_label": "ifweb()"
     },
     {
@@ -20160,7 +20133,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L25",
       "id": "utils_platformutils_windowmanager",
-      "community": 25,
+      "community": 37,
       "norm_label": "windowmanager"
     },
     {
@@ -20169,7 +20142,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L43",
       "id": "utils_platformutils_storagemanager",
-      "community": 25,
+      "community": 19,
       "norm_label": "storagemanager"
     },
     {
@@ -20178,7 +20151,7 @@
       "source_file": "Ryvie-Front/src/utils/platformUtils.ts",
       "source_location": "L73",
       "id": "utils_platformutils_notificationmanager",
-      "community": 25,
+      "community": 37,
       "norm_label": "notificationmanager"
     },
     {
@@ -20218,28 +20191,10 @@
       "norm_label": "sessionmanager"
     },
     {
-      "label": ".recordClockSkew()",
-      "file_type": "code",
-      "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L38",
-      "id": "utils_sessionmanager_sessionmanager_recordclockskew",
-      "community": 25,
-      "norm_label": ".recordclockskew()"
-    },
-    {
-      "label": ".serverNowSeconds()",
-      "file_type": "code",
-      "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L51",
-      "id": "utils_sessionmanager_sessionmanager_servernowseconds",
-      "community": 25,
-      "norm_label": ".servernowseconds()"
-    },
-    {
       "label": ".startSession()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L56",
+      "source_location": "L30",
       "id": "utils_sessionmanager_sessionmanager_startsession",
       "community": 25,
       "norm_label": ".startsession()"
@@ -20248,7 +20203,7 @@
       "label": ".endSession()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L77",
+      "source_location": "L50",
       "id": "utils_sessionmanager_sessionmanager_endsession",
       "community": 25,
       "norm_label": ".endsession()"
@@ -20257,7 +20212,7 @@
       "label": ".isSessionActive()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L97",
+      "source_location": "L70",
       "id": "utils_sessionmanager_sessionmanager_issessionactive",
       "community": 25,
       "norm_label": ".issessionactive()"
@@ -20266,7 +20221,7 @@
       "label": ".isTokenExpired()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L111",
+      "source_location": "L84",
       "id": "utils_sessionmanager_sessionmanager_istokenexpired",
       "community": 25,
       "norm_label": ".istokenexpired()"
@@ -20275,7 +20230,7 @@
       "label": ".getToken()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L122",
+      "source_location": "L94",
       "id": "utils_sessionmanager_sessionmanager_gettoken",
       "community": 25,
       "norm_label": ".gettoken()"
@@ -20284,7 +20239,7 @@
       "label": ".getCurrentUser()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L132",
+      "source_location": "L104",
       "id": "utils_sessionmanager_sessionmanager_getcurrentuser",
       "community": 25,
       "norm_label": ".getcurrentuser()"
@@ -20293,7 +20248,7 @@
       "label": ".setCurrentUserName()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L142",
+      "source_location": "L114",
       "id": "utils_sessionmanager_sessionmanager_setcurrentusername",
       "community": 25,
       "norm_label": ".setcurrentusername()"
@@ -20302,7 +20257,7 @@
       "label": ".getCurrentUserRole()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L150",
+      "source_location": "L122",
       "id": "utils_sessionmanager_sessionmanager_getcurrentuserrole",
       "community": 25,
       "norm_label": ".getcurrentuserrole()"
@@ -20311,7 +20266,7 @@
       "label": ".getCurrentUserEmail()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L154",
+      "source_location": "L126",
       "id": "utils_sessionmanager_sessionmanager_getcurrentuseremail",
       "community": 25,
       "norm_label": ".getcurrentuseremail()"
@@ -20320,7 +20275,7 @@
       "label": ".getSessionInfo()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L158",
+      "source_location": "L130",
       "id": "utils_sessionmanager_sessionmanager_getsessioninfo",
       "community": 25,
       "norm_label": ".getsessioninfo()"
@@ -20329,7 +20284,7 @@
       "label": ".setAuthHeader()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L170",
+      "source_location": "L142",
       "id": "utils_sessionmanager_sessionmanager_setauthheader",
       "community": 25,
       "norm_label": ".setauthheader()"
@@ -20338,7 +20293,7 @@
       "label": ".setToken()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L176",
+      "source_location": "L148",
       "id": "utils_sessionmanager_sessionmanager_settoken",
       "community": 25,
       "norm_label": ".settoken()"
@@ -20347,7 +20302,7 @@
       "label": ".initializeSession()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L186",
+      "source_location": "L157",
       "id": "utils_sessionmanager_sessionmanager_initializesession",
       "community": 25,
       "norm_label": ".initializesession()"
@@ -20356,7 +20311,7 @@
       "label": ".validateToken()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L194",
+      "source_location": "L165",
       "id": "utils_sessionmanager_sessionmanager_validatetoken",
       "community": 25,
       "norm_label": ".validatetoken()"
@@ -20365,7 +20320,7 @@
       "label": ".refreshTokenIfNeeded()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L208",
+      "source_location": "L179",
       "id": "utils_sessionmanager_sessionmanager_refreshtokenifneeded",
       "community": 25,
       "norm_label": ".refreshtokenifneeded()"
@@ -20374,7 +20329,7 @@
       "label": ".setCookie()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L233",
+      "source_location": "L204",
       "id": "utils_sessionmanager_sessionmanager_setcookie",
       "community": 25,
       "norm_label": ".setcookie()"
@@ -20383,7 +20338,7 @@
       "label": ".getCookie()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L241",
+      "source_location": "L212",
       "id": "utils_sessionmanager_sessionmanager_getcookie",
       "community": 25,
       "norm_label": ".getcookie()"
@@ -20392,7 +20347,7 @@
       "label": ".deleteCookie()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L254",
+      "source_location": "L225",
       "id": "utils_sessionmanager_sessionmanager_deletecookie",
       "community": 25,
       "norm_label": ".deletecookie()"
@@ -20401,7 +20356,7 @@
       "label": "startSession()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L263",
+      "source_location": "L234",
       "id": "utils_sessionmanager_startsession",
       "community": 25,
       "norm_label": "startsession()"
@@ -20410,7 +20365,7 @@
       "label": "getSessionInfo()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L264",
+      "source_location": "L235",
       "id": "utils_sessionmanager_getsessioninfo",
       "community": 25,
       "norm_label": "getsessioninfo()"
@@ -20419,7 +20374,7 @@
       "label": "initializeSession()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L265",
+      "source_location": "L236",
       "id": "utils_sessionmanager_initializesession",
       "community": 25,
       "norm_label": "initializesession()"
@@ -20428,7 +20383,7 @@
       "label": "isSessionActive()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L266",
+      "source_location": "L237",
       "id": "utils_sessionmanager_issessionactive",
       "community": 25,
       "norm_label": "issessionactive()"
@@ -20437,7 +20392,7 @@
       "label": "getCurrentUser()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L267",
+      "source_location": "L238",
       "id": "utils_sessionmanager_getcurrentuser",
       "community": 25,
       "norm_label": "getcurrentuser()"
@@ -20446,7 +20401,7 @@
       "label": "getCurrentUserRole()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L268",
+      "source_location": "L239",
       "id": "utils_sessionmanager_getcurrentuserrole",
       "community": 25,
       "norm_label": "getcurrentuserrole()"
@@ -20455,7 +20410,7 @@
       "label": "endSession()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L269",
+      "source_location": "L240",
       "id": "utils_sessionmanager_endsession",
       "community": 25,
       "norm_label": "endsession()"
@@ -20464,7 +20419,7 @@
       "label": "setCurrentUserName()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L270",
+      "source_location": "L241",
       "id": "utils_sessionmanager_setcurrentusername",
       "community": 25,
       "norm_label": "setcurrentusername()"
@@ -20473,7 +20428,7 @@
       "label": "setToken()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L271",
+      "source_location": "L242",
       "id": "utils_sessionmanager_settoken",
       "community": 25,
       "norm_label": "settoken()"
@@ -20500,7 +20455,7 @@
       "label": "handleTokenError()",
       "file_type": "code",
       "source_file": "Ryvie-Front/src/utils/setupAxios.ts",
-      "source_location": "L23",
+      "source_location": "L22",
       "id": "utils_setupaxios_handletokenerror",
       "community": 19,
       "norm_label": "handletokenerror()"
@@ -40706,7 +40661,7 @@
       "file_type": "code",
       "source_file": "Ryvie-Front/src/i18n/en.json",
       "source_location": "L541",
-      "community": 132,
+      "community": 5,
       "norm_label": "language",
       "id": "i18n_en_settings_language"
     },
@@ -45485,7 +45440,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 56,
+      "community": 9,
       "norm_label": "app update sse system documentation",
       "id": "sse_update_doc"
     },
@@ -45641,7 +45596,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 273,
+      "community": 9,
       "norm_label": "update worker",
       "id": "updateworker_worker"
     },
@@ -45732,7 +45687,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 132,
+      "community": 5,
       "norm_label": "first time setup page",
       "id": "firsttimesetup_page"
     },
@@ -85063,36 +85018,6 @@
       "target": "pages_authcallback_authcallback"
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L28",
-      "weight": 1.0,
-      "source": "pages_authcallback",
-      "target": "pages_authcallback_clearcallbackhistory",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L34",
-      "weight": 1.0,
-      "source": "pages_authcallback",
-      "target": "pages_authcallback_healauthstate",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L15",
-      "weight": 1.0,
-      "source": "pages_authcallback",
-      "target": "pages_authcallback_recordcallbackvisit",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -85110,42 +85035,9 @@
       "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
       "source_location": "L3",
       "weight": 1.0,
-      "source": "pages_authcallback",
-      "target": "utils_sessionmanager_endsession",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "pages_authcallback",
-      "target": "utils_sessionmanager_issessionactive",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L3",
-      "weight": 1.0,
       "confidence_score": 1.0,
       "source": "pages_authcallback",
       "target": "utils_sessionmanager_startsession"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/pages/AuthCallback.tsx",
-      "source_location": "L35",
-      "weight": 1.0,
-      "source": "pages_authcallback_healauthstate",
-      "target": "utils_sessionmanager_endsession",
-      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -88552,31 +88444,11 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L38",
-      "weight": 1.0,
-      "source": "utils_sessionmanager_sessionmanager",
-      "target": "utils_sessionmanager_sessionmanager_recordclockskew",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
       "source_location": "L164",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "utils_sessionmanager_sessionmanager",
       "target": "utils_sessionmanager_sessionmanager_refreshtokenifneeded"
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L51",
-      "weight": 1.0,
-      "source": "utils_sessionmanager_sessionmanager",
-      "target": "utils_sessionmanager_sessionmanager_servernowseconds",
-      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -88637,50 +88509,6 @@
       "confidence_score": 1.0,
       "source": "utils_sessionmanager_sessionmanager",
       "target": "utils_sessionmanager_sessionmanager_validatetoken"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L178",
-      "weight": 1.0,
-      "source": "utils_sessionmanager_sessionmanager_settoken",
-      "target": "utils_sessionmanager_sessionmanager_recordclockskew",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L59",
-      "weight": 1.0,
-      "source": "utils_sessionmanager_sessionmanager_startsession",
-      "target": "utils_sessionmanager_sessionmanager_recordclockskew",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L116",
-      "weight": 1.0,
-      "source": "utils_sessionmanager_sessionmanager_istokenexpired",
-      "target": "utils_sessionmanager_sessionmanager_servernowseconds",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "Ryvie-Front/src/utils/sessionManager.ts",
-      "source_location": "L199",
-      "weight": 1.0,
-      "source": "utils_sessionmanager_sessionmanager_validatetoken",
-      "target": "utils_sessionmanager_sessionmanager_servernowseconds",
-      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91353,9 +91181,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L70",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_all_svs"
+      "target": "backup_ryvie_backup_all_svs",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91393,9 +91221,9 @@
       "source_file": "scripts/backup/ryvie-backup.sh",
       "source_location": "L66",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_backup",
-      "target": "backup_ryvie_backup_mangle"
+      "target": "backup_ryvie_backup_mangle",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91605,9 +91433,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L168",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_direct_child_excludes"
+      "target": "backup_ryvie_restore_direct_child_excludes",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91615,9 +91443,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L40",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_is_subvol"
+      "target": "backup_ryvie_restore_is_subvol",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91635,9 +91463,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L41",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_mangle"
+      "target": "backup_ryvie_restore_mangle",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91645,9 +91473,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L125",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_restore_subvols"
+      "target": "backup_ryvie_restore_restore_subvols",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91695,9 +91523,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L117",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_src_rel"
+      "target": "backup_ryvie_restore_src_rel",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91705,9 +91533,9 @@
       "source_file": "scripts/backup/ryvie-restore.sh",
       "source_location": "L108",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore",
-      "target": "backup_ryvie_restore_sv_list"
+      "target": "backup_ryvie_restore_sv_list",
+      "confidence_score": 1.0
     },
     {
       "relation": "defines",
@@ -91747,9 +91575,9 @@
       "source_location": "L184",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "opt_ryvie_scripts_backup_ryvie_restore_sh__entry",
-      "target": "backup_ryvie_restore_is_subvol"
+      "target": "backup_ryvie_restore_is_subvol",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -91802,9 +91630,9 @@
       "source_location": "L117",
       "weight": 1.0,
       "context": "call",
-      "confidence_score": 1.0,
       "source": "backup_ryvie_restore_src_rel",
-      "target": "backup_ryvie_restore_mangle"
+      "target": "backup_ryvie_restore_mangle",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
