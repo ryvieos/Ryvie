@@ -95,6 +95,22 @@ Les clouds classiques (Google Drive, iCloud, Dropbox…) sont pratiques mais **l
 2. **Installer le client Ryvie Desktop.** Disponible pour macOS, Windows et Linux sur [ryvie.fr](https://ryvie.fr).
 3. **Se connecter.** Ouvrez le client, connectez-vous à votre instance, et gérez vos apps, votre grille et votre espace.
 
+### Installer sur un Debian / Ubuntu existant
+
+Déjà sous **Debian** ou **Ubuntu** ? Transformez la machine en instance Ryvie avec une seule commande qui lance le `install.sh` de l'OS Ryvie :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ryvieos/ryvieos/main/install.sh | sudo bash
+```
+
+### ☁️ Vous préférez qu'on s'occupe de tout ? Ryvie Cloud
+
+Pas envie de gérer le matériel ni les mises à jour vous-même ? **[Ryvie Cloud](https://ryvie.fr)** héberge votre instance et s'occupe de tout — installation, mises à jour, sauvegardes et plus — dès maintenant. Cela reste une **machine dédiée par client** (pas de multi-tenant partagé) : exactement le même Ryvie privé, mais géré pour vous.
+
+> **Bon à savoir**
+> - **La sauvegarde off-site arrive.** Des sauvegardes automatiques hors-site de vos données sont en cours de préparation.
+> - **Nombre d'appareils illimité pendant l'alpha et la bêta.** Connectez autant d'appareils que vous voulez pour l'instant — c'est gratuit pendant toute la phase alpha/bêta et pourra évoluer par la suite.
+
 ---
 
 ## 🛠️ Stack technique

@@ -26,10 +26,37 @@ export class SessionManager {
   private userEmailKey = 'currentUserEmail';
   private sessionActiveKey = 'sessionActive';
   private sessionStartKey = 'sessionStartTime';
+  private clockSkewKey = 'clockSkewSeconds';
+
+  // ── Compensation de dérive d'horloge ──
+  // L'expiration du token est comparée à l'horloge du CLIENT, mais exp/iat viennent
+  // de l'horloge du SERVEUR (la box). Si la box retarde (NTP pas encore synchronisé
+  // après un boot, pas de pile RTC), un token fraîchement émis peut paraître déjà
+  // expiré côté client → boucle infinie login → SSO → auth-callback → login.
+  // À chaque réception d'un token frais (login SSO ou refresh), iat ≈ « maintenant »
+  // côté serveur : on mémorise l'écart et on l'applique à toutes les vérifications.
+  private recordClockSkew(token: string): void {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload && typeof payload.iat === 'number') {
+        const skew = Math.floor(Date.now() / 1000) - payload.iat;
+        StorageManager.setItem(this.clockSkewKey, skew);
+        if (Math.abs(skew) > 120) {
+          console.warn(`[SessionManager] Dérive d'horloge client/serveur détectée: ${skew}s (compensée)`);
+        }
+      }
+    } catch { /* token illisible : pas de compensation */ }
+  }
+
+  private serverNowSeconds(): number {
+    const skew = StorageManager.getItem<number>(this.clockSkewKey, 0) || 0;
+    return Math.floor(Date.now() / 1000) - (typeof skew === 'number' ? skew : 0);
+  }
 
   startSession(userData: UserData): void {
     const { token, userId, userName, userRole, userEmail } = userData;
-    
+
+    this.recordClockSkew(token);
     StorageManager.setItem(this.tokenKey, token);
     StorageManager.setItem(this.userKey, userName || userId);
     StorageManager.setItem(this.userRoleKey, userRole || 'User');
@@ -85,7 +112,8 @@ export class SessionManager {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       if (!payload || typeof payload.exp !== 'number') return false;
-      return Math.floor(Date.now() / 1000) >= payload.exp;
+      // Horloge serveur reconstituée (dérive compensée), cf. recordClockSkew.
+      return this.serverNowSeconds() >= payload.exp;
     } catch {
       return false; // en cas de doute, ne pas invalider abusivement
     }
@@ -147,6 +175,7 @@ export class SessionManager {
 
   setToken(newToken: string): void {
     if (!newToken) return;
+    this.recordClockSkew(newToken);
     StorageManager.setItem(this.tokenKey, newToken);
     this.setAuthHeader(newToken);
     if (!isElectron()) {
@@ -164,11 +193,11 @@ export class SessionManager {
 
   validateToken(token: string): boolean {
     if (!token) return false;
-    
+
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      const now = Math.floor(Date.now() / 1000);
-      
+      const now = this.serverNowSeconds();
+
       return payload.exp > now;
     } catch (error) {
       console.error('[SessionManager] Erreur lors de la validation du token:', error);

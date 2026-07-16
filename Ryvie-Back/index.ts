@@ -282,6 +282,7 @@ async function startServer() {
     // Enregistrer tous les services de démarrage
     startupTracker.registerService('architecture');
     startupTracker.registerService('redis');
+    startupTracker.registerService('migrations');
     startupTracker.registerService('network');
     startupTracker.registerService('caddy');
     startupTracker.registerService('ldap');
@@ -314,7 +315,20 @@ async function startServer() {
       startupTracker.markError('redis', redisError.message);
       throw redisError;
     }
-    
+
+    // Migrations de données (/data) — AVANT tout service qui lit /data.
+    // Rend le saut direct entre versions sûr (cf. migrations/README.md).
+    // Bloquant : un échec arrête le démarrage -> rollback BTRFS automatique.
+    const { runMigrations } = require('./services/system/migrationRunner');
+    try {
+      await runMigrations();
+      startupTracker.markDone('migrations');
+    } catch (migrationError: any) {
+      console.error('❌ Échec des migrations de données:', migrationError.message);
+      startupTracker.markError('migrations', migrationError.message);
+      throw migrationError;
+    }
+
     // Attendre qu'une interface réseau soit disponible (max 30 secondes)
     console.log('📶 Attente d\'une interface réseau valide...');
     listNetworkInterfaces(); // Debug: afficher les interfaces disponibles

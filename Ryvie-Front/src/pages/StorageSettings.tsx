@@ -10,7 +10,6 @@ import {
   faSpinner,
   faPlay,
   faCopy,
-  faArrowLeft,
   faArrowRight,
   faUserPlus,
   faCheck,
@@ -123,8 +122,6 @@ const StorageSettings = () => {
   // Data states
   const [loading, setLoading] = useState(!cached);
   const [disks, setDisks] = useState(() => cached?.disks || []);
-  // Index du disque affiché dans le carrousel de la vue d'ensemble
-  const [currentDiskIndex, setCurrentDiskIndex] = useState(0);
   const [diskHealth, setDiskHealth] = useState(() => cached?.diskHealth || {});
   const [dataSource, setDataSource] = useState(() => cached?.dataSource || null);
   const [raidStatus, setRaidStatus] = useState<any>(() => cached?.raidStatus || null);
@@ -1516,28 +1513,14 @@ const StorageSettings = () => {
                 <h2><FontAwesomeIcon icon={faHeartbeat} /> {t('storageSettings.diskHealth')}</h2>
                 <p className="section-subtitle">{t('storageSettings.diskHealthDesc')}</p>
 
-                {disks.length > 0 && (() => {
-                  // On affiche un seul disque à la fois ; les flèches permettent de défiler
-                  const safeIndex = Math.min(currentDiskIndex, disks.length - 1);
-                  const disk = disks[safeIndex];
-                  const health = diskHealth[disk.path] || {};
-                  const diskHasRaidPartition = !!raidMemberDisksMap[disk.path];
-                  const healthColor = getHealthColor(health.health);
+                <div className="disks-grid">
+                  {disks.map(disk => {
+                    const health = diskHealth[disk.path] || {};
+                    const diskHasRaidPartition = !!raidMemberDisksMap[disk.path];
+                    const healthColor = getHealthColor(health.health);
 
-                  return (
-                    <div className="disk-carousel">
-                      {disks.length > 1 && (
-                        <button
-                          type="button"
-                          className="disk-carousel-nav prev"
-                          aria-label={t('storageSettings.prevDisk')}
-                          onClick={() => setCurrentDiskIndex((safeIndex - 1 + disks.length) % disks.length)}
-                        >
-                          <FontAwesomeIcon icon={faArrowLeft} />
-                        </button>
-                      )}
-
-                      <div className={`disk-card-simple ${diskHasRaidPartition ? 'in-raid' : ''}`}>
+                    return (
+                      <div key={disk.path} className={`disk-card-simple ${diskHasRaidPartition ? 'in-raid' : ''}`}>
                         <div className="storage-disk-icon" style={health.health === 'good' ? { background: `linear-gradient(135deg, ${healthColor}, #059669)` } : health.health === 'failing' ? { background: `linear-gradient(135deg, #ef4444, #dc2626)` } : {}}>
                           <FontAwesomeIcon icon={faHdd} />
                         </div>
@@ -1571,40 +1554,9 @@ const StorageSettings = () => {
                           {!diskHasRaidPartition && !disk.isMounted && !disk.isSystemDisk && <span className="storage-badge-available">{t('storageSettings.available')}</span>}
                         </div>
                       </div>
-
-                      {disks.length > 1 && (
-                        <button
-                          type="button"
-                          className="disk-carousel-nav next"
-                          aria-label={t('storageSettings.nextDisk')}
-                          onClick={() => setCurrentDiskIndex((safeIndex + 1) % disks.length)}
-                        >
-                          <FontAwesomeIcon icon={faArrowRight} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {disks.length > 1 && (
-                  <div className="disk-carousel-indicator">
-                    <span className="disk-carousel-count">
-                      {Math.min(currentDiskIndex, disks.length - 1) + 1} / {disks.length}
-                    </span>
-                    <div className="disk-carousel-dots">
-                      {disks.map((d, i) => (
-                        <button
-                          key={d.path}
-                          type="button"
-                          className={`disk-carousel-dot ${i === Math.min(currentDiskIndex, disks.length - 1) ? 'active' : ''}`}
-                          aria-label={`${d.path}`}
-                          title={d.path}
-                          onClick={() => setCurrentDiskIndex(i)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
 
                 {disks.length === 0 && (
                   <div className="empty-state"><FontAwesomeIcon icon={faHdd} size="3x" /><p>{t('storageSettings.noDiskDetected')}</p></div>

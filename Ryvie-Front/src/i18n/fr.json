@@ -996,7 +996,7 @@
     "processing": "Traitement en cours...",
     "authAdmin": "Authentification Administrateur",
     "authAdminAdd": "Veuillez vous authentifier en tant qu'administrateur pour ajouter un nouvel utilisateur",
-    "authAdminDelete": "Veuillez vous authentifier en tant qu'administrateur pour supprimer l'utilisateur <strong>{name}</strong>",
+    "authAdminDelete": "Veuillez vous authentifier en tant qu'administrateur pour supprimer l'utilisateur {name}",
     "userExists": "Cet utilisateur existe déjà.",
     "emailAlreadyUsed": "Cette adresse mail est déjà utilisée.",
     "adminUid": "Identifiant admin",

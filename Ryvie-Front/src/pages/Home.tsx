@@ -1171,7 +1171,7 @@ const Home = () => {
             // avant une mise à jour). Filet de sécurité à 90s.
             setInstallingApps(prev => {
               if (!prev[appId]) return prev;
-              const updated = { ...prev, [appId]: { ...prev[appId], awaitingStart: true } };
+              const updated = { ...prev, [appId]: { ...prev[appId], awaitingStart: true, awaitingSince: Date.now() } };
               saveInstallState(updated);
               return updated;
             });
@@ -1322,29 +1322,38 @@ const Home = () => {
                     return prev;
                   }
                   
+                  // Conserver les champs existants (isUpdate, appIcon, awaitingStart…) :
+                  // ne mettre à jour que la progression.
                   const updated = {
                     ...prev,
-                    [appId]: { 
-                      appName: appData.appName,
-                      progress: data.progress || 0 
+                    [appId]: {
+                      ...(prev[appId] || appData),
+                      appName: prev[appId]?.appName || appData.appName,
+                      progress: data.progress || 0
                     }
                   };
                   saveInstallState(updated);
                   return updated;
                 });
                 
-                // Si terminé avec succès
+                // Si terminé avec succès : même logique que le flux principal — on garde
+                // le camembert (awaitingStart) jusqu'à ce que l'app soit réellement
+                // "running" (effet de surveillance + polling), sinon l'icône grise le
+                // temps du redémarrage post-install/màj.
                 if (data.progress >= 100 || data.stage === 'complete') {
-                  console.log(`[Home] Installation de ${appId} terminée via SSE`);
+                  console.log(`[Home] Installation de ${appId} terminée via SSE, attente du démarrage`);
                   eventSource.close();
-                  // Rafraîchir immédiatement car le manifest est généré AVANT 100%
-                  removeInstallation(appId);
                   setInstallingApps(prev => {
-                    const updated = { ...prev };
-                    delete updated[appId];
+                    if (!prev[appId]) return prev;
+                    const updated = { ...prev, [appId]: { ...prev[appId], awaitingStart: true, awaitingSince: Date.now() } };
+                    saveInstallState(updated);
                     return updated;
                   });
+                  // Rafraîchir immédiatement car le manifest est généré AVANT 100%
                   refreshDesktopIcons();
+                  [3000, 8000, 15000, 30000].forEach(ms => setTimeout(() => {
+                    try { refreshDesktopIcons(); } catch (_) {}
+                  }, ms));
                 }
                 
                 // Si erreur
@@ -1435,13 +1444,23 @@ const Home = () => {
           // 1. L'app est installée ET réellement démarrée (running) -> le camembert reste
           //    affiché tant que l'app n'est pas prête, même si le téléchargement est à 100%.
           // 2. OU l'installation n'est plus active ET la dernière mise à jour date de plus de 30 secondes
+          //    (90 s si on attend le redémarrage post-téléchargement, pour ne pas griser
+          //    une app qui met du temps à repasser "running").
           const lastUpdate = installData?.lastUpdate || Date.now();
           const timeSinceUpdate = Date.now() - lastUpdate;
-          const isStale = timeSinceUpdate > 30000; // 30 secondes
+          const isStale = timeSinceUpdate > (installData?.awaitingStart ? 90000 : 30000);
+
+          // Après une mise à jour, un "running" précoce peut encore être l'ancien
+          // conteneur (même règle que l'effet de surveillance du statut) : on exige
+          // d'avoir vu le redémarrage, ou un plancher de 12 s après le téléchargement.
+          const trustRunning = isRunning && (
+            !installData?.isUpdate || installData?.sawRestart ||
+            (Date.now() - (installData?.awaitingSince || 0) > 12000)
+          );
 
           // Ne nettoyer que si l'install/màj n'est PLUS active côté backend
           // (sinon on retirerait une mise à jour en cours, l'app étant déjà "running").
-          if (!isActive && (isRunning || isStale)) {
+          if (!isActive && (trustRunning || isStale)) {
             console.log(`[Home] Polling: Installation de ${appId} terminée (progress: ${progress}%, running: ${isRunning}, active: ${isActive}, stale: ${isStale}), nettoyage`);
             removeInstallation(appId);
             setInstallingApps(prev => {
@@ -1476,14 +1495,33 @@ const Home = () => {
       const next = { ...prev };
       Object.keys(prev).forEach(rawId => {
         const entry = prev[rawId];
+        if (!entry || !entry.awaitingStart) return;
         const st = appStatus[`app-${rawId}`]?.status;
         // Install ET mise à jour : on retire le camembert quand l'app est "running",
         // mais SEULEMENT après la fin du téléchargement (awaitingStart) — ainsi on ne le
         // retire jamais pendant le téléchargement d'une màj (où l'app est encore running).
-        if (entry && entry.awaitingStart && st === 'running') {
-          delete next[rawId];
-          removeInstallation(rawId);
-          changed = true;
+        if (st && st !== 'running') {
+          // Le redémarrage post-màj est maintenant visible : le prochain "running"
+          // sera celui du NOUVEAU conteneur, on pourra s'y fier immédiatement.
+          if (!entry.sawRestart) {
+            next[rawId] = { ...entry, sawRestart: true };
+            changed = true;
+          }
+          return;
+        }
+        if (st === 'running') {
+          // Après une MISE À JOUR, un "running" précoce peut encore être celui de
+          // l'ancien conteneur (le backend signale la fin du téléchargement avant que
+          // le redémarrage ne soit visible). Retirer le camembert à ce moment-là fait
+          // apparaître l'app en couleur, puis grise (redémarrage), puis en couleur.
+          // On attend donc d'avoir VU l'app redémarrer, ou un plancher de 12 s.
+          const trustRunning = !entry.isUpdate || entry.sawRestart ||
+            (Date.now() - (entry.awaitingSince || 0) > 12000);
+          if (trustRunning) {
+            delete next[rawId];
+            removeInstallation(rawId);
+            changed = true;
+          }
         }
       });
       if (changed) saveInstallState(next);

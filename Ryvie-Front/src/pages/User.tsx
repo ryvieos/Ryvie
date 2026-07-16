@@ -925,7 +925,16 @@ const User = () => {
                 </button>
               </div>
               <div className="modal-body">
-                <p>{t('userManagement.authAdminDelete').replace('{name}', userToDelete?.name || '')}</p>
+                {/* Le nom est injecté comme élément JSX (pas de HTML dans la chaîne i18n,
+                    qui s'afficherait en brut). */}
+                <p>
+                  {t('userManagement.authAdminDelete').split('{name}').map((part, i, parts) => (
+                    <React.Fragment key={i}>
+                      {part}
+                      {i < parts.length - 1 && <strong>{userToDelete?.name || ''}</strong>}
+                    </React.Fragment>
+                  ))}
+                </p>
                 
                 {/* Affichage du message d'erreur dans le modal */}
                 {message && messageType === 'error' && (

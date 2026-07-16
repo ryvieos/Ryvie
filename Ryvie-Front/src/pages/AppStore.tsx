@@ -16,7 +16,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import '../styles/Transitions.css';
 import '../styles/pages/AppStore.css';
-import { getSessionInfo } from '../utils/sessionManager';
+import sessionManager, { getSessionInfo } from '../utils/sessionManager';
 import { useLanguage } from '../contexts/LanguageContext';
 
  type AppStoreApp = {
@@ -594,9 +594,9 @@ const AppStore = () => {
         throw new Error('Token mal formé (pas 3 parties)');
       }
       const payload = JSON.parse(atob(tokenParts[1]));
-      const now = Math.floor(Date.now() / 1000);
-      
-      if (payload.exp && payload.exp < now) {
+
+      // Dérive d'horloge client/serveur compensée (cf. sessionManager.recordClockSkew).
+      if (payload.exp && sessionManager.isTokenExpired(sessionInfo.token)) {
         throw new Error('Token expiré');
       }
       

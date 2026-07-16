@@ -14,7 +14,7 @@ import Welcome from './pages/Welcome';
 import Userlogin from './pages/Connexion';
 import ServerRestarting from './pages/ServerRestarting';
 import Onboarding from './pages/Onboarding';
-import { initializeSession, isSessionActive, endSession, getSessionInfo } from './utils/sessionManager';
+import sessionManager, { initializeSession, isSessionActive, endSession, getSessionInfo } from './utils/sessionManager';
 import { handleTokenError } from './utils/setupAxios';
 import { isElectron } from './utils/platformUtils';
 import { handleAuthError } from './services/authService';
@@ -46,11 +46,10 @@ const App = () => {
       try {
         const { token } = getSessionInfo() || {};
         if (!token) return; // pas de session → rien à faire
-        let expired = false;
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          expired = typeof payload?.exp === 'number' && Math.floor(Date.now() / 1000) >= payload.exp;
-        } catch { expired = false; }
+        // isTokenExpired compense la dérive d'horloge client/serveur (clockSkew) :
+        // ne PAS re-comparer exp à Date.now() ici, sinon un token frais émis par une
+        // box dont l'horloge retarde serait vu expiré → boucle login/auth-callback.
+        const expired = sessionManager.isTokenExpired(token);
         if (expired) {
           console.log('[App] Session expirée détectée (vérif proactive) → déconnexion');
           handleTokenError('EXPIRED_TOKEN');

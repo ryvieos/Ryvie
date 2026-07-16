@@ -3,7 +3,7 @@ import '../styles/pages/Settings.css';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/setupAxios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy, faNetworkWired, faLaptop, faCircle, faSpinner, faDesktop, faMobileScreen, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
+import { faServer, faHdd, faDatabase, faPlug, faGlobe, faCheck, faCopy, faNetworkWired, faLaptop, faCircle, faSpinner, faDesktop, faMobileScreen, faEye, faEyeSlash, faArrowLeft, faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { faApple, faWindows, faLinux, faAndroid } from '@fortawesome/free-brands-svg-icons';
 import { isElectron } from '../utils/platformUtils';
 import urlsConfig from '../config/urls';
@@ -234,6 +234,8 @@ const Settings = () => {
   const [mdraidStatus, setMdraidStatus] = useState<{arrays?: any[]; members?: any[]} | null>(null);
   const [storageLoading, setStorageLoading] = useState(true);
   const [storageError, setStorageError] = useState(null);
+  // Index du disque affiché dans le carrousel "Disques détectés"
+  const [detectedDiskIndex, setDetectedDiskIndex] = useState(0);
   // État pour les adresses publiques
   const [publicAddresses, setPublicAddresses] = useState(null);
   const [copiedAddress, setCopiedAddress] = useState(null);
@@ -3260,8 +3262,7 @@ const Settings = () => {
             ) : !storageInventory ? (
               <p>{t('settings.loadingDiskInventory')}</p>
             ) : (
-              <div className="disks-grid">
-                {(() => {
+              (() => {
                   const items = [];
                   const block = storageInventory?.devices?.blockdevices || [];
                   const inRaidPaths = new Set();
@@ -3316,33 +3317,80 @@ const Settings = () => {
                     }
                   });
                   if (items.length === 0) return <div className="empty-state"><p>{t('settings.noDiskDetected')}</p></div>;
-                  return items.map(disk => (
-                    <div key={disk.path} className={`disk-card ${disk.isMounted ? 'mounted' : 'unmounted'}`}>
-                      <div className="disk-header">
-                        <div className="disk-name-with-status">
-                          <FontAwesomeIcon icon={faHdd} className={`disk-icon-visual ${disk.isMounted ? 'mounted' : 'unmounted'}`} />
-                          <div className="disk-title-area">
-                            <h4>{disk.path}</h4>
-                            <div className={`disk-status-badge ${disk.isMounted ? 'mounted' : 'unmounted'}`}>
-                              <span className="status-dot"></span>
-                              {disk.isMounted ? `${t('settings.mounted')} (${disk.mountInfo})` : t('settings.unmounted')}
+
+                  // Carrousel : un seul disque affiché à la fois, flèches + points pour défiler
+                  const safeIndex = Math.min(detectedDiskIndex, items.length - 1);
+                  const disk = items[safeIndex];
+                  return (
+                    <>
+                      <div className="disk-carousel">
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            className="disk-carousel-nav prev"
+                            aria-label={t('storageSettings.prevDisk')}
+                            onClick={() => setDetectedDiskIndex((safeIndex - 1 + items.length) % items.length)}
+                          >
+                            <FontAwesomeIcon icon={faArrowLeft} />
+                          </button>
+                        )}
+
+                        <div className={`disk-card ${disk.isMounted ? 'mounted' : 'unmounted'}`}>
+                          <div className="disk-header">
+                            <div className="disk-name-with-status">
+                              <FontAwesomeIcon icon={faHdd} className={`disk-icon-visual ${disk.isMounted ? 'mounted' : 'unmounted'}`} />
+                              <div className="disk-title-area">
+                                <h4>{disk.path}</h4>
+                                <div className={`disk-status-badge ${disk.isMounted ? 'mounted' : 'unmounted'}`}>
+                                  <span className="status-dot"></span>
+                                  {disk.isMounted ? `${t('settings.mounted')} (${disk.mountInfo})` : t('settings.unmounted')}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="disk-details">
+                            <div className="disk-info-rows">
+                              <div className="disk-info-row"><span>{t('settings.sizeLabel')}:</span><strong>{disk.size}</strong></div>
+                              <div className="disk-info-row"><span>RAID:</span><strong>{disk.inRaid ? t('common.yes') : t('common.no')}</strong></div>
+                              {disk.isSystemDisk && (
+                                <div className="disk-info-row"><span>{t('settings.roleLabel')}:</span><strong>{t('settings.systemLabel')}</strong></div>
+                              )}
                             </div>
                           </div>
                         </div>
+
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            className="disk-carousel-nav next"
+                            aria-label={t('storageSettings.nextDisk')}
+                            onClick={() => setDetectedDiskIndex((safeIndex + 1) % items.length)}
+                          >
+                            <FontAwesomeIcon icon={faArrowRight} />
+                          </button>
+                        )}
                       </div>
-                      <div className="disk-details">
-                        <div className="disk-info-rows">
-                          <div className="disk-info-row"><span>{t('settings.sizeLabel')}:</span><strong>{disk.size}</strong></div>
-                          <div className="disk-info-row"><span>RAID:</span><strong>{disk.inRaid ? t('common.yes') : t('common.no')}</strong></div>
-                          {disk.isSystemDisk && (
-                            <div className="disk-info-row"><span>{t('settings.roleLabel')}:</span><strong>{t('settings.systemLabel')}</strong></div>
-                          )}
+
+                      {items.length > 1 && (
+                        <div className="disk-carousel-indicator">
+                          <span className="disk-carousel-count">{safeIndex + 1} / {items.length}</span>
+                          <div className="disk-carousel-dots">
+                            {items.map((d, i) => (
+                              <button
+                                key={d.path}
+                                type="button"
+                                className={`disk-carousel-dot ${i === safeIndex ? 'active' : ''}`}
+                                aria-label={d.path}
+                                title={d.path}
+                                onClick={() => setDetectedDiskIndex(i)}
+                              />
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ));
-                })()}
-              </div>
+                      )}
+                    </>
+                  );
+                })()
             )}
           </div>
         </div>
