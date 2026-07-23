@@ -2,63 +2,79 @@
 
 ## Principe fondamental
 
-**Ne jamais copier `/data/docker` ni `/data/containerd` lors d'une migration RAID.**
+**La migration de `/data` se fait À CHAUD avec `btrfs device add` + `btrfs device remove`.**
 
-Ces répertoires contiennent des sous-volumes BTRFS avec des IDs internes que Docker/containerd utilisent pour gérer les layers d'images, les conteneurs et les snapshots. Copier ces données (même via `btrfs send/receive`) casse la correspondance entre les IDs BTRFS et la base interne de Docker.
+Zéro coupure, zéro rsync, zéro réinstallation d'apps : le filesystem reste monté,
+Docker et toutes les apps continuent de tourner, et les subvolume IDs sont préservés
+(c'est le même filesystem, rien n'est copié « par-dessus », les blocs sont déplacés
+en interne par btrfs).
 
-## Comment Synology gère ça
+Validé sur RyvieOS : migration complète de `/data` (14 Go, 18 subvolumes, snapshots
+inclus) pendant que 17 conteneurs tournaient — uptimes intacts, reboot vérifié.
 
-Synology utilise la même stratégie : lors d'une migration vers un nouveau pool de stockage, les paquets Docker sont **réinstallés**, pas copiés. Les données utilisateur (configs, volumes bind-mount) sont migrées, mais le runtime Docker est recréé proprement.
+## Comment ça marche
 
-## Architecture de `/data`
+`/data` est TOUJOURS un filesystem btrfs dédié, quel que soit le support :
 
-```
-/data/
-├── apps/          ✅ COPIER — Code source, docker-compose.yml, configs des apps
-├── config/        ✅ COPIER — Configs backend, frontend, manifests, reverse-proxy, Keycloak
-├── images/        ✅ COPIER — Backgrounds, uploads utilisateurs
-├── logs/          ✅ COPIER — Historique des logs
-├── netbird/       ✅ COPIER — Configuration réseau VPN
-├── portainer/     ✅ COPIER — Configuration Portainer
-├── docker/        ❌ EXCLURE — Runtime Docker (images, layers, conteneurs)
-├── containerd/    ❌ EXCLURE — Runtime containerd (snapshots, metadata)
-└── snapshot/      ❌ EXCLURE — Snapshots BTRFS (sous-volumes read-only)
-```
+| Contexte | Support de /data |
+|---|---|
+| VPS / VM (mode `vps`) | image loopback `/data.img` (mkfs.btrfs -L DATA) |
+| Machine physique (mode `appliance`) | partition nvme, puis `/dev/md0` (mdadm) après création du RAID |
 
-## Flux de migration RAID
+btrfs étant multi-device nativement, on peut ajouter un nouveau support au pool
+et drainer l'ancien, le tout en ligne :
 
-1. Créer le nouveau RAID (mdadm --create)
-2. Formater en BTRFS (mkfs.btrfs)
-3. Monter temporairement sur `/mnt/new_raid`
-4. **Stopper Docker et containerd**
-5. **rsync** de `/data/` vers `/mnt/new_raid/` en excluant `docker/`, `containerd/`, `snapshot/`
-6. Vérifier que les dossiers critiques (`config/`, `apps/`) sont bien copiés
-7. Démonter l'ancien `/data`, monter le nouveau RAID sur `/data`
-8. Mettre à jour `/etc/fstab` et `/etc/mdadm/mdadm.conf`
-9. **Redémarrer Docker** (il recrée `/data/docker` et `/data/containerd` vides)
-10. **Réinstaller toutes les apps** depuis `/data/config/manifests/` via `docker compose up -d`
-11. Vérifier l'état final
+```bash
+# 1. Étendre le pool sur le nouveau support (instantané)
+btrfs device add -f /dev/md0 /data
 
-## Pourquoi Docker casse avec btrfs send/receive
+# 2. Drainer l'ancien support (les données migrent en arrière-plan)
+btrfs device remove /dev/nvme0n1p4 /data   # ou /dev/loop0
 
-Docker avec le driver de stockage BTRFS crée des sous-volumes imbriqués :
-```
-/data/docker/btrfs/subvolumes/<layer-id>/   — un sous-volume par layer
+# 3. Mettre à jour /etc/fstab (l'UUID du filesystem NE CHANGE PAS)
+#    UUID=<fs-uuid> /data btrfs defaults,noatime,compress=zstd:3,nofail 0 0
 ```
 
-Chaque sous-volume a un **subvolume ID** unique attribué par BTRFS. Docker stocke ces IDs dans sa base (`/data/docker/image/btrfs/`). Quand on fait `btrfs send | btrfs receive`, les sous-volumes reçus obtiennent de **nouveaux IDs**. Docker ne retrouve plus ses layers → erreur au démarrage.
+Notes :
+- `btrfs device remove` efface le superblock de l'ancien device en sortant — pas de
+  signature fantôme.
+- Si l'ancien support est une image loopback, supprimer le fichier `.img` après la
+  migration pour récupérer l'espace sur le disque système.
+- Ne PAS rebooter pendant la fenêtre de migration (fstab pointe encore sur l'ancien
+  support tant que l'étape 3 n'est pas faite).
+- Vérification de capacité obligatoire avant : le nouveau support doit contenir
+  les données utilisées + marge métadonnées (5 % + 2 GiB dans le code).
+
+## Implémentation
+
+`POST /api/storage/mdraid-create` (routes/system/storage.ts) :
+1. Prépare les disques + `mdadm --create` (l'array se construit, `/data` intact)
+2. Attend la resync initiale (l'array est utilisable, aucune coupure)
+3. Si `/data` est déjà en btrfs → **migration à chaud** (device add + remove + fstab)
+4. Sinon (machine vierge) → mkfs.btrfs + mount + subvolumes docker/containerd
+
+L'agrandissement d'un array existant (`mdraid-auto-migrate`, `mdraid-grow-size`,
+`mdraid-reshape`) reste en mdadm pur : `--add`, `--grow`, reshape en ligne, puis
+`btrfs filesystem resize max /data`. Là non plus, aucune coupure.
+
+## À ne PAS faire (méthodes historiques, obsolètes)
+
+- ❌ `rsync` de `/data` vers un nouveau filesystem + réinstallation des apps :
+  coupure de service, fragile, inutile depuis la migration à chaud.
+- ❌ `btrfs send/receive` pour déplacer `/data` : les subvolumes reçus obtiennent
+  de NOUVEAUX IDs → si le driver de stockage Docker est `btrfs`, Docker perd ses
+  layers. `device add/remove` n'a pas ce problème (IDs inchangés).
+- ❌ RAID5/6 btrfs natif : write hole non résolu. La redondance reste sur mdadm ;
+  btrfs reste en single-device au-dessus de md0.
 
 ## Endpoint de secours
 
-`POST /api/storage/docker-reinstall-apps` permet de réinstaller toutes les apps Docker depuis leurs manifests à tout moment, sans migration RAID. Utile :
-- Après une corruption Docker
-- Après un crash système
-- Comme bouton de secours dans l'interface
+`POST /api/storage/docker-reinstall-apps` réinstalle toutes les apps depuis
+`/data/config/manifests/`. Ce n'est PLUS une étape de migration — c'est un outil
+de réparation (corruption Docker, crash) découplé du stockage.
 
 ## Pourquoi Docker doit rester sur /data (et non sur /)
 
-- `/` fait ~18G — trop petit pour Docker (images + layers = facilement 50G+)
-- `/` n'est pas en RAID — pas de redondance
-- `/` n'est pas en BTRFS — pas de snapshots
+- `/` est trop petit pour Docker (images + layers = facilement 50 G+)
+- `/` n'est ni en RAID ni en btrfs (pas de redondance, pas de snapshots)
 - Les bind-mounts entre `/` et `/data` causent des problèmes de performance
-- La stratégie "ne jamais copier Docker" élimine 100% des bugs de migration

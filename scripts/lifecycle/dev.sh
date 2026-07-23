@@ -13,6 +13,14 @@ echo ""
 # Installer/mettre à jour les scripts RAID système et s'assurer que /data est monté
 bash /opt/Ryvie/scripts/storage/raid-setup.sh
 
+# Verification critique de securite: /data doit etre en ligne
+# (nofail dans fstab => le boot continue meme si /data ne monte pas)
+if ! findmnt -f /data > /dev/null 2>&1; then
+  echo "ERREUR CRITIQUE: /data n est pas monte."
+  echo "Demarrage de Ryvie annule pour eviter d ecrire dans un /data vide sur le disque systeme."
+  exit 1
+fi
+
 # Arrêter les processus prod s'ils tournent
 pm2 stop ryvie-backend-prod ryvie-frontend-prod 2>/dev/null || true
 pm2 delete ryvie-backend-prod ryvie-frontend-prod 2>/dev/null || true
