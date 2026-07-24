@@ -124,12 +124,31 @@ function normalizeLdapCompose(content: string): { content: string; changed: bool
   const adminPassword = extractComposeValue(content, 'LDAP_ADMIN_PASSWORD', 'admin');
   const ldapRoot = extractComposeValue(content, 'LDAP_ROOT', 'dc=example,dc=org');
 
+  // CRITIQUE : préserver la directive user: posée par install.sh.
+  // Le bind-mount /data/config/ldap/data appartient à l'utilisateur applicatif
+  // (uid variable : 1000 ou 1001 selon la machine) et le conteneur bitnami DOIT
+  // tourner avec ce même UID (GID 0 obligatoire). Sans cette ligne, le conteneur
+  // retombe sur l'UID par défaut de l'image (1001) → slapd boucle sur
+  // « Permission denied » → check-first-time échoue → l'assistant de première
+  // configuration ne s'affiche jamais.
+  const userMatch = content.match(/^\s*user:\s*["']?(\d+:\d+)["']?\s*$/m);
+  let composeUser = userMatch ? userMatch[1] : '';
+  if (!composeUser) {
+    try {
+      const dataDirStat = fs.statSync(path.join(DATA_ROOT, 'config', 'ldap', 'data'));
+      composeUser = `${dataDirStat.uid}:0`;
+    } catch {
+      composeUser = '1001:0';
+    }
+  }
+
   const canonicalContent = `version: '3.8'
 
 services:
   openldap:
     image: julescloud/ryvieldap:latest
     container_name: openldap
+    user: "${composeUser}"
     environment:
       - LDAP_ADMIN_USERNAME=admin
       - LDAP_ADMIN_PASSWORD=${adminPassword}

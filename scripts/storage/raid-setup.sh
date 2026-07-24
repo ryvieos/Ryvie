@@ -145,6 +145,20 @@ if [ -b /dev/md0 ] && ! findmnt -f /data >/dev/null 2>&1; then
   mount /data 2>/dev/null && log "/data monté" || log "Échec du montage de /data"
 fi
 
+# Auto-réparation : /data doit appartenir à l'utilisateur applicatif.
+# Ce script tourne à CHAQUE boot (systemd), contrairement à prod.sh/dev.sh
+# que PM2 resurrect court-circuite. Sans ce chown, un /data possédé par root
+# fait crasher OpenLDAP (Permission denied) → plus d'assistant première config.
+# Non récursif — ne JAMAIS chown -R (volumes Docker).
+if findmnt -f /data >/dev/null 2>&1; then
+  RYVIE_UID="$(id -u ryvie 2>/dev/null || echo '')"
+  DATA_UID="$(stat -c '%u' /data 2>/dev/null || echo '')"
+  if [ -n "$RYVIE_UID" ] && [ -n "$DATA_UID" ] && [ "$DATA_UID" != "$RYVIE_UID" ]; then
+    log "Correction du propriétaire de /data ($DATA_UID → ryvie $RYVIE_UID, non récursif)"
+    chown ryvie:ryvie /data 2>/dev/null || true
+  fi
+fi
+
 log "Terminé."
 RAID_SCRIPT
 sudo chmod +x "$ASSEMBLE_SCRIPT"
