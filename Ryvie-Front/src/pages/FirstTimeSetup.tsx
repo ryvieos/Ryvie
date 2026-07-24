@@ -25,23 +25,43 @@ const FirstTimeSetup = () => {
   // Vérifier au chargement si la page est accessible
   useEffect(() => {
     const checkAccess = async () => {
-      try {
-        const accessMode = getCurrentAccessMode() || 'private';
-        const serverUrl = getServerUrl(accessMode);
-        const response = await axios.get(`${serverUrl}/api/ldap/check-first-time`);
-        
-        if (response.data && !response.data.isFirstTime) {
-          // Des utilisateurs existent déjà, rediriger vers login
-          console.log('[FirstTimeSetup] Des utilisateurs existent déjà - redirection vers login');
-          navigate('/login', { replace: true });
-        } else {
-          // C'est bien la première fois, autoriser l'accès
-          setIsChecking(false);
+      const accessMode = getCurrentAccessMode() || 'private';
+      const serverUrl = getServerUrl(accessMode);
+
+      // LDAP peut être en cours de démarrage : on réessaie avant de trancher.
+      // Ne rediriger vers /login QUE sur un isFirstTime === false explicite
+      // (des comptes existent vraiment). Un état inconnu (503 LDAP_UNAVAILABLE)
+      // ne doit pas éjecter l'utilisateur de l'assistant de première config.
+      const RETRIES = 5;
+      const DELAY_MS = 3000;
+      let isFirstTime: boolean | null = null;
+      for (let attempt = 1; attempt <= RETRIES; attempt++) {
+        try {
+          const response = await axios.get(`${serverUrl}/api/ldap/check-first-time`);
+          if (typeof response.data?.isFirstTime === 'boolean') {
+            isFirstTime = response.data.isFirstTime;
+            break;
+          }
+        } catch (error) {
+          console.warn(`[FirstTimeSetup] check-first-time tentative ${attempt}/${RETRIES} échouée`);
         }
-      } catch (error) {
-        console.error('[FirstTimeSetup] Erreur lors de la vérification:', error);
-        // En cas d'erreur, rediriger vers login par sécurité
+        if (attempt < RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+        }
+      }
+
+      if (isFirstTime === false) {
+        // Des utilisateurs existent déjà, rediriger vers login
+        console.log('[FirstTimeSetup] Des utilisateurs existent déjà - redirection vers login');
         navigate('/login', { replace: true });
+      } else {
+        // Première fois confirmée, ou état inconnu (LDAP KO) : laisser
+        // l'assistant accessible — la création du compte échouera proprement
+        // si LDAP est vraiment indisponible, sans boucle de redirection.
+        if (isFirstTime === null) {
+          console.error('[FirstTimeSetup] État première-connexion inconnu (LDAP KO) - accès assistant maintenu');
+        }
+        setIsChecking(false);
       }
     };
 

@@ -212,7 +212,11 @@ router.get('/ldap/check-first-time', async (req: any, res: any) => {
   ldapClient.bind(ldapConfig.bindDN, ldapConfig.bindPassword, (err) => {
     if (err) {
       ldapClient.destroy();
-      return res.status(500).json({ error: 'Échec de connexion LDAP', isFirstTime: false });
+      // LDAP injoignable ≠ « déjà configuré ». isFirstTime:null = état INCONNU :
+      // le front doit réessayer, surtout pas sauter l'assistant de première
+      // configuration (sinon une machine neuve avec LDAP en panne reste
+      // bloquée sur le login sans aucun compte existant).
+      return res.status(503).json({ error: 'Échec de connexion LDAP', code: 'LDAP_UNAVAILABLE', isFirstTime: null });
     }
 
     const filter = ldapConfig.userFilter;
@@ -222,7 +226,7 @@ router.get('/ldap/check-first-time', async (req: any, res: any) => {
       (err, ldapRes) => {
         if (err) {
           ldapClient.unbind();
-          return res.status(500).json({ error: 'Erreur de recherche LDAP', isFirstTime: false });
+          return res.status(503).json({ error: 'Erreur de recherche LDAP', code: 'LDAP_UNAVAILABLE', isFirstTime: null });
         }
 
         let userCount = 0;
@@ -251,7 +255,7 @@ router.get('/ldap/check-first-time', async (req: any, res: any) => {
         ldapRes.on('error', (err) => {
           ldapClient.unbind();
           console.error('[check-first-time] Erreur LDAP:', err);
-          res.status(500).json({ error: 'Erreur LDAP', isFirstTime: false });
+          res.status(503).json({ error: 'Erreur LDAP', code: 'LDAP_UNAVAILABLE', isFirstTime: null });
         });
       }
     );

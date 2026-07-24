@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from '../utils/setupAxios';
+import axios, { handleTokenError } from '../utils/setupAxios';
 import urlsConfig from '../config/urls';
 const { getServerUrl } = urlsConfig;
 import { getCurrentAccessMode } from '../utils/detectAccessMode';
@@ -584,6 +584,11 @@ const AppStore = () => {
     if (!sessionInfo?.isActive || !sessionInfo?.token) {
       addLog(`❌ Erreur: Utilisateur non connecté`, 'error');
       showToast(t('appStore.notifications.mustBeConnected'), 'error');
+      // Rediriger vers la connexion au lieu de rester bloqué : le token a
+      // expiré (TTL 60 min) et ne peut plus être rafraîchi côté serveur
+      // (jwt.verify rejette un token expiré). handleTokenError gère le cas
+      // overlay/iframe (postMessage) comme le cas plein écran.
+      handleTokenError('EXPIRED_TOKEN');
       return;
     }
 
@@ -599,11 +604,13 @@ const AppStore = () => {
       if (payload.exp && sessionManager.isTokenExpired(sessionInfo.token)) {
         throw new Error('Token expiré');
       }
-      
+
       addLog(`✅ Token valide, expiration: ${new Date(payload.exp * 1000).toLocaleString()}`, 'success');
     } catch (tokenError) {
       addLog(`❌ Erreur de validation du token: ${tokenError.message}`, 'error');
       showToast(t('appStore.notifications.sessionExpired'), 'error');
+      // Token expiré/illisible → renvoyer vers la connexion (voir ci-dessus).
+      handleTokenError('EXPIRED_TOKEN');
       return;
     }
 
@@ -653,7 +660,9 @@ try {
     timeout: 300000,
     headers: {
       'Content-Type': 'application/json',
-      // Ajoutez ici d'autres headers si nécessaires (auth, etc.)
+      // Header d'auth explicite : ne pas dépendre uniquement du header par
+      // défaut d'axios (pas toujours positionné dans le contexte overlay).
+      Authorization: `Bearer ${sessionInfo.token}`,
     }
   });
   

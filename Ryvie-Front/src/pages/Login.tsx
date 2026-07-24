@@ -94,16 +94,40 @@ const Login = () => {
         return;
       }
 
-      // 4) Vérifier si c'est la première connexion
+      // 4) Vérifier si c'est la première connexion.
+      // LDAP peut mettre du temps à démarrer (boot) ou être temporairement KO :
+      // le backend renvoie alors 503 + isFirstTime:null (état INCONNU). On
+      // RÉESSAIE au lieu de conclure « déjà configuré », sinon une machine
+      // neuve dont LDAP est indisponible n'affiche jamais l'assistant RAID.
       try {
         const mode = getCurrentAccessMode() || 'private';
         const serverUrl = getServerUrl(mode);
-        const response = await axios.get(`${serverUrl}/api/ldap/check-first-time`);
-        
-        if (response.data && response.data.isFirstTime) {
+
+        const FIRST_TIME_RETRIES = 5;
+        const FIRST_TIME_DELAY_MS = 3000;
+        let isFirstTime: boolean | null = null;
+        for (let attempt = 1; attempt <= FIRST_TIME_RETRIES; attempt++) {
+          try {
+            const response = await axios.get(`${serverUrl}/api/ldap/check-first-time`);
+            if (typeof response.data?.isFirstTime === 'boolean') {
+              isFirstTime = response.data.isFirstTime;
+              break;
+            }
+          } catch (e) {
+            console.warn(`[Login] check-first-time tentative ${attempt}/${FIRST_TIME_RETRIES} échouée (LDAP indisponible ?)`);
+          }
+          if (attempt < FIRST_TIME_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, FIRST_TIME_DELAY_MS));
+          }
+        }
+
+        if (isFirstTime === true) {
           console.log('[Login] Première connexion détectée - redirection vers Assistant RAID');
           navigate('/setup/storage', { replace: true });
           return;
+        }
+        if (isFirstTime === null) {
+          console.error('[Login] Impossible de déterminer l\'état première-connexion (LDAP KO) - fallback Keycloak');
         }
 
         // 5) Récupérer l'IP locale si on est sur ryvie.local (pour que le cookie Keycloak
